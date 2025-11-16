@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'asistencias_estudiantes_resultados.dart';
+import '/admin/logica/gestion_criterios.dart';
+import 'reportes_evaluaciones_excel.dart';
 
-class AsistenciasEstudiantesScreen extends StatefulWidget {
-  const AsistenciasEstudiantesScreen({super.key});
+class ReportesEvaluacionesScreen extends StatefulWidget {
+  const ReportesEvaluacionesScreen({super.key});
 
   @override
-  State<AsistenciasEstudiantesScreen> createState() =>
-      _AsistenciasEstudiantesScreenState();
+  State<ReportesEvaluacionesScreen> createState() =>
+      _ReportesEvaluacionesScreenState();
 }
 
-class _AsistenciasEstudiantesScreenState
-    extends State<AsistenciasEstudiantesScreen>
+class _ReportesEvaluacionesScreenState extends State<ReportesEvaluacionesScreen>
     with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final RubricasService _rubricasService = RubricasService();
+  final ReportesEvaluacionesExcelService _excelService =
+      ReportesEvaluacionesExcelService();
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -56,9 +59,13 @@ class _AsistenciasEstudiantesScreenState
   Map<String, dynamic>? _eventoData;
   List<Map<String, dynamic>> _eventosDisponibles = [];
   List<Map<String, dynamic>> _eventosFiltrados = [];
+  List<Map<String, dynamic>> _evaluaciones = [];
+  Map<String, Rubrica> _rubricasCache = {};
 
   // ESTADOS
   bool _isLoadingEventos = false;
+  bool _isLoadingEvaluaciones = false;
+  bool _isGeneratingExcel = false;
 
   @override
   void initState() {
@@ -101,6 +108,7 @@ class _AsistenciasEstudiantesScreenState
       _carreraSeleccionada = null;
       _eventoSeleccionado = null;
       _eventoData = null;
+      _evaluaciones.clear();
 
       if (facultad != null) {
         _carrerasDisponibles = facultadesCarreras[facultad] ?? [];
@@ -117,6 +125,7 @@ class _AsistenciasEstudiantesScreenState
       _carreraSeleccionada = carrera;
       _eventoSeleccionado = null;
       _eventoData = null;
+      _evaluaciones.clear();
       _filtrarEventos();
     });
   }
@@ -176,12 +185,11 @@ class _AsistenciasEstudiantesScreenState
       print('Error al cargar eventos: $e');
       if (mounted) {
         setState(() => _isLoadingEventos = false);
-        _showSnackBar('Error al cargar eventos: $e', isError: true);
       }
     }
   }
 
-  void _onEventoChanged(String? eventoId) {
+  Future<void> _onEventoChanged(String? eventoId) async {
     if (eventoId == null) return;
 
     final eventoData = _eventosFiltrados.firstWhere((e) => e['id'] == eventoId);
@@ -189,38 +197,190 @@ class _AsistenciasEstudiantesScreenState
     setState(() {
       _eventoSeleccionado = eventoId;
       _eventoData = eventoData;
+      _evaluaciones.clear();
     });
+
+    await _cargarEvaluaciones();
   }
 
-  Future<void> _verAsistencias() async {
-    if (_eventoSeleccionado == null) {
-      _showSnackBar('Selecciona un evento primero', isError: true);
+  Future<void> _cargarEvaluaciones() async {
+    if (_eventoSeleccionado == null) return;
+
+    setState(() => _isLoadingEvaluaciones = true);
+
+    try {
+      print('🔍 Cargando evaluaciones del evento: $_eventoSeleccionado');
+
+      // 1. Cargar rúbricas en paralelo
+      final rubricasFuture = _rubricasService.obtenerRubricas();
+
+      // 2. Obtener proyectos del evento
+      final proyectosSnapshot = await _firestore
+          .collection('events')
+          .doc(_eventoSeleccionado)
+          .collection('proyectos')
+          .get();
+
+      print('📦 ${proyectosSnapshot.docs.length} proyectos en el evento');
+
+      if (proyectosSnapshot.docs.isEmpty) {
+        print('⚠️ No hay proyectos en este evento');
+        if (mounted) {
+          setState(() {
+            _evaluaciones = [];
+            _isLoadingEvaluaciones = false;
+          });
+        }
+        return;
+      }
+
+      // 3. Esperar rúbricas
+      final todasRubricas = await rubricasFuture;
+      _rubricasCache = {for (var r in todasRubricas) r.id: r};
+
+      final List<Map<String, dynamic>> evaluacionesList = [];
+
+      // 4. Obtener evaluaciones en batch usando Future.wait
+      final futures = proyectosSnapshot.docs.map((proyectoDoc) async {
+        try {
+          final proyectoData = proyectoDoc.data();
+          final evaluacionesSnapshot = await _firestore
+              .collection('events')
+              .doc(_eventoSeleccionado)
+              .collection('proyectos')
+              .doc(proyectoDoc.id)
+              .collection('evaluaciones')
+              .get();
+
+          return evaluacionesSnapshot.docs.map((evaluacionDoc) {
+            final evaluacionData = evaluacionDoc.data();
+
+            // Conversión segura de notas
+            final notasRaw = evaluacionData['notas'];
+            final Map<String, dynamic> notas = {};
+            if (notasRaw != null && notasRaw is Map) {
+              notasRaw.forEach((key, value) {
+                notas[key.toString()] = value;
+              });
+            }
+
+            final rubricaId = evaluacionData['rubricaId'] as String?;
+            Rubrica? rubrica;
+            if (rubricaId != null && _rubricasCache.containsKey(rubricaId)) {
+              rubrica = _rubricasCache[rubricaId];
+            }
+
+            return {
+              'proyectoId': proyectoDoc.id,
+              'codigo': proyectoData['Código'] ?? 'Sin código',
+              'titulo': proyectoData['Título'] ?? 'Sin título',
+              'integrantes': proyectoData['Integrantes'] ?? '',
+              'sala': proyectoData['Sala'] ?? '',
+              'clasificacion': proyectoData['Clasificación'] ?? 'Sin categoría',
+              'juradoId': evaluacionDoc.id,
+              'juradoNombre': evaluacionData['juradoNombre'] ?? 'Jurado',
+              'rubricaId': rubricaId,
+              'rubricaNombre': evaluacionData['rubricaNombre'] ?? 'Sin rúbrica',
+              'rubrica': rubrica,
+              'evaluada': evaluacionData['evaluada'] ?? false,
+              'bloqueada': evaluacionData['bloqueada'] ?? false,
+              'notaTotal': (evaluacionData['notaTotal'] ?? 0.0).toDouble(),
+              'notas': notas,
+              'fechaAsignacion': evaluacionData['fechaAsignacion'],
+              'fechaEvaluacion': evaluacionData['fechaEvaluacion'],
+            };
+          }).toList();
+        } catch (e) {
+          print('❌ Error procesando proyecto ${proyectoDoc.id}: $e');
+          return <Map<String, dynamic>>[];
+        }
+      }).toList();
+
+      // 5. Esperar todas las evaluaciones en paralelo
+      final resultados = await Future.wait(futures);
+
+      // 6. Aplanar la lista de listas
+      for (var lista in resultados) {
+        evaluacionesList.addAll(lista);
+      }
+
+      print('📝 ${evaluacionesList.length} evaluaciones encontradas');
+
+      // Ordenar por código de proyecto
+      evaluacionesList.sort((a, b) => a['codigo'].compareTo(b['codigo']));
+
+      print('✅ ${evaluacionesList.length} evaluaciones cargadas');
+
+      if (mounted) {
+        setState(() {
+          _evaluaciones = evaluacionesList;
+          _isLoadingEvaluaciones = false;
+        });
+      }
+    } catch (e) {
+      print('❌ Error al cargar evaluaciones: $e');
+      if (mounted) {
+        setState(() => _isLoadingEvaluaciones = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar evaluaciones: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _descargarExcel() async {
+    if (_evaluaciones.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No hay evaluaciones para exportar'),
+          backgroundColor: Colors.orange,
+        ),
+      );
       return;
     }
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AsistenciasEstudiantesResultadosScreen(
-          eventoId: _eventoSeleccionado!,
-          eventoNombre: _eventoData!['name'],
-          facultad: _facultadSeleccionada!,
-          carrera: _carreraSeleccionada,
-        ),
-      ),
-    );
-  }
+    setState(() => _isGeneratingExcel = true);
 
-  void _showSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+    try {
+      final resultado = await _excelService.generarReporteEvaluaciones(
+        evaluaciones: _evaluaciones,
+        eventoNombre: _eventoData!['name'],
+        facultad: _facultadSeleccionada ?? '',
+        carrera: _carreraSeleccionada,
+      );
+
+      if (mounted) {
+        setState(() => _isGeneratingExcel = false);
+
+        if (resultado) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Reporte Excel generado exitosamente'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ Error al generar el reporte Excel'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error al generar Excel: $e');
+      if (mounted) {
+        setState(() => _isGeneratingExcel = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   @override
@@ -229,7 +389,7 @@ class _AsistenciasEstudiantesScreenState
       backgroundColor: const Color(0xFF1E3A5F),
       appBar: AppBar(
         title: const Text(
-          'Asistencias de Estudiantes',
+          'Reportes de Evaluaciones',
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
         backgroundColor: const Color(0xFF1E3A5F),
@@ -239,6 +399,14 @@ class _AsistenciasEstudiantesScreenState
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          if (_eventoSeleccionado != null && !_isLoadingEvaluaciones)
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _cargarEvaluaciones,
+              tooltip: 'Actualizar',
+            ),
+        ],
       ),
       body: FadeTransition(
         opacity: _fadeAnimation,
@@ -273,11 +441,31 @@ class _AsistenciasEstudiantesScreenState
                             _buildEventoCard(),
                           ],
 
-                          // PASO 3: Botón Ver Asistencias
-                          if (_eventoSeleccionado != null) ...[
-                            const SizedBox(height: 24),
-                            _buildBotonVerAsistencias(),
+                          // Resumen de evaluaciones
+                          if (_eventoSeleccionado != null &&
+                              !_isLoadingEvaluaciones &&
+                              _evaluaciones.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            _buildResumenCard(),
                           ],
+
+                          // Botón descargar Excel
+                          if (_eventoSeleccionado != null &&
+                              !_isLoadingEvaluaciones &&
+                              _evaluaciones.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            _buildBotonDescargar(),
+                          ],
+
+                          // Estado de carga o vacío
+                          if (_eventoSeleccionado != null &&
+                              _isLoadingEvaluaciones)
+                            _buildLoadingState(),
+
+                          if (_eventoSeleccionado != null &&
+                              !_isLoadingEvaluaciones &&
+                              _evaluaciones.isEmpty)
+                            _buildEmptyState(),
 
                           const SizedBox(height: 20),
                         ],
@@ -519,24 +707,188 @@ class _AsistenciasEstudiantesScreenState
     );
   }
 
-  Widget _buildBotonVerAsistencias() {
+  Widget _buildResumenCard() {
+    final totalEvaluaciones = _evaluaciones.length;
+    final evaluadas = _evaluaciones.where((e) => e['evaluada'] as bool).length;
+    final pendientes = totalEvaluaciones - evaluadas;
+
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF27AE60), Color(0xFF229954)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.analytics, color: Colors.white, size: 24),
+                SizedBox(width: 12),
+                Text(
+                  'Resumen de Evaluaciones',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildEstadisticaItem(
+                    'Total',
+                    totalEvaluaciones.toString(),
+                    Icons.assignment,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildEstadisticaItem(
+                    'Evaluadas',
+                    evaluadas.toString(),
+                    Icons.check_circle,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildEstadisticaItem(
+                    'Pendientes',
+                    pendientes.toString(),
+                    Icons.pending,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEstadisticaItem(String label, String valor, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.white, size: 20),
+          const SizedBox(height: 8),
+          Text(
+            valor,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.white.withOpacity(0.8),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBotonDescargar() {
     return SizedBox(
       width: double.infinity,
       height: 56,
       child: ElevatedButton.icon(
-        onPressed: _verAsistencias,
-        icon: const Icon(Icons.people_alt, size: 24),
-        label: const Text(
-          'Ver Asistencias',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        onPressed: _isGeneratingExcel ? null : _descargarExcel,
+        icon: _isGeneratingExcel
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.file_download, size: 24),
+        label: Text(
+          _isGeneratingExcel
+              ? 'Generando Excel...'
+              : 'Descargar Reporte en Excel',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF4A90E2),
+          backgroundColor: const Color(0xFF27AE60),
           foregroundColor: Colors.white,
+          disabledBackgroundColor: Colors.grey[300],
+          disabledForegroundColor: Colors.grey[500],
           elevation: 4,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: const Padding(
+        padding: EdgeInsets.all(40.0),
+        child: Column(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Cargando evaluaciones...',
+              style: TextStyle(fontSize: 14, color: Color(0xFF64748B)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(40.0),
+        child: Column(
+          children: [
+            Icon(Icons.assignment_outlined, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No hay evaluaciones en este evento',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Las evaluaciones aparecerán cuando se asignen proyectos a los jurados',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            ),
+          ],
         ),
       ),
     );

@@ -21,6 +21,7 @@ dependencies:
   excel: ^4.0.3
   app_links: ^3.4.3
   path_provider: ^2.1.1
+  open_file: ^3.3.2
   permission_handler: ^11.1.0
 
 dev_dependencies:

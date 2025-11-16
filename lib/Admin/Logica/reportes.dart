@@ -3,6 +3,7 @@ import '/prefs_helper.dart';
 import 'asistencias_estudiantes.dart';
 import 'ganadores_estudiantes.dart';
 import 'evaluaciones_general_excel.dart';
+import 'reportes_evaluaciones.dart'; // Nueva importación
 
 class ReportesScreen extends StatefulWidget {
   const ReportesScreen({super.key});
@@ -341,7 +342,6 @@ class _ReportesScreenState extends State<ReportesScreen>
     }
   }
 
-  // Widget helper actualizado para los items de información
   Widget _buildInfoItem(String text, IconData icon) {
     return Row(
       children: [
@@ -587,6 +587,27 @@ class _ReportesScreenState extends State<ReportesScreen>
                                 delay: 400,
                                 child: _buildReportOption(
                                   context: context,
+                                  title: 'Reportes de Evaluaciones',
+                                  subtitle:
+                                      'Consulta evaluaciones filtradas por facultad, carrera y jurado',
+                                  icon: Icons.fact_check,
+                                  color: const Color(0xFF27AE60),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            const ReportesEvaluacionesScreen(),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              _buildAnimatedCard(
+                                delay: 500,
+                                child: _buildReportOption(
+                                  context: context,
                                   title: 'Evaluaciones Generales',
                                   subtitle:
                                       'Descarga un reporte completo de todas las evaluaciones con todos los jurados',
@@ -606,7 +627,7 @@ class _ReportesScreenState extends State<ReportesScreen>
 
                         // Footer info
                         _buildAnimatedCard(
-                          delay: 500,
+                          delay: 600,
                           child: Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(

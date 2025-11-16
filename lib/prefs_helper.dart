@@ -145,10 +145,6 @@ class PrefsHelper {
     return fullName.toLowerCase().replaceAll(' ', '.');
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ OPTIMIZACIÓN 1: LOGIN CON ÍNDICE COMPUESTO
-  // Reduce de 5+ lecturas a solo 2 lecturas (60% menos)
-  // ═══════════════════════════════════════════════════════════════
   static Future<bool> loginStudent(String username, String password) async {
     try {
       print('🔐 Intentando login de estudiante...');
@@ -180,8 +176,16 @@ class PrefsHelper {
             .get();
 
         if (!studentDoc.exists) {
-          print('❌ Estudiante no encontrado en la colección');
-          return false;
+          // 🔧 FIX: Si el documento no existe pero el índice sí, limpiar índice corrupto
+          print('⚠️ Índice corrupto detectado, limpiando...');
+          await _firestore
+              .collection('student_index')
+              .doc(username.trim().toLowerCase())
+              .delete();
+
+          print('🔄 Reintentando búsqueda manual...');
+          // Reintentar con fallback
+          return await _loginStudentFallback(username, password);
         }
 
         final studentData = studentDoc.data()!;
@@ -207,10 +211,6 @@ class PrefsHelper {
         }
       }
 
-      // ═══════════════════════════════════════════════════════════
-      // ⚠️ FALLBACK: Si no existe en índice, buscar manualmente
-      // (Solo se ejecuta si el índice no está creado aún)
-      // ═══════════════════════════════════════════════════════════
       print('⚠️ Usuario no encontrado en índice, buscando manualmente...');
       return await _loginStudentFallback(username, password);
     } catch (e) {
@@ -219,9 +219,6 @@ class PrefsHelper {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // Método fallback (solo se usa si el índice no existe)
-  // ═══════════════════════════════════════════════════════════════
   static Future<bool> _loginStudentFallback(
     String username,
     String password,
@@ -637,56 +634,80 @@ class PrefsHelper {
     int successCount = 0;
     int errorCount = 0;
 
-    // ✅ Usar batch para operaciones múltiples
-    final batch = _firestore.batch();
-    int batchCount = 0;
+    try {
+      // ✅ Dividir en lotes de 450 operaciones (margen de seguridad bajo el límite de 500)
+      const batchSize = 450;
 
-    for (var student in students) {
-      try {
-        final studentRef = _firestore
-            .collection('users')
-            .doc(student['carreraPath'])
-            .collection('students')
-            .doc(student['studentId']);
+      for (int i = 0; i < students.length; i += batchSize) {
+        final batch = _firestore.batch();
+        final endIndex = (i + batchSize < students.length)
+            ? i + batchSize
+            : students.length;
 
-        // Obtener username para eliminar índice
-        final studentDoc = await studentRef.get();
-        if (studentDoc.exists) {
-          final username = studentDoc.data()?['username'];
-          if (username != null) {
-            final indexRef = _firestore
-                .collection('student_index')
-                .doc(username);
-            batch.delete(indexRef);
-            batchCount++;
+        final currentBatch = students.sublist(i, endIndex);
+
+        print(
+          '📦 Procesando lote ${(i ~/ batchSize) + 1}: ${currentBatch.length} estudiantes',
+        );
+
+        for (var student in currentBatch) {
+          try {
+            final studentRef = _firestore
+                .collection('users')
+                .doc(student['carreraPath'])
+                .collection('students')
+                .doc(student['studentId']);
+
+            // ✅ OPTIMIZACIÓN: Obtener username desde la lista en memoria
+            // En lugar de hacer un get() adicional
+            final studentData = _userCache[student['studentId']];
+
+            if (studentData != null) {
+              final username = studentData['username'];
+              if (username != null) {
+                final indexRef = _firestore
+                    .collection('student_index')
+                    .doc(username);
+                batch.delete(indexRef);
+              }
+            } else {
+              // Fallback: si no está en caché, intentar eliminar por patrón
+              // (esto solo pasa si el estudiante no fue cargado previamente)
+              print('⚠️ Estudiante ${student['studentId']} no en caché');
+            }
+
+            batch.delete(studentRef);
+            successCount++;
+          } catch (e) {
+            print(
+              '❌ Error preparando eliminación de ${student['studentId']}: $e',
+            );
+            errorCount++;
           }
         }
 
-        batch.delete(studentRef);
-        batchCount++;
-
-        // Firestore permite máximo 500 operaciones por batch
-        if (batchCount >= 400) {
+        // Ejecutar el batch actual
+        try {
           await batch.commit();
-          batchCount = 0;
+          print('✅ Lote ${(i ~/ batchSize) + 1} completado');
+        } catch (e) {
+          print('❌ Error ejecutando batch: $e');
+          errorCount += currentBatch.length - successCount;
         }
-
-        successCount++;
-      } catch (e) {
-        print('Error eliminando estudiante ${student['studentId']}: $e');
-        errorCount++;
       }
+
+      // Limpiar caché
+      _userCache.clear();
+      _cacheTimestamp = null;
+
+      print(
+        '✅ Eliminación completada: $successCount exitosos, $errorCount errores',
+      );
+      return {'success': successCount, 'errors': errorCount};
+    } catch (e) {
+      print('❌ Error general en eliminación masiva: $e');
+      return {'success': successCount, 'errors': errorCount};
     }
-
-    // Ejecutar operaciones restantes
-    if (batchCount > 0) {
-      await batch.commit();
-    }
-
-    // Limpiar caché
-    _userCache.clear();
-
-    return {'success': successCount, 'errors': errorCount};
   }
 
   static Future<bool> updateStudent({

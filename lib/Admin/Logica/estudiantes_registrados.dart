@@ -218,7 +218,7 @@ class _EstudiantesRegistradosScreenState
           children: [
             Icon(Icons.warning_rounded, color: Colors.red, size: 32),
             SizedBox(width: 8),
-            Text('⚠️ ADVERTENCIA'),
+            Text('ADVERTENCIA'),
           ],
         ),
         content: Column(
@@ -303,37 +303,50 @@ class _EstudiantesRegistradosScreenState
               'Eliminando estudiantes...',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
+            SizedBox(height: 8),
+            Text(
+              'Esto puede tomar unos segundos',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
           ],
         ),
       ),
     );
 
     try {
-      int successCount = 0;
-      int errorCount = 0;
-
       // ✅ Usar el path correcto según el tipo de facultad
       final carreraPath = _requiereCarrera(_selectedFacultad)
           ? _selectedCarrera!
           : _selectedFacultad!;
 
-      for (var student in _filteredStudents) {
-        try {
-          await PrefsHelper.deleteStudent(carreraPath, student['id']);
-          successCount++;
-        } catch (e) {
-          errorCount++;
-          print('Error eliminando estudiante: $e');
-        }
-      }
+      // ✅ OPTIMIZACIÓN: Llamar al método batch en PrefsHelper
+      print(
+        '🗑️ Iniciando eliminación masiva de ${_filteredStudents.length} estudiantes...',
+      );
 
-      Navigator.of(context).pop();
+      final studentsToDelete = _filteredStudents
+          .map(
+            (student) => {
+              'carreraPath': carreraPath,
+              'studentId': student['id'] as String,
+            },
+          )
+          .toList();
+
+      final result = await PrefsHelper.deleteMultipleStudents(studentsToDelete);
+
+      final successCount = result['success'] ?? 0;
+      final errorCount = result['errors'] ?? 0;
+
+      Navigator.of(context).pop(); // Cerrar diálogo de progreso
       await _showDeleteResultsDialog(successCount, errorCount);
 
+      // Recargar lista
       await _loadStudents();
     } catch (e) {
       Navigator.of(context).pop();
       _showMessage('Error durante la eliminación: $e');
+      print('❌ Error en eliminación masiva: $e');
     }
   }
 
@@ -349,7 +362,7 @@ class _EstudiantesRegistradosScreenState
               color: success > 0 && errors == 0 ? Colors.green : Colors.orange,
             ),
             const SizedBox(width: 8),
-            const Text('Resultado de Eliminación'),
+            const Text('Resultados'),
           ],
         ),
         content: Column(

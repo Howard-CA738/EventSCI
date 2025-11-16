@@ -666,28 +666,28 @@ class AsistenciasExcel {
     try {
       // Solicitar permisos según la versión de Android
       if (Platform.isAndroid) {
-        // Para Android 13+ (API 33+)
-        if (await Permission.photos.isPermanentlyDenied ||
-            await Permission.videos.isPermanentlyDenied) {
-          await openAppSettings();
-          throw Exception('Por favor, habilita los permisos en configuración');
-        }
+        // Para Android 13+ (API 33+) - Solo necesitamos manageExternalStorage
+        var storageStatus = await Permission.storage.status;
 
-        // Solicitar permisos para Android 13+
-        Map<Permission, PermissionStatus> statuses = await [
-          Permission.photos,
-          Permission.videos,
-        ].request();
+        if (!storageStatus.isGranted) {
+          // Primero intentar con storage normal
+          storageStatus = await Permission.storage.request();
 
-        // Para Android 11-12
-        if (!statuses.values.every((status) => status.isGranted)) {
-          var storageStatus = await Permission.storage.request();
+          // Si no se concede, intentar con manageExternalStorage
           if (!storageStatus.isGranted) {
-            var manageStatus = await Permission.manageExternalStorage.request();
+            var manageStatus = await Permission.manageExternalStorage.status;
+
             if (!manageStatus.isGranted) {
-              throw Exception(
-                'Permisos de almacenamiento denegados. Por favor, habilítalos en configuración.',
-              );
+              manageStatus = await Permission.manageExternalStorage.request();
+
+              if (!manageStatus.isGranted) {
+                if (manageStatus.isPermanentlyDenied) {
+                  await openAppSettings();
+                }
+                throw Exception(
+                  'Se requieren permisos de almacenamiento para guardar el archivo Excel.',
+                );
+              }
             }
           }
         }
@@ -706,18 +706,25 @@ class AsistenciasExcel {
 
       final fileName = 'Asistencias_${nombreCarrera}${sufijo}_$timestamp.xlsx';
 
-      // Obtener directorio de Documentos
+      // Obtener directorio de Documentos o Descargas
       Directory? directory;
       if (Platform.isAndroid) {
-        // Ruta de Documentos en Android
-        directory = Directory('/storage/emulated/0/Documents');
+        // Intentar con Downloads primero (más compatible)
+        directory = Directory('/storage/emulated/0/Download');
+
         if (!await directory.exists()) {
-          // Si no existe la carpeta Documents, crearla
-          try {
-            await directory.create(recursive: true);
-          } catch (e) {
-            // Si falla, usar la ruta alternativa
-            directory = Directory('/storage/emulated/0/Download');
+          // Si no existe, intentar con Documents
+          directory = Directory('/storage/emulated/0/Documents');
+
+          if (!await directory.exists()) {
+            try {
+              await directory.create(recursive: true);
+            } catch (e) {
+              print('Error al crear directorio: $e');
+              throw Exception(
+                'No se pudo crear el directorio para guardar el archivo',
+              );
+            }
           }
         }
       } else if (Platform.isIOS) {
@@ -736,12 +743,12 @@ class AsistenciasExcel {
         final file = File(filePath);
         await file.writeAsBytes(fileBytes);
         print('✅ Archivo guardado exitosamente en: $filePath');
-        print('📁 Ubicación: Documentos del dispositivo');
+        print('📁 Ubicación: ${directory.path}');
       } else {
         throw Exception('Error al generar el archivo Excel');
       }
     } catch (e) {
-      print('Error al guardar archivo: $e');
+      print('❌ Error al guardar archivo: $e');
       rethrow;
     }
   }

@@ -6,8 +6,10 @@ import '/admin/interfaz/crear_eventos_screen.dart';
 import 'gestion_grupos.dart';
 import '/admin/interfaz/seleccionar_ganadores_screen.dart';
 import 'reportes.dart';
-import 'editar_notas.dart';
+import 'asignar_proyectos.dart';
 import 'periodos.dart';
+import 'gestion_rubricas.dart';
+import 'evaluaciones.dart'; // ✅ NUEVA IMPORTACIÓN
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -164,13 +166,40 @@ class _AdminScreenState extends State<AdminScreen> {
                         },
                       ),
                       _buildMenuCard(
-                        imagePath: 'assets/icons/notas.png',
-                        title: 'Editar\nNotas',
-                        subtitle: 'Gestionar notas de estudiantes',
+                        imagePath: 'assets/icons/criterios.png',
+                        title: 'Gestión de\nRúbricas',
+                        subtitle: 'Crear y editar rúbricas',
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (context) => const EditarNotasScreen(),
+                              builder: (context) =>
+                                  const GestionCriteriosScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _buildMenuCard(
+                        imagePath: 'assets/icons/notas.png',
+                        title: 'Asignar\nProyectos',
+                        subtitle: 'Asignar proyectos a jurados',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const AsignarProyectosScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      // ✅ NUEVA OPCIÓN: Ver Evaluaciones
+                      _buildMenuCard(
+                        imagePath: 'assets/icons/evaluaciones.png',
+                        title: 'Ver\nEvaluaciones',
+                        subtitle: 'Revisar evaluaciones de jurados',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const EvaluacionesScreen(),
                             ),
                           );
                         },

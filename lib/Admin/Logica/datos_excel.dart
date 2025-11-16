@@ -4,6 +4,19 @@ import 'package:excel/excel.dart' as excel_pkg;
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// Estructura para agrupar estudiantes duplicados
+class StudentGroup {
+  final String normalizedName;
+  final List<Map<String, dynamic>> records;
+  Map<String, dynamic> mergedData;
+
+  StudentGroup({
+    required this.normalizedName,
+    required this.records,
+    required this.mergedData,
+  });
+}
+
 class DatosExcelScreen extends StatefulWidget {
   const DatosExcelScreen({super.key});
 
@@ -23,6 +36,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
   int _errorCount = 0;
   int _currentProgress = 0;
   List<String> _errors = [];
+  int _duplicatesDetected = 0;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -42,8 +56,6 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     'Documento': 'dni',
     'Unidad académica': 'facultad',
     'Programa estudio': 'carrera',
-
-    // Opcionales (por si los tienes en otras hojas):
     'Modalidad estudio': 'modalidadEstudio',
     'Sede': 'sede',
     'Grupo': 'grupo',
@@ -81,6 +93,65 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     super.dispose();
   }
 
+  // Función para normalizar nombres (eliminar acentos, espacios extra, etc)
+  String _normalizeStudentName(String name) {
+    String normalized = name.trim().toLowerCase();
+
+    const accents = {
+      'á': 'a',
+      'à': 'a',
+      'ä': 'a',
+      'â': 'a',
+      'é': 'e',
+      'è': 'e',
+      'ë': 'e',
+      'ê': 'e',
+      'í': 'i',
+      'ì': 'i',
+      'ï': 'i',
+      'î': 'i',
+      'ó': 'o',
+      'ò': 'o',
+      'ö': 'o',
+      'ô': 'o',
+      'ú': 'u',
+      'ù': 'u',
+      'ü': 'u',
+      'û': 'u',
+      'ñ': 'n',
+      'ç': 'c',
+    };
+
+    accents.forEach((accent, replacement) {
+      normalized = normalized.replaceAll(accent, replacement);
+    });
+
+    normalized = normalized.replaceAll(RegExp(r'\s+'), ' ');
+
+    return normalized;
+  }
+
+  // Función para detectar y eliminar estudiantes duplicados (solo mantiene el primero)
+  Map<String, Map<String, dynamic>> _removeDuplicateStudents(
+    List<Map<String, dynamic>> allData,
+  ) {
+    Map<String, Map<String, dynamic>> uniqueStudents = {};
+
+    for (var studentData in allData) {
+      String fullName = _getFieldValue(studentData, 'name', '');
+      if (fullName.isEmpty) continue;
+
+      String normalizedName = _normalizeStudentName(fullName);
+
+      // Solo agregar si NO existe ya (mantener el primero)
+      if (!uniqueStudents.containsKey(normalizedName)) {
+        uniqueStudents[normalizedName] = studentData;
+      }
+    }
+
+    return uniqueStudents;
+  }
+
   Future<void> _pickExcelFile() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -96,6 +167,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
           _successCount = 0;
           _errorCount = 0;
           _currentProgress = 0;
+          _duplicatesDetected = 0;
         });
 
         File file = File(result.files.single.path!);
@@ -178,7 +250,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       if (_totalRows == 0) {
         _showMessage('No se encontraron datos válidos en el archivo');
       } else {
-        _showMessage('✅ Se encontraron $_totalRows estudiantes para importar');
+        _showMessage('✅ Se encontraron $_totalRows registros para importar');
       }
     } catch (e) {
       _showMessage('Error al leer el archivo Excel: $e');
@@ -236,38 +308,28 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '¿Deseas importar $_totalRows estudiantes?',
+              '¿Deseas importar $_totalRows registros?',
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF1E3A5F),
               ),
             ),
-            const SizedBox(height: 16),
-            _buildFeatureItem('Importación ULTRA RÁPIDA'),
-            _buildFeatureItem('Acepta celdas vacías'),
-            _buildFeatureItem('Omite duplicados automáticamente'),
-            _buildFeatureItem('Organizado por carrera'),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.orange.shade200),
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
+              child: const Row(
                 children: [
-                  Icon(
-                    Icons.info_outline,
-                    color: Colors.orange.shade700,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  const Expanded(
+                  Icon(Icons.info_outline, color: Color(0xFF1E3A5F), size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
                     child: Text(
-                      'Puede tardar 30-60 segundos para 100+ estudiantes',
-                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                      'Se eliminarán automáticamente los registros duplicados (solo se importará el primero de cada estudiante)',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF1E3A5F)),
                     ),
                   ),
                 ],
@@ -306,6 +368,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       _successCount = 0;
       _errorCount = 0;
       _currentProgress = 0;
+      _duplicatesDetected = 0;
       _errors.clear();
     });
 
@@ -341,9 +404,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     );
   }
 
-  // ACTUALIZADO: Procesar importación por carrera
   Future<void> _processBatchImport() async {
-    // Agrupar estudiantes por carrera
     Map<String, List<Map<String, dynamic>>> studentsByCarrera = {};
 
     for (var studentData in _allData) {
@@ -354,24 +415,46 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       studentsByCarrera[carrera]!.add(studentData);
     }
 
-    // Procesar cada carrera
+    int totalProcessed = 0;
+
     for (var entry in studentsByCarrera.entries) {
       String carrera = entry.key;
       List<Map<String, dynamic>> students = entry.value;
 
-      // Obtener usuarios existentes en esta carrera
+      print('📚 Procesando carrera: $carrera');
+      print('   Total registros en Excel: ${students.length}');
+
+      // Eliminar duplicados (solo mantener el primero de cada estudiante)
+      Map<String, Map<String, dynamic>> uniqueStudentsMap =
+          _removeDuplicateStudents(students);
+
+      List<Map<String, dynamic>> uniqueStudents = uniqueStudentsMap.values
+          .toList();
+
+      print('   Estudiantes únicos detectados: ${uniqueStudents.length}');
+
+      int duplicatesInCarrera = students.length - uniqueStudents.length;
+      _duplicatesDetected += duplicatesInCarrera;
+
+      if (duplicatesInCarrera > 0) {
+        print('   🗑️ Se eliminaron $duplicatesInCarrera registros duplicados');
+      }
+
       final existingUsers = await _getExistingUsersInCarrera(carrera);
       List<Map<String, dynamic>> validStudents = [];
 
-      for (int i = 0; i < students.length; i++) {
-        var studentData = students[i];
-        final preparedData = _prepareStudentData(studentData, _currentProgress);
+      // Procesar cada estudiante único
+      for (int i = 0; i < uniqueStudents.length; i++) {
+        var studentData = uniqueStudents[i];
+
+        final preparedData = _prepareStudentData(studentData, totalProcessed);
+
         final isDuplicate = _checkDuplicate(preparedData, existingUsers);
 
         if (isDuplicate) {
           _errorCount++;
           _errors.add(
-            'Fila ${_currentProgress + 2}: ${preparedData['name']} - Ya existe en $carrera (DNI: ${preparedData['dni']})',
+            'Estudiante ${preparedData['name']} - Ya existe en $carrera (DNI: ${preparedData['dni']})',
           );
         } else {
           validStudents.add(preparedData);
@@ -380,10 +463,22 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
         setState(() {
           _currentProgress++;
         });
+
+        totalProcessed++;
       }
 
-      // Escribir estudiantes válidos en esta carrera
+      // Actualizar progreso por los duplicados eliminados
+      setState(() {
+        _currentProgress += duplicatesInCarrera;
+      });
+
       await _batchWriteToFirestoreByCarrera(carrera, validStudents);
+    }
+
+    if (_duplicatesDetected > 0) {
+      _showMessage(
+        '✅ Se eliminaron $_duplicatesDetected registros duplicados del Excel',
+      );
     }
   }
 
@@ -484,6 +579,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
         null,
       ),
       'celular': _getFieldValue(rawData, 'celular', null),
+      'email': _getFieldValue(rawData, 'email', ''),
       'userType': 'student',
       'createdAt': FieldValue.serverTimestamp(),
     };
@@ -494,10 +590,8 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     List<Map<String, dynamic>> students,
   ) async {
     try {
-      // ✅ Primero asegurarnos de que el documento de carrera existe
       final carreraDocRef = _firestore.collection('users').doc(carrera);
 
-      // Verificar si existe, si no, crearlo
       final carreraDoc = await carreraDocRef.get();
       if (!carreraDoc.exists) {
         await carreraDocRef.set({
@@ -515,7 +609,6 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
             : students.length;
 
         for (int j = i; j < end; j++) {
-          // ✅ Ahora usa el nombre de carrera directamente
           DocumentReference docRef = carreraDocRef.collection('students').doc();
           batch.set(docRef, students[j]);
         }
@@ -561,6 +654,11 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
   }
 
   void _showResultsDialog() {
+    int totalRegistros = _totalRows;
+    int usuariosCreados = _successCount;
+    int duplicadosOmitidos = _errorCount;
+    int registrosEliminados = _duplicatesDetected;
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -587,7 +685,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
             const SizedBox(width: 12),
             const Expanded(
               child: Text(
-                'Resultados',
+                'Resultados de Importación',
                 style: TextStyle(
                   color: Color(0xFF1E3A5F),
                   fontWeight: FontWeight.bold,
@@ -602,34 +700,78 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildResultCard(
-                'Total procesados',
-                '$_totalRows',
+                'Total de registros en Excel',
+                '$totalRegistros',
                 Icons.list_alt,
                 Colors.blue.shade600,
                 Colors.blue.shade50,
               ),
+              if (registrosEliminados > 0) ...[
+                const SizedBox(height: 12),
+                _buildResultCard(
+                  'Duplicados eliminados',
+                  '$registrosEliminados',
+                  Icons.delete_outline,
+                  Colors.red.shade600,
+                  Colors.red.shade50,
+                ),
+              ],
               const SizedBox(height: 12),
               _buildResultCard(
-                'Importados exitosamente',
-                '$_successCount',
-                Icons.check_circle,
+                'Estudiantes únicos detectados',
+                '${totalRegistros - registrosEliminados}',
+                Icons.people_outline,
+                Colors.purple.shade600,
+                Colors.purple.shade50,
+              ),
+              const SizedBox(height: 12),
+              _buildResultCard(
+                'Usuarios creados exitosamente',
+                '$usuariosCreados',
+                Icons.person_add,
                 Colors.green.shade600,
                 Colors.green.shade50,
               ),
               const SizedBox(height: 12),
               _buildResultCard(
-                'Duplicados omitidos',
-                '$_errorCount',
+                'Ya existentes (omitidos)',
+                '$duplicadosOmitidos',
                 Icons.info_outline,
                 Colors.orange.shade600,
                 Colors.orange.shade50,
               ),
+              if (registrosEliminados > 0) ...[
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info, color: Colors.red.shade700, size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Se detectaron estudiantes repetidos en el Excel y se eliminaron automáticamente, manteniendo solo el primer registro',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.red.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               if (_errors.isNotEmpty) ...[
                 const SizedBox(height: 20),
                 const Divider(),
                 const SizedBox(height: 12),
                 const Text(
-                  'Detalles de duplicados:',
+                  'Detalles de estudiantes ya existentes:',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF1E3A5F),
@@ -774,7 +916,6 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       body: SafeArea(
         child: Column(
           children: [
-            // Header
             Padding(
               padding: const EdgeInsets.all(20.0),
               child: Row(
@@ -815,7 +956,6 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                 ],
               ),
             ),
-            // Content Area
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -868,7 +1008,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
           const SizedBox(height: 32),
           Text(
             _currentProgress < _totalRows
-                ? 'Validando datos...'
+                ? 'Detectando duplicados...'
                 : 'Guardando en base de datos...',
             style: const TextStyle(
               fontSize: 18,
@@ -878,7 +1018,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            '$_currentProgress / $_totalRows estudiantes',
+            '$_currentProgress / $_totalRows registros',
             style: const TextStyle(fontSize: 16, color: Color(0xFF64748B)),
           ),
           const SizedBox(height: 24),
@@ -950,7 +1090,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                       ),
                     ),
                     const Text(
-                      'Exitosos',
+                      'Creados',
                       style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                     ),
                   ],
@@ -959,21 +1099,21 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                 Column(
                   children: [
                     const Icon(
-                      Icons.info_outline,
-                      color: Colors.orange,
+                      Icons.delete_outline,
+                      color: Colors.red,
                       size: 24,
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '$_errorCount',
+                      '$_duplicatesDetected',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.orange,
+                        color: Colors.red,
                         fontSize: 16,
                       ),
                     ),
                     const Text(
-                      'Duplicados',
+                      'Eliminados',
                       style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                     ),
                   ],
@@ -992,7 +1132,6 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Card principal de importación
           Card(
             elevation: 4,
             shadowColor: Colors.black26,
@@ -1035,7 +1174,6 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 20),
-                  // Features
                   _buildFeatureRow(
                     Icons.check_circle_outline,
                     'Acepta celdas vacías',
@@ -1043,10 +1181,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                   const SizedBox(height: 8),
                   _buildFeatureRow(Icons.bolt, 'Importación ultra rápida'),
                   const SizedBox(height: 8),
-                  _buildFeatureRow(
-                    Icons.refresh,
-                    'Omite duplicados automáticamente',
-                  ),
+                  _buildFeatureRow(Icons.delete_sweep, 'Elimina duplicados'),
                   const SizedBox(height: 8),
                   _buildFeatureRow(
                     Icons.folder_special,
@@ -1130,7 +1265,6 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
               ),
             ),
           ),
-          // Vista previa
           if (_fileSelected && _previewData.isNotEmpty) ...[
             const SizedBox(height: 20),
             Card(
@@ -1180,7 +1314,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            '$_totalRows estudiantes',
+                            '$_totalRows registros',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -1308,7 +1442,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            'Y ${_totalRows - 5} estudiantes más...',
+                            'Y ${_totalRows - 5} registros más...',
                             style: const TextStyle(
                               color: Color(0xFF64748B),
                               fontStyle: FontStyle.italic,
@@ -1325,7 +1459,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                         onPressed: _importData,
                         icon: const Icon(Icons.rocket_launch, size: 22),
                         label: const Text(
-                          'Importar Todos (Modo Rápido)',
+                          'Importar Eliminando Duplicados',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -1347,7 +1481,6 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
               ),
             ),
           ],
-          // Mensaje de error si no hay datos
           if (_fileSelected && _previewData.isEmpty) ...[
             const SizedBox(height: 20),
             Card(

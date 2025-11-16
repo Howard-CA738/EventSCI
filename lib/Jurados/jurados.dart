@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 import '/login.dart';
+import '/admin/logica/gestion_criterios.dart';
 
 class JuradosScreen extends StatefulWidget {
   const JuradosScreen({super.key});
@@ -12,6 +13,7 @@ class JuradosScreen extends StatefulWidget {
 
 class _JuradosScreenState extends State<JuradosScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final RubricasService _rubricasService = RubricasService();
   String _userName = '';
   String _userId = '';
   bool _isLoading = true;
@@ -41,51 +43,106 @@ class _JuradosScreenState extends State<JuradosScreen> {
     setState(() => _isLoading = true);
 
     try {
+      print('🔍 Buscando proyectos para jurado: $_userId');
       final List<Map<String, dynamic>> proyectos = [];
 
+      // 1. Buscar TODAS las evaluaciones asignadas a este jurado usando collectionGroup
       final evaluacionesSnapshot = await _firestore
           .collectionGroup('evaluaciones')
           .where('juradoId', isEqualTo: _userId)
           .get();
 
-      print('Evaluaciones encontradas: ${evaluacionesSnapshot.docs.length}');
+      print('📋 Evaluaciones encontradas: ${evaluacionesSnapshot.docs.length}');
 
+      // 2. Cargar todas las rúbricas una sola vez
+      final todasRubricas = await _rubricasService.obtenerRubricas();
+      final Map<String, Rubrica> rubricasMap = {
+        for (var r in todasRubricas) r.id: r,
+      };
+
+      // 3. Para cada evaluación, obtener los datos del proyecto
       for (var evaluacionDoc in evaluacionesSnapshot.docs) {
-        final evaluacionData = evaluacionDoc.data();
+        try {
+          final evaluacionData = evaluacionDoc.data();
 
-        final pathSegments = evaluacionDoc.reference.path.split('/');
-        final eventId = pathSegments[1];
-        final proyectoId = pathSegments[3];
+          // Extraer IDs desde la ruta: events/{eventId}/proyectos/{proyectoId}/evaluaciones/{juradoId}
+          final path = evaluacionDoc.reference.path;
+          final parts = path.split('/');
 
-        final proyectoDoc = await _firestore
-            .collection('events')
-            .doc(eventId)
-            .collection('proyectos')
-            .doc(proyectoId)
-            .get();
+          if (parts.length < 4) {
+            print('⚠️ Ruta inválida: $path');
+            continue;
+          }
 
-        if (proyectoDoc.exists) {
+          final eventId = parts[1];
+          final proyectoId = parts[3];
+
+          print('   📦 Procesando: $eventId / $proyectoId');
+
+          // Obtener datos del proyecto
+          final proyectoDoc = await _firestore
+              .collection('events')
+              .doc(eventId)
+              .collection('proyectos')
+              .doc(proyectoId)
+              .get();
+
+          if (!proyectoDoc.exists) {
+            print('   ⚠️ Proyecto no encontrado');
+            continue;
+          }
+
           final proyectoData = proyectoDoc.data()!;
+          final rubricaId = evaluacionData['rubricaId'] as String?;
+
+          // Buscar la rúbrica
+          Rubrica? rubrica;
+          if (rubricaId != null && rubricasMap.containsKey(rubricaId)) {
+            rubrica = rubricasMap[rubricaId];
+          }
+
+          if (rubrica == null) {
+            print('   ⚠️ Rúbrica no encontrada: $rubricaId');
+            continue;
+          }
+
+          // Obtener datos del evento para mostrar información adicional
+          final eventoDoc = await _firestore
+              .collection('events')
+              .doc(eventId)
+              .get();
+
+          final eventoData = eventoDoc.exists
+              ? eventoDoc.data()!
+              : <String, dynamic>{};
 
           proyectos.add({
             'eventId': eventId,
             'proyectoId': proyectoId,
-            'codigo': proyectoData['Código'] ?? '',
+            'eventoNombre': eventoData['name'] ?? 'Sin nombre',
+            'codigo': proyectoData['Código'] ?? 'Sin código',
             'titulo': proyectoData['Título'] ?? 'Sin título',
             'integrantes': proyectoData['Integrantes'] ?? '',
             'sala': proyectoData['Sala'] ?? '',
-            'criterios': evaluacionData['criterios'] ?? [],
-            'facultad': evaluacionData['facultad'] ?? '',
-            'carrera': evaluacionData['carrera'] ?? '',
-            'categoria': evaluacionData['categoria'] ?? '',
-            'evaluacionId': evaluacionDoc.id,
+            'clasificacion': proyectoData['Clasificación'] ?? 'Sin categoría',
+            'rubricaId': rubrica.id,
+            'rubricaNombre': rubrica.nombre,
+            'rubrica': rubrica,
             'evaluada': evaluacionData['evaluada'] ?? false,
             'bloqueada': evaluacionData['bloqueada'] ?? false,
-            'notaTotal': evaluacionData['notaTotal'] ?? 0,
+            'notaTotal': (evaluacionData['notaTotal'] ?? 0.0).toDouble(),
+            'fechaAsignacion': evaluacionData['fechaAsignacion'],
           });
+
+          print('   ✅ Proyecto agregado: ${proyectoData['Código']}');
+        } catch (e) {
+          print('   ❌ Error procesando evaluación: $e');
         }
       }
 
+      print('✅ Total proyectos cargados: ${proyectos.length}');
+
+      // Ordenar por código
       proyectos.sort((a, b) => a['codigo'].compareTo(b['codigo']));
 
       if (mounted) {
@@ -95,7 +152,7 @@ class _JuradosScreenState extends State<JuradosScreen> {
         });
       }
     } catch (e) {
-      print('Error al cargar proyectos: $e');
+      print('❌ Error al cargar proyectos: $e');
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -112,6 +169,7 @@ class _JuradosScreenState extends State<JuradosScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Cerrar Sesión'),
         content: const Text('¿Estás seguro de que deseas cerrar sesión?'),
         actions: [
@@ -119,9 +177,9 @@ class _JuradosScreenState extends State<JuradosScreen> {
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancelar'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Cerrar Sesión'),
           ),
         ],
@@ -241,11 +299,17 @@ class _JuradosScreenState extends State<JuradosScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(),
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1E3A5F)),
+            ),
             SizedBox(height: 16),
             Text(
               'Cargando proyectos asignados...',
-              style: TextStyle(fontSize: 16, color: Color(0xFF64748B)),
+              style: TextStyle(
+                fontSize: 16,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
@@ -259,25 +323,36 @@ class _JuradosScreenState extends State<JuradosScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.assignment_outlined,
-                size: 80,
-                color: Colors.grey[400],
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.assignment_outlined,
+                  size: 80,
+                  color: Colors.grey[400],
+                ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               Text(
                 'No tienes proyectos asignados',
                 style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[700],
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Text(
-                'Los proyectos aparecerán aquí cuando un administrador te los asigne',
+                'Los proyectos aparecerán aquí cuando\nel administrador te los asigne',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.grey[600],
+                  height: 1.5,
+                ),
               ),
             ],
           ),
@@ -285,204 +360,433 @@ class _JuradosScreenState extends State<JuradosScreen> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Text(
-            'Proyectos para Evaluar (${_proyectosAsignados.length})',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E3A5F),
+    // Agrupar proyectos por estado
+    final pendientes = _proyectosAsignados
+        .where((p) => !(p['evaluada'] as bool) && !(p['bloqueada'] as bool))
+        .toList();
+    final evaluados = _proyectosAsignados
+        .where((p) => (p['evaluada'] as bool))
+        .toList();
+    final bloqueados = _proyectosAsignados
+        .where((p) => (p['bloqueada'] as bool))
+        .toList();
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Resumen de estadísticas
+          _buildEstadisticasCard(),
+
+          // Proyectos Pendientes
+          if (pendientes.isNotEmpty) ...[
+            _buildSeccionHeader(
+              'Proyectos Pendientes',
+              pendientes.length,
+              Colors.orange,
+              Icons.pending_actions,
+            ),
+            ...pendientes.map((p) => _buildProyectoCard(p)),
+          ],
+
+          // Proyectos Evaluados
+          if (evaluados.isNotEmpty) ...[
+            _buildSeccionHeader(
+              'Proyectos Evaluados',
+              evaluados.length,
+              Colors.green,
+              Icons.check_circle,
+            ),
+            ...evaluados.map((p) => _buildProyectoCard(p)),
+          ],
+
+          // Proyectos Bloqueados
+          if (bloqueados.isNotEmpty) ...[
+            _buildSeccionHeader(
+              'Proyectos Bloqueados',
+              bloqueados.length,
+              Colors.red,
+              Icons.lock,
+            ),
+            ...bloqueados.map((p) => _buildProyectoCard(p)),
+          ],
+
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEstadisticasCard() {
+    final total = _proyectosAsignados.length;
+    final evaluados = _proyectosAsignados
+        .where((p) => p['evaluada'] as bool)
+        .length;
+    final pendientes = total - evaluados;
+    final progreso = total > 0 ? evaluados / total : 0.0;
+
+    return Container(
+      margin: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E3A5F), Color(0xFF2C5F7C)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1E3A5F).withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.analytics, color: Colors.white, size: 28),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Tu Progreso',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${(progreso * 100).toStringAsFixed(0)}%',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildEstadistica(
+                  'Total',
+                  total.toString(),
+                  Icons.assignment,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildEstadistica(
+                  'Pendientes',
+                  pendientes.toString(),
+                  Icons.pending,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildEstadistica(
+                  'Evaluados',
+                  evaluados.toString(),
+                  Icons.check_circle,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: progreso,
+              minHeight: 8,
+              backgroundColor: Colors.white.withOpacity(0.3),
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
             ),
           ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            itemCount: _proyectosAsignados.length,
-            itemBuilder: (context, index) {
-              final proyecto = _proyectosAsignados[index];
-              final criterios = proyecto['criterios'] as List<dynamic>;
-              final evaluada = proyecto['evaluada'] as bool;
-              final bloqueada = proyecto['bloqueada'] as bool;
+        ],
+      ),
+    );
+  }
 
-              return Card(
-                margin: const EdgeInsets.only(bottom: 16),
-                elevation: 3,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: InkWell(
-                  onTap: () => _navegarAEvaluacion(proyecto),
-                  borderRadius: BorderRadius.circular(16),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildEstadistica(String label, String valor, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.white, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            valor,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white.withOpacity(0.8),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSeccionHeader(
+    String titulo,
+    int cantidad,
+    Color color,
+    IconData icon,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            titulo,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              cantidad.toString(),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProyectoCard(Map<String, dynamic> proyecto) {
+    final rubrica = proyecto['rubrica'] as Rubrica;
+    final evaluada = proyecto['evaluada'] as bool;
+    final bloqueada = proyecto['bloqueada'] as bool;
+
+    Color estadoColor = Colors.orange;
+    IconData estadoIcon = Icons.pending;
+    String estadoTexto = 'Pendiente';
+
+    if (bloqueada) {
+      estadoColor = Colors.red;
+      estadoIcon = Icons.lock;
+      estadoTexto = 'Bloqueada';
+    } else if (evaluada) {
+      estadoColor = Colors.green;
+      estadoIcon = Icons.check_circle;
+      estadoTexto = 'Evaluada';
+    }
+
+    return Card(
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      elevation: 3,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: estadoColor.withOpacity(0.3), width: 2),
+      ),
+      child: InkWell(
+        onTap: () => _navegarAEvaluacion(proyecto),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E3A5F),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      proyecto['codigo'],
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: estadoColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1E3A5F),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                proyecto['codigo'],
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                            const Spacer(),
-                            if (evaluada || bloqueada)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: bloqueada
-                                      ? Colors.red.withOpacity(0.1)
-                                      : Colors.green.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      bloqueada
-                                          ? Icons.lock
-                                          : Icons.check_circle,
-                                      size: 16,
-                                      color: bloqueada
-                                          ? Colors.red
-                                          : Colors.green,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      bloqueada ? 'Bloqueada' : 'Evaluada',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: bloqueada
-                                            ? Colors.red
-                                            : Colors.green,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            const SizedBox(width: 8),
-                            const Icon(
-                              Icons.arrow_forward_ios,
-                              size: 18,
-                              color: Color(0xFF64748B),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
+                        Icon(estadoIcon, size: 16, color: estadoColor),
+                        const SizedBox(width: 4),
                         Text(
-                          proyecto['titulo'],
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E3A5F),
+                          estadoTexto,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: estadoColor,
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        if (proyecto['integrantes'].toString().isNotEmpty)
-                          _buildInfoRow(Icons.people, proyecto['integrantes']),
-                        if (proyecto['sala'].toString().isNotEmpty)
-                          _buildInfoRow(Icons.room, proyecto['sala']),
-                        const SizedBox(height: 12),
-                        const Divider(height: 1),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF0F9FF),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: const Color(
-                                      0xFF1E3A5F,
-                                    ).withOpacity(0.2),
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.assignment,
-                                      color: Color(0xFF1E3A5F),
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      '${criterios.length} criterio${criterios.length != 1 ? 's' : ''}',
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF1E3A5F),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            if (evaluada) ...[
-                              const SizedBox(width: 12),
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: Colors.green.withOpacity(0.3),
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.grade,
-                                      color: Colors.green,
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '${proyecto['notaTotal']}',
-                                      style: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.green,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ],
                         ),
                       ],
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 18,
+                    color: Color(0xFF64748B),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                proyecto['titulo'],
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E3A5F),
                 ),
-              );
-            },
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              if (proyecto['integrantes'].toString().isNotEmpty)
+                _buildInfoRow(Icons.people, proyecto['integrantes']),
+              if (proyecto['sala'].toString().isNotEmpty)
+                _buildInfoRow(Icons.room, proyecto['sala']),
+              _buildInfoRow(Icons.event, 'Evento: ${proyecto['eventoNombre']}'),
+              _buildInfoRow(
+                Icons.category,
+                'Categoría: ${proyecto['clasificacion']}',
+              ),
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0F9FF),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFF1E3A5F).withOpacity(0.2),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.checklist,
+                            color: Color(0xFF1E3A5F),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${rubrica.nombre}\n${rubrica.totalSecciones} secciones • ${rubrica.totalCriterios} criterios',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1E3A5F),
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (evaluada) ...[
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.green.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          const Icon(
+                            Icons.grade,
+                            color: Colors.green,
+                            size: 20,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            proyecto['notaTotal'].toStringAsFixed(1),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -507,7 +811,10 @@ class _JuradosScreenState extends State<JuradosScreen> {
   }
 }
 
-// Pantalla de evaluación del proyecto
+// ============================================================================
+// PANTALLA DE EVALUACIÓN CON RÚBRICAS
+// ============================================================================
+
 class EvaluacionProyectoScreen extends StatefulWidget {
   final Map<String, dynamic> proyecto;
   final String juradoId;
@@ -527,15 +834,17 @@ class EvaluacionProyectoScreen extends StatefulWidget {
 
 class _EvaluacionProyectoScreenState extends State<EvaluacionProyectoScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final Map<int, double?> _notasSeleccionadas = {};
+  final Map<String, double?> _notasSeleccionadas = {};
   bool _isGuardando = false;
   bool _isCargando = true;
   bool _yaEvaluado = false;
   bool _estaBloqueado = false;
+  late Rubrica _rubrica;
 
   @override
   void initState() {
     super.initState();
+    _rubrica = widget.proyecto['rubrica'] as Rubrica;
     _cargarNotas();
   }
 
@@ -560,12 +869,8 @@ class _EvaluacionProyectoScreenState extends State<EvaluacionProyectoScreen> {
 
           if (data.containsKey('notas')) {
             final notas = data['notas'] as Map<String, dynamic>;
-
             for (var entry in notas.entries) {
-              final index = int.tryParse(entry.key);
-              if (index != null) {
-                _notasSeleccionadas[index] = (entry.value as num).toDouble();
-              }
+              _notasSeleccionadas[entry.key] = (entry.value as num).toDouble();
             }
           }
         }
@@ -579,27 +884,21 @@ class _EvaluacionProyectoScreenState extends State<EvaluacionProyectoScreen> {
     }
   }
 
-  // Parsear la escala del formato "0/10" o "0/20"
-  int _parseMaxEscala(String escala) {
-    final parts = escala.split('/');
-    if (parts.length == 2) {
-      return int.tryParse(parts[1].trim()) ?? 10;
-    }
-    return 10;
-  }
-
   Future<void> _guardarEvaluacion() async {
     // Validar que todos los criterios tengan nota
-    final criterios = widget.proyecto['criterios'] as List<dynamic>;
-    for (int i = 0; i < criterios.length; i++) {
-      if (_notasSeleccionadas[i] == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Debes calificar todos los criterios'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
+    for (var seccion in _rubrica.secciones) {
+      for (var criterio in seccion.criterios) {
+        if (_notasSeleccionadas[criterio.id] == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Debes calificar todos los criterios en "${seccion.nombre}"',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
       }
     }
 
@@ -607,6 +906,7 @@ class _EvaluacionProyectoScreenState extends State<EvaluacionProyectoScreen> {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Confirmar Evaluación'),
         content: const Text(
           'Una vez guardada, no podrás modificar las notas. ¿Estás seguro?',
@@ -632,13 +932,16 @@ class _EvaluacionProyectoScreenState extends State<EvaluacionProyectoScreen> {
     setState(() => _isGuardando = true);
 
     try {
-      // Preparar las notas
+      // Calcular nota total
+      double notaTotal = 0;
       final Map<String, dynamic> notas = {};
-      double sumaTotal = 0;
 
-      for (var entry in _notasSeleccionadas.entries) {
-        notas[entry.key.toString()] = entry.value!;
-        sumaTotal += entry.value!;
+      for (var seccion in _rubrica.secciones) {
+        for (var criterio in seccion.criterios) {
+          final nota = _notasSeleccionadas[criterio.id]!;
+          notas[criterio.id] = nota;
+          notaTotal += nota;
+        }
       }
 
       // Guardar en Firestore
@@ -651,16 +954,15 @@ class _EvaluacionProyectoScreenState extends State<EvaluacionProyectoScreen> {
           .doc(widget.juradoId)
           .update({
             'notas': notas,
-            'notaTotal': sumaTotal,
+            'notaTotal': notaTotal,
             'evaluada': true,
-            'bloqueada': false,
             'fechaEvaluacion': FieldValue.serverTimestamp(),
           });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Evaluación guardada exitosamente'),
+            content: Text('✅ Evaluación guardada exitosamente'),
             backgroundColor: Colors.green,
           ),
         );
@@ -685,7 +987,6 @@ class _EvaluacionProyectoScreenState extends State<EvaluacionProyectoScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final criterios = widget.proyecto['criterios'] as List<dynamic>;
     final soloLectura = _yaEvaluado || _estaBloqueado;
 
     return Scaffold(
@@ -707,13 +1008,25 @@ class _EvaluacionProyectoScreenState extends State<EvaluacionProyectoScreen> {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      'Evaluar ${widget.proyecto['codigo']}',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Evaluar ${widget.proyecto['codigo']}',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          _rubrica.nombre,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white.withOpacity(0.8),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   if (!soloLectura && !_isGuardando && !_isCargando)
@@ -743,158 +1056,14 @@ class _EvaluacionProyectoScreenState extends State<EvaluacionProyectoScreen> {
                     : ListView(
                         padding: const EdgeInsets.all(20),
                         children: [
-                          // Mensaje de estado
-                          if (soloLectura)
-                            Container(
-                              margin: const EdgeInsets.only(bottom: 16),
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: _estaBloqueado
-                                    ? Colors.red.withOpacity(0.1)
-                                    : Colors.green.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: _estaBloqueado
-                                      ? Colors.red.withOpacity(0.3)
-                                      : Colors.green.withOpacity(0.3),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    _estaBloqueado
-                                        ? Icons.lock
-                                        : Icons.check_circle,
-                                    color: _estaBloqueado
-                                        ? Colors.red
-                                        : Colors.green,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      _estaBloqueado
-                                          ? 'Evaluación bloqueada por el administrador'
-                                          : 'Evaluación completada. Solo lectura.',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: _estaBloqueado
-                                            ? Colors.red
-                                            : Colors.green,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                          // Info del proyecto
-                          Card(
-                            elevation: 2,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    widget.proyecto['titulo'],
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF1E3A5F),
-                                    ),
-                                  ),
-                                  if (widget.proyecto['integrantes']
-                                      .toString()
-                                      .isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      widget.proyecto['integrantes'],
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey[700],
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ),
+                          if (soloLectura) _buildEstadoAlert(),
+                          _buildInfoProyecto(),
                           const SizedBox(height: 20),
-
-                          // Criterios de evaluación
-                          const Text(
-                            'Criterios de Evaluación',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1E3A5F),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          ...List.generate(criterios.length, (index) {
-                            final criterio = criterios[index];
-                            final maxNota = _parseMaxEscala(criterio['escala']);
-                            final notaSeleccionada = _notasSeleccionadas[index];
-
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 16),
-                              elevation: 2,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      criterio['descripcion'],
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF334155),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(
-                                          0xFF1E3A5F,
-                                        ).withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        'Escala: ${criterio['escala']}',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF1E3A5F),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-
-                                    // Selector de notas con chips
-                                    _buildNotaSelector(
-                                      index,
-                                      maxNota,
-                                      notaSeleccionada,
-                                      soloLectura,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }),
+                          _buildResumenRubrica(),
+                          const SizedBox(height: 20),
+                          ..._rubrica.secciones.map((seccion) {
+                            return _buildSeccion(seccion, soloLectura);
+                          }).toList(),
                         ],
                       ),
               ),
@@ -919,78 +1088,464 @@ class _EvaluacionProyectoScreenState extends State<EvaluacionProyectoScreen> {
     );
   }
 
-  Widget _buildNotaSelector(
-    int criterioIndex,
-    int maxNota,
-    double? notaSeleccionada,
-    bool soloLectura,
-  ) {
-    // Definir umbral para mostrar dropdown en lugar de chips
-    const umbralChips = 10; // Si maxNota > 10, usar dropdown
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.stars, size: 18, color: Color(0xFF1E3A5F)),
-            const SizedBox(width: 8),
-            Text(
-              notaSeleccionada != null
-                  ? 'Nota seleccionada: ${notaSeleccionada.toStringAsFixed(notaSeleccionada.truncateToDouble() == notaSeleccionada ? 0 : 1)}'
-                  : 'Selecciona una calificación',
+  Widget _buildEstadoAlert() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _estaBloqueado
+            ? Colors.red.withOpacity(0.1)
+            : Colors.green.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _estaBloqueado
+              ? Colors.red.withOpacity(0.3)
+              : Colors.green.withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _estaBloqueado ? Icons.lock : Icons.check_circle,
+            color: _estaBloqueado ? Colors.red : Colors.green,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _estaBloqueado
+                  ? 'Evaluación bloqueada por el administrador'
+                  : 'Evaluación completada. Solo lectura.',
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: notaSeleccionada != null
-                    ? const Color(0xFF1E3A5F)
-                    : Colors.grey[600],
+                color: _estaBloqueado ? Colors.red : Colors.green,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoProyecto() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.proyecto['titulo'],
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E3A5F),
+              ),
+            ),
+            if (widget.proyecto['integrantes'].toString().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.people, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.proyecto['integrantes'],
+                      style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (widget.proyecto['sala'].toString().isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(Icons.room, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.proyecto['sala'],
+                    style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.event, size: 16, color: Colors.blue[700]),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    widget.proyecto['eventoNombre'],
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.blue[700],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResumenRubrica() {
+    final notasIngresadas = _notasSeleccionadas.length;
+    final totalCriterios = _rubrica.totalCriterios;
+    final progreso = totalCriterios > 0
+        ? notasIngresadas / totalCriterios
+        : 0.0;
+
+    double notaActual = 0;
+    for (var nota in _notasSeleccionadas.values) {
+      if (nota != null) notaActual += nota;
+    }
+
+    return Card(
+      elevation: 2,
+      color: Colors.blue.shade50,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.analytics_outlined, color: Colors.blue.shade700),
+                const SizedBox(width: 8),
+                Text(
+                  'Progreso de Evaluación',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade900,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Criterios evaluados',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$notasIngresadas / $totalCriterios',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Puntaje actual',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${notaActual.toStringAsFixed(1)} / ${_rubrica.puntajeMaximo.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: progreso,
+                minHeight: 8,
+                backgroundColor: Colors.grey[300],
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  progreso == 1.0 ? Colors.green : Colors.blue,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              progreso == 1.0
+                  ? '¡Evaluación completa! Puedes guardar.'
+                  : 'Completa todos los criterios para guardar',
+              style: TextStyle(
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+                color: progreso == 1.0 ? Colors.green : Colors.grey[600],
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-
-        // Si la escala es grande (>10), usar dropdown
-        if (maxNota > umbralChips)
-          _buildDropdownSelector(
-            criterioIndex,
-            maxNota,
-            notaSeleccionada,
-            soloLectura,
-          )
-        else
-          // Si la escala es pequeña (<=10), usar chips
-          _buildChipsSelector(
-            criterioIndex,
-            maxNota,
-            notaSeleccionada,
-            soloLectura,
-          ),
-      ],
+      ),
     );
   }
 
-  Widget _buildChipsSelector(
-    int criterioIndex,
-    int maxNota,
+  Widget _buildSeccion(SeccionRubrica seccion, bool soloLectura) {
+    int criteriosEvaluados = 0;
+    double puntajeSeccion = 0;
+
+    for (var criterio in seccion.criterios) {
+      if (_notasSeleccionadas[criterio.id] != null) {
+        criteriosEvaluados++;
+        puntajeSeccion += _notasSeleccionadas[criterio.id]!;
+      }
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: true,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E3A5F).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.folder_open,
+              color: Color(0xFF1E3A5F),
+              size: 24,
+            ),
+          ),
+          title: Text(
+            seccion.nombre,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E3A5F),
+            ),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 4),
+              Text(
+                '${seccion.criterios.length} criterios • ${seccion.pesoTotal.toStringAsFixed(0)} pts máx',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+              if (criteriosEvaluados > 0) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(
+                      criteriosEvaluados == seccion.criterios.length
+                          ? Icons.check_circle
+                          : Icons.pending,
+                      size: 14,
+                      color: criteriosEvaluados == seccion.criterios.length
+                          ? Colors.green
+                          : Colors.orange,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$criteriosEvaluados/${seccion.criterios.length} evaluados • ${puntajeSeccion.toStringAsFixed(1)} pts',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: criteriosEvaluados == seccion.criterios.length
+                            ? Colors.green
+                            : Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+          children: seccion.criterios.map((criterio) {
+            return _buildCriterio(criterio, soloLectura);
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCriterio(Criterio criterio, bool soloLectura) {
+    final notaSeleccionada = _notasSeleccionadas[criterio.id];
+    final pesoMaximo = criterio.peso;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: notaSeleccionada != null
+            ? Colors.green.withOpacity(0.05)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: notaSeleccionada != null
+              ? Colors.green.withOpacity(0.3)
+              : Colors.grey.withOpacity(0.3),
+          width: notaSeleccionada != null ? 2 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  criterio.descripcion,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF334155),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'Máx: ${pesoMaximo.toStringAsFixed(1)} pts',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E3A5F),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (notaSeleccionada != null)
+            Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.stars, size: 18, color: Colors.green),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Calificación: ${notaSeleccionada.toStringAsFixed(1)} pts',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.pending, size: 16, color: Colors.orange[700]),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Selecciona una calificación',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.orange[700],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          _buildNotaSelector(criterio, notaSeleccionada, soloLectura),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotaSelector(
+    Criterio criterio,
     double? notaSeleccionada,
     bool soloLectura,
   ) {
-    final opciones = List.generate(maxNota + 1, (i) => i.toDouble());
+    final pesoMaximo = criterio.peso;
+    final List<double> opciones = [];
+    double valor = 0;
+    while (valor <= pesoMaximo) {
+      opciones.add(valor);
+      valor += 0.5;
+    }
+    if (opciones.last != pesoMaximo) {
+      opciones.add(pesoMaximo);
+    }
 
+    if (opciones.length > 10) {
+      return _buildDropdownSelector(
+        criterio,
+        opciones,
+        notaSeleccionada,
+        soloLectura,
+      );
+    } else {
+      return _buildChipsSelector(
+        criterio,
+        opciones,
+        notaSeleccionada,
+        soloLectura,
+      );
+    }
+  }
+
+  Widget _buildChipsSelector(
+    Criterio criterio,
+    List<double> opciones,
+    double? notaSeleccionada,
+    bool soloLectura,
+  ) {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: opciones.map((nota) {
         final isSelected = notaSeleccionada == nota;
-
         return InkWell(
           onTap: soloLectura
               ? null
               : () {
                   setState(() {
-                    _notasSeleccionadas[criterioIndex] = nota;
+                    _notasSeleccionadas[criterio.id] = nota;
                   });
                 },
           borderRadius: BorderRadius.circular(12),
@@ -1055,13 +1610,11 @@ class _EvaluacionProyectoScreenState extends State<EvaluacionProyectoScreen> {
   }
 
   Widget _buildDropdownSelector(
-    int criterioIndex,
-    int maxNota,
+    Criterio criterio,
+    List<double> opciones,
     double? notaSeleccionada,
     bool soloLectura,
   ) {
-    final opciones = List.generate(maxNota + 1, (i) => i.toDouble());
-
     return Container(
       decoration: BoxDecoration(
         color: soloLectura ? Colors.grey[200] : Colors.white,
@@ -1119,7 +1672,7 @@ class _EvaluacionProyectoScreenState extends State<EvaluacionProyectoScreen> {
                 child: Row(
                   children: [
                     Container(
-                      width: 40,
+                      width: 50,
                       height: 40,
                       decoration: BoxDecoration(
                         color: notaSeleccionada == nota
@@ -1142,21 +1695,17 @@ class _EvaluacionProyectoScreenState extends State<EvaluacionProyectoScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'pts',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
                     if (notaSeleccionada == nota) ...[
-                      const SizedBox(width: 12),
+                      const Spacer(),
                       const Icon(
                         Icons.check_circle,
                         color: Color(0xFF1E3A5F),
                         size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Seleccionada',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1E3A5F),
-                        ),
                       ),
                     ],
                   ],
@@ -1169,7 +1718,7 @@ class _EvaluacionProyectoScreenState extends State<EvaluacionProyectoScreen> {
               : (value) {
                   if (value != null) {
                     setState(() {
-                      _notasSeleccionadas[criterioIndex] = value;
+                      _notasSeleccionadas[criterio.id] = value;
                     });
                   }
                 },
@@ -1185,7 +1734,7 @@ class _EvaluacionProyectoScreenState extends State<EvaluacionProyectoScreen> {
                         color: const Color(0xFF1E3A5F),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.check_circle,
                         color: Colors.white,
                         size: 20,
