@@ -18,6 +18,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
 
   bool _isLoading = false;
   bool _isInitializing = true;
+  bool _isCalculando = false;
   String? _currentUserType;
 
   final Map<String, List<String>> _facultadesCarreras = {
@@ -50,6 +51,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
   List<String> _carrerasDisponibles = [];
   List<Map<String, dynamic>> _ganadores = [];
   int _totalEventos = 0;
+  Map<String, List<Map<String, dynamic>>> _ganadoresPorCategoria = {};
 
   @override
   void initState() {
@@ -90,6 +92,222 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
     }
   }
 
+  // ============================================================================
+  // 🔥 NUEVA FUNCIÓN: Calcular ganadores automáticamente por categoría
+  // ============================================================================
+  Future<void> _calcularGanadoresAutomaticos() async {
+    if (_facultadSeleccionada == null || _carreraSeleccionada == null) {
+      _showSnackBar('Debes seleccionar facultad y carrera');
+      return;
+    }
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Calcular Ganadores'),
+        content: const Text(
+          '¿Deseas calcular automáticamente los TOP 3 ganadores de cada categoría?\n\n'
+          'Se seleccionarán los proyectos con mejor promedio de evaluaciones.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1E3A5F),
+            ),
+            child: const Text('Calcular'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true) return;
+
+    setState(() => _isCalculando = true);
+
+    try {
+      print('🏆 Iniciando cálculo de ganadores automático');
+
+      final eventosSnapshot = await _firestore
+          .collection('events')
+          .where('facultad', isEqualTo: _facultadSeleccionada)
+          .where('carrera', isEqualTo: _carreraSeleccionada)
+          .get();
+
+      if (eventosSnapshot.docs.isEmpty) {
+        _showSnackBar('No hay eventos para esta facultad/carrera');
+        setState(() => _isCalculando = false);
+        return;
+      }
+
+      int totalProyectosProcesados = 0;
+      int totalGanadoresAsignados = 0;
+
+      for (var eventoDoc in eventosSnapshot.docs) {
+        print('\n📌 Procesando evento: ${eventoDoc.id}');
+
+        // 1. Obtener todos los proyectos del evento
+        final proyectosSnapshot = await _firestore
+            .collection('events')
+            .doc(eventoDoc.id)
+            .collection('proyectos')
+            .get();
+
+        if (proyectosSnapshot.docs.isEmpty) {
+          print('   ⚠️ Sin proyectos');
+          continue;
+        }
+
+        // 2. Calcular puntaje promedio de cada proyecto
+        Map<String, Map<String, dynamic>> proyectosConPuntaje = {};
+
+        for (var proyectoDoc in proyectosSnapshot.docs) {
+          final proyectoData = proyectoDoc.data();
+          final clasificacion =
+              proyectoData['Clasificación'] ?? 'Sin categoría';
+
+          // Obtener evaluaciones del proyecto
+          final evaluacionesSnapshot = await _firestore
+              .collection('events')
+              .doc(eventoDoc.id)
+              .collection('proyectos')
+              .doc(proyectoDoc.id)
+              .collection('evaluaciones')
+              .where('evaluada', isEqualTo: true)
+              .where('bloqueada', isEqualTo: false)
+              .get();
+
+          if (evaluacionesSnapshot.docs.isEmpty) {
+            print('   ⚠️ Proyecto ${proyectoDoc.id} sin evaluaciones válidas');
+            continue;
+          }
+
+          // Calcular promedio
+          double sumaNotas = 0;
+          int totalEvaluaciones = 0;
+
+          for (var evaluacionDoc in evaluacionesSnapshot.docs) {
+            final notaTotal = (evaluacionDoc.data()['notaTotal'] ?? 0.0) as num;
+            sumaNotas += notaTotal.toDouble();
+            totalEvaluaciones++;
+          }
+
+          final promedioFinal = totalEvaluaciones > 0
+              ? sumaNotas / totalEvaluaciones
+              : 0.0;
+
+          proyectosConPuntaje[proyectoDoc.id] = {
+            'id': proyectoDoc.id,
+            'data': proyectoData,
+            'clasificacion': clasificacion,
+            'promedio': promedioFinal,
+            'totalEvaluaciones': totalEvaluaciones,
+          };
+
+          totalProyectosProcesados++;
+        }
+
+        // 3. Agrupar por categoría
+        Map<String, List<MapEntry<String, Map<String, dynamic>>>> porCategoria =
+            {};
+
+        for (var entry in proyectosConPuntaje.entries) {
+          final categoria = entry.value['clasificacion'] as String;
+          if (!porCategoria.containsKey(categoria)) {
+            porCategoria[categoria] = [];
+          }
+          porCategoria[categoria]!.add(entry);
+        }
+
+        // 4. Seleccionar TOP 3 de cada categoría
+        for (var categoria in porCategoria.keys) {
+          print('\n   🏅 Categoría: $categoria');
+
+          final proyectosCategoria = porCategoria[categoria]!;
+
+          // Ordenar por promedio descendente
+          proyectosCategoria.sort((a, b) {
+            final promedioA = a.value['promedio'] as double;
+            final promedioB = b.value['promedio'] as double;
+            return promedioB.compareTo(promedioA);
+          });
+
+          // Tomar TOP 3
+          final top3 = proyectosCategoria.take(3).toList();
+
+          print('   📊 ${proyectosCategoria.length} proyectos encontrados');
+          print('   🏆 Asignando TOP 3 ganadores:');
+
+          // 5. Marcar como ganadores en Firestore
+          int posicion = 1;
+          for (var proyecto in top3) {
+            final proyectoId = proyecto.key;
+            final promedio = proyecto.value['promedio'] as double;
+            final codigo = proyecto.value['data']['Código'] ?? 'Sin código';
+
+            print(
+              '      $posicion° lugar: $codigo - Promedio: ${promedio.toStringAsFixed(2)}',
+            );
+
+            await _firestore
+                .collection('events')
+                .doc(eventoDoc.id)
+                .collection('proyectos')
+                .doc(proyectoId)
+                .update({
+                  'isWinner': true,
+                  'posicion': posicion,
+                  'promedioFinal': promedio,
+                  'winnerDate': FieldValue.serverTimestamp(),
+                });
+
+            totalGanadoresAsignados++;
+            posicion++;
+          }
+
+          // 6. Limpiar ganadores anteriores que no están en el TOP 3
+          for (var proyecto in proyectosCategoria.skip(3)) {
+            await _firestore
+                .collection('events')
+                .doc(eventoDoc.id)
+                .collection('proyectos')
+                .doc(proyecto.key)
+                .update({
+                  'isWinner': false,
+                  'posicion': FieldValue.delete(),
+                  'promedioFinal': FieldValue.delete(),
+                  'winnerDate': FieldValue.delete(),
+                });
+          }
+        }
+      }
+
+      print('\n✅ Proceso completado:');
+      print('   📦 Proyectos procesados: $totalProyectosProcesados');
+      print('   🏆 Ganadores asignados: $totalGanadoresAsignados');
+
+      if (mounted) {
+        _showSnackBar(
+          '✅ Ganadores calculados: $totalGanadoresAsignados proyectos',
+          isSuccess: true,
+        );
+        await _cargarGanadores();
+      }
+    } catch (e) {
+      print('❌ Error al calcular ganadores: $e');
+      _showSnackBar('Error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isCalculando = false);
+      }
+    }
+  }
+
   Future<void> _cargarGanadores() async {
     if (_facultadSeleccionada == null || _carreraSeleccionada == null) {
       _showSnackBar('Debes seleccionar facultad y carrera');
@@ -99,6 +317,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
     setState(() {
       _isLoading = true;
       _ganadores.clear();
+      _ganadoresPorCategoria.clear();
       _totalEventos = 0;
     });
 
@@ -140,13 +359,33 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                 proyectoData['Clasificación'] ?? 'Sin clasificación',
             'sala': proyectoData['Sala'] ?? 'Sin sala',
             'isWinner': proyectoData['isWinner'] ?? false,
+            'posicion': proyectoData['posicion'] ?? 0,
+            'promedioFinal': (proyectoData['promedioFinal'] ?? 0.0).toDouble(),
             'winnerDate': proyectoData['winnerDate'],
           });
         }
       }
 
+      // Agrupar por categoría
+      Map<String, List<Map<String, dynamic>>> porCategoria = {};
+      for (var ganador in ganadoresList) {
+        final categoria = ganador['clasificacion'] as String;
+        if (!porCategoria.containsKey(categoria)) {
+          porCategoria[categoria] = [];
+        }
+        porCategoria[categoria]!.add(ganador);
+      }
+
+      // Ordenar dentro de cada categoría por posición
+      porCategoria.forEach((categoria, lista) {
+        lista.sort(
+          (a, b) => (a['posicion'] as int).compareTo(b['posicion'] as int),
+        );
+      });
+
       setState(() {
         _ganadores = ganadoresList;
+        _ganadoresPorCategoria = porCategoria;
       });
 
       _showSnackBar(
@@ -171,6 +410,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
           ? _facultadesCarreras[facultad] ?? []
           : [];
       _ganadores.clear();
+      _ganadoresPorCategoria.clear();
       _totalEventos = 0;
     });
   }
@@ -219,7 +459,23 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
     final clasificacion = ganador['clasificacion'] ?? 'Sin clasificación';
     final sala = ganador['sala'] ?? 'Sin sala';
     final eventName = ganador['eventName'] ?? 'Sin evento';
+    final posicion = ganador['posicion'] ?? 0;
+    final promedio = ganador['promedioFinal'] ?? 0.0;
     final winnerDate = (ganador['winnerDate'] as Timestamp?)?.toDate();
+
+    // Medalla según posición
+    IconData medalla = Icons.emoji_events;
+    Color colorMedalla = Colors.amber;
+    String textoLugar = '${posicion}° Lugar';
+
+    if (posicion == 1) {
+      medalla = Icons.emoji_events;
+      colorMedalla = Colors.amber;
+    } else if (posicion == 2) {
+      colorMedalla = Colors.grey[400]!;
+    } else if (posicion == 3) {
+      colorMedalla = Colors.brown[300]!;
+    }
 
     showDialog(
       context: context,
@@ -251,24 +507,32 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.amber,
+                          color: colorMedalla,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Icon(
-                          Icons.emoji_events,
-                          color: Colors.white,
-                          size: 28,
-                        ),
+                        child: Icon(medalla, color: Colors.white, size: 28),
                       ),
                       const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'PROYECTO GANADOR',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'PROYECTO GANADOR',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              textoLugar,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white.withOpacity(0.9),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       IconButton(
@@ -285,15 +549,50 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Promedio
+                        if (promedio > 0)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.green.shade400,
+                                  Colors.green.shade600,
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.star,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Promedio: ${promedio.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         // Nombre del proyecto
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: Colors.amber.withOpacity(0.1),
+                            color: colorMedalla.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: Colors.amber.withOpacity(0.3),
+                              color: colorMedalla.withOpacity(0.3),
                             ),
                           ),
                           child: Column(
@@ -320,7 +619,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                           ),
                         ),
                         const SizedBox(height: 16),
-                        // Detalles del proyecto
                         _buildDetailRow(Icons.event, 'Evento', eventName),
                         _buildDetailRow(Icons.qr_code, 'Código', codigo),
                         _buildDetailRow(
@@ -354,9 +652,9 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                               ),
                             ),
                             const SizedBox(width: 12),
-                            Text(
+                            const Text(
                               'Integrantes: ',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFF1E3A5F),
@@ -454,6 +752,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
       _carreraSeleccionada = null;
       _carrerasDisponibles.clear();
       _ganadores.clear();
+      _ganadoresPorCategoria.clear();
       _totalEventos = 0;
     });
     _showSnackBar('Filtros reiniciados', isSuccess: true);
@@ -526,7 +825,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                             ),
                           ),
                           Text(
-                            'Consulta y visualiza ganadores',
+                            'TOP 3 por categoría',
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.white70,
@@ -557,18 +856,20 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                       topRight: Radius.circular(30),
                     ),
                   ),
-                  child: _isLoading
-                      ? const Center(
+                  child: _isLoading || _isCalculando
+                      ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              CircularProgressIndicator(
+                              const CircularProgressIndicator(
                                 color: Color(0xFF1E3A5F),
                               ),
-                              SizedBox(height: 16),
+                              const SizedBox(height: 16),
                               Text(
-                                'Cargando ganadores...',
-                                style: TextStyle(
+                                _isCalculando
+                                    ? 'Calculando ganadores...'
+                                    : 'Cargando ganadores...',
+                                style: const TextStyle(
                                   color: Color(0xFF64748B),
                                   fontSize: 16,
                                 ),
@@ -731,51 +1032,92 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                                         setState(() {
                                           _carreraSeleccionada = value;
                                           _ganadores.clear();
+                                          _ganadoresPorCategoria.clear();
                                           _totalEventos = 0;
                                         });
                                       },
                                     ),
                                     const SizedBox(height: 20),
-                                    // Botón buscar
-                                    SizedBox(
-                                      width: double.infinity,
-                                      height: 50,
-                                      child: ElevatedButton(
-                                        onPressed: _cargarGanadores,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: const Color(
-                                            0xFF1E3A5F,
-                                          ),
-                                          foregroundColor: Colors.white,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                          elevation: 0,
-                                        ),
-                                        child: const Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.search),
-                                            SizedBox(width: 8),
-                                            Text(
-                                              'Buscar Ganadores',
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w600,
+                                    // Botones de acción
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: SizedBox(
+                                            height: 50,
+                                            child: ElevatedButton(
+                                              onPressed:
+                                                  _calcularGanadoresAutomaticos,
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.green,
+                                                foregroundColor: Colors.white,
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                elevation: 0,
+                                              ),
+                                              child: const Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(Icons.calculate),
+                                                  SizedBox(width: 8),
+                                                  Text(
+                                                    'Calcular',
+                                                    style: TextStyle(
+                                                      fontSize: 15,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
-                                          ],
+                                          ),
                                         ),
-                                      ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: SizedBox(
+                                            height: 50,
+                                            child: ElevatedButton(
+                                              onPressed: _cargarGanadores,
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: const Color(
+                                                  0xFF1E3A5F,
+                                                ),
+                                                foregroundColor: Colors.white,
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                elevation: 0,
+                                              ),
+                                              child: const Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(Icons.visibility),
+                                                  SizedBox(width: 8),
+                                                  Text(
+                                                    'Ganador',
+                                                    style: TextStyle(
+                                                      fontSize: 15,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
                               ),
                               const SizedBox(height: 20),
-                              // Resultados
+                              // Resultados por categoría
                               if (_facultadSeleccionada != null &&
                                   _carreraSeleccionada != null) ...[
                                 // Header de resultados
@@ -823,7 +1165,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                                               ),
                                             ),
                                             Text(
-                                              '${_ganadores.length} ganador(es) encontrados',
+                                              '${_ganadores.length} ganador(es) • ${_ganadoresPorCategoria.length} categoría(s)',
                                               style: const TextStyle(
                                                 fontSize: 16,
                                                 fontWeight: FontWeight.bold,
@@ -860,8 +1202,8 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                                   ),
                                 ),
                                 const SizedBox(height: 16),
-                                // Lista de ganadores
-                                if (_ganadores.isEmpty)
+                                // Lista de ganadores por categoría
+                                if (_ganadoresPorCategoria.isEmpty)
                                   Container(
                                     padding: const EdgeInsets.all(40),
                                     decoration: BoxDecoration(
@@ -886,259 +1228,27 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                                         ),
                                         const SizedBox(height: 8),
                                         Text(
-                                          'Intenta con otros filtros',
+                                          'Presiona "Calcular TOP 3" para generar ganadores',
                                           style: TextStyle(
                                             fontSize: 14,
                                             color: Colors.grey[500],
                                           ),
+                                          textAlign: TextAlign.center,
                                         ),
                                       ],
                                     ),
                                   )
                                 else
-                                  ListView.builder(
-                                    shrinkWrap: true,
-                                    physics:
-                                        const NeverScrollableScrollPhysics(),
-                                    itemCount: _ganadores.length,
-                                    itemBuilder: (context, index) {
-                                      final g = _ganadores[index];
-                                      final integrantes = _parseIntegrantes(
-                                        g['integrantes'],
-                                      );
-                                      return Container(
-                                        margin: const EdgeInsets.only(
-                                          bottom: 12,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(
-                                                0.05,
-                                              ),
-                                              blurRadius: 10,
-                                              offset: const Offset(0, 4),
-                                            ),
-                                          ],
-                                        ),
-                                        child: Material(
-                                          color: Colors.transparent,
-                                          child: InkWell(
-                                            onTap: () =>
-                                                _mostrarDetallesGanador(g),
-                                            borderRadius: BorderRadius.circular(
-                                              16,
-                                            ),
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(16),
-                                              child: Row(
-                                                children: [
-                                                  // Icono de trofeo
-                                                  Container(
-                                                    padding:
-                                                        const EdgeInsets.all(
-                                                          12,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.amber
-                                                          .withOpacity(0.15),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            12,
-                                                          ),
-                                                    ),
-                                                    child: const Icon(
-                                                      Icons.emoji_events,
-                                                      color: Colors.amber,
-                                                      size: 28,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 16),
-                                                  // Información del proyecto
-                                                  Expanded(
-                                                    child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
-                                                      children: [
-                                                        Text(
-                                                          g['projectName'] ??
-                                                              'Proyecto sin nombre',
-                                                          style:
-                                                              const TextStyle(
-                                                                fontSize: 16,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                                color: Color(
-                                                                  0xFF1E3A5F,
-                                                                ),
-                                                              ),
-                                                          maxLines: 2,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
-                                                        const SizedBox(
-                                                          height: 8,
-                                                        ),
-                                                        Row(
-                                                          children: [
-                                                            Icon(
-                                                              Icons.event,
-                                                              size: 14,
-                                                              color: Colors
-                                                                  .grey[600],
-                                                            ),
-                                                            const SizedBox(
-                                                              width: 4,
-                                                            ),
-                                                            Expanded(
-                                                              child: Text(
-                                                                g['eventName'] ??
-                                                                    'Sin evento',
-                                                                style: TextStyle(
-                                                                  fontSize: 13,
-                                                                  color: Colors
-                                                                      .grey[600],
-                                                                ),
-                                                                maxLines: 1,
-                                                                overflow:
-                                                                    TextOverflow
-                                                                        .ellipsis,
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        const SizedBox(
-                                                          height: 4,
-                                                        ),
-                                                        Row(
-                                                          children: [
-                                                            Container(
-                                                              padding:
-                                                                  const EdgeInsets.symmetric(
-                                                                    horizontal:
-                                                                        8,
-                                                                    vertical: 4,
-                                                                  ),
-                                                              decoration: BoxDecoration(
-                                                                color:
-                                                                    const Color(
-                                                                      0xFF1E3A5F,
-                                                                    ).withOpacity(
-                                                                      0.1,
-                                                                    ),
-                                                                borderRadius:
-                                                                    BorderRadius.circular(
-                                                                      6,
-                                                                    ),
-                                                              ),
-                                                              child: Row(
-                                                                mainAxisSize:
-                                                                    MainAxisSize
-                                                                        .min,
-                                                                children: [
-                                                                  Icon(
-                                                                    Icons
-                                                                        .qr_code,
-                                                                    size: 12,
-                                                                    color: const Color(
-                                                                      0xFF1E3A5F,
-                                                                    ),
-                                                                  ),
-                                                                  const SizedBox(
-                                                                    width: 4,
-                                                                  ),
-                                                                  Text(
-                                                                    g['codigo'] ??
-                                                                        'Sin código',
-                                                                    style: const TextStyle(
-                                                                      fontSize:
-                                                                          11,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w600,
-                                                                      color: Color(
-                                                                        0xFF1E3A5F,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                            ),
-                                                            const SizedBox(
-                                                              width: 8,
-                                                            ),
-                                                            Container(
-                                                              padding:
-                                                                  const EdgeInsets.symmetric(
-                                                                    horizontal:
-                                                                        8,
-                                                                    vertical: 4,
-                                                                  ),
-                                                              decoration: BoxDecoration(
-                                                                color: Colors
-                                                                    .green
-                                                                    .withOpacity(
-                                                                      0.1,
-                                                                    ),
-                                                                borderRadius:
-                                                                    BorderRadius.circular(
-                                                                      6,
-                                                                    ),
-                                                              ),
-                                                              child: Row(
-                                                                mainAxisSize:
-                                                                    MainAxisSize
-                                                                        .min,
-                                                                children: [
-                                                                  const Icon(
-                                                                    Icons.group,
-                                                                    size: 12,
-                                                                    color: Colors
-                                                                        .green,
-                                                                  ),
-                                                                  const SizedBox(
-                                                                    width: 4,
-                                                                  ),
-                                                                  Text(
-                                                                    '${integrantes.length}',
-                                                                    style: const TextStyle(
-                                                                      fontSize:
-                                                                          11,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w600,
-                                                                      color: Colors
-                                                                          .green,
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                  // Flecha
-                                                  Icon(
-                                                    Icons.arrow_forward_ios,
-                                                    color: Colors.grey[400],
-                                                    size: 18,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
+                                  ..._ganadoresPorCategoria.entries.map((
+                                    entry,
+                                  ) {
+                                    final categoria = entry.key;
+                                    final ganadores = entry.value;
+                                    return _buildCategoriaSection(
+                                      categoria,
+                                      ganadores,
+                                    );
+                                  }).toList(),
                               ],
                             ],
                           ),
@@ -1146,6 +1256,263 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoriaSection(
+    String categoria,
+    List<Map<String, dynamic>> ganadores,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header de categoría
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF1E3A5F),
+                  const Color(0xFF1E3A5F).withOpacity(0.8),
+                ],
+              ),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.category, color: Colors.white, size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    categoria,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'TOP ${ganadores.length}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Lista de ganadores
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: ganadores.map((ganador) {
+                return _buildGanadorCard(ganador);
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGanadorCard(Map<String, dynamic> ganador) {
+    final posicion = ganador['posicion'] as int;
+    final promedio = ganador['promedioFinal'] as double;
+    final integrantes = _parseIntegrantes(ganador['integrantes']);
+
+    // Colores según posición
+    Color colorPosicion = Colors.amber;
+    IconData iconPosicion = Icons.emoji_events;
+
+    if (posicion == 1) {
+      colorPosicion = Colors.amber;
+    } else if (posicion == 2) {
+      colorPosicion = Colors.grey[400]!;
+    } else if (posicion == 3) {
+      colorPosicion = Colors.brown[300]!;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: colorPosicion.withOpacity(0.3), width: 2),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _mostrarDetallesGanador(ganador),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // Medalla de posición
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: colorPosicion.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(iconPosicion, color: colorPosicion, size: 28),
+                      Text(
+                        '$posicion°',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: colorPosicion,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Información del proyecto
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        ganador['projectName'] ?? 'Proyecto sin nombre',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E3A5F),
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.qr_code,
+                                  size: 12,
+                                  color: Color(0xFF1E3A5F),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  ganador['codigo'] ?? 'Sin código',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1E3A5F),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.group,
+                                  size: 12,
+                                  color: Colors.green,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${integrantes.length}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (promedio > 0) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.star,
+                              size: 16,
+                              color: Colors.amber,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Promedio: ${promedio.toStringAsFixed(2)} pts',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.amber[800],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                // Flecha
+                Icon(
+                  Icons.arrow_forward_ios,
+                  color: Colors.grey[400],
+                  size: 18,
+                ),
+              ],
+            ),
           ),
         ),
       ),
