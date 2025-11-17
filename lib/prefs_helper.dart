@@ -13,9 +13,9 @@ class PrefsHelper {
   static const String userTypeJurado = 'jurado';
 
   static const String adminEmail = 'admin';
-  static const String adminPassword = 'admin123';
-  static const String asistenteEmail = 'asistente';
-  static const String asistentePassword = 'asistente123';
+  static const String adminPassword = 'admin@2025.';
+  static const String asistenteEmail = 'society';
+  static const String asistentePassword = 'society.2O25';
   static const String juradoEmail = 'jurado';
   static const String juradoPassword = 'jurado123';
 

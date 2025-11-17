@@ -107,7 +107,6 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
     });
 
     try {
-      // CAMBIO: Buscar en 'users' con userType 'jurado' en lugar de colección 'jurados'
       final juradosSnapshot = await _firestore
           .collection('users')
           .where('userType', isEqualTo: 'jurado')
@@ -116,12 +115,19 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
 
       final List<Map<String, dynamic>> juradosList = [];
 
-      // Filtrar por carrera en el código
       for (var doc in juradosSnapshot.docs) {
         final data = doc.data();
 
-        // Solo agregar si la carrera coincide
         if (data['carrera'] == _carreraSeleccionada) {
+          // CAMBIO: Manejar categorías como lista
+          List<String> categorias = [];
+          if (data['categorias'] != null) {
+            categorias = List<String>.from(data['categorias']);
+          } else if (data['categoria'] != null) {
+            // Compatibilidad con datos antiguos
+            categorias = [data['categoria']];
+          }
+
           juradosList.add({
             'id': doc.id,
             'nombre': data['name'] ?? '',
@@ -129,7 +135,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
             'password': data['password'] ?? '',
             'facultad': data['facultad'] ?? '',
             'carrera': data['carrera'] ?? '',
-            'categoria': data['categoria'] ?? '',
+            'categorias': categorias,
           });
         }
       }
@@ -170,7 +176,9 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
     final nombreController = TextEditingController(text: jurado['nombre']);
     final usuarioController = TextEditingController(text: jurado['usuario']);
     final passwordController = TextEditingController(text: jurado['password']);
-    String categoriaSeleccionada = jurado['categoria'];
+    List<String> categoriasSeleccionadas = List<String>.from(
+      jurado['categorias'],
+    );
 
     showDialog(
       context: context,
@@ -269,77 +277,139 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                StreamBuilder<QuerySnapshot>(
-                  stream: _firestore
-                      .collection('events')
-                      .where('facultad', isEqualTo: _facultadSeleccionada)
-                      .where('carrera', isEqualTo: _carreraSeleccionada)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
+
+                // NUEVO: Selector de múltiples categorías
+                FutureBuilder<List<String>>(
+                  future: _obtenerCategorias(),
+                  builder: (context, catSnapshot) {
+                    if (!catSnapshot.hasData) {
                       return const CircularProgressIndicator();
                     }
 
-                    Set<String> categorias = {};
-                    for (var eventDoc in snapshot.data!.docs) {
-                      _firestore
-                          .collection('events')
-                          .doc(eventDoc.id)
-                          .collection('proyectos')
-                          .get()
-                          .then((proyectos) {
-                            for (var proyecto in proyectos.docs) {
-                              final clasificacion = proyecto
-                                  .data()['Clasificación'];
-                              if (clasificacion != null) {
-                                categorias.add(clasificacion);
-                              }
-                            }
-                          });
-                    }
+                    final categorias = catSnapshot.data!;
 
-                    return FutureBuilder<List<String>>(
-                      future: _obtenerCategorias(),
-                      builder: (context, catSnapshot) {
-                        if (!catSnapshot.hasData) {
-                          return const CircularProgressIndicator();
-                        }
-
-                        return DropdownButtonFormField<String>(
-                          value: categoriaSeleccionada,
-                          decoration: InputDecoration(
-                            labelText: 'Categoría',
-                            prefixIcon: const Icon(
-                              Icons.category,
-                              color: Color(0xFF1A5490),
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF1A5490),
-                                width: 2,
-                              ),
+                    return Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.category,
+                                  color: Color(0xFF1A5490),
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Categorías',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const Spacer(),
+                                if (categoriasSeleccionadas.isNotEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1A5490),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      '${categoriasSeleccionadas.length}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
-                          items: catSnapshot.data!.map((cat) {
-                            return DropdownMenuItem(
-                              value: cat,
-                              child: Text(cat),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            setDialogState(() {
-                              categoriaSeleccionada = value!;
-                            });
-                          },
-                        );
-                      },
+                          const Divider(height: 1),
+                          Container(
+                            constraints: const BoxConstraints(maxHeight: 200),
+                            child: ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: categorias.length,
+                              itemBuilder: (context, index) {
+                                final categoria = categorias[index];
+                                final isSelected = categoriasSeleccionadas
+                                    .contains(categoria);
+
+                                return CheckboxListTile(
+                                  title: Text(
+                                    categoria,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                  value: isSelected,
+                                  activeColor: const Color(0xFF1A5490),
+                                  onChanged: (bool? value) {
+                                    setDialogState(() {
+                                      if (value == true) {
+                                        categoriasSeleccionadas.add(categoria);
+                                      } else {
+                                        categoriasSeleccionadas.remove(
+                                          categoria,
+                                        );
+                                      }
+                                    });
+                                  },
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                  dense: true,
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
                     );
                   },
                 ),
+
+                // Mostrar categorías seleccionadas como chips
+                if (categoriasSeleccionadas.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12.0),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: categoriasSeleccionadas.map((cat) {
+                        return Chip(
+                          label: Text(
+                            cat,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.white,
+                            ),
+                          ),
+                          backgroundColor: const Color(0xFF1A5490),
+                          deleteIcon: const Icon(
+                            Icons.close,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                          onDeleted: () {
+                            setDialogState(() {
+                              categoriasSeleccionadas.remove(cat);
+                            });
+                          },
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                        );
+                      }).toList(),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -353,12 +423,22 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
+                if (categoriasSeleccionadas.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Debe seleccionar al menos una categoría'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+
                 await _actualizarJurado(
                   jurado['id'],
                   nombreController.text,
                   usuarioController.text,
                   passwordController.text,
-                  categoriaSeleccionada,
+                  categoriasSeleccionadas,
                 );
                 if (mounted) {
                   Navigator.pop(context);
@@ -422,15 +502,15 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
     String nombre,
     String usuario,
     String password,
-    String categoria,
+    List<String> categorias,
   ) async {
     try {
-      // CAMBIO: Actualizar en 'users' en lugar de 'jurados'
+      // CAMBIO: Actualizar con lista de categorías
       await _firestore.collection('users').doc(id).update({
         'name': nombre,
         'usuario': usuario,
         'password': password,
-        'categoria': categoria,
+        'categorias': categorias, // Lista de categorías
       });
 
       if (mounted) {
@@ -509,7 +589,6 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
 
     if (confirmar == true) {
       try {
-        // CAMBIO: Eliminar de 'users' en lugar de 'jurados'
         await _firestore.collection('users').doc(id).delete();
 
         if (mounted) {
@@ -751,6 +830,9 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                               itemCount: _jurados.length,
                               itemBuilder: (context, index) {
                                 final jurado = _jurados[index];
+                                final categorias =
+                                    jurado['categorias'] as List<String>;
+
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 12),
                                   elevation: 3,
@@ -790,13 +872,40 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                                             fontSize: 14,
                                           ),
                                         ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Categoría: ${jurado['categoria']}',
-                                          style: TextStyle(
-                                            color: Colors.grey[600],
-                                            fontSize: 13,
-                                          ),
+                                        const SizedBox(height: 4),
+                                        // Mostrar categorías como chips pequeños
+                                        Wrap(
+                                          spacing: 4,
+                                          runSpacing: 4,
+                                          children: categorias.map((cat) {
+                                            return Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: const Color(
+                                                  0xFF1A5490,
+                                                ).withOpacity(0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                border: Border.all(
+                                                  color: const Color(
+                                                    0xFF1A5490,
+                                                  ).withOpacity(0.3),
+                                                ),
+                                              ),
+                                              child: Text(
+                                                cat,
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: Color(0xFF1A5490),
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            );
+                                          }).toList(),
                                         ),
                                       ],
                                     ),

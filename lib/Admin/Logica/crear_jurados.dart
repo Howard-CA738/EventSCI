@@ -23,7 +23,7 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
   // Valores seleccionados para los dropdowns
   String? _facultadSeleccionada;
   String? _carreraSeleccionada;
-  String? _categoriaSeleccionada;
+  List<String> _categoriasSeleccionadas = []; // CAMBIO: Ahora es una lista
 
   // Listas dinámicas
   List<String> _facultades = [];
@@ -81,7 +81,7 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
     setState(() {
       _facultadSeleccionada = facultad;
       _carreraSeleccionada = null;
-      _categoriaSeleccionada = null;
+      _categoriasSeleccionadas = [];
       _categoriasDisponibles = [];
 
       if (facultad != null && _carrerasPorFacultad.containsKey(facultad)) {
@@ -96,14 +96,13 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
   Future<void> _onCarreraChanged(String? carrera) async {
     setState(() {
       _carreraSeleccionada = carrera;
-      _categoriaSeleccionada = null;
+      _categoriasSeleccionadas = [];
       _categoriasDisponibles = [];
     });
 
     if (carrera == null || _facultadSeleccionada == null) return;
 
     try {
-      // Buscar eventos que coincidan con facultad y carrera
       final eventsSnapshot = await _firestore
           .collection('events')
           .where('facultad', isEqualTo: _facultadSeleccionada)
@@ -112,7 +111,6 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
 
       final Set<String> categoriasSet = {};
 
-      // Para cada evento, obtener las categorías de sus proyectos
       for (var eventDoc in eventsSnapshot.docs) {
         final proyectosSnapshot = await _firestore
             .collection('events')
@@ -134,12 +132,10 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
         setState(() {
           _categoriasDisponibles = categoriasSet.toList()..sort();
 
-          // Guardar en cache
           final cacheKey = '$_facultadSeleccionada|$carrera';
           _categoriasPorCarrera[cacheKey] = categoriasSet;
         });
 
-        // Mostrar mensaje si no hay categorías
         if (categoriasSet.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -168,44 +164,43 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
       return;
     }
 
+    // Validar que al menos haya una categoría seleccionada
+    if (_categoriasSeleccionadas.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Debe seleccionar al menos una categoría'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final success = await PrefsHelper.createJuradoAccount(
-        nombre: _nombreController.text.trim(),
-        usuario: _usuarioController.text.trim(),
-        password: _passwordController.text,
-        facultad: _facultadSeleccionada!,
-        carrera: _carreraSeleccionada!,
-        categoria: _categoriaSeleccionada!,
-      );
+      // CAMBIO: Crear jurado con lista de categorías
+      final juradoData = {
+        'name': _nombreController.text.trim(),
+        'usuario': _usuarioController.text.trim(),
+        'password': _passwordController.text,
+        'facultad': _facultadSeleccionada!,
+        'carrera': _carreraSeleccionada!,
+        'categorias': _categoriasSeleccionadas, // Lista de categorías
+        'userType': 'jurado',
+        'createdAt': FieldValue.serverTimestamp(),
+      };
 
-      if (!mounted) return;
+      // Verificar si el usuario ya existe
+      final existingUser = await _firestore
+          .collection('users')
+          .where('usuario', isEqualTo: _usuarioController.text.trim())
+          .get();
 
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Jurado creado exitosamente'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-
-        // Limpiar formulario
-        _formKey.currentState!.reset();
-        _nombreController.clear();
-        _usuarioController.clear();
-        _passwordController.clear();
-        setState(() {
-          _facultadSeleccionada = null;
-          _carreraSeleccionada = null;
-          _categoriaSeleccionada = null;
-          _carrerasDisponibles = [];
-          _categoriasDisponibles = [];
-        });
-      } else {
+      if (existingUser.docs.isNotEmpty) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Error: El usuario ya está registrado'),
@@ -213,7 +208,34 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
             duration: Duration(seconds: 3),
           ),
         );
+        return;
       }
+
+      // Crear el jurado
+      await _firestore.collection('users').add(juradoData);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Jurado creado exitosamente'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // Limpiar formulario
+      _formKey.currentState!.reset();
+      _nombreController.clear();
+      _usuarioController.clear();
+      _passwordController.clear();
+      setState(() {
+        _facultadSeleccionada = null;
+        _carreraSeleccionada = null;
+        _categoriasSeleccionadas = [];
+        _carrerasDisponibles = [];
+        _categoriasDisponibles = [];
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -266,7 +288,6 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
                       ),
                     ),
                   ),
-                  // Botón para ver/editar jurados
                   IconButton(
                     icon: const Icon(
                       Icons.edit_document,
@@ -508,7 +529,7 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
                         ),
                         const SizedBox(height: 18),
 
-                        // Facultad - MEJORADO
+                        // Facultad
                         DropdownButtonFormField<String>(
                           value: _facultadSeleccionada,
                           isExpanded: true,
@@ -605,7 +626,7 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
                         ),
                         const SizedBox(height: 18),
 
-                        // Carrera - MEJORADO
+                        // Carrera
                         DropdownButtonFormField<String>(
                           value: _carreraSeleccionada,
                           isExpanded: true,
@@ -704,144 +725,181 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
                         ),
                         const SizedBox(height: 18),
 
-                        // Categoría - MEJORADO
-                        DropdownButtonFormField<String>(
-                          value: _categoriaSeleccionada,
-                          isExpanded: true,
-                          icon: Icon(
-                            Icons.arrow_drop_down,
-                            color: Colors.grey[600],
-                          ),
-                          style: const TextStyle(
-                            fontSize: 15,
-                            color: Colors.black87,
-                          ),
-                          decoration: InputDecoration(
-                            labelText: 'Categoría / Proyecto',
-                            prefixIcon: const Icon(
-                              Icons.category,
-                              color: Color(0xFF1A5490),
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(15),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(15),
-                              borderSide: BorderSide(
-                                color: Colors.grey[300]!,
-                                width: 1.5,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(15),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF1A5490),
-                                width: 2,
-                              ),
-                            ),
-                            filled: true,
-                            fillColor: Colors.white,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 18,
+                        // NUEVO: Selector de múltiples categorías
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(15),
+                            border: Border.all(
+                              color: Colors.grey[300]!,
+                              width: 1.5,
                             ),
                           ),
-                          hint: Text(
-                            _carreraSeleccionada == null
-                                ? 'Seleccione una carrera primero'
-                                : 'Seleccione una categoría',
-                            style: TextStyle(
-                              color: Colors.grey[400],
-                              fontSize: 14,
-                            ),
-                          ),
-                          selectedItemBuilder: (BuildContext context) {
-                            return _categoriasDisponibles.map((String value) {
-                              return Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  value,
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              );
-                            }).toList();
-                          },
-                          items: _categoriasDisponibles.isEmpty
-                              ? null
-                              : _categoriasDisponibles.map((categoria) {
-                                  return DropdownMenuItem(
-                                    value: categoria,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 12,
-                                        horizontal: 8,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.category,
+                                      color: Color(0xFF1A5490),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      'Categorías / Proyectos',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        color: Colors.grey[700],
+                                        fontWeight: FontWeight.w500,
                                       ),
-                                      decoration: BoxDecoration(
-                                        border: Border(
-                                          bottom: BorderSide(
-                                            color: Colors.grey[200]!,
-                                            width: 1,
+                                    ),
+                                    const Spacer(),
+                                    if (_categoriasSeleccionadas.isNotEmpty)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF1A5490),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '${_categoriasSeleccionadas.length}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
                                           ),
                                         ),
                                       ),
-                                      child: Text(
-                                        categoria,
-                                        style: const TextStyle(
-                                          fontSize: 14.5,
-                                          height: 1.4,
+                                  ],
+                                ),
+                              ),
+                              if (_categoriasDisponibles.isEmpty &&
+                                  _carreraSeleccionada != null)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16.0,
+                                    vertical: 8.0,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.grey[600],
                                         ),
                                       ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Cargando categorías...',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              else if (_categoriasDisponibles.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16.0,
+                                    vertical: 8.0,
+                                  ),
+                                  child: Text(
+                                    'Seleccione una carrera primero',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey[500],
+                                      fontStyle: FontStyle.italic,
                                     ),
-                                  );
-                                }).toList(),
-                          onChanged: _categoriasDisponibles.isEmpty
-                              ? null
-                              : (value) {
-                                  setState(() {
-                                    _categoriaSeleccionada = value;
-                                  });
-                                },
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Por favor seleccione una categoría';
-                            }
-                            return null;
-                          },
-                          menuMaxHeight: 300,
-                          dropdownColor: Colors.white,
+                                  ),
+                                )
+                              else
+                                Container(
+                                  constraints: const BoxConstraints(
+                                    maxHeight: 200,
+                                  ),
+                                  child: ListView.builder(
+                                    shrinkWrap: true,
+                                    itemCount: _categoriasDisponibles.length,
+                                    itemBuilder: (context, index) {
+                                      final categoria =
+                                          _categoriasDisponibles[index];
+                                      final isSelected =
+                                          _categoriasSeleccionadas.contains(
+                                            categoria,
+                                          );
+
+                                      return CheckboxListTile(
+                                        title: Text(
+                                          categoria,
+                                          style: const TextStyle(fontSize: 14),
+                                        ),
+                                        value: isSelected,
+                                        activeColor: const Color(0xFF1A5490),
+                                        onChanged: (bool? value) {
+                                          setState(() {
+                                            if (value == true) {
+                                              _categoriasSeleccionadas.add(
+                                                categoria,
+                                              );
+                                            } else {
+                                              _categoriasSeleccionadas.remove(
+                                                categoria,
+                                              );
+                                            }
+                                          });
+                                        },
+                                        controlAffinity:
+                                            ListTileControlAffinity.leading,
+                                        dense: true,
+                                      );
+                                    },
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
 
-                        // Indicador de carga para categorías
-                        if (_carreraSeleccionada != null &&
-                            _categoriasDisponibles.isEmpty)
+                        // Mostrar categorías seleccionadas
+                        if (_categoriasSeleccionadas.isNotEmpty)
                           Padding(
-                            padding: const EdgeInsets.only(top: 8.0, left: 4),
-                            child: Row(
-                              children: [
-                                SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.grey[600],
+                            padding: const EdgeInsets.only(top: 12.0),
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _categoriasSeleccionadas.map((cat) {
+                                return Chip(
+                                  label: Text(
+                                    cat,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.white,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Cargando categorías...',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[600],
-                                    fontStyle: FontStyle.italic,
+                                  backgroundColor: const Color(0xFF1A5490),
+                                  deleteIcon: const Icon(
+                                    Icons.close,
+                                    size: 16,
+                                    color: Colors.white,
                                   ),
-                                ),
-                              ],
+                                  onDeleted: () {
+                                    setState(() {
+                                      _categoriasSeleccionadas.remove(cat);
+                                    });
+                                  },
+                                );
+                              }).toList(),
                             ),
                           ),
 
@@ -904,7 +962,7 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'El jurado evaluará solo proyectos de la categoría seleccionada',
+                                  'El jurado puede evaluar una o más categorías según su selección',
                                   style: TextStyle(
                                     fontSize: 13,
                                     color: Colors.blue.shade900,

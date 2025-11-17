@@ -829,7 +829,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   }
 
   Widget _buildColeccionSellos() {
-    const int totalSellos = 10;
+    final totalSellos = _asistenciasFiltradas.length; // ✅ SIN LÍMITE
 
     return AnimatedOpacity(
       opacity: _isLoadingAsistencias ? 0.0 : 1.0,
@@ -897,37 +897,96 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
+                    horizontal: 14,
+                    vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E3A5F),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${_asistenciasFiltradas.length}/$totalSellos',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF1E3A5F),
+                        const Color(0xFF2563EB),
+                      ],
                     ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF1E3A5F).withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.star, color: Colors.amber, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        '$totalSellos',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 20),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 5,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1,
-              ),
-              itemCount: totalSellos,
-              itemBuilder: (context, index) {
-                if (index < _asistenciasFiltradas.length) {
+
+            // ✅ MOSTRAR MENSAJE SI NO HAY SELLOS
+            if (totalSellos == 0)
+              Container(
+                padding: const EdgeInsets.all(40),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Center(
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.workspace_premium_outlined,
+                        size: 64,
+                        color: Colors.grey.shade400,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Aún no tienes sellos',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Escanea códigos QR en eventos para ganar sellos',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              // ✅ MOSTRAR TODOS LOS SELLOS
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 5,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 1,
+                ),
+                itemCount: totalSellos,
+                itemBuilder: (context, index) {
                   return TweenAnimationBuilder(
                     tween: Tween<double>(begin: 0, end: 1),
                     duration: Duration(milliseconds: 300 + (index * 50)),
@@ -944,71 +1003,53 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                       );
                     },
                   );
-                } else {
-                  return TweenAnimationBuilder(
-                    tween: Tween<double>(begin: 0, end: 1),
-                    duration: Duration(milliseconds: 300 + (index * 50)),
-                    curve: Curves.easeOut,
-                    builder: (context, double value, child) {
-                      return Transform.scale(
-                        scale: value,
-                        child: _buildSelloVacio(index),
-                      );
-                    },
-                  );
-                }
-              },
-            ),
-            if (_asistenciasFiltradas.length > totalSellos) ...[
-              const SizedBox(height: 16),
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.amber.shade200, width: 2),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.celebration,
-                        color: Colors.amber.shade700,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '¡Felicitaciones! Tienes ${_asistenciasFiltradas.length} asistencias',
-                        style: TextStyle(
-                          color: Colors.amber.shade900,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                },
               ),
-              const SizedBox(height: 12),
-              Center(
-                child: TextButton.icon(
-                  onPressed: _mostrarTodosLosSellos,
-                  icon: const Icon(Icons.grid_view),
-                  label: const Text('Ver todos los sellos'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFF1E3A5F),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+
+            // ✅ MENSAJE DE FELICITACIÓN
+            if (totalSellos > 0) ...[
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.amber.shade50, Colors.orange.shade50],
                   ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.shade200, width: 2),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.celebration,
+                      color: Colors.amber.shade700,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '¡Excelente trabajo!',
+                            style: TextStyle(
+                              color: Colors.amber.shade900,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Has ganado $totalSellos ${totalSellos == 1 ? 'sello' : 'sellos'} de asistencia',
+                            style: TextStyle(
+                              color: Colors.amber.shade800,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
