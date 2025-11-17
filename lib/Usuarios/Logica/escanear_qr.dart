@@ -24,9 +24,14 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
   bool _hasScanned = false;
   bool _isFlashOn = false;
 
+  // ✅ AGREGAR ESTAS LÍNEAS:
+  DateTime? _ultimoEscaneo;
+  static const int _cooldownSegundos = 3;
+
   // ✅ CACHE DE DATOS DEL USUARIO (evita leer cada vez)
   Map<String, dynamic>? _cachedUserData;
-
+  int _escaneosDeSesion = 0;
+  static const int _intervaloActualizacionResumen = 3;
   late AnimationController _animationController;
   late Animation<double> _scanLineAnimation;
   late Animation<double> _pulseAnimation;
@@ -83,7 +88,23 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
   // AHORA: qrDoc + existingDoc = 2 lecturas (conteo eliminado)
   // ═══════════════════════════════════════════════════════════════
   Future<void> _procesarQR(String qrData) async {
+    // ✅ PRIMERO: Validar que no esté procesando
     if (_isProcessing || _hasScanned) return;
+
+    // ✅ SEGUNDO: Validar cooldown
+    if (_ultimoEscaneo != null) {
+      final diferencia = DateTime.now().difference(_ultimoEscaneo!);
+      if (diferencia.inSeconds < _cooldownSegundos) {
+        _showSnackBar(
+          'Espera ${_cooldownSegundos - diferencia.inSeconds}s antes de escanear',
+          isError: true,
+        );
+        return; // No reiniciar cámara, solo esperar
+      }
+    }
+
+    // ✅ TERCERO: Registrar timestamp DESPUÉS de validaciones
+    _ultimoEscaneo = DateTime.now();
 
     setState(() {
       _isProcessing = true;
@@ -93,9 +114,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
     try {
       await cameraController.stop();
 
-      // ═══════════════════════════════════════════════════════════
-      // PASO 1: DECODIFICAR QR
-      // ═══════════════════════════════════════════════════════════
       Map<String, dynamic> qrInfo;
       try {
         if (qrData.startsWith('myapp://')) {
@@ -330,10 +348,16 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         'registrationMethod': 'qr_scan',
       };
 
-      // ✅ OPTIMIZACIÓN: Usar batch para ambas escrituras
+      // ✅ OPTIMIZACIÓN: Incrementar contador de escaneos
+      _escaneosDeSesion++;
+
+      // ✅ Decidir si actualizar resumen (solo cada N escaneos)
+      final debeActualizarResumen =
+          (_escaneosDeSesion % _intervaloActualizacionResumen == 0) ||
+          (_escaneosDeSesion == 1);
+
       final batch = _firestore.batch();
 
-      // Referencia al scan
       final scanRef = _firestore
           .collection('events')
           .doc(qrInfo['eventId'])
@@ -342,28 +366,39 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
           .collection('scans')
           .doc(scanId);
 
-      // Referencia al resumen
       final resumenRef = _firestore
           .collection('events')
           .doc(qrInfo['eventId'])
           .collection('asistencias')
           .doc(studentId);
 
+      // ✅ SIEMPRE guardar el scan individual
       batch.set(scanRef, scanData);
-      batch.set(resumenRef, {
-        'studentName': _currentUserName,
-        'studentUsername': _cachedUserData!['username'],
-        'studentDNI': _cachedUserData!['dni'],
-        'studentCodigo': _cachedUserData!['codigoUniversitario'],
-        'facultad': _cachedUserData!['facultad'],
-        'carrera': _cachedUserData!['carrera'],
-        'eventId': qrInfo['eventId'],
-        'eventName': qrInfo['eventName'],
-        'lastScan': FieldValue.serverTimestamp(),
-        'totalScans': FieldValue.increment(1),
-      }, SetOptions(merge: true));
 
-      // ✅ Ejecutar ambas operaciones en una sola llamada
+      // ✅ CONDICIONAL: Solo actualizar resumen cada N escaneos
+      if (debeActualizarResumen) {
+        batch.set(resumenRef, {
+          'studentName': _currentUserName,
+          'studentUsername': _cachedUserData!['username'],
+          'studentDNI': _cachedUserData!['dni'],
+          'studentCodigo': _cachedUserData!['codigoUniversitario'],
+          'facultad': _cachedUserData!['facultad'],
+          'carrera': _cachedUserData!['carrera'],
+          'eventId': qrInfo['eventId'],
+          'eventName': qrInfo['eventName'],
+          'lastScan': FieldValue.serverTimestamp(),
+          'totalScans': FieldValue.increment(1),
+        }, SetOptions(merge: true));
+
+        print(
+          '✅ Asistencia con resumen: $scanId (Escaneo #$_escaneosDeSesion)',
+        );
+      } else {
+        print(
+          '✅ Asistencia SIN resumen: $scanId (Escaneo #$_escaneosDeSesion)',
+        );
+      }
+
       await batch.commit();
 
       print('✅ Asistencia guardada con batch: $scanId');
@@ -1144,6 +1179,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
   void dispose() {
     _animationController.dispose();
     cameraController.dispose();
+    _escaneosDeSesion = 0;
     super.dispose();
   }
 }

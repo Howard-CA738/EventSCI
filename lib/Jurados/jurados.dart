@@ -18,7 +18,9 @@ class _JuradosScreenState extends State<JuradosScreen> {
   String _userId = '';
   bool _isLoading = true;
   List<Map<String, dynamic>> _proyectosAsignados = [];
-
+  // ✅ NUEVO: Agrupar proyectos por rúbrica
+  Map<String, List<Map<String, dynamic>>> _proyectosPorRubrica = {};
+  Map<String, Rubrica> _rubricasMap = {};
   @override
   void initState() {
     super.initState();
@@ -39,14 +41,29 @@ class _JuradosScreenState extends State<JuradosScreen> {
     }
   }
 
+  // ============================================================================
+  // ✅ MÉTODO COMPLETAMENTE REESCRITO: Ahora agrupa por rúbrica
+  // ============================================================================
+
   Future<void> _cargarProyectosAsignados() async {
     setState(() => _isLoading = true);
 
     try {
       print('🔍 Buscando proyectos para jurado: $_userId');
-      final List<Map<String, dynamic>> proyectos = [];
 
-      // 1. Buscar TODAS las evaluaciones asignadas a este jurado usando collectionGroup
+      // Estructura temporal para agrupar proyectos
+      Map<String, List<Map<String, dynamic>>> proyectosPorRubricaTemp = {};
+      Map<String, Rubrica> rubricasTemp = {};
+
+      // 1. Cargar TODAS las rúbricas una sola vez
+      final todasRubricas = await _rubricasService.obtenerRubricas();
+      final Map<String, Rubrica> rubricasMapGlobal = {
+        for (var r in todasRubricas) r.id: r,
+      };
+
+      print('📚 Total de rúbricas disponibles: ${todasRubricas.length}');
+
+      // 2. Buscar TODAS las evaluaciones del jurado
       final evaluacionesSnapshot = await _firestore
           .collectionGroup('evaluaciones')
           .where('juradoId', isEqualTo: _userId)
@@ -54,18 +71,12 @@ class _JuradosScreenState extends State<JuradosScreen> {
 
       print('📋 Evaluaciones encontradas: ${evaluacionesSnapshot.docs.length}');
 
-      // 2. Cargar todas las rúbricas una sola vez
-      final todasRubricas = await _rubricasService.obtenerRubricas();
-      final Map<String, Rubrica> rubricasMap = {
-        for (var r in todasRubricas) r.id: r,
-      };
-
-      // 3. Para cada evaluación, obtener los datos del proyecto
+      // 3. Procesar cada evaluación
       for (var evaluacionDoc in evaluacionesSnapshot.docs) {
         try {
           final evaluacionData = evaluacionDoc.data();
 
-          // Extraer IDs desde la ruta: events/{eventId}/proyectos/{proyectoId}/evaluaciones/{juradoId}
+          // Extraer IDs desde la ruta
           final path = evaluacionDoc.reference.path;
           final parts = path.split('/');
 
@@ -76,8 +87,35 @@ class _JuradosScreenState extends State<JuradosScreen> {
 
           final eventId = parts[1];
           final proyectoId = parts[3];
+          final rubricaId = evaluacionData['rubricaId'] as String?;
 
-          print('   📦 Procesando: $eventId / $proyectoId');
+          if (rubricaId == null) {
+            print('⚠️ Evaluación sin rubricaId');
+            continue;
+          }
+
+          print(
+            '   📦 Procesando: $eventId / $proyectoId / Rúbrica: $rubricaId',
+          );
+
+          // Buscar la rúbrica
+          Rubrica? rubrica;
+          if (rubricasMapGlobal.containsKey(rubricaId)) {
+            rubrica = rubricasMapGlobal[rubricaId];
+          }
+
+          if (rubrica == null) {
+            print('   ⚠️ Rúbrica no encontrada: $rubricaId');
+            continue;
+          }
+
+          // ✅ VALIDACIÓN CRÍTICA: Verificar que el jurado SIGA asignado
+          if (!rubrica.juradosAsignados.contains(_userId)) {
+            print('   ⚠️ Jurado ya no está asignado. Eliminando evaluación...');
+            await evaluacionDoc.reference.delete();
+            print('   ✅ Evaluación huérfana eliminada');
+            continue;
+          }
 
           // Obtener datos del proyecto
           final proyectoDoc = await _firestore
@@ -93,20 +131,8 @@ class _JuradosScreenState extends State<JuradosScreen> {
           }
 
           final proyectoData = proyectoDoc.data()!;
-          final rubricaId = evaluacionData['rubricaId'] as String?;
 
-          // Buscar la rúbrica
-          Rubrica? rubrica;
-          if (rubricaId != null && rubricasMap.containsKey(rubricaId)) {
-            rubrica = rubricasMap[rubricaId];
-          }
-
-          if (rubrica == null) {
-            print('   ⚠️ Rúbrica no encontrada: $rubricaId');
-            continue;
-          }
-
-          // Obtener datos del evento para mostrar información adicional
+          // Obtener datos del evento
           final eventoDoc = await _firestore
               .collection('events')
               .doc(eventId)
@@ -116,7 +142,8 @@ class _JuradosScreenState extends State<JuradosScreen> {
               ? eventoDoc.data()!
               : <String, dynamic>{};
 
-          proyectos.add({
+          // Crear objeto del proyecto
+          final proyecto = {
             'eventId': eventId,
             'proyectoId': proyectoId,
             'eventoNombre': eventoData['name'] ?? 'Sin nombre',
@@ -132,22 +159,39 @@ class _JuradosScreenState extends State<JuradosScreen> {
             'bloqueada': evaluacionData['bloqueada'] ?? false,
             'notaTotal': (evaluacionData['notaTotal'] ?? 0.0).toDouble(),
             'fechaAsignacion': evaluacionData['fechaAsignacion'],
-          });
+          };
 
-          print('   ✅ Proyecto agregado: ${proyectoData['Código']}');
+          // ✅ NUEVO: Agrupar por rúbrica
+          if (!proyectosPorRubricaTemp.containsKey(rubricaId)) {
+            proyectosPorRubricaTemp[rubricaId] = [];
+            rubricasTemp[rubricaId] = rubrica;
+          }
+
+          proyectosPorRubricaTemp[rubricaId]!.add(proyecto);
+          print('   ✅ Proyecto agregado a rúbrica: ${rubrica.nombre}');
         } catch (e) {
           print('   ❌ Error procesando evaluación: $e');
         }
       }
 
-      print('✅ Total proyectos cargados: ${proyectos.length}');
+      // ✅ NUEVO: Ordenar proyectos dentro de cada rúbrica
+      proyectosPorRubricaTemp.forEach((rubricaId, proyectos) {
+        proyectos.sort((a, b) => a['codigo'].compareTo(b['codigo']));
+      });
 
-      // Ordenar por código
-      proyectos.sort((a, b) => a['codigo'].compareTo(b['codigo']));
+      print(
+        '✅ Total de rúbricas con proyectos: ${proyectosPorRubricaTemp.length}',
+      );
+      proyectosPorRubricaTemp.forEach((rubricaId, proyectos) {
+        print(
+          '   📚 ${rubricasTemp[rubricaId]?.nombre}: ${proyectos.length} proyectos',
+        );
+      });
 
       if (mounted) {
         setState(() {
-          _proyectosAsignados = proyectos;
+          _proyectosPorRubrica = proyectosPorRubricaTemp;
+          _rubricasMap = rubricasTemp;
           _isLoading = false;
         });
       }
@@ -316,7 +360,7 @@ class _JuradosScreenState extends State<JuradosScreen> {
       );
     }
 
-    if (_proyectosAsignados.isEmpty) {
+    if (_proyectosPorRubrica.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(40.0),
@@ -360,60 +404,361 @@ class _JuradosScreenState extends State<JuradosScreen> {
       );
     }
 
-    // Agrupar proyectos por estado
-    final pendientes = _proyectosAsignados
-        .where((p) => !(p['evaluada'] as bool) && !(p['bloqueada'] as bool))
-        .toList();
-    final evaluados = _proyectosAsignados
-        .where((p) => (p['evaluada'] as bool))
-        .toList();
-    final bloqueados = _proyectosAsignados
-        .where((p) => (p['bloqueada'] as bool))
-        .toList();
+    // ✅ NUEVO: Calcular estadísticas globales
+    int totalProyectos = 0;
+    int totalEvaluados = 0;
+    int totalPendientes = 0;
+    int totalBloqueados = 0;
+
+    _proyectosPorRubrica.forEach((_, proyectos) {
+      totalProyectos += proyectos.length;
+      totalEvaluados += proyectos.where((p) => p['evaluada'] as bool).length;
+      totalBloqueados += proyectos.where((p) => p['bloqueada'] as bool).length;
+    });
+    totalPendientes = totalProyectos - totalEvaluados - totalBloqueados;
 
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Resumen de estadísticas
-          _buildEstadisticasCard(),
+          // ✅ Resumen global
+          _buildEstadisticasCardGlobal(
+            totalProyectos,
+            totalPendientes,
+            totalEvaluados,
+            totalBloqueados,
+          ),
 
-          // Proyectos Pendientes
-          if (pendientes.isNotEmpty) ...[
-            _buildSeccionHeader(
-              'Proyectos Pendientes',
-              pendientes.length,
-              Colors.orange,
-              Icons.pending_actions,
-            ),
-            ...pendientes.map((p) => _buildProyectoCard(p)),
-          ],
+          const SizedBox(height: 16),
 
-          // Proyectos Evaluados
-          if (evaluados.isNotEmpty) ...[
-            _buildSeccionHeader(
-              'Proyectos Evaluados',
-              evaluados.length,
-              Colors.green,
-              Icons.check_circle,
-            ),
-            ...evaluados.map((p) => _buildProyectoCard(p)),
-          ],
+          // ✅ NUEVO: Mostrar cada rúbrica con sus proyectos
+          ..._proyectosPorRubrica.entries.map((entry) {
+            final rubricaId = entry.key;
+            final proyectos = entry.value;
+            final rubrica = _rubricasMap[rubricaId]!;
 
-          // Proyectos Bloqueados
-          if (bloqueados.isNotEmpty) ...[
-            _buildSeccionHeader(
-              'Proyectos Bloqueados',
-              bloqueados.length,
-              Colors.red,
-              Icons.lock,
-            ),
-            ...bloqueados.map((p) => _buildProyectoCard(p)),
-          ],
+            return _buildRubricaSection(rubrica, proyectos);
+          }).toList(),
 
           const SizedBox(height: 20),
         ],
       ),
+    );
+  }
+
+  Widget _buildEstadisticasCardGlobal(
+    int total,
+    int pendientes,
+    int evaluados,
+    int bloqueados,
+  ) {
+    final progreso = total > 0 ? evaluados / total : 0.0;
+
+    return Container(
+      margin: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E3A5F), Color(0xFF2C5F7C)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1E3A5F).withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.analytics, color: Colors.white, size: 28),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Tu Progreso Total',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${(progreso * 100).toStringAsFixed(0)}%',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${_proyectosPorRubrica.length} ${_proyectosPorRubrica.length == 1 ? 'rúbrica asignada' : 'rúbricas asignadas'}',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.white.withOpacity(0.8),
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildEstadistica(
+                  'Total',
+                  total.toString(),
+                  Icons.assignment,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildEstadistica(
+                  'Pendientes',
+                  pendientes.toString(),
+                  Icons.pending,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildEstadistica(
+                  'Evaluados',
+                  evaluados.toString(),
+                  Icons.check_circle,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: progreso,
+              minHeight: 8,
+              backgroundColor: Colors.white.withOpacity(0.3),
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRubricaSection(
+    Rubrica rubrica,
+    List<Map<String, dynamic>> proyectos,
+  ) {
+    // Calcular estadísticas de esta rúbrica
+    final pendientes = proyectos
+        .where((p) => !(p['evaluada'] as bool) && !(p['bloqueada'] as bool))
+        .toList();
+    final evaluados = proyectos.where((p) => p['evaluada'] as bool).toList();
+    final bloqueados = proyectos.where((p) => p['bloqueada'] as bool).toList();
+
+    final progreso = proyectos.isNotEmpty
+        ? evaluados.length / proyectos.length
+        : 0.0;
+
+    return Card(
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header de la rúbrica
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF1E3A5F).withOpacity(0.1),
+                  const Color(0xFF2C5F7C).withOpacity(0.05),
+                ],
+              ),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E3A5F),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.checklist,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            rubrica.nombre,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1E3A5F),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${rubrica.totalCriterios} criterios • ${rubrica.puntajeMaximo.toStringAsFixed(0)} pts máx',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: progreso == 1.0 ? Colors.green : Colors.orange,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${evaluados.length}/${proyectos.length}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: progreso,
+                    minHeight: 6,
+                    backgroundColor: Colors.grey[300],
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      progreso == 1.0 ? Colors.green : Colors.orange,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Lista de proyectos de esta rúbrica
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                // Proyectos Pendientes
+                if (pendientes.isNotEmpty) ...[
+                  _buildMiniSeccionHeader(
+                    'Pendientes',
+                    pendientes.length,
+                    Colors.orange,
+                    Icons.pending_actions,
+                  ),
+                  const SizedBox(height: 8),
+                  ...pendientes.map((p) => _buildProyectoCard(p)),
+                  const SizedBox(height: 16),
+                ],
+
+                // Proyectos Evaluados
+                if (evaluados.isNotEmpty) ...[
+                  _buildMiniSeccionHeader(
+                    'Evaluados',
+                    evaluados.length,
+                    Colors.green,
+                    Icons.check_circle,
+                  ),
+                  const SizedBox(height: 8),
+                  ...evaluados.map((p) => _buildProyectoCard(p)),
+                  const SizedBox(height: 16),
+                ],
+
+                // Proyectos Bloqueados
+                if (bloqueados.isNotEmpty) ...[
+                  _buildMiniSeccionHeader(
+                    'Bloqueados',
+                    bloqueados.length,
+                    Colors.red,
+                    Icons.lock,
+                  ),
+                  const SizedBox(height: 8),
+                  ...bloqueados.map((p) => _buildProyectoCard(p)),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniSeccionHeader(
+    String titulo,
+    int cantidad,
+    Color color,
+    IconData icon,
+  ) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 8),
+        Text(
+          titulo,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            cantidad.toString(),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

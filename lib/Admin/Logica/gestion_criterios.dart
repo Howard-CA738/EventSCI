@@ -434,6 +434,62 @@ class RubricasService {
     }
   }
 
+  // ✅ NUEVO: Eliminar evaluaciones cuando se remueven jurados de una rúbrica
+  Future<void> eliminarEvaluacionesDeJurados({
+    required String rubricaId,
+    required List<String> juradosIds,
+  }) async {
+    try {
+      print('🗑️ Iniciando eliminación de evaluaciones...');
+      print('   Rúbrica ID: $rubricaId');
+      print('   Jurados a remover: ${juradosIds.length}');
+
+      // Buscar todos los proyectos que usan esta rúbrica
+      final eventosSnapshot = await _firestore.collection('events').get();
+
+      int evaluacionesEliminadas = 0;
+
+      for (var eventoDoc in eventosSnapshot.docs) {
+        final proyectosSnapshot = await _firestore
+            .collection('events')
+            .doc(eventoDoc.id)
+            .collection('proyectos')
+            .get();
+
+        for (var proyectoDoc in proyectosSnapshot.docs) {
+          // Para cada jurado removido, eliminar su evaluación si existe
+          for (var juradoId in juradosIds) {
+            final evaluacionDoc = await _firestore
+                .collection('events')
+                .doc(eventoDoc.id)
+                .collection('proyectos')
+                .doc(proyectoDoc.id)
+                .collection('evaluaciones')
+                .doc(juradoId)
+                .get();
+
+            // Solo eliminar si la evaluación usa esta rúbrica
+            if (evaluacionDoc.exists) {
+              final data = evaluacionDoc.data();
+              if (data != null && data['rubricaId'] == rubricaId) {
+                await evaluacionDoc.reference.delete();
+                evaluacionesEliminadas++;
+                print(
+                  '   ✅ Evaluación eliminada: ${eventoDoc.id}/${proyectoDoc.id}/$juradoId',
+                );
+              }
+            }
+          }
+        }
+      }
+
+      print('✅ Total de evaluaciones eliminadas: $evaluacionesEliminadas');
+    } catch (e) {
+      print('❌ Error al eliminar evaluaciones de jurados: $e');
+      rethrow;
+    }
+  }
+
   // ✅ NUEVO: Filtrar rúbricas en memoria (para uso local)
   List<Rubrica> filtrarRubricas(
     List<Rubrica> rubricas, {

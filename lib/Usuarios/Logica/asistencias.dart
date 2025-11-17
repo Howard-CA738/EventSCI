@@ -34,8 +34,9 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
 
   // ✅ CACHÉ DE EVENTOS (evita recargar eventos repetidamente)
   final Map<String, Map<String, dynamic>> _eventosCache = {};
+  final Map<String, List<Map<String, dynamic>>> _asistenciasPorEventoCache = {};
   // ✅ OPTIMIZACIÓN: Paginación para eventos
-  static const int _eventosPorPagina = 20;
+  static const int _eventosPorPagina = 10;
   DocumentSnapshot? _ultimoEventoCargado;
   bool _hayMasEventos = true;
   @override
@@ -84,6 +85,11 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
 
   // Cargar períodos activos de la base de datos
   Future<void> _cargarPeriodosActivos() async {
+    if (_periodosDisponibles.isNotEmpty) {
+      print('✅ Períodos ya cargados desde caché');
+      _filtrarAsistencias();
+      return;
+    }
     try {
       final periodos = await PeriodosHelper.getPeriodosActivos();
 
@@ -178,7 +184,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           _currentUserId = userId;
           _currentUserName = userName;
         });
-        _cargarMisAsistencias();
       } else {
         _showSnackBar('No se pudo obtener el usuario actual', isError: true);
       }
@@ -218,8 +223,17 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
       // ═══════════════════════════════════════════════════════════════
       print('🔍 Buscando eventos...');
 
+      final hoy = DateTime.now();
+      final inicioHoy = DateTime(hoy.year, hoy.month, hoy.day);
+
       Query eventosQuery = _firestore
           .collection('events')
+          .where(
+            'createdAt',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(
+              inicioHoy.subtract(Duration(days: 30)),
+            ),
+          )
           .orderBy('createdAt', descending: true)
           .limit(_eventosPorPagina);
 
@@ -383,7 +397,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
         );
         return;
       }
-
+      _asistenciasPorEventoCache[eventId] = asistencias;
       // ═══════════════════════════════════════════════════════════════
       // GUARDAR EL EVENTO CON SUS ASISTENCIAS
       // ═══════════════════════════════════════════════════════════════
@@ -1282,6 +1296,64 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                 ),
                 child: _currentUserId == null
                     ? const Center(child: CircularProgressIndicator())
+                    : _eventosConAsistencias.isEmpty && !_isLoadingAsistencias
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(40),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.event_available,
+                                size: 80,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 24),
+                              Text(
+                                'Tus asistencias están guardadas',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1E3A5F),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Presiona el botón para cargarlas cuando lo necesites',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade600,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 32),
+                              ElevatedButton.icon(
+                                onPressed: _cargarMisAsistencias,
+                                icon: const Icon(
+                                  Icons.cloud_download,
+                                  size: 24,
+                                ),
+                                label: const Text(
+                                  'Cargar Mis Asistencias',
+                                  style: TextStyle(fontSize: 16),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF1A5490),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 32,
+                                    vertical: 16,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
                     : RefreshIndicator(
                         onRefresh: () => _cargarMisAsistencias(),
                         color: const Color(0xFF1E3A5F),

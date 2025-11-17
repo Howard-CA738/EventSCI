@@ -1367,6 +1367,22 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
       carrera: widget.rubrica.carrera,
     );
 
+    // ✅ NUEVO: Detectar jurados removidos
+    final juradosRemovidos = widget.rubrica.juradosAsignados
+        .where((id) => !_juradosSeleccionados.contains(id))
+        .toList();
+
+    // ✅ NUEVO: Eliminar evaluaciones de jurados removidos
+    if (juradosRemovidos.isNotEmpty) {
+      print(
+        '🗑️ Eliminando evaluaciones de ${juradosRemovidos.length} jurados removidos...',
+      );
+      await _service.eliminarEvaluacionesDeJurados(
+        rubricaId: widget.rubrica.id,
+        juradosIds: juradosRemovidos,
+      );
+    }
+
     final success = await _service.actualizarRubrica(rubricaActualizada);
 
     if (!mounted) return;
@@ -1374,8 +1390,12 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
 
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Rúbrica actualizada exitosamente'),
+        SnackBar(
+          content: Text(
+            juradosRemovidos.isNotEmpty
+                ? 'Rúbrica actualizada y ${juradosRemovidos.length} evaluación(es) eliminada(s)'
+                : 'Rúbrica actualizada exitosamente',
+          ),
           backgroundColor: Colors.green,
         ),
       );

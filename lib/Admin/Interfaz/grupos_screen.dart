@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '/admin/logica/grupos.dart';
+import '/admin/logica/agregar_proyectos.dart';
 
 class GruposScreen extends StatefulWidget {
   final Map<String, dynamic> eventData;
@@ -76,6 +77,15 @@ class _GruposScreenState extends State<GruposScreen>
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
+          // NUEVO: Botón para agregar proyecto manualmente
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: IconButton(
+              icon: const Icon(Icons.add_box),
+              onPressed: _navegarAAgregarProyecto,
+              tooltip: 'Agregar proyecto manualmente',
+            ),
+          ),
           if (_proyectosExistentes.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
@@ -87,6 +97,7 @@ class _GruposScreenState extends State<GruposScreen>
             ),
         ],
       ),
+
       body: Container(
         decoration: const BoxDecoration(
           color: Color(0xFFF5F7FA),
@@ -121,6 +132,18 @@ class _GruposScreenState extends State<GruposScreen>
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  void _navegarAAgregarProyecto() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => AgregarProyectoScreen(
+          eventData: widget.eventData,
+          gruposService: _gruposService,
+          onProyectoAgregado: _cargarProyectosExistentes,
         ),
       ),
     );

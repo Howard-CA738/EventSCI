@@ -26,7 +26,17 @@ class PrefsHelper {
   // ═══════════════════════════════════════════════════════════════
   static final Map<String, Map<String, dynamic>> _userCache = {};
   static DateTime? _cacheTimestamp;
-  static const Duration _cacheDuration = Duration(minutes: 30);
+  static const Duration _cacheDuration = Duration(hours: 24);
+  // ✅ NUEVO: Caché para lista de estudiantes
+  static List<Map<String, dynamic>>? _studentsCache;
+  static DateTime? _studentsCacheTimestamp;
+  static const Duration _studentsCacheDuration = Duration(hours: 1);
+
+  static void clearStudentsCache() {
+    _studentsCache = null;
+    _studentsCacheTimestamp = null;
+    print('🗑️ Caché de estudiantes limpiado');
+  }
 
   static Future<void> saveUserData({
     required String userType,
@@ -445,6 +455,7 @@ class PrefsHelper {
       );
 
       print('✅ Estudiante e índice creados exitosamente');
+      clearStudentsCache();
       return true;
     } catch (e) {
       print('❌ Error creando estudiante: $e');
@@ -461,7 +472,21 @@ class PrefsHelper {
     try {
       final userIdPath = await getCurrentUserId();
       if (userIdPath == null) return null;
-
+      if (!forceRefresh &&
+          _cacheTimestamp != null &&
+          DateTime.now().difference(_cacheTimestamp!) < _cacheDuration) {
+        final parts = userIdPath.split('/');
+        if (parts.length == 2) {
+          final studentId = parts[1];
+          if (_userCache.containsKey(studentId)) {
+            print(
+              '✅ Datos obtenidos del caché (${_cacheDuration.inHours}h válido)',
+            );
+            return _userCache[studentId];
+          }
+        }
+      }
+      print('⚠️ Caché expirado o no disponible, cargando desde Firestore...');
       // ✅ Verificar caché
       if (!forceRefresh &&
           _cacheTimestamp != null &&
@@ -558,6 +583,17 @@ class PrefsHelper {
 
   static Future<List<Map<String, dynamic>>> getStudents() async {
     try {
+      // ✅ Verificar caché
+      if (_studentsCache != null &&
+          _studentsCacheTimestamp != null &&
+          DateTime.now().difference(_studentsCacheTimestamp!) <
+              _studentsCacheDuration) {
+        print('✅ Estudiantes obtenidos del caché');
+        return _studentsCache!;
+      }
+
+      print('⚠️ Caché expirado, cargando desde Firestore...');
+
       List<Map<String, dynamic>> allStudents = [];
       final carrerasSnapshot = await _firestore.collection('users').get();
 
@@ -582,6 +618,10 @@ class PrefsHelper {
           allStudents.add(data);
         }
       }
+
+      // ✅ Guardar en caché
+      _studentsCache = allStudents;
+      _studentsCacheTimestamp = DateTime.now();
 
       return allStudents;
     } catch (e) {
@@ -621,6 +661,7 @@ class PrefsHelper {
       _userCache.remove(studentId);
 
       print('Estudiante eliminado exitosamente de $carreraPath');
+      clearStudentsCache();
       return true;
     } catch (e) {
       print('Error eliminando estudiante: $e');
@@ -703,6 +744,7 @@ class PrefsHelper {
       print(
         '✅ Eliminación completada: $successCount exitosos, $errorCount errores',
       );
+      clearStudentsCache();
       return {'success': successCount, 'errors': errorCount};
     } catch (e) {
       print('❌ Error general en eliminación masiva: $e');
@@ -766,6 +808,7 @@ class PrefsHelper {
       _userCache.remove(studentId);
 
       print('Estudiante actualizado exitosamente');
+      clearStudentsCache();
       return true;
     } catch (e) {
       print('Error actualizando estudiante: $e');
@@ -1231,6 +1274,7 @@ class PrefsHelper {
     await prefs.setBool(_keyIsLoggedIn, false);
 
     // ✅ Limpiar caché
+    clearStudentsCache();
     _userCache.clear();
     _cacheTimestamp = null;
 
