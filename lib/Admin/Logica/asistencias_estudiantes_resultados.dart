@@ -37,7 +37,7 @@ class _AsistenciasEstudiantesResultadosScreenState
   bool _isGeneratingExcel = false;
 
   String _busqueda = '';
-  String _ordenamiento = 'nombre'; // nombre, asistencias, codigo
+  String _ordenamiento = 'nombre';
 
   @override
   void initState() {
@@ -87,12 +87,11 @@ class _AsistenciasEstudiantesResultadosScreenState
         return;
       }
 
-      final List<Map<String, dynamic>> estudiantesList = [];
-
-      for (var estudianteDoc in asistenciasSnapshot.docs) {
+      // ✅ Cargar estudiantes con búsqueda de ciclo/grupo
+      final futures = asistenciasSnapshot.docs.map((estudianteDoc) async {
         final estudianteData = estudianteDoc.data();
 
-        // Contar scans
+        // Obtener scans
         final scansSnapshot = await _firestore
             .collection('events')
             .doc(widget.eventoId)
@@ -103,7 +102,37 @@ class _AsistenciasEstudiantesResultadosScreenState
 
         final totalScans = scansSnapshot.docs.length;
 
-        // Obtener detalles de los scans
+        // ✅ Intentar obtener ciclo y grupo del resumen primero
+        String? ciclo = estudianteData['ciclo'];
+        String? grupo = estudianteData['grupo'];
+
+        // ✅ Si NO están en el resumen, buscar en el perfil
+        if (ciclo == null || grupo == null) {
+          try {
+            final carreraPath = estudianteData['carrera'];
+            final username = estudianteData['studentUsername'];
+
+            if (carreraPath != null && username != null) {
+              final studentQuery = await _firestore
+                  .collection('users')
+                  .doc(carreraPath)
+                  .collection('students')
+                  .where('username', isEqualTo: username)
+                  .limit(1)
+                  .get();
+
+              if (studentQuery.docs.isNotEmpty) {
+                final studentData = studentQuery.docs.first.data();
+                ciclo ??= studentData['ciclo'];
+                grupo ??= studentData['grupo'];
+              }
+            }
+          } catch (e) {
+            print('⚠️ Error buscando ciclo/grupo: $e');
+          }
+        }
+
+        // Convertir scans a lista
         final List<Map<String, dynamic>> scans = scansSnapshot.docs.map((
           scanDoc,
         ) {
@@ -118,7 +147,6 @@ class _AsistenciasEstudiantesResultadosScreenState
           };
         }).toList();
 
-        // Ordenar scans por fecha
         scans.sort((a, b) {
           final timestampA = (a['timestamp'] as Timestamp?)?.toDate();
           final timestampB = (b['timestamp'] as Timestamp?)?.toDate();
@@ -126,7 +154,7 @@ class _AsistenciasEstudiantesResultadosScreenState
           return timestampB.compareTo(timestampA);
         });
 
-        estudiantesList.add({
+        return {
           'id': estudianteDoc.id,
           'nombre': estudianteData['studentName'] ?? 'Sin nombre',
           'username': estudianteData['studentUsername'] ?? '',
@@ -134,17 +162,22 @@ class _AsistenciasEstudiantesResultadosScreenState
           'codigo': estudianteData['studentCodigo'] ?? '',
           'facultad': estudianteData['facultad'] ?? '',
           'carrera': estudianteData['carrera'] ?? '',
+          'ciclo': ciclo ?? 'N/A',
+          'grupo': grupo ?? 'N/A',
           'totalScans': totalScans,
           'lastScan': estudianteData['lastScan'],
           'scans': scans,
-        });
-      }
+        };
+      }).toList();
+
+      final estudiantesList = await Future.wait(futures);
 
       print('✅ ${estudiantesList.length} estudiantes cargados');
 
       if (mounted) {
         setState(() {
           _estudiantes = estudiantesList;
+          _ordenamiento = 'ciclo-grupo';
           _aplicarFiltrosYOrdenamiento();
           _isLoading = false;
         });
@@ -177,22 +210,48 @@ class _AsistenciasEstudiantesResultadosScreenState
       }).toList();
     }
 
-    // Aplicar ordenamiento
+    // ✅ APLICAR ORDENAMIENTO MEJORADO
     switch (_ordenamiento) {
       case 'nombre':
         filtrados.sort(
           (a, b) => (a['nombre'] as String).compareTo(b['nombre'] as String),
         );
         break;
+
       case 'asistencias':
         filtrados.sort(
           (a, b) => (b['totalScans'] as int).compareTo(a['totalScans'] as int),
         );
         break;
+
       case 'codigo':
         filtrados.sort(
           (a, b) => (a['codigo'] as String).compareTo(b['codigo'] as String),
         );
+        break;
+
+      case 'ciclo-grupo':
+        // ✅ ORDENAMIENTO ESPECIAL: CICLO → GRUPO → NOMBRE
+        filtrados.sort((a, b) {
+          // 1. Primero por CICLO
+          final cicloA = _parseCiclo(a['ciclo']);
+          final cicloB = _parseCiclo(b['ciclo']);
+
+          if (cicloA != cicloB) {
+            return cicloA.compareTo(cicloB);
+          }
+
+          // 2. Luego por GRUPO (si el ciclo es igual)
+          final grupoA = _parseGrupo(a['grupo']);
+          final grupoB = _parseGrupo(b['grupo']);
+
+          if (grupoA != grupoB) {
+            return grupoA.compareTo(grupoB);
+          }
+
+          // 3. Finalmente por NOMBRE (si ciclo y grupo son iguales)
+          return (a['nombre'] as String).compareTo(b['nombre'] as String);
+        });
         break;
     }
 
@@ -241,17 +300,50 @@ class _AsistenciasEstudiantesResultadosScreenState
         );
       }
 
+      // ✅ ORDENAR LA LISTA ANTES DE EXPORTAR
+      final estudiantesOrdenados = List<Map<String, dynamic>>.from(
+        _estudiantes,
+      );
+
+      estudiantesOrdenados.sort((a, b) {
+        // 1. Primero por CICLO
+        final cicloA = _parseCiclo(a['ciclo']);
+        final cicloB = _parseCiclo(b['ciclo']);
+
+        if (cicloA != cicloB) {
+          return cicloA.compareTo(cicloB);
+        }
+
+        // 2. Luego por GRUPO
+        final grupoA = _parseGrupo(a['grupo']);
+        final grupoB = _parseGrupo(b['grupo']);
+
+        if (grupoA != grupoB) {
+          return grupoA.compareTo(grupoB);
+        }
+
+        // 3. Finalmente por NOMBRE
+        return (a['nombre'] as String).compareTo(b['nombre'] as String);
+      });
+
+      print('✅ Lista ordenada: ${estudiantesOrdenados.length} estudiantes');
+      print(
+        '   Primero: Ciclo ${estudiantesOrdenados.first['ciclo']}, Grupo ${estudiantesOrdenados.first['grupo']}',
+      );
+      print(
+        '   Último: Ciclo ${estudiantesOrdenados.last['ciclo']}, Grupo ${estudiantesOrdenados.last['grupo']}',
+      );
+
+      // ✅ EXPORTAR LA LISTA ORDENADA
       final resultado = await _excelService.generarReporteAsistencias(
-        estudiantes: _estudiantes,
+        estudiantes: estudiantesOrdenados, // ← USAR LISTA ORDENADA
         eventoNombre: widget.eventoNombre,
         facultad: widget.facultad,
         carrera: widget.carrera,
       );
 
       if (mounted) {
-        // Cerrar diálogo de progreso
         Navigator.pop(context);
-
         setState(() => _isGeneratingExcel = false);
 
         if (resultado) {
@@ -626,7 +718,6 @@ class _AsistenciasEstudiantesResultadosScreenState
                 ),
                 child: Column(
                   children: [
-                    // Resumen y controles
                     Container(
                       padding: const EdgeInsets.all(20),
                       child: Column(
@@ -734,6 +825,10 @@ class _AsistenciasEstudiantesResultadosScreenState
                                 child: Wrap(
                                   spacing: 8,
                                   children: [
+                                    _buildOrdenChip(
+                                      'Ciclo/Grupo',
+                                      'ciclo-grupo',
+                                    ), // ✅ NUEVO
                                     _buildOrdenChip('Nombre', 'nombre'),
                                     _buildOrdenChip(
                                       'Asistencias',
@@ -751,7 +846,6 @@ class _AsistenciasEstudiantesResultadosScreenState
 
                     // Botón descargar Excel
                     if (_estudiantes.isNotEmpty && !_isLoading) ...[
-                      const SizedBox(height: 16),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: SizedBox(
@@ -1031,5 +1125,49 @@ class _AsistenciasEstudiantesResultadosScreenState
         ),
       ),
     );
+  }
+
+  int _parseCiclo(String? ciclo) {
+    if (ciclo == null || ciclo.isEmpty || ciclo == 'N/A') {
+      return 999; // Los N/A van al final
+    }
+
+    try {
+      // Intentar extraer número del ciclo
+      final match = RegExp(r'\d+').firstMatch(ciclo);
+      if (match != null) {
+        return int.parse(match.group(0)!);
+      }
+    } catch (e) {
+      // Si falla, devolver un valor alto
+    }
+
+    return 999;
+  }
+
+  /// Convierte el grupo a número para ordenar correctamente
+  /// Ejemplos: "1" → 1, "Único" → 0, "N/A" → 999
+  int _parseGrupo(String? grupo) {
+    if (grupo == null || grupo.isEmpty || grupo == 'N/A') {
+      return 999; // Los N/A van al final
+    }
+
+    // Casos especiales
+    final grupoLower = grupo.toLowerCase();
+    if (grupoLower.contains('único') || grupoLower.contains('unico')) {
+      return 0; // "Único" va primero
+    }
+
+    try {
+      // Intentar extraer número del grupo
+      final match = RegExp(r'\d+').firstMatch(grupo);
+      if (match != null) {
+        return int.parse(match.group(0)!);
+      }
+    } catch (e) {
+      // Si falla, devolver un valor alto
+    }
+
+    return 999;
   }
 }

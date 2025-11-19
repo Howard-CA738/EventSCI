@@ -24,11 +24,14 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
   bool _hasScanned = false;
   bool _isFlashOn = false;
 
-  // ✅ AGREGAR ESTAS LÍNEAS:
+  // ✅ ZOOM VARIABLES
+  double _currentZoom = 0.0; // Valor actual del zoom (0.0 - 1.0)
+  double _minZoom = 0.0;
+  double _maxZoom = 1.0;
+
   DateTime? _ultimoEscaneo;
   static const int _cooldownSegundos = 3;
 
-  // ✅ CACHE DE DATOS DEL USUARIO (evita leer cada vez)
   Map<String, dynamic>? _cachedUserData;
   int _escaneosDeSesion = 0;
   static const int _intervaloActualizacionResumen = 3;
@@ -41,6 +44,44 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
     super.initState();
     _getCurrentUser();
     _setupAnimations();
+    _initializeZoom();
+  }
+
+  // ✅ INICIALIZAR VALORES DE ZOOM
+  void _initializeZoom() async {
+    // Esperar un poco para que la cámara esté lista
+    await Future.delayed(const Duration(milliseconds: 500));
+    // Los valores por defecto ya están configurados (0.0 - 1.0)
+    // El MobileScannerController maneja el zoom internamente
+    print('✅ Zoom inicializado: min=$_minZoom, max=$_maxZoom');
+  }
+
+  // ✅ MANEJAR GESTOS DE ZOOM (PINCH)
+  void _handleScaleStart(ScaleStartDetails details) {
+    // Guardar el zoom inicial cuando empieza el gesto
+  }
+
+  void _handleScaleUpdate(ScaleUpdateDetails details) {
+    // Solo procesar si hay cambio de escala significativo
+    if (details.scale == 1.0) return;
+
+    // Calcular el nuevo zoom basado en el gesto
+    // details.scale > 1.0 = zoom in, < 1.0 = zoom out
+    double zoomDelta = (details.scale - 1.0) * 0.05; // Sensibilidad ajustada
+    double newZoom = (_currentZoom + zoomDelta).clamp(0.0, 1.0);
+
+    if ((newZoom - _currentZoom).abs() > 0.01) {
+      // Evitar actualizaciones mínimas
+      setState(() {
+        _currentZoom = newZoom;
+      });
+
+      try {
+        cameraController.setZoomScale(_currentZoom);
+      } catch (e) {
+        print('⚠️ Error al ajustar zoom: $e');
+      }
+    }
   }
 
   void _setupAnimations() {
@@ -58,15 +99,10 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ OPTIMIZADO: Cargar datos del usuario UNA VEZ con caché
-  // ═══════════════════════════════════════════════════════════════
   Future<void> _getCurrentUser() async {
     try {
       final userId = await PrefsHelper.getCurrentUserId();
       final userName = await PrefsHelper.getUserName();
-
-      // ✅ USAR CACHÉ del PrefsHelper
       final userData = await PrefsHelper.getCurrentUserData();
 
       setState(() {
@@ -82,16 +118,9 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ OPTIMIZADO: Reducido de 3 lecturas a 2 lecturas
-  // ANTES: qrDoc + existingDoc + allScans = 3 lecturas
-  // AHORA: qrDoc + existingDoc = 2 lecturas (conteo eliminado)
-  // ═══════════════════════════════════════════════════════════════
   Future<void> _procesarQR(String qrData) async {
-    // ✅ PRIMERO: Validar que no esté procesando
     if (_isProcessing || _hasScanned) return;
 
-    // ✅ SEGUNDO: Validar cooldown
     if (_ultimoEscaneo != null) {
       final diferencia = DateTime.now().difference(_ultimoEscaneo!);
       if (diferencia.inSeconds < _cooldownSegundos) {
@@ -99,11 +128,10 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
           'Espera ${_cooldownSegundos - diferencia.inSeconds}s antes de escanear',
           isError: true,
         );
-        return; // No reiniciar cámara, solo esperar
+        return;
       }
     }
 
-    // ✅ TERCERO: Registrar timestamp DESPUÉS de validaciones
     _ultimoEscaneo = DateTime.now();
 
     setState(() {
@@ -136,9 +164,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         return;
       }
 
-      // ═══════════════════════════════════════════════════════════
-      // PASO 2: VALIDAR QUE EL QR ESTÉ ACTIVO (1 LECTURA)
-      // ═══════════════════════════════════════════════════════════
       final qrId = qrInfo['qrId'];
       if (qrId == null || qrId.toString().isEmpty) {
         _showResult(
@@ -184,9 +209,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         return;
       }
 
-      // ═══════════════════════════════════════════════════════════
-      // PASO 3: VALIDAR CAMPOS REQUERIDOS
-      // ═══════════════════════════════════════════════════════════
       final requiredFields = [
         'eventId',
         'eventName',
@@ -212,9 +234,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         return;
       }
 
-      // ═══════════════════════════════════════════════════════════
-      // PASO 4: VALIDAR FACULTAD Y CARRERA (sin lectura adicional)
-      // ═══════════════════════════════════════════════════════════
       String userFacultad = (_cachedUserData!['facultad'] ?? '')
           .toString()
           .trim()
@@ -232,11 +251,9 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
           .trim()
           .toLowerCase();
 
-      // Normalizar carreras
       userCarrera = userCarrera.replaceAll(RegExp(r'^ep\s*'), '');
       eventCarrera = eventCarrera.replaceAll(RegExp(r'^ep\s*'), '');
 
-      // Evento general de UPeU
       bool esEventoUPeU =
           eventFacultad == 'universidad peruana unión' ||
           eventFacultad == 'universidad peruana union';
@@ -259,9 +276,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         }
       }
 
-      // ═══════════════════════════════════════════════════════════
-      // PASO 5: VERIFICAR DUPLICADOS CON ID COMPUESTO (1 LECTURA)
-      // ═══════════════════════════════════════════════════════════
       final codigoProyecto = qrInfo['codigoProyecto']?.toString().trim();
       final tituloProyecto = qrInfo['tituloProyecto']?.toString().trim();
       final grupo = qrInfo['grupo']?.toString().trim();
@@ -269,7 +283,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
       final parts = _currentUserId!.split('/');
       final studentId = parts[1];
 
-      // ✅ ID COMPUESTO: eventId + studentId + codigoProyecto
       final scanId = '${qrInfo['eventId']}_${studentId}_$codigoProyecto';
 
       print('🔍 Verificando duplicado con ID: $scanId');
@@ -292,10 +305,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                 .substring(0, 16) ??
             'Fecha desconocida';
 
-        // ✅ OPTIMIZACIÓN: Eliminado el conteo extra de scans
-        // Antes hacía una query adicional para contar
-        // Ahora simplemente informa que ya existe
-
         _showResult(
           success: false,
           message:
@@ -308,9 +317,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         return;
       }
 
-      // ═══════════════════════════════════════════════════════════
-      // PASO 6: GUARDAR ASISTENCIA CON BATCH (1 ESCRITURA BATCH)
-      // ═══════════════════════════════════════════════════════════
       final codigoFinal =
           (codigoProyecto != null &&
               codigoProyecto.isNotEmpty &&
@@ -348,10 +354,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         'registrationMethod': 'qr_scan',
       };
 
-      // ✅ OPTIMIZACIÓN: Incrementar contador de escaneos
       _escaneosDeSesion++;
 
-      // ✅ Decidir si actualizar resumen (solo cada N escaneos)
       final debeActualizarResumen =
           (_escaneosDeSesion % _intervaloActualizacionResumen == 0) ||
           (_escaneosDeSesion == 1);
@@ -372,10 +376,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
           .collection('asistencias')
           .doc(studentId);
 
-      // ✅ SIEMPRE guardar el scan individual
       batch.set(scanRef, scanData);
 
-      // ✅ CONDICIONAL: Solo actualizar resumen cada N escaneos
       if (debeActualizarResumen) {
         batch.set(resumenRef, {
           'studentName': _currentUserName,
@@ -384,6 +386,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
           'studentCodigo': _cachedUserData!['codigoUniversitario'],
           'facultad': _cachedUserData!['facultad'],
           'carrera': _cachedUserData!['carrera'],
+          'ciclo': _cachedUserData!['ciclo'],
+          'grupo': _cachedUserData!['grupo'],
           'eventId': qrInfo['eventId'],
           'eventName': qrInfo['eventName'],
           'lastScan': FieldValue.serverTimestamp(),
@@ -926,21 +930,63 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                               clipBehavior: Clip.antiAlias,
                               child: Stack(
                                 children: [
-                                  MobileScanner(
-                                    controller: cameraController,
-                                    onDetect: (capture) {
-                                      final List<Barcode> barcodes =
-                                          capture.barcodes;
-                                      for (final barcode in barcodes) {
-                                        if (barcode.rawValue != null &&
-                                            !_hasScanned &&
-                                            !_isProcessing) {
-                                          _procesarQR(barcode.rawValue!);
-                                          break;
+                                  // ✅ ENVOLVER MobileScanner CON GestureDetector PARA ZOOM
+                                  GestureDetector(
+                                    onScaleStart: _handleScaleStart,
+                                    onScaleUpdate: _handleScaleUpdate,
+                                    child: MobileScanner(
+                                      controller: cameraController,
+                                      onDetect: (capture) {
+                                        final List<Barcode> barcodes =
+                                            capture.barcodes;
+                                        for (final barcode in barcodes) {
+                                          if (barcode.rawValue != null &&
+                                              !_hasScanned &&
+                                              !_isProcessing) {
+                                            _procesarQR(barcode.rawValue!);
+                                            break;
+                                          }
                                         }
-                                      }
-                                    },
+                                      },
+                                    ),
                                   ),
+                                  // ✅ INDICADOR DE ZOOM
+                                  if (_currentZoom > 0.0)
+                                    Positioned(
+                                      top: 16,
+                                      right: 16,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withOpacity(0.6),
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.zoom_in,
+                                              color: Colors.white,
+                                              size: 18,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              '${(_currentZoom * 100).toInt()}%',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
                                   Center(
                                     child: SizedBox(
                                       width: 250,
@@ -1153,7 +1199,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                       ),
                                       SizedBox(height: 4),
                                       Text(
-                                        'Escanea todos los códigos diferentes de la categoría',
+                                        'Usa dos dedos para hacer zoom',
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: Color(0xFF64748B),

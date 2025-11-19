@@ -4,9 +4,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 
 class ReportesEvaluacionesExcelService {
-  Future<bool> generarReporteEvaluaciones({
+  Future<Map<String, dynamic>> generarReporteEvaluaciones({
     required List<Map<String, dynamic>> evaluaciones,
     required String eventoNombre,
     required String facultad,
@@ -15,6 +16,16 @@ class ReportesEvaluacionesExcelService {
     try {
       print('📊 Iniciando generación de reporte Excel...');
 
+      // 1. Solicitar permisos primero
+      final permisoConcedido = await _solicitarPermisos();
+      if (!permisoConcedido) {
+        return {
+          'success': false,
+          'message': 'Permisos de almacenamiento denegados',
+        };
+      }
+
+      // 2. Crear el Excel
       final excel = Excel.createExcel();
 
       // Crear hojas
@@ -28,14 +39,167 @@ class ReportesEvaluacionesExcelService {
         excel.delete('Sheet1');
       }
 
-      // Guardar archivo
-      await _guardarArchivo(excel, eventoNombre, facultad, carrera);
+      // 3. Guardar archivo
+      final resultado = await _guardarArchivo(
+        excel,
+        eventoNombre,
+        facultad,
+        carrera,
+      );
 
-      return true;
+      return resultado;
     } catch (e) {
       print('❌ Error al generar Excel: $e');
+      return {'success': false, 'message': 'Error al generar el archivo: $e'};
+    }
+  }
+
+  Future<bool> _solicitarPermisos() async {
+    if (!Platform.isAndroid) {
+      return true; // iOS no necesita permisos especiales
+    }
+
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      final androidInfo = await deviceInfo.androidInfo;
+      final sdkInt = androidInfo.version.sdkInt;
+
+      print('📱 Android SDK: $sdkInt');
+
+      // Android 13+ (API 33+)
+      if (sdkInt >= 33) {
+        // No necesita permisos para guardar en Downloads
+        return true;
+      }
+      // Android 10-12 (API 29-32)
+      else if (sdkInt >= 29) {
+        // Tampoco necesita permisos por Scoped Storage
+        return true;
+      }
+      // Android 9 o menor (API 28-)
+      else {
+        final status = await Permission.storage.request();
+        if (status.isGranted) {
+          return true;
+        } else if (status.isPermanentlyDenied) {
+          await openAppSettings();
+          return false;
+        } else {
+          return false;
+        }
+      }
+    } catch (e) {
+      print('❌ Error al verificar permisos: $e');
       return false;
     }
+  }
+
+  Future<Map<String, dynamic>> _guardarArchivo(
+    Excel excel,
+    String eventoNombre,
+    String facultad,
+    String? carrera,
+  ) async {
+    try {
+      // Generar nombre de archivo
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final nombreEvento = _limpiarNombre(eventoNombre);
+
+      String sufijo = '';
+      if (carrera != null && carrera != 'General') {
+        sufijo = '_${_limpiarNombre(carrera)}';
+      }
+
+      final fileName = 'Reporte_${nombreEvento}${sufijo}_$timestamp.xlsx';
+
+      Directory? directory;
+      String rutaCompleta = '';
+
+      if (Platform.isAndroid) {
+        // SOLUCIÓN: Usar getExternalStorageDirectory + Documents
+        final Directory? baseDir = await getExternalStorageDirectory();
+
+        if (baseDir == null) {
+          throw Exception('No se pudo acceder al almacenamiento externo');
+        }
+
+        // Navegar hasta la carpeta Documents pública
+        // Ruta típica: /storage/emulated/0/Documents
+        final List<String> paths = baseDir.path.split('/');
+        final int index = paths.indexOf('Android');
+
+        if (index != -1) {
+          // Crear ruta hasta /storage/emulated/0/Documents
+          final String publicPath = paths.sublist(0, index).join('/');
+          directory = Directory('$publicPath/Documents/ReportesEvaluaciones');
+
+          print('📁 Intentando crear directorio: ${directory.path}');
+
+          // Crear carpeta si no existe
+          if (!await directory.exists()) {
+            try {
+              await directory.create(recursive: true);
+              print('✅ Directorio creado exitosamente');
+            } catch (e) {
+              print('⚠️ No se pudo crear en Documents, usando Downloads...');
+              directory = Directory('$publicPath/Download');
+              if (!await directory.exists()) {
+                await directory.create(recursive: true);
+              }
+            }
+          }
+        } else {
+          // Fallback: usar el directorio de la app
+          directory = Directory('${baseDir.path}/ReportesEvaluaciones');
+          await directory.create(recursive: true);
+        }
+      } else if (Platform.isIOS) {
+        directory = await getApplicationDocumentsDirectory();
+      }
+
+      if (directory == null) {
+        throw Exception('No se pudo determinar el directorio de guardado');
+      }
+
+      // Guardar archivo
+      rutaCompleta = '${directory.path}/$fileName';
+      final fileBytes = excel.save();
+
+      if (fileBytes != null) {
+        final file = File(rutaCompleta);
+        await file.writeAsBytes(fileBytes);
+
+        print('✅ Archivo guardado exitosamente');
+        print('📁 Ubicación: $rutaCompleta');
+
+        return {
+          'success': true,
+          'message': 'Archivo guardado exitosamente',
+          'path': rutaCompleta,
+          'fileName': fileName,
+          'directory': directory.path,
+        };
+      } else {
+        throw Exception('Error al generar los bytes del archivo');
+      }
+    } catch (e) {
+      print('❌ Error al guardar archivo: $e');
+      return {'success': false, 'message': 'Error al guardar: $e'};
+    }
+  }
+
+  String _limpiarNombre(String nombre) {
+    // Limpiar caracteres especiales
+    String limpio = nombre
+        .replaceAll(RegExp(r'[^\w\s-]'), '')
+        .replaceAll(RegExp(r'\s+'), '_');
+
+    // Limitar longitud DESPUÉS de limpiar
+    if (limpio.length > 30) {
+      return limpio.substring(0, 30);
+    }
+
+    return limpio.isEmpty ? 'reporte' : limpio;
   }
 
   void _crearHojaResumen(
@@ -148,7 +312,6 @@ class ReportesEvaluacionesExcelService {
     );
     row += 1;
 
-    // Headers de tabla
     _agregarFilaHeader(sheet, row++, [
       'Categoría',
       'Total',
@@ -171,7 +334,6 @@ class ReportesEvaluacionesExcelService {
       ]);
     }
 
-    // Ajustar anchos de columna
     sheet.setColumnWidth(0, 25);
     sheet.setColumnWidth(1, 20);
     sheet.setColumnWidth(2, 15);
@@ -186,7 +348,6 @@ class ReportesEvaluacionesExcelService {
 
     int row = 0;
 
-    // Headers
     final headers = [
       'Código',
       'Título',
@@ -202,7 +363,6 @@ class ReportesEvaluacionesExcelService {
 
     _agregarFilaHeader(sheet, row++, headers);
 
-    // Datos
     for (var eval in evaluaciones) {
       final datos = [
         eval['codigo'],
@@ -223,9 +383,7 @@ class ReportesEvaluacionesExcelService {
         );
         cell.value = TextCellValue(datos[i]);
 
-        // Colorear según estado
         if (i == 7) {
-          // Columna Estado
           if (eval['bloqueada'] as bool) {
             cell.cellStyle = CellStyle(
               backgroundColorHex: ExcelColor.fromHexString('#FFEBEE'),
@@ -247,17 +405,16 @@ class ReportesEvaluacionesExcelService {
       row++;
     }
 
-    // Ajustar anchos
-    sheet.setColumnWidth(0, 12); // Código
-    sheet.setColumnWidth(1, 35); // Título
-    sheet.setColumnWidth(2, 20); // Categoría
-    sheet.setColumnWidth(3, 40); // Integrantes
-    sheet.setColumnWidth(4, 12); // Sala
-    sheet.setColumnWidth(5, 25); // Jurado
-    sheet.setColumnWidth(6, 30); // Rúbrica
-    sheet.setColumnWidth(7, 12); // Estado
-    sheet.setColumnWidth(8, 12); // Nota
-    sheet.setColumnWidth(9, 18); // Fecha
+    sheet.setColumnWidth(0, 12);
+    sheet.setColumnWidth(1, 35);
+    sheet.setColumnWidth(2, 20);
+    sheet.setColumnWidth(3, 40);
+    sheet.setColumnWidth(4, 12);
+    sheet.setColumnWidth(5, 25);
+    sheet.setColumnWidth(6, 30);
+    sheet.setColumnWidth(7, 12);
+    sheet.setColumnWidth(8, 12);
+    sheet.setColumnWidth(9, 18);
   }
 
   void _crearHojaPorProyecto(
@@ -267,7 +424,6 @@ class ReportesEvaluacionesExcelService {
     final sheet = excel['Por Proyecto'];
     int row = 0;
 
-    // Agrupar por proyecto
     final proyectosMap = <String, List<Map<String, dynamic>>>{};
     for (var eval in evaluaciones) {
       final codigo = eval['codigo'] as String;
@@ -282,7 +438,6 @@ class ReportesEvaluacionesExcelService {
       final evals = entry.value;
       final primerEval = evals.first;
 
-      // Información del proyecto
       var proyectoHeader = sheet.cell(
         CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
       );
@@ -315,7 +470,6 @@ class ReportesEvaluacionesExcelService {
       _agregarFilaSimple(sheet, row++, 'Sala:', primerEval['sala']);
       row++;
 
-      // Headers de evaluaciones
       _agregarFilaHeader(sheet, row++, [
         'Jurado',
         'Rúbrica',
@@ -324,7 +478,6 @@ class ReportesEvaluacionesExcelService {
         'Fecha Evaluación',
       ]);
 
-      // Evaluaciones del proyecto
       for (var eval in evals) {
         _agregarFilaDatos(sheet, row++, [
           eval['juradoNombre'],
@@ -335,7 +488,6 @@ class ReportesEvaluacionesExcelService {
         ]);
       }
 
-      // Promedio si hay evaluaciones completadas
       final evaluadasProyecto = evals
           .where((e) => e['evaluada'] as bool)
           .toList();
@@ -364,10 +516,9 @@ class ReportesEvaluacionesExcelService {
         row++;
       }
 
-      row += 2; // Espacio entre proyectos
+      row += 2;
     }
 
-    // Ajustar anchos
     sheet.setColumnWidth(0, 25);
     sheet.setColumnWidth(1, 30);
     sheet.setColumnWidth(2, 12);
@@ -382,7 +533,6 @@ class ReportesEvaluacionesExcelService {
     final sheet = excel['Por Jurado'];
     int row = 0;
 
-    // Agrupar por jurado
     final juradosMap = <String, List<Map<String, dynamic>>>{};
     for (var eval in evaluaciones) {
       final jurado = eval['juradoNombre'] as String;
@@ -396,7 +546,6 @@ class ReportesEvaluacionesExcelService {
       final jurado = entry.key;
       final evals = entry.value;
 
-      // Información del jurado
       var juradoHeader = sheet.cell(
         CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
       );
@@ -439,7 +588,6 @@ class ReportesEvaluacionesExcelService {
       );
       row++;
 
-      // Headers de proyectos
       _agregarFilaHeader(sheet, row++, [
         'Código',
         'Título',
@@ -449,7 +597,6 @@ class ReportesEvaluacionesExcelService {
         'Fecha Evaluación',
       ]);
 
-      // Proyectos del jurado
       for (var eval in evals) {
         final datos = [
           eval['codigo'],
@@ -466,7 +613,6 @@ class ReportesEvaluacionesExcelService {
           );
           cell.value = TextCellValue(datos[i]);
 
-          // Colorear según estado
           if (i == 3) {
             if (eval['bloqueada'] as bool) {
               cell.cellStyle = CellStyle(
@@ -489,10 +635,9 @@ class ReportesEvaluacionesExcelService {
         row++;
       }
 
-      row += 2; // Espacio entre jurados
+      row += 2;
     }
 
-    // Ajustar anchos
     sheet.setColumnWidth(0, 12);
     sheet.setColumnWidth(1, 35);
     sheet.setColumnWidth(2, 20);
@@ -501,7 +646,6 @@ class ReportesEvaluacionesExcelService {
     sheet.setColumnWidth(5, 18);
   }
 
-  // Métodos auxiliares
   void _agregarFilaSimple(Sheet sheet, int row, String label, String value) {
     var labelCell = sheet.cell(
       CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
@@ -556,91 +700,6 @@ class ReportesEvaluacionesExcelService {
       return '-';
     } catch (e) {
       return '-';
-    }
-  }
-
-  Future<void> _guardarArchivo(
-    Excel excel,
-    String eventoNombre,
-    String facultad,
-    String? carrera,
-  ) async {
-    try {
-      // Solicitar permisos solo si es necesario (Android < 10)
-      if (Platform.isAndroid) {
-        // Para Android 10+ (API 29+) no se necesitan permisos para Documents/Download
-        // Solo para versiones anteriores
-        final storageStatus = await Permission.storage.status;
-
-        if (storageStatus.isDenied) {
-          final result = await Permission.storage.request();
-
-          if (result.isDenied || result.isPermanentlyDenied) {
-            throw Exception(
-              'Se necesitan permisos de almacenamiento para guardar el archivo',
-            );
-          }
-        }
-      }
-
-      // Generar nombre de archivo
-      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final nombreEvento = eventoNombre.replaceAll(' ', '_');
-
-      // Agregar carrera al nombre si existe
-      String sufijo = '';
-      if (carrera != null && carrera != 'General') {
-        sufijo = '_${carrera.replaceAll(' ', '_')}';
-      }
-
-      final fileName =
-          'Reporte_Evaluaciones_${nombreEvento}${sufijo}_$timestamp.xlsx';
-
-      // Obtener directorio de Documentos
-      Directory? directory;
-      if (Platform.isAndroid) {
-        // Usar Downloads que es más accesible sin permisos especiales
-        directory = Directory('/storage/emulated/0/Download');
-
-        // Verificar si existe, si no, intentar con Documents
-        if (!await directory.exists()) {
-          directory = Directory('/storage/emulated/0/Documents');
-
-          if (!await directory.exists()) {
-            try {
-              await directory.create(recursive: true);
-            } catch (e) {
-              // Si falla, usar getExternalStorageDirectory
-              final appDir = await getExternalStorageDirectory();
-              directory = Directory('${appDir?.path}/Download');
-              await directory.create(recursive: true);
-            }
-          }
-        }
-      } else if (Platform.isIOS) {
-        directory = await getApplicationDocumentsDirectory();
-      }
-
-      if (directory == null) {
-        throw Exception('No se pudo acceder al directorio de descargas');
-      }
-
-      // Guardar archivo
-      final filePath = '${directory.path}/$fileName';
-      final fileBytes = excel.save();
-
-      if (fileBytes != null) {
-        final file = File(filePath);
-        await file.writeAsBytes(fileBytes);
-        print('✅ Archivo guardado exitosamente en: $filePath');
-        print('📁 Ubicación: ${directory.path}');
-        print('📄 Nombre: $fileName');
-      } else {
-        throw Exception('Error al generar el archivo Excel');
-      }
-    } catch (e) {
-      print('❌ Error al guardar archivo: $e');
-      rethrow;
     }
   }
 }

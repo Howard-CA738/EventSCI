@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
+import 'reportes_ganadores_excel.dart'; // ✅ IMPORTAR SERVICIO
 
 class GanadoresEstudiantesScreen extends StatefulWidget {
   const GanadoresEstudiantesScreen({super.key});
@@ -13,12 +14,16 @@ class GanadoresEstudiantesScreen extends StatefulWidget {
 class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
     with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ReportesGanadoresExcelService _excelService =
+      ReportesGanadoresExcelService(); // ✅ INSTANCIA DEL SERVICIO
+
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
   bool _isLoading = false;
   bool _isInitializing = true;
   bool _isCalculando = false;
+  bool _isGeneratingExcel = false; // ✅ NUEVO ESTADO
   String? _currentUserType;
 
   final Map<String, List<String>> _facultadesCarreras = {
@@ -93,7 +98,227 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
   }
 
   // ============================================================================
-  // 🔥 NUEVA FUNCIÓN: Calcular ganadores automáticamente por categoría
+  // 🔥 NUEVA FUNCIÓN: Descargar Excel
+  // ============================================================================
+  Future<void> _descargarExcel() async {
+    if (_ganadoresPorCategoria.isEmpty) {
+      _showSnackBar('No hay ganadores para exportar', isError: true);
+      return;
+    }
+
+    if (_facultadSeleccionada == null || _carreraSeleccionada == null) {
+      _showSnackBar('Debes seleccionar facultad y carrera', isError: true);
+      return;
+    }
+
+    setState(() => _isGeneratingExcel = true);
+
+    try {
+      // Mostrar diálogo de progreso
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(color: Color(0xFF1E3A5F)),
+                const SizedBox(height: 20),
+                const Text(
+                  'Generando reporte de ganadores...',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Esto puede tomar unos momentos',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      // Generar el Excel
+      final resultado = await _excelService.generarReporteGanadores(
+        ganadoresPorCategoria: _ganadoresPorCategoria,
+        facultad: _facultadSeleccionada!,
+        carrera: _carreraSeleccionada!,
+        totalEventos: _totalEventos,
+      );
+
+      if (mounted) {
+        Navigator.pop(context); // Cerrar diálogo de progreso
+        setState(() => _isGeneratingExcel = false);
+
+        if (resultado) {
+          // Mostrar diálogo de éxito
+          _mostrarDialogoExito();
+        } else {
+          _showSnackBar('❌ Error al generar el reporte Excel', isError: true);
+        }
+      }
+    } catch (e) {
+      print('Error al generar Excel: $e');
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        setState(() => _isGeneratingExcel = false);
+        _showSnackBar('Error: $e', isError: true);
+      }
+    }
+  }
+
+  void _mostrarDialogoExito() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.green.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_circle,
+                color: Colors.green,
+                size: 32,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text('Reporte Generado', style: TextStyle(fontSize: 18)),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '✅ El archivo Excel se ha generado exitosamente',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.folder_open,
+                        size: 18,
+                        color: Colors.blue.shade700,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Ubicación:',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Carpeta de Descargas / Documentos',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.description,
+                        size: 18,
+                        color: Colors.blue.shade700,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Archivo:',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Reporte_Ganadores_${_carreraSeleccionada!.replaceAll(' ', '_')}.xlsx',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[700],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.amber.shade700,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Busca el archivo en tu administrador de archivos',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+
+    // También mostrar SnackBar
+    _showSnackBar(
+      '✅ Reporte de ganadores generado exitosamente',
+      isSuccess: true,
+    );
+  }
+
+  // ============================================================================
+  // FUNCIÓN: Calcular ganadores automáticamente por categoría
   // ============================================================================
   Future<void> _calcularGanadoresAutomaticos() async {
     if (_facultadSeleccionada == null || _carreraSeleccionada == null) {
@@ -151,7 +376,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
       for (var eventoDoc in eventosSnapshot.docs) {
         print('\n📌 Procesando evento: ${eventoDoc.id}');
 
-        // 1. Obtener todos los proyectos del evento
         final proyectosSnapshot = await _firestore
             .collection('events')
             .doc(eventoDoc.id)
@@ -163,7 +387,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
           continue;
         }
 
-        // 2. Calcular puntaje promedio de cada proyecto
         Map<String, Map<String, dynamic>> proyectosConPuntaje = {};
 
         for (var proyectoDoc in proyectosSnapshot.docs) {
@@ -171,7 +394,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
           final clasificacion =
               proyectoData['Clasificación'] ?? 'Sin categoría';
 
-          // Obtener evaluaciones del proyecto
           final evaluacionesSnapshot = await _firestore
               .collection('events')
               .doc(eventoDoc.id)
@@ -187,7 +409,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
             continue;
           }
 
-          // Calcular promedio
           double sumaNotas = 0;
           int totalEvaluaciones = 0;
 
@@ -212,7 +433,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
           totalProyectosProcesados++;
         }
 
-        // 3. Agrupar por categoría
         Map<String, List<MapEntry<String, Map<String, dynamic>>>> porCategoria =
             {};
 
@@ -224,26 +444,22 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
           porCategoria[categoria]!.add(entry);
         }
 
-        // 4. Seleccionar TOP 3 de cada categoría
         for (var categoria in porCategoria.keys) {
           print('\n   🏅 Categoría: $categoria');
 
           final proyectosCategoria = porCategoria[categoria]!;
 
-          // Ordenar por promedio descendente
           proyectosCategoria.sort((a, b) {
             final promedioA = a.value['promedio'] as double;
             final promedioB = b.value['promedio'] as double;
             return promedioB.compareTo(promedioA);
           });
 
-          // Tomar TOP 3
           final top3 = proyectosCategoria.take(3).toList();
 
           print('   📊 ${proyectosCategoria.length} proyectos encontrados');
           print('   🏆 Asignando TOP 3 ganadores:');
 
-          // 5. Marcar como ganadores en Firestore
           int posicion = 1;
           for (var proyecto in top3) {
             final proyectoId = proyecto.key;
@@ -270,7 +486,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
             posicion++;
           }
 
-          // 6. Limpiar ganadores anteriores que no están en el TOP 3
           for (var proyecto in proyectosCategoria.skip(3)) {
             await _firestore
                 .collection('events')
@@ -366,7 +581,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
         }
       }
 
-      // Agrupar por categoría
       Map<String, List<Map<String, dynamic>>> porCategoria = {};
       for (var ganador in ganadoresList) {
         final categoria = ganador['clasificacion'] as String;
@@ -376,7 +590,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
         porCategoria[categoria]!.add(ganador);
       }
 
-      // Ordenar dentro de cada categoría por posición
       porCategoria.forEach((categoria, lista) {
         lista.sort(
           (a, b) => (a['posicion'] as int).compareTo(b['posicion'] as int),
@@ -428,14 +641,20 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
     return integrantesStr.isNotEmpty ? [integrantesStr.trim()] : [];
   }
 
-  void _showSnackBar(String message, {bool isSuccess = false}) {
+  void _showSnackBar(
+    String message, {
+    bool isSuccess = false,
+    bool isError = false,
+  }) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
             Icon(
-              isSuccess ? Icons.check_circle : Icons.info,
+              isSuccess
+                  ? Icons.check_circle
+                  : (isError ? Icons.error : Icons.info),
               color: Colors.white,
             ),
             const SizedBox(width: 12),
@@ -444,7 +663,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
         ),
         backgroundColor: isSuccess
             ? Colors.green[600]
-            : const Color(0xFF1E3A5F),
+            : (isError ? Colors.red[600] : const Color(0xFF1E3A5F)),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         duration: const Duration(seconds: 3),
@@ -463,7 +682,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
     final promedio = ganador['promedioFinal'] ?? 0.0;
     final winnerDate = (ganador['winnerDate'] as Timestamp?)?.toDate();
 
-    // Medalla según posición
     IconData medalla = Icons.emoji_events;
     Color colorMedalla = Colors.amber;
     String textoLugar = '${posicion}° Lugar';
@@ -492,7 +710,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Header del diálogo
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: const BoxDecoration(
@@ -542,14 +759,12 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                     ],
                   ),
                 ),
-                // Contenido del diálogo
                 Flexible(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Promedio
                         if (promedio > 0)
                           Container(
                             width: double.infinity,
@@ -584,7 +799,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                               ],
                             ),
                           ),
-                        // Nombre del proyecto
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(16),
@@ -636,7 +850,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                         const SizedBox(height: 16),
                         const Divider(),
                         const SizedBox(height: 16),
-                        // Integrantes
                         Row(
                           children: [
                             Container(
@@ -793,7 +1006,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
           opacity: _fadeAnimation,
           child: Column(
             children: [
-              // Header
               Padding(
                 padding: const EdgeInsets.all(20.0),
                 child: Row(
@@ -846,7 +1058,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                   ],
                 ),
               ),
-              // Content Area
               Expanded(
                 child: Container(
                   decoration: const BoxDecoration(
@@ -929,7 +1140,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                                       ],
                                     ),
                                     const SizedBox(height: 20),
-                                    // Dropdown Facultad
                                     DropdownButtonFormField<String>(
                                       value: _facultadSeleccionada,
                                       isExpanded: true,
@@ -980,7 +1190,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                                       onChanged: _actualizarCarreras,
                                     ),
                                     const SizedBox(height: 16),
-                                    // Dropdown Carrera
                                     DropdownButtonFormField<String>(
                                       value: _carreraSeleccionada,
                                       isExpanded: true,
@@ -1038,7 +1247,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                                       },
                                     ),
                                     const SizedBox(height: 20),
-                                    // Botones de acción
                                     Row(
                                       children: [
                                         Expanded(
@@ -1099,7 +1307,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                                                   Icon(Icons.visibility),
                                                   SizedBox(width: 8),
                                                   Text(
-                                                    'Ganador',
+                                                    'Ver',
                                                     style: TextStyle(
                                                       fontSize: 15,
                                                       fontWeight:
@@ -1202,6 +1410,59 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                                   ),
                                 ),
                                 const SizedBox(height: 16),
+
+                                // ✅ BOTÓN DESCARGAR EXCEL
+                                if (_ganadoresPorCategoria.isNotEmpty) ...[
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 56,
+                                    child: ElevatedButton.icon(
+                                      onPressed: _isGeneratingExcel
+                                          ? null
+                                          : _descargarExcel,
+                                      icon: _isGeneratingExcel
+                                          ? const SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.file_download,
+                                              size: 24,
+                                            ),
+                                      label: Text(
+                                        _isGeneratingExcel
+                                            ? 'Generando Excel...'
+                                            : 'Descargar Reporte en Excel',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(
+                                          0xFF27AE60,
+                                        ),
+                                        foregroundColor: Colors.white,
+                                        disabledBackgroundColor:
+                                            Colors.grey[300],
+                                        disabledForegroundColor:
+                                            Colors.grey[500],
+                                        elevation: 4,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
+
                                 // Lista de ganadores por categoría
                                 if (_ganadoresPorCategoria.isEmpty)
                                   Container(
@@ -1228,7 +1489,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                                         ),
                                         const SizedBox(height: 8),
                                         Text(
-                                          'Presiona "Calcular TOP 3" para generar ganadores',
+                                          'Presiona "Calcular" para generar ganadores',
                                           style: TextStyle(
                                             fontSize: 14,
                                             color: Colors.grey[500],
@@ -1282,7 +1543,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header de categoría
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -1332,7 +1592,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
               ],
             ),
           ),
-          // Lista de ganadores
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -1351,7 +1610,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
     final promedio = ganador['promedioFinal'] as double;
     final integrantes = _parseIntegrantes(ganador['integrantes']);
 
-    // Colores según posición
     Color colorPosicion = Colors.amber;
     IconData iconPosicion = Icons.emoji_events;
 
@@ -1378,7 +1636,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                // Medalla de posición
                 Container(
                   width: 60,
                   height: 60,
@@ -1402,7 +1659,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                   ),
                 ),
                 const SizedBox(width: 16),
-                // Información del proyecto
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1505,7 +1761,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                     ],
                   ),
                 ),
-                // Flecha
                 Icon(
                   Icons.arrow_forward_ios,
                   color: Colors.grey[400],

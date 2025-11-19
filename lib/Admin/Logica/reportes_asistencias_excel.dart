@@ -201,6 +201,12 @@ class ReportesAsistenciasExcelService {
     sheet.setColumnWidth(3, 15);
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // FUNCIONES COMPLETAS PARA reportes_asistencias_excel.dart
+  // REEMPLAZA LAS FUNCIONES EXISTENTES CON ESTAS
+  // ══════════════════════════════════════════════════════════════
+
+  // 1️⃣ FUNCIÓN COMPLETA: _crearHojaDetallada
   void _crearHojaDetallada(
     Excel excel,
     List<Map<String, dynamic>> estudiantes,
@@ -209,7 +215,7 @@ class ReportesAsistenciasExcelService {
 
     int row = 0;
 
-    // Headers
+    // ✅ HEADERS CON CICLO Y GRUPO AGREGADOS
     final headers = [
       'Nombre',
       'Usuario',
@@ -217,6 +223,8 @@ class ReportesAsistenciasExcelService {
       'Código',
       'Facultad',
       'Carrera',
+      'Ciclo', // ← NUEVO
+      'Grupo', // ← NUEVO
       'Total Asistencias',
       'Última Asistencia',
     ];
@@ -227,6 +235,7 @@ class ReportesAsistenciasExcelService {
     for (var estudiante in estudiantes) {
       final lastScan = (estudiante['lastScan'] as Timestamp?)?.toDate();
 
+      // ✅ DATOS CON CICLO Y GRUPO
       final datos = [
         estudiante['nombre'],
         '@${estudiante['username']}',
@@ -234,6 +243,8 @@ class ReportesAsistenciasExcelService {
         estudiante['codigo'],
         estudiante['facultad'],
         estudiante['carrera'],
+        estudiante['ciclo'] ?? 'N/A', // ← NUEVO
+        estudiante['grupo'] ?? 'N/A', // ← NUEVO
         estudiante['totalScans'].toString(),
         lastScan != null
             ? DateFormat('dd/MM/yyyy HH:mm').format(lastScan)
@@ -246,8 +257,8 @@ class ReportesAsistenciasExcelService {
         );
         cell.value = TextCellValue(datos[i]);
 
-        // Colorear columna de total asistencias
-        if (i == 6) {
+        // Colorear columna de total asistencias (ahora en índice 8 en lugar de 6)
+        if (i == 8) {
           final total = estudiante['totalScans'] as int;
           if (total >= 10) {
             cell.cellStyle = CellStyle(
@@ -271,17 +282,20 @@ class ReportesAsistenciasExcelService {
       row++;
     }
 
-    // Ajustar anchos
+    // ✅ AJUSTAR ANCHOS CON LAS NUEVAS COLUMNAS
     sheet.setColumnWidth(0, 30); // Nombre
     sheet.setColumnWidth(1, 15); // Usuario
     sheet.setColumnWidth(2, 12); // DNI
     sheet.setColumnWidth(3, 15); // Código
     sheet.setColumnWidth(4, 35); // Facultad
     sheet.setColumnWidth(5, 35); // Carrera
-    sheet.setColumnWidth(6, 18); // Total
-    sheet.setColumnWidth(7, 18); // Última
+    sheet.setColumnWidth(6, 10); // Ciclo ← NUEVO
+    sheet.setColumnWidth(7, 10); // Grupo ← NUEVO
+    sheet.setColumnWidth(8, 18); // Total
+    sheet.setColumnWidth(9, 18); // Última
   }
 
+  // 2️⃣ FUNCIÓN COMPLETA: _crearHojaPorEstudiante
   void _crearHojaPorEstudiante(
     Excel excel,
     List<Map<String, dynamic>> estudiantes,
@@ -318,6 +332,11 @@ class ReportesAsistenciasExcelService {
       );
       _agregarFilaSimple(sheet, row++, 'Facultad:', estudiante['facultad']);
       _agregarFilaSimple(sheet, row++, 'Carrera:', estudiante['carrera']);
+
+      // ✅ AGREGAR CICLO Y GRUPO
+      _agregarFilaSimple(sheet, row++, 'Ciclo:', estudiante['ciclo'] ?? 'N/A');
+      _agregarFilaSimple(sheet, row++, 'Grupo:', estudiante['grupo'] ?? 'N/A');
+
       _agregarFilaSimple(
         sheet,
         row++,
@@ -362,6 +381,7 @@ class ReportesAsistenciasExcelService {
     sheet.setColumnWidth(4, 18); // Fecha
   }
 
+  // 3️⃣ FUNCIÓN COMPLETA: _crearHojaEstadisticas (CON ESTADÍSTICAS DE CICLO)
   void _crearHojaEstadisticas(
     Excel excel,
     List<Map<String, dynamic>> estudiantes,
@@ -422,6 +442,67 @@ class ReportesAsistenciasExcelService {
 
     row += 2;
 
+    // ✅ NUEVA SECCIÓN: ESTADÍSTICAS POR CICLO
+    var cicloHeader = sheet.cell(
+      CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+    );
+    cicloHeader.value = TextCellValue('ESTADÍSTICAS POR CICLO');
+    cicloHeader.cellStyle = CellStyle(
+      backgroundColorHex: ExcelColor.fromHexString('#1E3A5F'),
+      fontColorHex: ExcelColor.white,
+      bold: true,
+    );
+    sheet.merge(
+      CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+      CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row),
+    );
+    row += 1;
+
+    // Agrupar por ciclo
+    final ciclosMap = <String, Map<String, int>>{};
+    for (var estudiante in estudiantes) {
+      final ciclo = estudiante['ciclo'] ?? 'N/A';
+      if (!ciclosMap.containsKey(ciclo)) {
+        ciclosMap[ciclo] = {'estudiantes': 0, 'asistencias': 0};
+      }
+      ciclosMap[ciclo]!['estudiantes'] = ciclosMap[ciclo]!['estudiantes']! + 1;
+      ciclosMap[ciclo]!['asistencias'] =
+          ciclosMap[ciclo]!['asistencias']! + (estudiante['totalScans'] as int);
+    }
+
+    if (ciclosMap.isNotEmpty) {
+      _agregarFilaHeader(sheet, row++, [
+        'Ciclo',
+        'Total Estudiantes',
+        'Total Asistencias',
+        'Promedio',
+      ]);
+
+      final ciclos = ciclosMap.keys.toList()..sort();
+      for (var ciclo in ciclos) {
+        final estudiantes = ciclosMap[ciclo]!['estudiantes']!;
+        final asistencias = ciclosMap[ciclo]!['asistencias']!;
+        final promedio = estudiantes > 0
+            ? (asistencias / estudiantes).toStringAsFixed(2)
+            : '0.00';
+
+        _agregarFilaDatos(sheet, row++, [
+          ciclo,
+          estudiantes.toString(),
+          asistencias.toString(),
+          promedio,
+        ]);
+      }
+    } else {
+      var noCicloCell = sheet.cell(
+        CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+      );
+      noCicloCell.value = TextCellValue('No hay datos de ciclos registrados');
+      row++;
+    }
+
+    row += 2;
+
     // Estadísticas por grupo (si existen)
     var grupoHeader = sheet.cell(
       CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
@@ -434,29 +515,48 @@ class ReportesAsistenciasExcelService {
     );
     sheet.merge(
       CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
-      CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row),
+      CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row),
     );
     row += 1;
 
-    // Agrupar por grupo
-    final gruposMap = <String, int>{};
-
+    // Agrupar por grupo de ESTUDIANTES (no de scans)
+    final gruposEstudiantesMap = <String, Map<String, int>>{};
     for (var estudiante in estudiantes) {
-      final scans = estudiante['scans'] as List<dynamic>;
-      for (var scan in scans) {
-        final grupo = scan['grupo'];
-        if (grupo != null && grupo.toString().isNotEmpty) {
-          gruposMap[grupo] = (gruposMap[grupo] ?? 0) + 1;
-        }
+      final grupo = estudiante['grupo'] ?? 'N/A';
+      if (!gruposEstudiantesMap.containsKey(grupo)) {
+        gruposEstudiantesMap[grupo] = {'estudiantes': 0, 'asistencias': 0};
       }
+      gruposEstudiantesMap[grupo]!['estudiantes'] =
+          gruposEstudiantesMap[grupo]!['estudiantes']! + 1;
+      gruposEstudiantesMap[grupo]!['asistencias'] =
+          gruposEstudiantesMap[grupo]!['asistencias']! +
+          (estudiante['totalScans'] as int);
     }
 
-    if (gruposMap.isNotEmpty) {
-      _agregarFilaHeader(sheet, row++, ['Grupo', 'Total Asistencias']);
+    if (gruposEstudiantesMap.isNotEmpty &&
+        !(gruposEstudiantesMap.length == 1 &&
+            gruposEstudiantesMap.containsKey('N/A'))) {
+      _agregarFilaHeader(sheet, row++, [
+        'Grupo',
+        'Total Estudiantes',
+        'Total Asistencias',
+        'Promedio',
+      ]);
 
-      final grupos = gruposMap.keys.toList()..sort();
+      final grupos = gruposEstudiantesMap.keys.toList()..sort();
       for (var grupo in grupos) {
-        _agregarFilaDatos(sheet, row++, [grupo, gruposMap[grupo].toString()]);
+        final estudiantes = gruposEstudiantesMap[grupo]!['estudiantes']!;
+        final asistencias = gruposEstudiantesMap[grupo]!['asistencias']!;
+        final promedio = estudiantes > 0
+            ? (asistencias / estudiantes).toStringAsFixed(2)
+            : '0.00';
+
+        _agregarFilaDatos(sheet, row++, [
+          grupo,
+          estudiantes.toString(),
+          asistencias.toString(),
+          promedio,
+        ]);
       }
     } else {
       var noGrupoCell = sheet.cell(
@@ -470,6 +570,7 @@ class ReportesAsistenciasExcelService {
     sheet.setColumnWidth(0, 30);
     sheet.setColumnWidth(1, 20);
     sheet.setColumnWidth(2, 20);
+    sheet.setColumnWidth(3, 15);
   }
 
   // Métodos auxiliares
