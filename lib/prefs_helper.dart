@@ -1,11 +1,22 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '/admin/logica/filiales_service.dart';
 
 class PrefsHelper {
+  static const String userTypeAdminCarrera = 'admin_carrera';
+  static const String _keyAdminCarreraFilial = 'admin_carrera_filial';
+  static const String _keyAdminCarreraFilialNombre =
+      'admin_carrera_filial_nombre';
+  static const String _keyAdminCarreraFacultad = 'admin_carrera_facultad';
+  static const String _keyAdminCarreraCarrera = 'admin_carrera_carrera';
+  static const String _keyAdminCarreraCarreraId = 'admin_carrera_carrera_id';
+  static const String _keyAdminCarreraPermisos = 'admin_carrera_permisos';
   static const String _keyUserType = 'user_type';
   static const String _keyUserName = 'user_name';
   static const String _keyUserId = 'user_id';
   static const String _keyIsLoggedIn = 'is_logged_in';
+  // ✅ NUEVO: Token de sesión para invalidar sesiones antiguas
+  static const String _keySessionToken = 'session_token';
 
   static const String userTypeAdmin = 'admin';
   static const String userTypeStudent = 'student';
@@ -21,13 +32,9 @@ class PrefsHelper {
 
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ CACHÉ EN MEMORIA (evita lecturas repetidas)
-  // ═══════════════════════════════════════════════════════════════
   static final Map<String, Map<String, dynamic>> _userCache = {};
   static DateTime? _cacheTimestamp;
   static const Duration _cacheDuration = Duration(hours: 24);
-  // ✅ NUEVO: Caché para lista de estudiantes
   static List<Map<String, dynamic>>? _studentsCache;
   static DateTime? _studentsCacheTimestamp;
   static const Duration _studentsCacheDuration = Duration(hours: 1);
@@ -36,6 +43,126 @@ class PrefsHelper {
     _studentsCache = null;
     _studentsCacheTimestamp = null;
     print('🗑️ Caché de estudiantes limpiado');
+  }
+
+  // ✅ NUEVO: Verificar si la sesión del admin sigue siendo válida
+  static Future<bool> isSessionValid() async {
+    try {
+      final userType = await getUserType();
+
+      // Solo verificar para admin y asistente
+      if (userType != userTypeAdmin && userType != userTypeAsistente) {
+        return true;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final localToken = prefs.getString(_keySessionToken);
+      final userId = await getCurrentUserId();
+
+      if (localToken == null || userId == null) return false;
+
+      // Consultar contraseña actual en Firestore
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (!userDoc.exists) return false;
+
+      final currentPassword = userDoc.data()?['password'];
+
+      // Si el token local no coincide con la contraseña en Firestore → sesión inválida
+      final isValid = localToken == currentPassword;
+
+      if (!isValid) {
+        print(
+          '🔒 Sesión invalidada: la contraseña fue cambiada en otro dispositivo',
+        );
+      }
+
+      return isValid;
+    } catch (e) {
+      print('Error validando sesión: $e');
+      return false;
+    }
+  }
+
+  static Future<void> saveAdminCarreraData({
+    required String userId,
+    required String userName,
+    required String filial,
+    required String filialNombre,
+    required String facultad,
+    required String carrera,
+    required String carreraId,
+    required List<String> permisos,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyUserType, userTypeAdminCarrera);
+    await prefs.setString(_keyUserName, userName);
+    await prefs.setString(_keyUserId, userId);
+    await prefs.setString(_keyAdminCarreraFilial, filial);
+    await prefs.setString(_keyAdminCarreraFilialNombre, filialNombre);
+    await prefs.setString(_keyAdminCarreraFacultad, facultad);
+    await prefs.setString(_keyAdminCarreraCarrera, carrera);
+    await prefs.setString(_keyAdminCarreraCarreraId, carreraId);
+    await prefs.setString(_keyAdminCarreraPermisos, permisos.join(','));
+    await prefs.setBool(_keyIsLoggedIn, true);
+    print('✅ Datos de admin carrera guardados en sesión');
+  }
+
+  static Future<String?> getAdminCarreraFilial() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyAdminCarreraFilial);
+  }
+
+  static Future<String?> getAdminCarreraFilialNombre() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyAdminCarreraFilialNombre);
+  }
+
+  static Future<String?> getAdminCarreraFacultad() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyAdminCarreraFacultad);
+  }
+
+  static Future<String?> getAdminCarreraCarrera() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyAdminCarreraCarrera);
+  }
+
+  static Future<String?> getAdminCarreraCarreraId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyAdminCarreraCarreraId);
+  }
+
+  static Future<List<String>> getAdminCarreraPermisos() async {
+    final prefs = await SharedPreferences.getInstance();
+    final permisosString = prefs.getString(_keyAdminCarreraPermisos);
+    if (permisosString == null || permisosString.isEmpty) return [];
+    return permisosString.split(',');
+  }
+
+  static Future<bool> isAdminCarrera() async {
+    final userType = await getUserType();
+    return userType == userTypeAdminCarrera;
+  }
+
+  static Future<Map<String, dynamic>?> getAdminCarreraData() async {
+    final isAdmin = await isAdminCarrera();
+    if (!isAdmin) return null;
+
+    return {
+      'userId': await getCurrentUserId(),
+      'userName': await getUserName(),
+      'filial': await getAdminCarreraFilial(),
+      'filialNombre': await getAdminCarreraFilialNombre(),
+      'facultad': await getAdminCarreraFacultad(),
+      'carrera': await getAdminCarreraCarrera(),
+      'carreraId': await getAdminCarreraCarreraId(),
+      'permisos': await getAdminCarreraPermisos(),
+    };
+  }
+
+  static Future<bool> tienePermiso(String permiso) async {
+    final permisos = await getAdminCarreraPermisos();
+    return permisos.contains(permiso);
   }
 
   static Future<void> saveUserData({
@@ -72,7 +199,12 @@ class PrefsHelper {
 
   static Future<bool> loginAdmin(String email, String password) async {
     try {
-      if (email.trim() == adminEmail && password == adminPassword) {
+      // ═══════════════════════════════════════════════════════════
+      // 🔐 LOGIN ADMIN
+      // ═══════════════════════════════════════════════════════════
+      if (email.trim() == adminEmail) {
+        print('🔍 Buscando admin en Firestore...');
+
         final adminQuery = await _firestore
             .collection('users')
             .where('email', isEqualTo: adminEmail)
@@ -81,28 +213,59 @@ class PrefsHelper {
             .get();
 
         String adminId;
+
         if (adminQuery.docs.isEmpty) {
+          print('📝 Admin no existe, creando en Firestore...');
           final adminDoc = await _firestore.collection('users').add({
             'email': adminEmail,
-            'password': adminPassword,
+            'password': password,
             'userType': userTypeAdmin,
             'name': 'Administrador',
             'createdAt': FieldValue.serverTimestamp(),
           });
           adminId = adminDoc.id;
-          print('Admin creado exitosamente');
+          print('✅ Admin creado con contraseña: $password');
+
+          await saveUserData(
+            userType: userTypeAdmin,
+            userName: 'Administrador',
+            userId: adminId,
+          );
+          // ✅ Guardar token de sesión
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(_keySessionToken, password);
+          return true;
         } else {
           adminId = adminQuery.docs.first.id;
-        }
+          final adminData = adminQuery.docs.first.data();
+          final firestorePassword = adminData['password'];
 
-        await saveUserData(
-          userType: userTypeAdmin,
-          userName: 'Administrador',
-          userId: adminId,
-        );
-        return true;
-      } else if (email.trim() == asistenteEmail &&
-          password == asistentePassword) {
+          print('🔍 Admin encontrado en Firestore');
+
+          if (password == firestorePassword) {
+            print('✅ Contraseña correcta (validada desde Firestore)');
+
+            await saveUserData(
+              userType: userTypeAdmin,
+              userName: 'Administrador',
+              userId: adminId,
+            );
+            // ✅ Guardar token de sesión con la contraseña actual
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(_keySessionToken, firestorePassword);
+            return true;
+          } else {
+            print('❌ Contraseña incorrecta');
+            return false;
+          }
+        }
+      }
+      // ═══════════════════════════════════════════════════════════
+      // 🔐 LOGIN ASISTENTE
+      // ═══════════════════════════════════════════════════════════
+      else if (email.trim() == asistenteEmail) {
+        print('🔍 Buscando asistente en Firestore...');
+
         final asistenteQuery = await _firestore
             .collection('users')
             .where('email', isEqualTo: asistenteEmail)
@@ -111,32 +274,58 @@ class PrefsHelper {
             .get();
 
         String asistenteId;
+
         if (asistenteQuery.docs.isEmpty) {
+          print('📝 Asistente no existe, creando en Firestore...');
           final asistenteDoc = await _firestore.collection('users').add({
             'email': asistenteEmail,
-            'password': asistentePassword,
+            'password': password,
             'userType': userTypeAsistente,
             'name': 'Asistente',
             'createdAt': FieldValue.serverTimestamp(),
           });
           asistenteId = asistenteDoc.id;
-          print('Asistente creado exitosamente');
+          print('✅ Asistente creado con contraseña: $password');
+
+          await saveUserData(
+            userType: userTypeAsistente,
+            userName: 'Asistente',
+            userId: asistenteId,
+          );
+          // ✅ Guardar token de sesión
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(_keySessionToken, password);
+          return true;
         } else {
           asistenteId = asistenteQuery.docs.first.id;
-        }
+          final asistenteData = asistenteQuery.docs.first.data();
+          final firestorePassword = asistenteData['password'];
 
-        await saveUserData(
-          userType: userTypeAsistente,
-          userName: 'Asistente',
-          userId: asistenteId,
-        );
-        return true;
-      } else {
-        print('Credenciales de admin/asistente incorrectas');
-        return false;
+          print('🔍 Asistente encontrado en Firestore');
+
+          if (password == firestorePassword) {
+            print('✅ Contraseña correcta (validada desde Firestore)');
+
+            await saveUserData(
+              userType: userTypeAsistente,
+              userName: 'Asistente',
+              userId: asistenteId,
+            );
+            // ✅ Guardar token de sesión con la contraseña actual
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(_keySessionToken, firestorePassword);
+            return true;
+          } else {
+            print('❌ Contraseña incorrecta');
+            return false;
+          }
+        }
       }
+
+      print('❌ Usuario no reconocido: $email');
+      return false;
     } catch (e) {
-      print('Error en login admin/asistente: $e');
+      print('❌ Error en login admin/asistente: $e');
       return false;
     }
   }
@@ -160,7 +349,6 @@ class PrefsHelper {
       print('🔐 Intentando login de estudiante...');
       print('   Usuario: $username');
 
-      // ✅ PASO 1: Buscar en índice global (1 LECTURA)
       final indexQuery = await _firestore
           .collection('student_index')
           .where('username', isEqualTo: username.trim().toLowerCase())
@@ -168,16 +356,12 @@ class PrefsHelper {
           .get();
 
       if (indexQuery.docs.isNotEmpty) {
-        // ✅ Usuario encontrado en índice
         final indexData = indexQuery.docs.first.data();
         final carreraPath = indexData['carreraPath'];
         final studentId = indexData['studentId'];
 
         print('✅ Usuario encontrado en índice');
-        print('   Carrera: $carreraPath');
-        print('   ID: $studentId');
 
-        // ✅ PASO 2: Obtener datos completos del estudiante (1 LECTURA)
         final studentDoc = await _firestore
             .collection('users')
             .doc(carreraPath)
@@ -186,7 +370,6 @@ class PrefsHelper {
             .get();
 
         if (!studentDoc.exists) {
-          // 🔧 FIX: Si el documento no existe pero el índice sí, limpiar índice corrupto
           print('⚠️ Índice corrupto detectado, limpiando...');
           await _firestore
               .collection('student_index')
@@ -194,7 +377,6 @@ class PrefsHelper {
               .delete();
 
           print('🔄 Reintentando búsqueda manual...');
-          // Reintentar con fallback
           return await _loginStudentFallback(username, password);
         }
 
@@ -210,7 +392,6 @@ class PrefsHelper {
             userId: '$carreraPath/$studentId',
           );
 
-          // ✅ Cachear datos del usuario
           _userCache[studentId] = studentData;
           _cacheTimestamp = DateTime.now();
 
@@ -267,7 +448,6 @@ class PrefsHelper {
                 userId: '$carreraName/${studentDoc.id}',
               );
 
-              // ✅ Crear entrada en índice para futuras búsquedas
               await _createStudentIndex(
                 username: username.trim().toLowerCase(),
                 carreraPath: carreraName,
@@ -290,9 +470,6 @@ class PrefsHelper {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ OPTIMIZACIÓN 2: Crear índice al registrar estudiante
-  // ═══════════════════════════════════════════════════════════════
   static Future<void> _createStudentIndex({
     required String username,
     required String carreraPath,
@@ -328,9 +505,8 @@ class PrefsHelper {
     String? celular,
   }) async {
     try {
-      print('🔍 Verificando duplicados...');
+      print('🔍 Creando estudiante en: $carrera');
 
-      // ✅ Verificar duplicado en índice (más rápido)
       final indexExists = await _firestore
           .collection('student_index')
           .doc(username.toLowerCase().trim())
@@ -341,74 +517,56 @@ class PrefsHelper {
         return false;
       }
 
-      // Verificación global de duplicados
-      final carrerasSnapshot = await _firestore.collection('users').get();
+      final studentsRef = _firestore
+          .collection('users')
+          .doc(carrera)
+          .collection('students');
 
-      for (var carreraDoc in carrerasSnapshot.docs) {
-        if (carreraDoc.id == 'admin' ||
-            carreraDoc.id == 'asistente' ||
-            carreraDoc.id == 'jurado') {
-          continue;
-        }
+      final existingUsername = await studentsRef
+          .where('username', isEqualTo: username.trim().toLowerCase())
+          .limit(1)
+          .get();
 
-        final studentsRef = _firestore
-            .collection('users')
-            .doc(carreraDoc.id)
-            .collection('students');
+      if (existingUsername.docs.isNotEmpty) {
+        print('❌ Username ya existe en esta carrera');
+        return false;
+      }
 
-        if (email.trim().isNotEmpty) {
-          final existingEmailUser = await studentsRef
-              .where('email', isEqualTo: email.trim())
-              .limit(1)
-              .get();
-
-          if (existingEmailUser.docs.isNotEmpty) {
-            print('❌ Email ya existe');
-            return false;
-          }
-        }
-
-        if (codigoUniversitario.trim().isNotEmpty) {
-          final existingCodeUser = await studentsRef
-              .where(
-                'codigoUniversitario',
-                isEqualTo: codigoUniversitario.trim(),
-              )
-              .limit(1)
-              .get();
-
-          if (existingCodeUser.docs.isNotEmpty) {
-            print('❌ Código universitario ya existe');
-            return false;
-          }
-        }
-
-        final existingDniUser = await studentsRef
-            .where('dni', isEqualTo: dni.trim())
+      if (email.trim().isNotEmpty) {
+        final existingEmail = await studentsRef
+            .where('email', isEqualTo: email.trim())
             .limit(1)
             .get();
 
-        if (existingDniUser.docs.isNotEmpty) {
-          print('❌ DNI ya existe');
+        if (existingEmail.docs.isNotEmpty) {
+          print('❌ Email ya existe en esta carrera');
           return false;
         }
       }
 
-      print('✅ No hay duplicados');
+      if (codigoUniversitario.trim().isNotEmpty) {
+        final existingCode = await studentsRef
+            .where('codigoUniversitario', isEqualTo: codigoUniversitario.trim())
+            .limit(1)
+            .get();
 
-      // Asegurar que el documento de carrera existe
-      final carreraRef = _firestore.collection('users').doc(carrera);
-      final carreraDoc = await carreraRef.get();
-
-      if (!carreraDoc.exists) {
-        print('📝 Creando documento para carrera: $carrera');
-        await carreraRef.set({
-          'name': carrera,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+        if (existingCode.docs.isNotEmpty) {
+          print('❌ Código universitario ya existe en esta carrera');
+          return false;
+        }
       }
 
-      final studentsRef = carreraRef.collection('students');
+      final existingDni = await studentsRef
+          .where('dni', isEqualTo: dni.trim())
+          .limit(1)
+          .get();
+
+      if (existingDni.docs.isNotEmpty) {
+        print('❌ DNI ya existe en esta carrera');
+        return false;
+      }
+
+      final carreraRef = _firestore.collection('users').doc(carrera);
 
       final studentData = {
         'email': email.trim(),
@@ -447,14 +605,19 @@ class PrefsHelper {
 
       final studentDoc = await studentsRef.add(studentData);
 
-      // ✅ Crear índice inmediatamente
       await _createStudentIndex(
         username: username.toLowerCase().trim(),
         carreraPath: carrera,
         studentId: studentDoc.id,
       );
 
-      print('✅ Estudiante e índice creados exitosamente');
+      await carreraRef.set({
+        'name': carrera,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      print('✅ Estudiante creado: ${studentDoc.id}');
+
       clearStudentsCache();
       return true;
     } catch (e) {
@@ -463,9 +626,6 @@ class PrefsHelper {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ OPTIMIZACIÓN 3: Usar caché para datos del usuario
-  // ═══════════════════════════════════════════════════════════════
   static Future<Map<String, dynamic>?> getCurrentUserData({
     bool forceRefresh = false,
   }) async {
@@ -479,29 +639,12 @@ class PrefsHelper {
         if (parts.length == 2) {
           final studentId = parts[1];
           if (_userCache.containsKey(studentId)) {
-            print(
-              '✅ Datos obtenidos del caché (${_cacheDuration.inHours}h válido)',
-            );
-            return _userCache[studentId];
-          }
-        }
-      }
-      print('⚠️ Caché expirado o no disponible, cargando desde Firestore...');
-      // ✅ Verificar caché
-      if (!forceRefresh &&
-          _cacheTimestamp != null &&
-          DateTime.now().difference(_cacheTimestamp!) < _cacheDuration) {
-        final parts = userIdPath.split('/');
-        if (parts.length == 2) {
-          final studentId = parts[1];
-          if (_userCache.containsKey(studentId)) {
             print('✅ Datos obtenidos del caché');
             return _userCache[studentId];
           }
         }
       }
 
-      // ✅ Si no hay caché válido, obtener de Firestore
       if (userIdPath.contains('/')) {
         final parts = userIdPath.split('/');
         if (parts.length != 2) return null;
@@ -522,7 +665,6 @@ class PrefsHelper {
         userData['id'] = userDoc.id;
         userData['carreraPath'] = carreraPath;
 
-        // ✅ Guardar en caché
         _userCache[studentId] = userData;
         _cacheTimestamp = DateTime.now();
 
@@ -583,7 +725,6 @@ class PrefsHelper {
 
   static Future<List<Map<String, dynamic>>> getStudents() async {
     try {
-      // ✅ Verificar caché
       if (_studentsCache != null &&
           _studentsCacheTimestamp != null &&
           DateTime.now().difference(_studentsCacheTimestamp!) <
@@ -591,8 +732,6 @@ class PrefsHelper {
         print('✅ Estudiantes obtenidos del caché');
         return _studentsCache!;
       }
-
-      print('⚠️ Caché expirado, cargando desde Firestore...');
 
       List<Map<String, dynamic>> allStudents = [];
       final carrerasSnapshot = await _firestore.collection('users').get();
@@ -619,7 +758,6 @@ class PrefsHelper {
         }
       }
 
-      // ✅ Guardar en caché
       _studentsCache = allStudents;
       _studentsCacheTimestamp = DateTime.now();
 
@@ -635,7 +773,6 @@ class PrefsHelper {
     String studentId,
   ) async {
     try {
-      // ✅ Eliminar del índice también
       final studentDoc = await _firestore
           .collection('users')
           .doc(carreraPath)
@@ -657,7 +794,6 @@ class PrefsHelper {
           .doc(studentId)
           .delete();
 
-      // ✅ Limpiar caché
       _userCache.remove(studentId);
 
       print('Estudiante eliminado exitosamente de $carreraPath');
@@ -676,7 +812,6 @@ class PrefsHelper {
     int errorCount = 0;
 
     try {
-      // ✅ Dividir en lotes de 450 operaciones (margen de seguridad bajo el límite de 500)
       const batchSize = 450;
 
       for (int i = 0; i < students.length; i += batchSize) {
@@ -687,10 +822,6 @@ class PrefsHelper {
 
         final currentBatch = students.sublist(i, endIndex);
 
-        print(
-          '📦 Procesando lote ${(i ~/ batchSize) + 1}: ${currentBatch.length} estudiantes',
-        );
-
         for (var student in currentBatch) {
           try {
             final studentRef = _firestore
@@ -699,8 +830,6 @@ class PrefsHelper {
                 .collection('students')
                 .doc(student['studentId']);
 
-            // ✅ OPTIMIZACIÓN: Obtener username desde la lista en memoria
-            // En lugar de hacer un get() adicional
             final studentData = _userCache[student['studentId']];
 
             if (studentData != null) {
@@ -711,10 +840,6 @@ class PrefsHelper {
                     .doc(username);
                 batch.delete(indexRef);
               }
-            } else {
-              // Fallback: si no está en caché, intentar eliminar por patrón
-              // (esto solo pasa si el estudiante no fue cargado previamente)
-              print('⚠️ Estudiante ${student['studentId']} no en caché');
             }
 
             batch.delete(studentRef);
@@ -727,23 +852,17 @@ class PrefsHelper {
           }
         }
 
-        // Ejecutar el batch actual
         try {
           await batch.commit();
-          print('✅ Lote ${(i ~/ batchSize) + 1} completado');
         } catch (e) {
           print('❌ Error ejecutando batch: $e');
           errorCount += currentBatch.length - successCount;
         }
       }
 
-      // Limpiar caché
       _userCache.clear();
       _cacheTimestamp = null;
 
-      print(
-        '✅ Eliminación completada: $successCount exitosos, $errorCount errores',
-      );
       clearStudentsCache();
       return {'success': successCount, 'errors': errorCount};
     } catch (e) {
@@ -804,7 +923,6 @@ class PrefsHelper {
           .doc(studentId)
           .update(updateData);
 
-      // ✅ Limpiar caché del estudiante modificado
       _userCache.remove(studentId);
 
       print('Estudiante actualizado exitosamente');
@@ -858,7 +976,6 @@ class PrefsHelper {
             'updatedAt': FieldValue.serverTimestamp(),
           });
 
-      // ✅ Limpiar caché
       _userCache.remove(studentId);
 
       print('Contraseña actualizada exitosamente');
@@ -990,7 +1107,6 @@ class PrefsHelper {
 
         for (var studentDoc in studentsQuery.docs) {
           try {
-            // Eliminar del índice
             final username = studentDoc.data()['username'];
             if (username != null) {
               await _firestore
@@ -1008,7 +1124,6 @@ class PrefsHelper {
         }
       }
 
-      // Limpiar caché completo
       _userCache.clear();
       _cacheTimestamp = null;
 
@@ -1019,7 +1134,6 @@ class PrefsHelper {
     }
   }
 
-  // MÉTODOS DE JURADO (sin cambios)
   static Future<bool> createJuradoAccount({
     required String nombre,
     required String usuario,
@@ -1066,8 +1180,6 @@ class PrefsHelper {
 
       if (usuario.trim().toLowerCase() == juradoEmail &&
           password == juradoPassword) {
-        print('✅ Credenciales de jurado por defecto detectadas');
-
         final juradoQuery = await _firestore
             .collection('users')
             .where('usuario', isEqualTo: juradoEmail)
@@ -1085,10 +1197,8 @@ class PrefsHelper {
             'createdAt': FieldValue.serverTimestamp(),
           });
           juradoId = juradoDoc.id;
-          print('✅ Jurado por defecto creado exitosamente con ID: $juradoId');
         } else {
           juradoId = juradoQuery.docs.first.id;
-          print('✅ Jurado por defecto encontrado con ID: $juradoId');
         }
 
         await saveUserData(
@@ -1097,16 +1207,9 @@ class PrefsHelper {
           userId: juradoId,
         );
 
-        final savedUserType = await getUserType();
-        print('✅ UserType guardado: $savedUserType');
-        print('✅ Login de jurado por defecto completado');
-
         return true;
       }
 
-      print(
-        '🔍 Buscando jurado personalizado con usuario: ${usuario.trim().toLowerCase()}',
-      );
       final juradoQuery = await _firestore
           .collection('users')
           .where('usuario', isEqualTo: usuario.trim().toLowerCase())
@@ -1118,25 +1221,14 @@ class PrefsHelper {
         final juradoDoc = juradoQuery.docs.first;
         final juradoData = juradoDoc.data();
 
-        print('✅ Jurado encontrado: ${juradoData['name']}');
-
         if (juradoData['password'] == password) {
           await saveUserData(
             userType: userTypeJurado,
             userName: juradoData['name'] ?? 'Jurado',
             userId: juradoDoc.id,
           );
-
-          final savedUserType = await getUserType();
-          print('✅ UserType guardado: $savedUserType');
-          print('✅ Login de jurado personalizado completado');
-
           return true;
-        } else {
-          print('❌ Contraseña incorrecta para el jurado');
         }
-      } else {
-        print('❌ Jurado no encontrado con usuario: $usuario');
       }
 
       return false;
@@ -1190,24 +1282,19 @@ class PrefsHelper {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      if (nombre != null && nombre.isNotEmpty) {
+      if (nombre != null && nombre.isNotEmpty)
         updateData['name'] = nombre.trim();
-      }
       if (usuario != null && usuario.isNotEmpty) {
         updateData['usuario'] = usuario.trim().toLowerCase();
       }
-      if (password != null && password.isNotEmpty) {
+      if (password != null && password.isNotEmpty)
         updateData['password'] = password;
-      }
-      if (facultad != null && facultad.isNotEmpty) {
+      if (facultad != null && facultad.isNotEmpty)
         updateData['facultad'] = facultad;
-      }
-      if (carrera != null && carrera.isNotEmpty) {
+      if (carrera != null && carrera.isNotEmpty)
         updateData['carrera'] = carrera;
-      }
-      if (categoria != null && categoria.isNotEmpty) {
+      if (categoria != null && categoria.isNotEmpty)
         updateData['categoria'] = categoria;
-      }
 
       await _firestore.collection('users').doc(juradoId).update(updateData);
       print('Jurado actualizado exitosamente');
@@ -1251,7 +1338,6 @@ class PrefsHelper {
         jurados = jurados.where((jurado) {
           final name = (jurado['name'] ?? '').toString().toLowerCase();
           final usuario = (jurado['usuario'] ?? '').toString().toLowerCase();
-
           return name.contains(searchLower) || usuario.contains(searchLower);
         }).toList();
       }
@@ -1263,20 +1349,26 @@ class PrefsHelper {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ OPTIMIZACIÓN: Limpiar caché al cerrar sesión
-  // ═══════════════════════════════════════════════════════════════
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyUserType);
     await prefs.remove(_keyUserName);
     await prefs.remove(_keyUserId);
+    await prefs.remove(_keySessionToken); // ✅ Limpiar token de sesión
     await prefs.setBool(_keyIsLoggedIn, false);
 
-    // ✅ Limpiar caché
+    await prefs.remove(_keyAdminCarreraFilial);
+    await prefs.remove(_keyAdminCarreraFilialNombre);
+    await prefs.remove(_keyAdminCarreraFacultad);
+    await prefs.remove(_keyAdminCarreraCarrera);
+    await prefs.remove(_keyAdminCarreraCarreraId);
+    await prefs.remove(_keyAdminCarreraPermisos);
+
     clearStudentsCache();
     _userCache.clear();
     _cacheTimestamp = null;
+
+    FilialesService.clearCache();
 
     print('✅ Sesión cerrada y caché limpiado');
   }

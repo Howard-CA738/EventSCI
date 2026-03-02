@@ -19,26 +19,30 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   String? _currentUserName;
   bool _isLoadingAsistencias = false;
 
-  // ✅ NUEVA ESTRUCTURA: Guardamos eventos con sus asistencias
+  // ✅ Datos académicos del estudiante (sede, facultad, carrera)
+  String? _studentSede;
+  String? _studentFacultad;
+  String? _studentCarrera;
+  String? _studentCiclo;
+  String? _studentGrupo;
+
   List<Map<String, dynamic>> _eventosConAsistencias = [];
   List<Map<String, dynamic>> _asistenciasFiltradas = [];
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
-  // Variables para el filtro de periodo
   String? _periodoSeleccionado;
   List<Map<String, dynamic>> _periodosDisponibles = [];
   String? _eventoSeleccionado;
   List<Map<String, dynamic>> _eventosDisponibles = [];
 
-  // ✅ CACHÉ DE EVENTOS (evita recargar eventos repetidamente)
   final Map<String, Map<String, dynamic>> _eventosCache = {};
   final Map<String, List<Map<String, dynamic>>> _asistenciasPorEventoCache = {};
-  // ✅ OPTIMIZACIÓN: Paginación para eventos
   static const int _eventosPorPagina = 10;
   DocumentSnapshot? _ultimoEventoCargado;
   bool _hayMasEventos = true;
+
   @override
   void initState() {
     super.initState();
@@ -60,13 +64,49 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
     super.dispose();
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ OBTENER USUARIO Y DATOS ACADÉMICOS
+  // ═══════════════════════════════════════════════════════════════
+  Future<void> _getCurrentUserId() async {
+    try {
+      final userId = await PrefsHelper.getCurrentUserId();
+      final userName = await PrefsHelper.getUserName();
+      final userData = await PrefsHelper.getCurrentUserData();
+
+      if (userId != null) {
+        setState(() {
+          _currentUserId = userId;
+          _currentUserName = userName;
+
+          if (userData != null) {
+            // Sede: priorizar 'sede', fallback a 'filial'
+            final sede = userData['sede']?.toString() ?? '';
+            final filial = userData['filial']?.toString() ?? '';
+            _studentSede = sede.isNotEmpty
+                ? sede
+                : filial.isNotEmpty
+                ? filial
+                : null;
+
+            _studentFacultad = userData['facultad']?.toString();
+            _studentCarrera = userData['carrera']?.toString();
+            _studentCiclo = userData['ciclo']?.toString();
+            _studentGrupo = userData['grupo']?.toString();
+          }
+        });
+      } else {
+        _showSnackBar('No se pudo obtener el usuario actual', isError: true);
+      }
+    } catch (e) {
+      _showSnackBar('Error al obtener usuario: $e', isError: true);
+    }
+  }
+
   void _calcularEventosDisponibles() {
     final Map<String, Map<String, dynamic>> eventosMap = {};
-
     for (var eventoData in _eventosConAsistencias) {
       final eventId = eventoData['eventId'];
       final eventName = eventoData['eventName'];
-
       if (eventId != null &&
           eventName != null &&
           eventName != 'Sin nombre' &&
@@ -76,51 +116,41 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
         }
       }
     }
-
     setState(() {
       _eventosDisponibles = eventosMap.values.toList()
         ..sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
     });
   }
 
-  // Cargar períodos activos de la base de datos
   Future<void> _cargarPeriodosActivos() async {
     if (_periodosDisponibles.isNotEmpty) {
-      print('✅ Períodos ya cargados desde caché');
       _filtrarAsistencias();
       return;
     }
     try {
       final periodos = await PeriodosHelper.getPeriodosActivos();
-
       setState(() {
         _periodosDisponibles = periodos;
-        // Seleccionar el primer período activo si no hay ninguno seleccionado
         if (_periodoSeleccionado == null && _periodosDisponibles.isNotEmpty) {
           _periodoSeleccionado = _periodosDisponibles.first['id'];
         }
       });
-
       _filtrarAsistencias();
     } catch (e) {
-      print('Error cargando períodos activos: $e');
+      print('Error cargando períodos: $e');
       _showSnackBar('Error al cargar períodos: $e', isError: true);
     }
   }
 
-  // Verificar si una asistencia pertenece a un período
   bool _asistenciaPerteneceAPeriodo(
     Map<String, dynamic> asistencia,
     Map<String, dynamic> periodo,
   ) {
     final timestamp = (asistencia['timestamp'] as Timestamp?)?.toDate();
     if (timestamp == null) return false;
-
     final fechaInicio = (periodo['fechaInicio'] as Timestamp?)?.toDate();
     final fechaFin = (periodo['fechaFin'] as Timestamp?)?.toDate();
-
     if (fechaInicio == null || fechaFin == null) return false;
-
     return timestamp.isAfter(fechaInicio.subtract(const Duration(days: 1))) &&
         timestamp.isBefore(fechaFin.add(const Duration(days: 1)));
   }
@@ -128,30 +158,23 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   void _filtrarAsistencias() {
     setState(() {
       _asistenciasFiltradas = [];
-
       for (var eventoData in _eventosConAsistencias) {
         for (var asistencia in eventoData['asistencias'] ?? []) {
-          // Filtro por periodo
           bool cumplePeriodo = true;
           if (_periodoSeleccionado != null) {
             final periodo = _periodosDisponibles.firstWhere(
               (p) => p['id'] == _periodoSeleccionado,
               orElse: () => {},
             );
-
             if (periodo.isNotEmpty) {
               cumplePeriodo = _asistenciaPerteneceAPeriodo(asistencia, periodo);
             }
           }
-
-          // Filtro por evento
           bool cumpleEvento = true;
           if (_eventoSeleccionado != null) {
             cumpleEvento = eventoData['eventId'] == _eventoSeleccionado;
           }
-
           if (cumplePeriodo && cumpleEvento) {
-            // ✅ Agregar datos del evento a la asistencia
             _asistenciasFiltradas.add({
               ...asistencia,
               'eventId': eventoData['eventId'],
@@ -160,36 +183,19 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
               'eventDate': eventoData['eventDate'],
               'eventFacultad': eventoData['eventFacultad'],
               'eventCarrera': eventoData['eventCarrera'],
+              // ✅ Sede del evento (si existe)
+              'eventSede': eventoData['eventSede'],
             });
           }
         }
       }
-
-      // Ordenar por fecha (más reciente primero)
       _asistenciasFiltradas.sort((a, b) {
-        final timestampA = (a['timestamp'] as Timestamp?)?.toDate();
-        final timestampB = (b['timestamp'] as Timestamp?)?.toDate();
-        if (timestampA == null || timestampB == null) return 0;
-        return timestampB.compareTo(timestampA);
+        final tA = (a['timestamp'] as Timestamp?)?.toDate();
+        final tB = (b['timestamp'] as Timestamp?)?.toDate();
+        if (tA == null || tB == null) return 0;
+        return tB.compareTo(tA);
       });
     });
-  }
-
-  Future<void> _getCurrentUserId() async {
-    try {
-      final userId = await PrefsHelper.getCurrentUserId();
-      final userName = await PrefsHelper.getUserName();
-      if (userId != null) {
-        setState(() {
-          _currentUserId = userId;
-          _currentUserName = userName;
-        });
-      } else {
-        _showSnackBar('No se pudo obtener el usuario actual', isError: true);
-      }
-    } catch (e) {
-      _showSnackBar('Error al obtener usuario: $e', isError: true);
-    }
   }
 
   Future<void> _cargarMisAsistencias({bool cargarMas = false}) async {
@@ -206,22 +212,10 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
 
     try {
       final parts = _currentUserId!.split('/');
-      if (parts.length != 2) {
-        throw Exception('ID de usuario inválido');
-      }
-
+      if (parts.length != 2) throw Exception('ID de usuario inválido');
       final studentId = parts[1];
 
-      print('═══════════════════════════════════════════════════════');
-      print('👤 USER ID COMPLETO: $_currentUserId');
-      print('   📂 Carrera Path: ${parts[0]}');
-      print('   🆔 Student ID: $studentId');
-      print('═══════════════════════════════════════════════════════');
-
-      // ═══════════════════════════════════════════════════════════════
-      // PASO 1: OBTENER TODOS LOS EVENTOS (sin orderBy para evitar índices)
-      // ═══════════════════════════════════════════════════════════════
-      print('🔍 Buscando eventos...');
+      print('👤 Cargando asistencias para: $studentId | Sede: $_studentSede');
 
       final hoy = DateTime.now();
       final inicioHoy = DateTime(hoy.year, hoy.month, hoy.day);
@@ -231,7 +225,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           .where(
             'createdAt',
             isGreaterThanOrEqualTo: Timestamp.fromDate(
-              inicioHoy.subtract(Duration(days: 30)),
+              inicioHoy.subtract(const Duration(days: 30)),
             ),
           )
           .orderBy('createdAt', descending: true)
@@ -243,39 +237,20 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
 
       final eventosSnapshot = await eventosQuery.get();
 
-      print('📊 Eventos encontrados: ${eventosSnapshot.docs.length}');
-
       if (eventosSnapshot.docs.isEmpty) {
-        setState(() {
-          _hayMasEventos = false;
-        });
-        if (!cargarMas) {
-          print('⚠️ No hay eventos en la base de datos');
-        }
+        setState(() => _hayMasEventos = false);
       } else {
         _ultimoEventoCargado = eventosSnapshot.docs.last;
-
         if (eventosSnapshot.docs.length < _eventosPorPagina) {
           _hayMasEventos = false;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // PASO 2: POR CADA EVENTO, VERIFICAR SI EL ESTUDIANTE TIENE ASISTENCIAS
-        // ═══════════════════════════════════════════════════════════════
         final List<Future<void>> cargaEventos = [];
-
         for (var eventDoc in eventosSnapshot.docs) {
           cargaEventos.add(_cargarAsistenciasDeEvento(eventDoc, studentId));
         }
-
-        // ✅ EJECUTAR TODAS LAS CONSULTAS EN PARALELO
         await Future.wait(cargaEventos);
 
-        print(
-          '✅ Total de eventos con asistencias: ${_eventosConAsistencias.length}',
-        );
-
-        // Ordenar por fecha después de cargar (en memoria)
         _eventosConAsistencias.sort((a, b) {
           final dateA = (a['eventDate'] as Timestamp?)?.toDate();
           final dateB = (b['eventDate'] as Timestamp?)?.toDate();
@@ -283,10 +258,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           return dateB.compareTo(dateA);
         });
 
-        // ═══════════════════════════════════════════════════════════════
-        // PASO 3: CARGAR PERÍODOS Y FILTRAR
-        // ═══════════════════════════════════════════════════════════════
-        // PASO 3: CARGAR PERÍODOS Y FILTRAR
         if (!cargarMas) {
           await _cargarPeriodosActivos();
           _calcularEventosDisponibles();
@@ -295,27 +266,21 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           _calcularEventosDisponibles();
         }
 
-        // Contar total de asistencias
         int totalAsistencias = 0;
         for (var evento in _eventosConAsistencias) {
           totalAsistencias += (evento['asistencias'] as List).length;
         }
-
         if (totalAsistencias > 0) {
           _showSnackBar(
             'Se cargaron $totalAsistencias asistencia(s) de ${_eventosConAsistencias.length} evento(s)',
           );
-        } else {
-          print('⚠️ No se encontraron asistencias para este estudiante');
         }
       }
     } catch (e) {
       _showSnackBar('Error al cargar asistencias: $e', isError: true);
-      print('❌ Error detallado: $e');
+      print('❌ Error: $e');
     } finally {
-      setState(() {
-        _isLoadingAsistencias = false;
-      });
+      setState(() => _isLoadingAsistencias = false);
     }
   }
 
@@ -327,8 +292,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
       final eventId = eventDoc.id;
       final eventData = eventDoc.data() as Map<String, dynamic>;
 
-      print('🔍 Buscando asistencias en evento: $eventId');
-      print('   👤 Estudiante: $studentId');
       final resumenDoc = await _firestore
           .collection('events')
           .doc(eventId)
@@ -336,14 +299,8 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           .doc(studentId)
           .get();
 
-      if (!resumenDoc.exists) {
-        // No hay asistencias de este estudiante en este evento
-        return;
-      }
+      if (!resumenDoc.exists) return;
 
-      print('📄 Resumen encontrado para evento: $eventId');
-
-      // Ahora cargar todos los scans
       final scansSnapshot = await _firestore
           .collection('events')
           .doc(eventId)
@@ -353,31 +310,12 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           .orderBy('timestamp', descending: true)
           .get();
 
-      print('   📊 Scans encontrados: ${scansSnapshot.docs.length}');
+      if (scansSnapshot.docs.isEmpty) return;
 
-      if (scansSnapshot.docs.isEmpty) {
-        print('   ⚠️ No se encontraron escaneos en evento $eventId');
-        return;
-      }
-
-      // ═══════════════════════════════════════════════════════════════
-      // CONVERTIR LOS ESCANEOS A FORMATO DE ASISTENCIAS
-      // ═══════════════════════════════════════════════════════════════
       final List<Map<String, dynamic>> asistencias = [];
-
       for (var scanDoc in scansSnapshot.docs) {
         final scanData = scanDoc.data();
-
-        print('   📄 Scan ID: ${scanDoc.id}');
-        print('      - Timestamp: ${scanData['timestamp']}');
-        print('      - Categoria: ${scanData['categoria']}');
-
-        // ✅ Validar que tenga timestamp
-        if (scanData['timestamp'] == null) {
-          print('   ⚠️ Escaneo sin timestamp: ${scanDoc.id}');
-          continue;
-        }
-
+        if (scanData['timestamp'] == null) continue;
         asistencias.add({
           'id': scanDoc.id,
           'timestamp': scanData['timestamp'],
@@ -391,16 +329,16 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
         });
       }
 
-      if (asistencias.isEmpty) {
-        print(
-          '   ⚠️ Todos los escaneos fueron filtrados (sin timestamp válido)',
-        );
-        return;
-      }
+      if (asistencias.isEmpty) return;
+
       _asistenciasPorEventoCache[eventId] = asistencias;
-      // ═══════════════════════════════════════════════════════════════
-      // GUARDAR EL EVENTO CON SUS ASISTENCIAS
-      // ═══════════════════════════════════════════════════════════════
+
+      // ✅ Extraer sede del evento
+      final eventSede =
+          eventData['sede']?.toString() ??
+          eventData['filialNombre']?.toString() ??
+          '';
+
       _eventosConAsistencias.add({
         'eventId': eventId,
         'eventName': eventData['name'] ?? 'Sin nombre',
@@ -408,28 +346,25 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
         'eventDate': eventData['date'],
         'eventFacultad': eventData['facultad'] ?? '',
         'eventCarrera': eventData['carrera'] ?? '',
+        'eventSede': eventSede, // ✅ NUEVO
         'asistencias': asistencias,
       });
 
-      // ✅ CACHEAR DATOS DEL EVENTO
       _eventosCache[eventId] = {
         'name': eventData['name'],
         'description': eventData['description'],
         'date': eventData['date'],
         'facultad': eventData['facultad'],
         'carrera': eventData['carrera'],
+        'sede': eventSede,
       };
-
-      print('   ✅ Evento $eventId cargado: ${asistencias.length} asistencias');
     } catch (e) {
       print('❌ Error cargando evento ${eventDoc.id}: $e');
-      print('   Stack trace: ${StackTrace.current}');
     }
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -452,7 +387,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
 
   Color _getColorByCategoria(String? categoria) {
     if (categoria == null || categoria.isEmpty) return const Color(0xFF5A6C7D);
-
     final hash = categoria.hashCode;
     final colors = [
       const Color(0xFF2563EB),
@@ -471,36 +405,147 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
 
   IconData _getIconByCategoria(String? categoria) {
     if (categoria == null || categoria.isEmpty) return Icons.help;
-
-    final categoriaLower = categoria.toLowerCase();
-
-    if (categoriaLower.contains('revisión') ||
-        categoriaLower.contains('revision')) {
+    final c = categoria.toLowerCase();
+    if (c.contains('revisión') || c.contains('revision'))
       return Icons.library_books;
-    } else if (categoriaLower.contains('empírico') ||
-        categoriaLower.contains('empirico')) {
-      return Icons.science;
-    } else if (categoriaLower.contains('innovación') ||
-        categoriaLower.contains('innovacion') ||
-        categoriaLower.contains('tecnológica') ||
-        categoriaLower.contains('tecnologica')) {
+    if (c.contains('empírico') || c.contains('empirico')) return Icons.science;
+    if (c.contains('innovación') ||
+        c.contains('innovacion') ||
+        c.contains('tecnológica'))
       return Icons.lightbulb;
-    } else if (categoriaLower.contains('narrativa')) {
-      return Icons.auto_stories;
-    } else if (categoriaLower.contains('descriptiv')) {
-      return Icons.description;
-    } else if (categoriaLower.contains('experimental')) {
-      return Icons.biotech;
-    } else if (categoriaLower.contains('teóric') ||
-        categoriaLower.contains('teorico')) {
-      return Icons.psychology;
-    } else if (categoriaLower.contains('cualitativ')) {
-      return Icons.forum;
-    } else if (categoriaLower.contains('cuantitativ')) {
-      return Icons.analytics;
-    } else {
-      return Icons.assignment;
+    if (c.contains('narrativa')) return Icons.auto_stories;
+    if (c.contains('descriptiv')) return Icons.description;
+    if (c.contains('experimental')) return Icons.biotech;
+    if (c.contains('teóric') || c.contains('teorico')) return Icons.psychology;
+    if (c.contains('cualitativ')) return Icons.forum;
+    if (c.contains('cuantitativ')) return Icons.analytics;
+    return Icons.assignment;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ BANNER DE DATOS ACADÉMICOS DEL ESTUDIANTE (sede + carrera)
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildBannerAcademico() {
+    if (_studentSede == null && _studentFacultad == null) {
+      return const SizedBox.shrink();
     }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [const Color(0xFF1E3A5F), const Color(0xFF2A5298)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1E3A5F).withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.school, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'Mi Información Académica',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (_studentSede != null)
+                _buildAcademicoChip(
+                  icon: Icons.location_city,
+                  label: _studentSede!,
+                  bgColor: Colors.blue.shade700,
+                ),
+              if (_studentFacultad != null)
+                _buildAcademicoChip(
+                  icon: Icons.account_balance,
+                  label: _studentFacultad!,
+                  bgColor: Colors.purple.shade700,
+                ),
+              if (_studentCarrera != null)
+                _buildAcademicoChip(
+                  icon: Icons.menu_book,
+                  label: _studentCarrera!,
+                  bgColor: Colors.teal.shade700,
+                ),
+              if (_studentCiclo != null)
+                _buildAcademicoChip(
+                  icon: Icons.layers,
+                  label: 'Ciclo $_studentCiclo',
+                  bgColor: Colors.orange.shade700,
+                ),
+              if (_studentGrupo != null)
+                _buildAcademicoChip(
+                  icon: Icons.groups,
+                  label: 'Grupo $_studentGrupo',
+                  bgColor: Colors.green.shade700,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAcademicoChip({
+    required IconData icon,
+    required String label,
+    required Color bgColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bgColor.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 12),
+          const SizedBox(width: 5),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 120),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildSelloAsistencia(Map<String, dynamic> asistencia) {
@@ -511,125 +556,85 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
         'Sin categoría';
     final color = _getColorByCategoria(categoria);
 
-    return Container(
-      width: 80,
-      height: 80,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [
-            color.withOpacity(0.8),
-            color.withOpacity(0.6),
-            color.withOpacity(0.4),
+    return Tooltip(
+      message: '${asistencia['eventName'] ?? ''}\n$categoria',
+      child: Container(
+        width: 80,
+        height: 80,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [
+              color.withOpacity(0.8),
+              color.withOpacity(0.6),
+              color.withOpacity(0.4),
+            ],
+            stops: const [0.0, 0.7, 1.0],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.3),
+              blurRadius: 8,
+              spreadRadius: 2,
+              offset: const Offset(0, 4),
+            ),
           ],
-          stops: const [0.0, 0.7, 1.0],
+          border: Border.all(color: color.withOpacity(0.8), width: 3),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.3),
-            blurRadius: 8,
-            spreadRadius: 2,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(color: color.withOpacity(0.8), width: 3),
-      ),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: SelloPainter(color: color.withOpacity(0.2)),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: SelloPainter(color: color.withOpacity(0.2)),
+              ),
             ),
-          ),
-          Center(
-            child: Icon(
-              _getIconByCategoria(categoria),
-              color: Colors.white,
-              size: 22,
-              shadows: [
-                Shadow(
-                  color: Colors.black.withOpacity(0.3),
-                  offset: const Offset(1, 1),
-                  blurRadius: 2,
-                ),
-              ],
+            Center(
+              child: Icon(
+                _getIconByCategoria(categoria),
+                color: Colors.white,
+                size: 22,
+                shadows: [
+                  Shadow(
+                    color: Colors.black.withOpacity(0.3),
+                    offset: const Offset(1, 1),
+                    blurRadius: 2,
+                  ),
+                ],
+              ),
             ),
-          ),
-          if (timestamp != null)
-            Positioned(
-              bottom: 6,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Text(
-                  '${timestamp.day}/${timestamp.month}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    shadows: [
-                      Shadow(
-                        color: Colors.black54,
-                        offset: Offset(0.5, 0.5),
-                        blurRadius: 1,
-                      ),
-                    ],
+            if (timestamp != null)
+              Positioned(
+                bottom: 6,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Text(
+                    '${timestamp.day}/${timestamp.month}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black54,
+                          offset: Offset(0.5, 0.5),
+                          blurRadius: 1,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          Positioned.fill(child: CustomPaint(painter: TextoCurvadoPainter())),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSelloVacio(int index) {
-    return Container(
-      width: 80,
-      height: 80,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.grey.shade100,
-        border: Border.all(
-          color: Colors.grey.shade300,
-          width: 2,
-          style: BorderStyle.solid,
+            Positioned.fill(child: CustomPaint(painter: TextoCurvadoPainter())),
+          ],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 4,
-            spreadRadius: 1,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: SelloPainter(
-                color: Colors.grey.shade300.withOpacity(0.3),
-              ),
-            ),
-          ),
-          Center(
-            child: Icon(
-              Icons.lock_outline,
-              color: Colors.grey.shade400,
-              size: 24,
-            ),
-          ),
-        ],
       ),
     );
   }
 
   Widget _buildFiltroPeriodo() {
-    if (_periodosDisponibles.isEmpty && _eventosDisponibles.isEmpty) {
+    if (_periodosDisponibles.isEmpty && _eventosDisponibles.isEmpty)
       return const SizedBox.shrink();
-    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -649,7 +654,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Filtro de Periodo
           if (_periodosDisponibles.isNotEmpty) ...[
             Row(
               children: [
@@ -682,24 +686,18 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
               runSpacing: 8,
               children: _periodosDisponibles
                   .map(
-                    (periodo) => _buildPeriodoChip(
-                      periodo['nombre'] ?? 'Sin nombre',
-                      periodo['id'],
-                    ),
+                    (p) =>
+                        _buildPeriodoChip(p['nombre'] ?? 'Sin nombre', p['id']),
                   )
                   .toList(),
             ),
           ],
-
-          // Separador
           if (_periodosDisponibles.isNotEmpty &&
               _eventosDisponibles.isNotEmpty) ...[
             const SizedBox(height: 20),
             Divider(color: Colors.grey.shade300),
             const SizedBox(height: 20),
           ],
-
-          // Filtro de Eventos
           if (_eventosDisponibles.isNotEmpty) ...[
             Row(
               children: [
@@ -736,12 +734,9 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
 
   Widget _buildPeriodoChip(String label, String? valor) {
     final isSelected = _periodoSeleccionado == valor;
-
     return InkWell(
       onTap: () {
-        setState(() {
-          _periodoSeleccionado = valor;
-        });
+        setState(() => _periodoSeleccionado = valor);
         _filtrarAsistencias();
       },
       borderRadius: BorderRadius.circular(20),
@@ -794,7 +789,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Seleccionar evento',
+                  'Todos los eventos',
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                 ),
               ],
@@ -804,34 +799,58 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
             padding: const EdgeInsets.only(right: 12),
             child: Icon(Icons.arrow_drop_down, color: Colors.grey.shade700),
           ),
-          items: _eventosDisponibles.map((evento) {
-            return DropdownMenuItem<String>(
-              value: evento['id'],
+          items: [
+            DropdownMenuItem<String>(
+              value: null,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Row(
                   children: [
-                    Icon(Icons.event, size: 18, color: const Color(0xFF2563EB)),
+                    Icon(
+                      Icons.all_inclusive,
+                      size: 18,
+                      color: Colors.grey.shade600,
+                    ),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        evento['name'],
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF1E3A5F),
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    const Text(
+                      'Todos los eventos',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF1E3A5F)),
                     ),
                   ],
                 ),
               ),
-            );
-          }).toList(),
+            ),
+            ..._eventosDisponibles.map((evento) {
+              return DropdownMenuItem<String>(
+                value: evento['id'],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.event,
+                        size: 18,
+                        color: const Color(0xFF2563EB),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          evento['name'],
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF1E3A5F),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
           onChanged: (value) {
-            setState(() {
-              _eventoSeleccionado = value;
-            });
+            setState(() => _eventoSeleccionado = value);
             _filtrarAsistencias();
           },
           dropdownColor: Colors.white,
@@ -843,8 +862,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   }
 
   Widget _buildColeccionSellos() {
-    final totalSellos = _asistenciasFiltradas.length; // ✅ SIN LÍMITE
-
+    final totalSellos = _asistenciasFiltradas.length;
     return AnimatedOpacity(
       opacity: _isLoadingAsistencias ? 0.0 : 1.0,
       duration: const Duration(milliseconds: 500),
@@ -893,6 +911,26 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                           color: Color(0xFF1E3A5F),
                         ),
                       ),
+                      // ✅ Mostrar sede del estudiante en la colección de sellos
+                      if (_studentSede != null)
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.location_city,
+                              size: 12,
+                              color: Colors.blue.shade700,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _studentSede!,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.blue.shade700,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
                       if (_periodoSeleccionado != null)
                         Text(
                           _periodosDisponibles.firstWhere(
@@ -915,11 +953,8 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFF1E3A5F),
-                        const Color(0xFF2563EB),
-                      ],
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF1E3A5F), Color(0xFF2563EB)],
                     ),
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
@@ -949,8 +984,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
               ],
             ),
             const SizedBox(height: 20),
-
-            // ✅ MOSTRAR MENSAJE SI NO HAY SELLOS
             if (totalSellos == 0)
               Container(
                 padding: const EdgeInsets.all(40),
@@ -989,7 +1022,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                 ),
               )
             else
-              // ✅ MOSTRAR TODOS LOS SELLOS
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -1019,8 +1051,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                   );
                 },
               ),
-
-            // ✅ MENSAJE DE FELICITACIÓN
             if (totalSellos > 0) ...[
               const SizedBox(height: 20),
               Container(
@@ -1054,7 +1084,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Has ganado $totalSellos ${totalSellos == 1 ? 'sello' : 'sellos'} de asistencia',
+                            'Has ganado $totalSellos ${totalSellos == 1 ? 'sello' : 'sellos'} de asistencia${_studentSede != null ? ' en ${_studentSede!}' : ''}',
                             style: TextStyle(
                               color: Colors.amber.shade800,
                               fontSize: 13,
@@ -1073,144 +1103,16 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
     );
   }
 
-  void _mostrarTodosLosSellos() {
-    final periodoNombre = _periodoSeleccionado != null
-        ? _periodosDisponibles.firstWhere(
-                (p) => p['id'] == _periodoSeleccionado,
-                orElse: () => {'nombre': 'Todos los Sellos'},
-              )['nombre'] ??
-              'Todos los Sellos'
-        : 'Todos los Sellos';
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (BuildContext context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.9,
-          minChildSize: 0.5,
-          maxChildSize: 0.95,
-          builder: (context, scrollController) {
-            return Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(25),
-                  topRight: Radius.circular(25),
-                ),
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    margin: const EdgeInsets.only(top: 12, bottom: 8),
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.workspace_premium,
-                            color: const Color(0xFFD97706),
-                            size: 26,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                periodoNombre,
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1E3A5F),
-                                ),
-                              ),
-                              Text(
-                                '${_asistenciasFiltradas.length} sellos de asistencia',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close),
-                          color: Colors.grey.shade600,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Divider(height: 1, color: Colors.grey.shade200),
-                  Expanded(
-                    child: GridView.builder(
-                      controller: scrollController,
-                      padding: const EdgeInsets.all(20),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 4,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            childAspectRatio: 1,
-                          ),
-                      itemCount: _asistenciasFiltradas.length,
-                      itemBuilder: (context, index) {
-                        return TweenAnimationBuilder(
-                          tween: Tween<double>(begin: 0, end: 1),
-                          duration: Duration(milliseconds: 200 + (index * 30)),
-                          curve: Curves.easeOutCubic,
-                          builder: (context, double value, child) {
-                            return Transform.scale(
-                              scale: value,
-                              child: Hero(
-                                tag:
-                                    'sello_modal_${_asistenciasFiltradas[index]['id']}',
-                                child: _buildSelloAsistencia(
-                                  _asistenciasFiltradas[index],
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
   bool _esValorValido(dynamic valor) {
     if (valor == null) return false;
-    final valorStr = valor.toString().trim().toLowerCase();
-    return valorStr.isNotEmpty &&
-        valorStr != 'sin código' &&
-        valorStr != 'sin codigo' &&
-        valorStr != 'sin título' &&
-        valorStr != 'sin titulo' &&
-        valorStr != 'sin grupo' &&
-        valorStr != 'null';
+    final v = valor.toString().trim().toLowerCase();
+    return v.isNotEmpty &&
+        v != 'sin código' &&
+        v != 'sin codigo' &&
+        v != 'sin título' &&
+        v != 'sin titulo' &&
+        v != 'sin grupo' &&
+        v != 'null';
   }
 
   @override
@@ -1220,6 +1122,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
       body: SafeArea(
         child: Column(
           children: [
+            // ── Header ──────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.all(20.0),
               child: Row(
@@ -1230,9 +1133,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                       color: Colors.white,
                       size: 28,
                     ),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
+                    onPressed: () => Navigator.of(context).pop(),
                     tooltip: 'Volver',
                   ),
                   const SizedBox(width: 8),
@@ -1266,9 +1167,30 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                           Text(
                             _currentUserName!,
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: 13,
                               color: Colors.white.withOpacity(0.8),
                             ),
+                          ),
+                        // ✅ Sede del estudiante en el header
+                        if (_studentSede != null)
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.location_city,
+                                size: 12,
+                                color: Colors.white.withOpacity(0.7),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _studentSede!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white.withOpacity(0.7),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
                       ],
                     ),
@@ -1285,6 +1207,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                 ],
               ),
             ),
+
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -1309,7 +1232,43 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                                 color: Colors.grey.shade400,
                               ),
                               const SizedBox(height: 24),
-                              Text(
+                              // ✅ Mostrar sede en pantalla vacía
+                              if (_studentSede != null) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: Colors.blue.shade200,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.location_city,
+                                        size: 16,
+                                        color: Colors.blue.shade700,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        _studentSede!,
+                                        style: TextStyle(
+                                          color: Colors.blue.shade700,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                              ],
+                              const Text(
                                 'Tus asistencias están guardadas',
                                 style: TextStyle(
                                   fontSize: 20,
@@ -1365,11 +1324,11 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
+                                // ✅ Banner académico con sede
+                                _buildBannerAcademico(),
                                 _buildFiltroPeriodo(),
                                 _buildColeccionSellos(),
                                 _buildAsistenciasCard(),
-
-                                // ✅ Botón "Cargar más eventos"
                                 if (_hayMasEventos && !_isLoadingAsistencias)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 20),
@@ -1548,8 +1507,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _asistenciasFiltradas.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 16),
+                separatorBuilder: (_, __) => const SizedBox(height: 16),
                 itemBuilder: (context, index) {
                   return TweenAnimationBuilder(
                     tween: Tween<double>(begin: 0, end: 1),
@@ -1585,10 +1543,13 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
     final codigoProyecto = asistencia['codigoProyecto'];
     final tituloProyecto = asistencia['tituloProyecto'];
     final grupo = asistencia['grupo'];
+    // ✅ Sede del evento
+    final eventSede = asistencia['eventSede']?.toString() ?? '';
 
     final hasValidCode = _esValorValido(codigoProyecto);
     final hasValidGroup = _esValorValido(grupo);
     final hasValidTitle = _esValorValido(tituloProyecto);
+    final hasEventSede = eventSede.isNotEmpty;
 
     return Container(
       decoration: BoxDecoration(
@@ -1617,6 +1578,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Cabecera de la card ──────────────────────────────────
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -1655,7 +1617,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                       Text(
                         asistencia['eventName'] ?? 'Sin nombre',
                         style: const TextStyle(
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF1E3A5F),
                           height: 1.2,
@@ -1663,6 +1625,31 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      // ✅ Sede del evento debajo del nombre
+                      if (hasEventSede) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.location_city,
+                              size: 12,
+                              color: Colors.blue.shade600,
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                eventSede,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.blue.shade700,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       if (hasValidCode) ...[
                         const SizedBox(height: 6),
                         Container(
@@ -1712,11 +1699,14 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
               ],
             ),
           ),
+
+          // ── Cuerpo de la card ────────────────────────────────────
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Chips de categoría y grupo
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -1792,6 +1782,8 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                       ),
                   ],
                 ),
+
+                // Título del proyecto
                 if (hasValidTitle) ...[
                   const SizedBox(height: 16),
                   Container(
@@ -1851,23 +1843,10 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                     ),
                   ),
                 ],
-                if (asistencia['eventDescription']?.isNotEmpty == true) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    asistencia['eventDescription'],
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade700,
-                      height: 1.4,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-                if ((asistencia['eventFacultad']?.isNotEmpty == true ||
-                        asistencia['facultad']?.isNotEmpty == true) &&
-                    (asistencia['eventCarrera']?.isNotEmpty == true ||
-                        asistencia['carrera']?.isNotEmpty == true)) ...[
+
+                // Info facultad/carrera del evento
+                if ((asistencia['eventFacultad']?.isNotEmpty == true) &&
+                    (asistencia['eventCarrera']?.isNotEmpty == true)) ...[
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -1889,7 +1868,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            '${asistencia['eventFacultad'] ?? asistencia['facultad'] ?? ''} • ${asistencia['eventCarrera'] ?? asistencia['carrera'] ?? ''}',
+                            '${asistencia['eventFacultad']} • ${asistencia['eventCarrera']}',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey.shade700,
@@ -1903,12 +1882,15 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                     ),
                   ),
                 ],
+
                 const SizedBox(height: 16),
                 Divider(color: Colors.grey.shade200, height: 1),
                 const SizedBox(height: 12),
+
+                // Chips de fecha
                 Row(
                   children: [
-                    if (eventDate != null) ...[
+                    if (eventDate != null)
                       Expanded(
                         child: _buildInfoChip(
                           icon: Icons.event_outlined,
@@ -1918,8 +1900,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                           color: const Color(0xFF0891B2),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                    ],
+                    if (eventDate != null) const SizedBox(width: 8),
                     if (timestamp != null)
                       Expanded(
                         child: _buildInfoChip(
@@ -1989,9 +1970,11 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   }
 }
 
+// ══════════════════════════════════════════════════════════════════
+// PAINTERS (sin cambios)
+// ══════════════════════════════════════════════════════════════════
 class SelloPainter extends CustomPainter {
   final Color color;
-
   SelloPainter({required this.color});
 
   @override
@@ -1999,24 +1982,18 @@ class SelloPainter extends CustomPainter {
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.fill;
-
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
-
     for (int i = 0; i < 12; i++) {
       final angle = (i * 30) * (3.14159 / 180);
-      final startRadius = radius * 0.6;
-      final endRadius = radius * 0.9;
-
       final start = Offset(
-        center.dx + startRadius * math.cos(angle),
-        center.dy + startRadius * math.sin(angle),
+        center.dx + radius * 0.6 * math.cos(angle),
+        center.dy + radius * 0.6 * math.sin(angle),
       );
       final end = Offset(
-        center.dx + endRadius * math.cos(angle),
-        center.dy + endRadius * math.sin(angle),
+        center.dx + radius * 0.9 * math.cos(angle),
+        center.dy + radius * 0.9 * math.sin(angle),
       );
-
       canvas.drawLine(start, end, paint..strokeWidth = 2);
     }
   }
@@ -2032,7 +2009,6 @@ class TextoCurvadoPainter extends CustomPainter {
       ..color = Colors.white.withOpacity(0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
-
     canvas.drawCircle(
       Offset(size.width / 2, size.height / 2),
       size.width / 2 - 8,

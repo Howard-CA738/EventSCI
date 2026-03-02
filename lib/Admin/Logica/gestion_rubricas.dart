@@ -1,12 +1,13 @@
 // gestion_rubricas.dart
-// Este archivo contiene todas las pantallas de UI para gestionar rúbricas
+// Pantallas UI actualizadas para usar sistema de filiales
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'gestion_criterios.dart'; // Importar los modelos
+import 'gestion_criterios.dart';
+import 'filiales_service.dart';
 
 // ============================================================================
-// PANTALLA PRINCIPAL - LISTA DE RÚBRICAS CON FILTROS
+// PANTALLA PRINCIPAL - CON FILTROS DE FILIAL
 // ============================================================================
 
 class GestionCriteriosScreen extends StatefulWidget {
@@ -22,58 +23,110 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
   List<Rubrica> _rubricasFiltradas = [];
   bool _isLoading = true;
 
-  // Variables para filtros
+  // ✅ NUEVO: Variables de filtros con filiales
+  String? _filtroFilial;
   String? _filtroFacultad;
   String? _filtroCarrera;
-  List<String> _carrerasDisponibles = [];
+
+  // ✅ NUEVO: Listas dinámicas
+  List<String> _filialesDisponibles = [];
+  List<String> _facultadesDisponibles = [];
+  List<Map<String, dynamic>> _carrerasDisponibles = [];
 
   @override
   void initState() {
     super.initState();
-    _cargarRubricas();
+    _cargarDatos();
   }
 
-  Future<void> _cargarRubricas() async {
+  Future<void> _cargarDatos() async {
     setState(() => _isLoading = true);
-    final rubricas = await _service.obtenerRubricas();
-    setState(() {
-      _rubricas = rubricas;
-      _rubricasFiltradas = rubricas;
-      _isLoading = false;
-    });
+
+    try {
+      // Cargar filiales y rúbricas
+      final filiales = await _service.getFiliales();
+      final rubricas = await _service.obtenerRubricas();
+
+      setState(() {
+        _filialesDisponibles = filiales;
+        _rubricas = rubricas;
+        _rubricasFiltradas = rubricas;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('❌ Error cargando datos: $e');
+      setState(() => _isLoading = false);
+    }
   }
 
-  // Aplicar filtros
+  // ✅ NUEVO: Cuando cambia la filial
+  Future<void> _onFilialChanged(String? filial) async {
+    setState(() {
+      _filtroFilial = filial;
+      _filtroFacultad = null;
+      _filtroCarrera = null;
+      _facultadesDisponibles = [];
+      _carrerasDisponibles = [];
+    });
+
+    if (filial != null) {
+      final facultades = await _service.getFacultadesByFilial(filial);
+      setState(() {
+        _facultadesDisponibles = facultades;
+      });
+    }
+
+    _aplicarFiltros();
+  }
+
+  // ✅ NUEVO: Cuando cambia la facultad
+  Future<void> _onFacultadChanged(String? facultad) async {
+    setState(() {
+      _filtroFacultad = facultad;
+      _filtroCarrera = null;
+      _carrerasDisponibles = [];
+    });
+
+    if (_filtroFilial != null && facultad != null) {
+      final carreras = await _service.getCarrerasByFacultad(
+        _filtroFilial!,
+        facultad,
+      );
+      setState(() {
+        _carrerasDisponibles = carreras;
+      });
+    }
+
+    _aplicarFiltros();
+  }
+
+  void _onCarreraChanged(String? carrera) {
+    setState(() {
+      _filtroCarrera = carrera;
+    });
+    _aplicarFiltros();
+  }
+
   void _aplicarFiltros() {
     setState(() {
       _rubricasFiltradas = _service.filtrarRubricas(
         _rubricas,
+        filial: _filtroFilial,
         facultad: _filtroFacultad,
         carrera: _filtroCarrera,
       );
     });
   }
 
-  // Limpiar filtros
   void _limpiarFiltros() {
     setState(() {
+      _filtroFilial = null;
       _filtroFacultad = null;
       _filtroCarrera = null;
+      _facultadesDisponibles = [];
       _carrerasDisponibles = [];
       _rubricasFiltradas = _rubricas;
     });
-  }
-
-  // Actualizar carreras cuando cambia la facultad
-  void _onFacultadChanged(String? facultad) {
-    setState(() {
-      _filtroFacultad = facultad;
-      _filtroCarrera = null;
-      _carrerasDisponibles = facultad != null
-          ? _service.facultadesCarreras[facultad] ?? []
-          : [];
-    });
-    _aplicarFiltros();
   }
 
   Future<void> _eliminarRubrica(String rubricaId) async {
@@ -107,7 +160,7 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        _cargarRubricas();
+        _cargarDatos();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -119,41 +172,38 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
     }
   }
 
-  // ✅ NUEVO: Validar que se haya seleccionado facultad antes de crear
   void _navegarACrearRubrica() {
+    // Validar que se haya seleccionado filial y facultad
+    if (_filtroFilial == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor selecciona una filial primero'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     if (_filtroFacultad == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Por favor selecciona una facultad primero'),
           backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
         ),
       );
       return;
     }
 
-    // Validar carrera si es necesario
-    if (_service.requiereCarrera(_filtroFacultad) && _filtroCarrera == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor selecciona una carrera primero'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    // Navegar a crear rúbrica pasando la facultad y carrera seleccionadas
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => CrearRubricaScreen(
+          filial: _filtroFilial!,
           facultad: _filtroFacultad!,
           carrera: _filtroCarrera,
         ),
       ),
-    ).then((_) => _cargarRubricas());
+    ).then((_) => _cargarDatos());
   }
 
   @override
@@ -224,71 +274,98 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
       child: Column(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      hint: const Text('Filtrar por Facultad'),
-                      value: _filtroFacultad,
-                      items: _service.facultadesCarreras.keys.map((facultad) {
-                        return DropdownMenuItem(
-                          value: facultad,
-                          child: Text(
-                            facultad,
-                            style: const TextStyle(fontSize: 14),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+          // ✅ Filial
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                isExpanded: true,
+                hint: const Text('Seleccionar Filial'),
+                value: _filtroFilial,
+                items: _filialesDisponibles.map((filialId) {
+                  return DropdownMenuItem(
+                    value: filialId,
+                    child: FutureBuilder<String>(
+                      future: _service.getNombreFilial(filialId),
+                      builder: (context, snapshot) {
+                        return Text(
+                          snapshot.data ?? filialId,
+                          style: const TextStyle(fontSize: 14),
                         );
-                      }).toList(),
-                      onChanged: _onFacultadChanged,
+                      },
                     ),
-                  ),
+                  );
+                }).toList(),
+                onChanged: _onFilialChanged,
+              ),
+            ),
+          ),
+
+          // ✅ Facultad
+          if (_filtroFilial != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  hint: const Text('Seleccionar Facultad'),
+                  value: _filtroFacultad,
+                  items: _facultadesDisponibles.map((facultad) {
+                    return DropdownMenuItem(
+                      value: facultad,
+                      child: Text(
+                        facultad,
+                        style: const TextStyle(fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: _onFacultadChanged,
                 ),
               ),
-              const SizedBox(width: 8),
-              if (_filtroFacultad != null &&
-                  _service.requiereCarrera(_filtroFacultad))
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        isExpanded: true,
-                        hint: const Text('Carrera'),
-                        value: _filtroCarrera,
-                        items: _carrerasDisponibles.map((carrera) {
-                          return DropdownMenuItem(
-                            value: carrera,
-                            child: Text(
-                              carrera,
-                              style: const TextStyle(fontSize: 14),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (carrera) {
-                          setState(() => _filtroCarrera = carrera);
-                          _aplicarFiltros();
-                        },
+            ),
+
+          // ✅ Carrera
+          if (_filtroFacultad != null && _carrerasDisponibles.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  hint: const Text('Seleccionar Carrera (opcional)'),
+                  value: _filtroCarrera,
+                  items: _carrerasDisponibles.map((carrera) {
+                    return DropdownMenuItem(
+                      value: carrera['nombre'] as String,
+                      child: Text(
+                        carrera['nombre'] as String,
+                        style: const TextStyle(fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ),
+                    );
+                  }).toList(),
+                  onChanged: _onCarreraChanged,
                 ),
-            ],
-          ),
-          if (_filtroFacultad != null || _filtroCarrera != null)
+              ),
+            ),
+
+          // Info y limpiar
+          if (_filtroFilial != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Row(
@@ -343,7 +420,7 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
           ),
           const SizedBox(height: 20),
           Text(
-            _filtroFacultad != null || _filtroCarrera != null
+            _filtroFilial != null
                 ? 'No hay rúbricas con estos filtros'
                 : 'No hay rúbricas creadas',
             style: const TextStyle(
@@ -354,10 +431,11 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
           ),
           const SizedBox(height: 10),
           Text(
-            _filtroFacultad != null || _filtroCarrera != null
+            _filtroFilial != null
                 ? 'Intenta con otros filtros'
-                : 'Selecciona una facultad y crea tu primera rúbrica',
+                : 'Selecciona una filial y facultad para crear tu primera rúbrica',
             style: const TextStyle(fontSize: 14, color: Color(0xFF64748B)),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -384,7 +462,7 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
                   builder: (context) => EditarRubricaScreen(rubrica: rubrica),
                 ),
               );
-              _cargarRubricas();
+              _cargarDatos();
             },
             borderRadius: BorderRadius.circular(15),
             child: Padding(
@@ -422,21 +500,29 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                rubrica.carrera != null &&
-                                        rubrica.carrera != 'General'
-                                    ? '${rubrica.facultad} - ${rubrica.carrera}'
-                                    : rubrica.facultad,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.blue[700],
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                            // ✅ Mostrar filial, facultad y carrera
+                            FutureBuilder<String>(
+                              future: _service.getNombreFilial(rubrica.filial),
+                              builder: (context, snapshot) {
+                                final nombreFilial =
+                                    snapshot.data ?? rubrica.filial;
+                                final ubicacion = rubrica.carrera != null
+                                    ? '$nombreFilial > ${rubrica.facultad} > ${rubrica.carrera}'
+                                    : '$nombreFilial > ${rubrica.facultad}';
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    ubicacion,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.blue[700],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              },
                             ),
                             if (rubrica.descripcion.isNotEmpty)
                               Padding(
@@ -528,14 +614,20 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
 }
 
 // ============================================================================
-// PANTALLA CREAR RÚBRICA - SIN FILTROS (RECIBE FACULTAD/CARRERA)
+// PANTALLA CREAR RÚBRICA - RECIBE FILIAL, FACULTAD, CARRERA
 // ============================================================================
 
 class CrearRubricaScreen extends StatefulWidget {
+  final String filial;
   final String facultad;
   final String? carrera;
 
-  const CrearRubricaScreen({super.key, required this.facultad, this.carrera});
+  const CrearRubricaScreen({
+    super.key,
+    required this.filial,
+    required this.facultad,
+    this.carrera,
+  });
 
   @override
   State<CrearRubricaScreen> createState() => _CrearRubricaScreenState();
@@ -552,15 +644,22 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
   List<Map<String, dynamic>> _juradosDisponibles = [];
   List<String> _juradosSeleccionados = [];
   bool _isLoading = false;
+  String _nombreFilial = '';
 
   @override
   void initState() {
     super.initState();
+    _cargarDatos();
+  }
+
+  Future<void> _cargarDatos() async {
+    _nombreFilial = await _service.getNombreFilial(widget.filial);
     _cargarJurados();
   }
 
   Future<void> _cargarJurados() async {
     final jurados = await _service.obtenerJurados(
+      filial: widget.filial,
       facultad: widget.facultad,
       carrera: widget.carrera,
     );
@@ -603,6 +702,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
       juradosAsignados: _juradosSeleccionados,
       fechaCreacion: DateTime.now(),
       puntajeMaximo: double.tryParse(_puntajeMaximoController.text) ?? 20,
+      filial: widget.filial,
       facultad: widget.facultad,
       carrera: widget.carrera,
     );
@@ -654,7 +754,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _buildFacultadCarreraInfo(),
+                        _buildUbicacionInfo(),
                         const SizedBox(height: 20),
                         _buildInfoBasica(),
                         const SizedBox(height: 20),
@@ -701,8 +801,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
     );
   }
 
-  // ✅ NUEVO: Mostrar facultad y carrera seleccionadas (solo lectura)
-  Widget _buildFacultadCarreraInfo() {
+  Widget _buildUbicacionInfo() {
     return Card(
       elevation: 2,
       color: Colors.blue.shade50,
@@ -717,7 +816,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
                 Icon(Icons.info_outline, color: Colors.blue.shade700),
                 const SizedBox(width: 8),
                 Text(
-                  'Información de Asignación',
+                  'Ubicación de la Rúbrica',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -727,57 +826,39 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.school, size: 20, color: Colors.blue.shade700),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Facultad: ${widget.facultad}',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.blue.shade900,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (widget.carrera != null && widget.carrera != 'General') ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(
-                    Icons.school_outlined,
-                    size: 20,
-                    color: Colors.blue.shade700,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Carrera: ${widget.carrera}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.blue.shade900,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            _buildInfoRow(Icons.location_city, 'Filial', _nombreFilial),
             const SizedBox(height: 8),
-            Text(
-              'Esta rúbrica se creará para ${widget.carrera != null && widget.carrera != 'General' ? 'la carrera seleccionada' : 'toda la universidad'}',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.blue.shade700,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
+            _buildInfoRow(Icons.school, 'Facultad', widget.facultad),
+            if (widget.carrera != null) ...[
+              const SizedBox(height: 8),
+              _buildInfoRow(Icons.menu_book, 'Carrera', widget.carrera!),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: Colors.blue.shade700),
+        const SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Colors.blue.shade900,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(fontSize: 13, color: Colors.blue.shade800),
+          ),
+        ),
+      ],
     );
   }
 
@@ -975,9 +1056,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      widget.carrera != null && widget.carrera != 'General'
-                          ? 'No hay jurados para ${widget.facultad} - ${widget.carrera}'
-                          : 'No hay jurados para ${widget.facultad}',
+                      'No hay jurados para $_nombreFilial - ${widget.facultad}',
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.orange.shade800,
@@ -1074,7 +1153,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
 }
 
 // ============================================================================
-// WIDGET REUTILIZABLE PARA SECCIÓN
+// WIDGETS REUTILIZABLES (igual que antes)
 // ============================================================================
 
 class _SeccionWidget extends StatefulWidget {
@@ -1200,10 +1279,6 @@ class _SeccionWidgetState extends State<_SeccionWidget> {
   }
 }
 
-// ============================================================================
-// WIDGET REUTILIZABLE PARA CRITERIO
-// ============================================================================
-
 class _CriterioWidget extends StatelessWidget {
   final Criterio criterio;
   final VoidCallback onEliminar;
@@ -1281,7 +1356,7 @@ class _CriterioWidget extends StatelessWidget {
 }
 
 // ============================================================================
-// PANTALLA EDITAR RÚBRICA - FACULTAD/CARRERA NO EDITABLE
+// PANTALLA EDITAR RÚBRICA (Similar a CrearRubricaScreen)
 // ============================================================================
 
 class EditarRubricaScreen extends StatefulWidget {
@@ -1310,17 +1385,24 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
   List<Map<String, dynamic>> _juradosDisponibles = [];
   late List<String> _juradosSeleccionados;
   bool _isLoading = false;
+  String _nombreFilial = '';
 
   @override
   void initState() {
     super.initState();
     _secciones = widget.rubrica.secciones.map((s) => s.copyWith()).toList();
     _juradosSeleccionados = List.from(widget.rubrica.juradosAsignados);
+    _cargarDatos();
+  }
+
+  Future<void> _cargarDatos() async {
+    _nombreFilial = await _service.getNombreFilial(widget.rubrica.filial);
     _cargarJurados();
   }
 
   Future<void> _cargarJurados() async {
     final jurados = await _service.obtenerJurados(
+      filial: widget.rubrica.filial,
       facultad: widget.rubrica.facultad,
       carrera: widget.rubrica.carrera,
     );
@@ -1363,20 +1445,16 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
       juradosAsignados: _juradosSeleccionados,
       fechaCreacion: widget.rubrica.fechaCreacion,
       puntajeMaximo: double.tryParse(_puntajeMaximoController.text) ?? 20,
+      filial: widget.rubrica.filial,
       facultad: widget.rubrica.facultad,
       carrera: widget.rubrica.carrera,
     );
 
-    // ✅ NUEVO: Detectar jurados removidos
     final juradosRemovidos = widget.rubrica.juradosAsignados
         .where((id) => !_juradosSeleccionados.contains(id))
         .toList();
 
-    // ✅ NUEVO: Eliminar evaluaciones de jurados removidos
     if (juradosRemovidos.isNotEmpty) {
-      print(
-        '🗑️ Eliminando evaluaciones de ${juradosRemovidos.length} jurados removidos...',
-      );
       await _service.eliminarEvaluacionesDeJurados(
         rubricaId: widget.rubrica.id,
         juradosIds: juradosRemovidos,
@@ -1434,7 +1512,7 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _buildFacultadCarreraInfo(),
+                        _buildUbicacionInfo(),
                         const SizedBox(height: 20),
                         _buildInfoBasica(),
                         const SizedBox(height: 20),
@@ -1481,10 +1559,10 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
     );
   }
 
-  Widget _buildFacultadCarreraInfo() {
+  Widget _buildUbicacionInfo() {
     return Card(
       elevation: 2,
-      color: Colors.blue.shade50,
+      color: Colors.amber.shade50,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1493,91 +1571,72 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.info_outline, color: Colors.blue.shade700),
+                Icon(Icons.lock_outline, color: Colors.amber.shade700),
                 const SizedBox(width: 8),
                 Text(
-                  'Información de Asignación',
+                  'Ubicación (No editable)',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade900,
+                    color: Colors.amber.shade900,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.school, size: 20, color: Colors.blue.shade700),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Facultad: ${widget.rubrica.facultad}',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.blue.shade900,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
+            _buildInfoRow(
+              Icons.location_city,
+              'Filial',
+              _nombreFilial,
+              Colors.amber,
             ),
-            if (widget.rubrica.carrera != null &&
-                widget.rubrica.carrera != 'General') ...[
+            const SizedBox(height: 8),
+            _buildInfoRow(
+              Icons.school,
+              'Facultad',
+              widget.rubrica.facultad,
+              Colors.amber,
+            ),
+            if (widget.rubrica.carrera != null) ...[
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(
-                    Icons.school_outlined,
-                    size: 20,
-                    color: Colors.blue.shade700,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Carrera: ${widget.rubrica.carrera}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.blue.shade900,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
+              _buildInfoRow(
+                Icons.menu_book,
+                'Carrera',
+                widget.rubrica.carrera!,
+                Colors.amber,
               ),
             ],
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.lock_outline,
-                    size: 16,
-                    color: Colors.amber.shade700,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'La facultad y carrera no se pueden modificar',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.amber.shade900,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildInfoRow(
+    IconData icon,
+    String label,
+    String value,
+    MaterialColor color,
+  ) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color.shade700),
+        const SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: color.shade900,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(fontSize: 13, color: color.shade800),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1715,18 +1774,13 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Asignar Jurados',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A5F),
-                  ),
-                ),
-              ],
+            const Text(
+              'Asignar Jurados',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E3A5F),
+              ),
             ),
             const SizedBox(height: 12),
             if (_juradosDisponibles.isEmpty)
@@ -1752,18 +1806,6 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
                         fontWeight: FontWeight.bold,
                         color: Colors.orange.shade900,
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      widget.rubrica.carrera != null &&
-                              widget.rubrica.carrera != 'General'
-                          ? 'No hay jurados para ${widget.rubrica.facultad} - ${widget.rubrica.carrera}'
-                          : 'No hay jurados para ${widget.rubrica.facultad}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.orange.shade800,
-                      ),
-                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),

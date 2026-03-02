@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
-import 'reportes_ganadores_excel.dart'; // ✅ IMPORTAR SERVICIO
+import 'reportes_ganadores_excel.dart';
+import 'filiales_service.dart'; // ✅ IMPORTAR
+import 'gestion_criterios.dart'; // ✅ IMPORTAR
 
 class GanadoresEstudiantesScreen extends StatefulWidget {
   const GanadoresEstudiantesScreen({super.key});
@@ -15,7 +17,8 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
     with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ReportesGanadoresExcelService _excelService =
-      ReportesGanadoresExcelService(); // ✅ INSTANCIA DEL SERVICIO
+      ReportesGanadoresExcelService();
+  final RubricasService _rubricasService = RubricasService(); // ✅ NUEVO
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -23,37 +26,19 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
   bool _isLoading = false;
   bool _isInitializing = true;
   bool _isCalculando = false;
-  bool _isGeneratingExcel = false; // ✅ NUEVO ESTADO
+  bool _isGeneratingExcel = false;
+  bool _isLoadingInitial = true; // ✅ NUEVO
   String? _currentUserType;
 
-  final Map<String, List<String>> _facultadesCarreras = {
-    'Facultad de Ciencias Empresariales': [
-      'Administración',
-      'Contabilidad',
-      'Gestión Tributaria y Aduanera',
-    ],
-    'Facultad de Ciencias Humanas y Educación': [
-      'Educación, Especialidad Inicial y Puericultura',
-      'Educación, Especialidad Primaria y Pedagogía Terapéutica',
-      'Educación, Especialidad Inglés y Español',
-    ],
-    'Facultad de Ciencias de la Salud': [
-      'Enfermería',
-      'Nutrición Humana',
-      'Psicología',
-    ],
-    'Facultad de Ingeniería y Arquitectura': [
-      'Ingeniería Civil',
-      'Arquitectura y Urbanismo',
-      'Ingeniería Ambiental',
-      'Ingeniería de Industrias Alimentarias',
-      'Ingeniería de Sistemas',
-    ],
-  };
-
+  // ✅ NUEVO: Sistema de filiales
+  String? _filialSeleccionada;
   String? _facultadSeleccionada;
   String? _carreraSeleccionada;
-  List<String> _carrerasDisponibles = [];
+
+  List<String> _filialesDisponibles = [];
+  List<String> _facultadesDisponibles = [];
+  List<Map<String, dynamic>> _carrerasDisponibles = [];
+
   List<Map<String, dynamic>> _ganadores = [];
   int _totalEventos = 0;
   Map<String, List<Map<String, dynamic>>> _ganadoresPorCategoria = {};
@@ -80,6 +65,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
 
   Future<void> _inicializar() async {
     await _getCurrentUserType();
+    await _cargarDatosIniciales(); // ✅ NUEVO
     setState(() {
       _isInitializing = false;
     });
@@ -97,8 +83,89 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
     }
   }
 
+  // ✅ NUEVO: Cargar datos iniciales
+  Future<void> _cargarDatosIniciales() async {
+    if (!mounted) return;
+
+    setState(() => _isLoadingInitial = true);
+
+    try {
+      final filiales = await _rubricasService.getFiliales();
+
+      if (mounted) {
+        setState(() {
+          _filialesDisponibles = filiales;
+          _isLoadingInitial = false;
+        });
+      }
+    } catch (e) {
+      print('Error al cargar datos iniciales: $e');
+      if (mounted) {
+        setState(() => _isLoadingInitial = false);
+        _showSnackBar('Error al cargar datos: $e', isError: true);
+      }
+    }
+  }
+
+  // ✅ NUEVO: Cuando cambia la filial
+  Future<void> _onFilialChanged(String? filial) async {
+    setState(() {
+      _filialSeleccionada = filial;
+      _facultadSeleccionada = null;
+      _carreraSeleccionada = null;
+      _facultadesDisponibles = [];
+      _carrerasDisponibles = [];
+      _ganadores.clear();
+      _ganadoresPorCategoria.clear();
+      _totalEventos = 0;
+    });
+
+    if (filial != null) {
+      final facultades = await _rubricasService.getFacultadesByFilial(filial);
+      if (mounted) {
+        setState(() {
+          _facultadesDisponibles = facultades;
+        });
+      }
+    }
+  }
+
+  // ✅ NUEVO: Cuando cambia la facultad
+  Future<void> _onFacultadChanged(String? facultad) async {
+    setState(() {
+      _facultadSeleccionada = facultad;
+      _carreraSeleccionada = null;
+      _carrerasDisponibles = [];
+      _ganadores.clear();
+      _ganadoresPorCategoria.clear();
+      _totalEventos = 0;
+    });
+
+    if (_filialSeleccionada != null && facultad != null) {
+      final carreras = await _rubricasService.getCarrerasByFacultad(
+        _filialSeleccionada!,
+        facultad,
+      );
+      if (mounted) {
+        setState(() {
+          _carrerasDisponibles = carreras;
+        });
+      }
+    }
+  }
+
+  // ✅ ACTUALIZADO: Cuando cambia la carrera
+  void _onCarreraChanged(String? carrera) {
+    setState(() {
+      _carreraSeleccionada = carrera;
+      _ganadores.clear();
+      _ganadoresPorCategoria.clear();
+      _totalEventos = 0;
+    });
+  }
+
   // ============================================================================
-  // 🔥 NUEVA FUNCIÓN: Descargar Excel
+  // 🔥 FUNCIÓN: Descargar Excel
   // ============================================================================
   Future<void> _descargarExcel() async {
     if (_ganadoresPorCategoria.isEmpty) {
@@ -106,8 +173,13 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
       return;
     }
 
-    if (_facultadSeleccionada == null || _carreraSeleccionada == null) {
-      _showSnackBar('Debes seleccionar facultad y carrera', isError: true);
+    if (_filialSeleccionada == null ||
+        _facultadSeleccionada == null ||
+        _carreraSeleccionada == null) {
+      _showSnackBar(
+        'Debes seleccionar filial, facultad y carrera',
+        isError: true,
+      );
       return;
     }
 
@@ -158,7 +230,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
         setState(() => _isGeneratingExcel = false);
 
         if (resultado) {
-          // Mostrar diálogo de éxito
           _mostrarDialogoExito();
         } else {
           _showSnackBar('❌ Error al generar el reporte Excel', isError: true);
@@ -310,7 +381,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
       ),
     );
 
-    // También mostrar SnackBar
     _showSnackBar(
       '✅ Reporte de ganadores generado exitosamente',
       isSuccess: true,
@@ -321,8 +391,10 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
   // FUNCIÓN: Calcular ganadores automáticamente por categoría
   // ============================================================================
   Future<void> _calcularGanadoresAutomaticos() async {
-    if (_facultadSeleccionada == null || _carreraSeleccionada == null) {
-      _showSnackBar('Debes seleccionar facultad y carrera');
+    if (_filialSeleccionada == null ||
+        _facultadSeleccionada == null ||
+        _carreraSeleccionada == null) {
+      _showSnackBar('Debes seleccionar filial, facultad y carrera');
       return;
     }
 
@@ -358,14 +430,16 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
     try {
       print('🏆 Iniciando cálculo de ganadores automático');
 
+      // ✅ ACTUALIZADO: Query con filialId
       final eventosSnapshot = await _firestore
           .collection('events')
+          .where('filialId', isEqualTo: _filialSeleccionada)
           .where('facultad', isEqualTo: _facultadSeleccionada)
-          .where('carrera', isEqualTo: _carreraSeleccionada)
+          .where('carreraNombre', isEqualTo: _carreraSeleccionada)
           .get();
 
       if (eventosSnapshot.docs.isEmpty) {
-        _showSnackBar('No hay eventos para esta facultad/carrera');
+        _showSnackBar('No hay eventos para esta ubicación');
         setState(() => _isCalculando = false);
         return;
       }
@@ -523,9 +597,12 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
     }
   }
 
+  // ✅ ACTUALIZADO: Cargar ganadores con filialId
   Future<void> _cargarGanadores() async {
-    if (_facultadSeleccionada == null || _carreraSeleccionada == null) {
-      _showSnackBar('Debes seleccionar facultad y carrera');
+    if (_filialSeleccionada == null ||
+        _facultadSeleccionada == null ||
+        _carreraSeleccionada == null) {
+      _showSnackBar('Debes seleccionar filial, facultad y carrera');
       return;
     }
 
@@ -539,8 +616,9 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
     try {
       final eventosSnapshot = await _firestore
           .collection('events')
+          .where('filialId', isEqualTo: _filialSeleccionada)
           .where('facultad', isEqualTo: _facultadSeleccionada)
-          .where('carrera', isEqualTo: _carreraSeleccionada)
+          .where('carreraNombre', isEqualTo: _carreraSeleccionada)
           .get();
 
       setState(() {
@@ -566,7 +644,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
             'eventId': eventoDoc.id,
             'eventName': eventoData['name'] ?? 'Evento sin nombre',
             'eventFacultad': eventoData['facultad'],
-            'eventCarrera': eventoData['carrera'],
+            'eventCarrera': eventoData['carreraNombre'],
             'projectName': proyectoData['Título'] ?? 'Proyecto sin nombre',
             'integrantes': proyectoData['Integrantes'],
             'codigo': proyectoData['Código'] ?? 'Sin código',
@@ -613,19 +691,6 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
         _isLoading = false;
       });
     }
-  }
-
-  void _actualizarCarreras(String? facultad) {
-    setState(() {
-      _facultadSeleccionada = facultad;
-      _carreraSeleccionada = null;
-      _carrerasDisponibles = facultad != null
-          ? _facultadesCarreras[facultad] ?? []
-          : [];
-      _ganadores.clear();
-      _ganadoresPorCategoria.clear();
-      _totalEventos = 0;
-    });
   }
 
   List<String> _parseIntegrantes(dynamic integrantesData) {
@@ -961,8 +1026,10 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
 
   void _limpiarFiltros() {
     setState(() {
+      _filialSeleccionada = null;
       _facultadSeleccionada = null;
       _carreraSeleccionada = null;
+      _facultadesDisponibles.clear();
       _carrerasDisponibles.clear();
       _ganadores.clear();
       _ganadoresPorCategoria.clear();
@@ -973,10 +1040,22 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
 
   @override
   Widget build(BuildContext context) {
-    if (_isInitializing) {
+    if (_isInitializing || _isLoadingInitial) {
       return const Scaffold(
         backgroundColor: Color(0xFF1E3A5F),
-        body: Center(child: CircularProgressIndicator(color: Colors.white)),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: Colors.white),
+              SizedBox(height: 16),
+              Text(
+                'Cargando datos...',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -1094,321 +1173,13 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               // Sección de filtros
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(20),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.05),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: const Color(
-                                              0xFF1E3A5F,
-                                            ).withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                          ),
-                                          child: const Icon(
-                                            Icons.filter_list,
-                                            color: Color(0xFF1E3A5F),
-                                            size: 24,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        const Text(
-                                          'Filtros de Búsqueda',
-                                          style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF1E3A5F),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 20),
-                                    DropdownButtonFormField<String>(
-                                      value: _facultadSeleccionada,
-                                      isExpanded: true,
-                                      decoration: InputDecoration(
-                                        labelText: 'Seleccionar Facultad',
-                                        prefixIcon: const Icon(
-                                          Icons.school,
-                                          color: Color(0xFF1E3A5F),
-                                        ),
-                                        filled: true,
-                                        fillColor: const Color(0xFFF5F5F5),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: const BorderSide(
-                                            color: Color(0xFF1E3A5F),
-                                            width: 2,
-                                          ),
-                                        ),
-                                      ),
-                                      items: _facultadesCarreras.keys
-                                          .map(
-                                            (f) => DropdownMenuItem(
-                                              value: f,
-                                              child: Text(
-                                                f,
-                                                style: const TextStyle(
-                                                  fontSize: 14,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          )
-                                          .toList(),
-                                      onChanged: _actualizarCarreras,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    DropdownButtonFormField<String>(
-                                      value: _carreraSeleccionada,
-                                      isExpanded: true,
-                                      decoration: InputDecoration(
-                                        labelText: 'Seleccionar Carrera',
-                                        prefixIcon: const Icon(
-                                          Icons.menu_book,
-                                          color: Color(0xFF1E3A5F),
-                                        ),
-                                        filled: true,
-                                        fillColor: const Color(0xFFF5F5F5),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: const BorderSide(
-                                            color: Color(0xFF1E3A5F),
-                                            width: 2,
-                                          ),
-                                        ),
-                                      ),
-                                      items: _carrerasDisponibles
-                                          .map(
-                                            (c) => DropdownMenuItem(
-                                              value: c,
-                                              child: Text(
-                                                c,
-                                                style: const TextStyle(
-                                                  fontSize: 14,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          )
-                                          .toList(),
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _carreraSeleccionada = value;
-                                          _ganadores.clear();
-                                          _ganadoresPorCategoria.clear();
-                                          _totalEventos = 0;
-                                        });
-                                      },
-                                    ),
-                                    const SizedBox(height: 20),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: SizedBox(
-                                            height: 50,
-                                            child: ElevatedButton(
-                                              onPressed:
-                                                  _calcularGanadoresAutomaticos,
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.green,
-                                                foregroundColor: Colors.white,
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(12),
-                                                ),
-                                                elevation: 0,
-                                              ),
-                                              child: const Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: [
-                                                  Icon(Icons.calculate),
-                                                  SizedBox(width: 8),
-                                                  Text(
-                                                    'Calcular',
-                                                    style: TextStyle(
-                                                      fontSize: 15,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: SizedBox(
-                                            height: 50,
-                                            child: ElevatedButton(
-                                              onPressed: _cargarGanadores,
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: const Color(
-                                                  0xFF1E3A5F,
-                                                ),
-                                                foregroundColor: Colors.white,
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(12),
-                                                ),
-                                                elevation: 0,
-                                              ),
-                                              child: const Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: [
-                                                  Icon(Icons.visibility),
-                                                  SizedBox(width: 8),
-                                                  Text(
-                                                    'Ver',
-                                                    style: TextStyle(
-                                                      fontSize: 15,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
+                              _buildFiltrosCard(),
                               const SizedBox(height: 20),
                               // Resultados por categoría
-                              if (_facultadSeleccionada != null &&
+                              if (_filialSeleccionada != null &&
+                                  _facultadSeleccionada != null &&
                                   _carreraSeleccionada != null) ...[
-                                // Header de resultados
-                                Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(16),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.05),
-                                        blurRadius: 10,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(10),
-                                        decoration: BoxDecoration(
-                                          color: Colors.amber.withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                        ),
-                                        child: const Icon(
-                                          Icons.emoji_events,
-                                          color: Colors.amber,
-                                          size: 24,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            const Text(
-                                              'Resultados',
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                color: Color(0xFF64748B),
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                            Text(
-                                              '${_ganadores.length} ganador(es) • ${_ganadoresPorCategoria.length} categoría(s)',
-                                              style: const TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold,
-                                                color: Color(0xFF1E3A5F),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      if (_totalEventos > 0)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 6,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: const Color(
-                                              0xFF1E3A5F,
-                                            ).withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(
-                                              20,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            '$_totalEventos evento(s)',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: Color(0xFF1E3A5F),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
+                                _buildResultadosHeader(),
                                 const SizedBox(height: 16),
 
                                 // ✅ BOTÓN DESCARGAR EXCEL
@@ -1465,40 +1236,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
 
                                 // Lista de ganadores por categoría
                                 if (_ganadoresPorCategoria.isEmpty)
-                                  Container(
-                                    padding: const EdgeInsets.all(40),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: Column(
-                                      children: [
-                                        Icon(
-                                          Icons.search_off,
-                                          size: 64,
-                                          color: Colors.grey[300],
-                                        ),
-                                        const SizedBox(height: 16),
-                                        Text(
-                                          'No se encontraron ganadores',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            color: Colors.grey[600],
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          'Presiona "Calcular" para generar ganadores',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.grey[500],
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ],
-                                    ),
-                                  )
+                                  _buildEmptyState()
                                 else
                                   ..._ganadoresPorCategoria.entries.map((
                                     entry,
@@ -1519,6 +1257,343 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ✅ NUEVO: Card de filtros con sistema de filiales
+  Widget _buildFiltrosCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.filter_list,
+                  color: Color(0xFF1E3A5F),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Filtros de Búsqueda',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E3A5F),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // ✅ Filtro Filial
+          DropdownButtonFormField<String>(
+            value: _filialSeleccionada,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: 'Seleccionar Filial',
+              prefixIcon: const Icon(
+                Icons.location_city,
+                color: Color(0xFF1E3A5F),
+              ),
+              filled: true,
+              fillColor: const Color(0xFFF5F5F5),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: Color(0xFF1E3A5F),
+                  width: 2,
+                ),
+              ),
+            ),
+            items: _filialesDisponibles.map((filialId) {
+              return DropdownMenuItem(
+                value: filialId,
+                child: FutureBuilder<String>(
+                  future: _rubricasService.getNombreFilial(filialId),
+                  builder: (context, snapshot) {
+                    return Text(
+                      snapshot.data ?? filialId,
+                      style: const TextStyle(fontSize: 14),
+                    );
+                  },
+                ),
+              );
+            }).toList(),
+            onChanged: _onFilialChanged,
+          ),
+
+          // ✅ Filtro Facultad
+          if (_filialSeleccionada != null) ...[
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: _facultadSeleccionada,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Seleccionar Facultad',
+                prefixIcon: const Icon(Icons.school, color: Color(0xFF1E3A5F)),
+                filled: true,
+                fillColor: const Color(0xFFF5F5F5),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF1E3A5F),
+                    width: 2,
+                  ),
+                ),
+              ),
+              items: _facultadesDisponibles.map((facultad) {
+                return DropdownMenuItem(
+                  value: facultad,
+                  child: Text(
+                    facultad,
+                    style: const TextStyle(fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }).toList(),
+              onChanged: _onFacultadChanged,
+            ),
+          ],
+
+          // ✅ Filtro Carrera
+          if (_facultadSeleccionada != null) ...[
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: _carreraSeleccionada,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Seleccionar Carrera',
+                prefixIcon: const Icon(
+                  Icons.menu_book,
+                  color: Color(0xFF1E3A5F),
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF5F5F5),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF1E3A5F),
+                    width: 2,
+                  ),
+                ),
+              ),
+              items: _carrerasDisponibles.map((carrera) {
+                return DropdownMenuItem(
+                  value: carrera['nombre'] as String,
+                  child: Text(
+                    carrera['nombre'] as String,
+                    style: const TextStyle(fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }).toList(),
+              onChanged: _onCarreraChanged,
+            ),
+          ],
+
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _calcularGanadoresAutomaticos,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.calculate),
+                        SizedBox(width: 8),
+                        Text(
+                          'Calcular',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SizedBox(
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _cargarGanadores,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E3A5F),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.visibility),
+                        SizedBox(width: 8),
+                        Text(
+                          'Ver',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResultadosHeader() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.amber.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.emoji_events,
+              color: Colors.amber,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Resultados',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF64748B),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  '${_ganadores.length} ganador(es) • ${_ganadoresPorCategoria.length} categoría(s)',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3A5F),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_totalEventos > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '$_totalEventos evento(s)',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1E3A5F),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      padding: const EdgeInsets.all(40),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.search_off, size: 64, color: Colors.grey[300]),
+          const SizedBox(height: 16),
+          Text(
+            'No se encontraron ganadores',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Presiona "Calcular" para generar ganadores',
+            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }

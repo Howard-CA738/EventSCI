@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' as excel_pkg;
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '/prefs_helper.dart';
 
 // Estructura para agrupar estudiantes duplicados
 class StudentGroup {
@@ -26,6 +27,10 @@ class DatosExcelScreen extends StatefulWidget {
 
 class _DatosExcelScreenState extends State<DatosExcelScreen>
     with SingleTickerProviderStateMixin {
+  bool _isAdminCarrera = false;
+  String? _adminCarreraFilial;
+  String? _adminCarreraFacultad;
+  String? _adminCarreraCarrera;
   bool _isLoading = false;
   bool _fileSelected = false;
   String? _fileName;
@@ -67,6 +72,10 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
   @override
   void initState() {
     super.initState();
+
+    // Detectar si es admin de carrera
+    _checkIfAdminCarrera();
+
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
@@ -150,6 +159,26 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     }
 
     return uniqueStudents;
+  }
+
+  Future<void> _checkIfAdminCarrera() async {
+    final isAdminCarrera = await PrefsHelper.isAdminCarrera();
+
+    if (isAdminCarrera) {
+      final adminData = await PrefsHelper.getAdminCarreraData();
+
+      if (adminData != null) {
+        setState(() {
+          _isAdminCarrera = true;
+          _adminCarreraFilial = adminData['filialNombre'];
+          _adminCarreraFacultad = adminData['facultad'];
+          _adminCarreraCarrera = adminData['carrera'];
+        });
+
+        print('✅ Admin de carrera detectado en importación Excel');
+        print('   Carrera: $_adminCarreraCarrera');
+      }
+    }
   }
 
   Future<void> _pickExcelFile() async {
@@ -407,12 +436,28 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
   Future<void> _processBatchImport() async {
     Map<String, List<Map<String, dynamic>>> studentsByCarrera = {};
 
-    for (var studentData in _allData) {
-      String carrera = _getFieldValue(studentData, 'carrera', 'Sin asignar');
-      if (!studentsByCarrera.containsKey(carrera)) {
-        studentsByCarrera[carrera] = [];
+    // ✅ Si es admin de carrera, TODOS van a su carrera
+    if (_isAdminCarrera) {
+      print(
+        '🔒 Modo admin de carrera: Importando todo a $_adminCarreraCarrera',
+      );
+
+      // Agrupar todos los estudiantes en la carrera del admin
+      for (var studentData in _allData) {
+        if (!studentsByCarrera.containsKey(_adminCarreraCarrera)) {
+          studentsByCarrera[_adminCarreraCarrera!] = [];
+        }
+        studentsByCarrera[_adminCarreraCarrera!]!.add(studentData);
       }
-      studentsByCarrera[carrera]!.add(studentData);
+    } else {
+      // Super admin: usar carrera del Excel
+      for (var studentData in _allData) {
+        String carrera = _getFieldValue(studentData, 'carrera', 'Sin asignar');
+        if (!studentsByCarrera.containsKey(carrera)) {
+          studentsByCarrera[carrera] = [];
+        }
+        studentsByCarrera[carrera]!.add(studentData);
+      }
     }
 
     int totalProcessed = 0;
@@ -560,17 +605,36 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       'COD${timestamp % 1000000}',
     );
 
+    // ✅ SOBRESCRIBIR DATOS SI ES ADMIN DE CARRERA
+    String facultad;
+    String carrera;
+    String sede;
+
+    if (_isAdminCarrera) {
+      // Forzar la carrera del admin
+      facultad = _adminCarreraFacultad!;
+      carrera = _adminCarreraCarrera!;
+      sede = _adminCarreraFilial!;
+
+      print('🔒 Admin de carrera: Forzando carrera a $carrera');
+    } else {
+      // Super admin: usar datos del Excel
+      facultad = _getFieldValue(rawData, 'facultad', 'Sin asignar');
+      carrera = _getFieldValue(rawData, 'carrera', 'Sin asignar');
+      sede = _getFieldValue(rawData, 'sede', null);
+    }
+
     return {
       'name': name,
       'username': username.toLowerCase(),
       'codigoUniversitario': codigoUniversitario,
       'dni': dni,
       'documento': dni,
-      'facultad': _getFieldValue(rawData, 'facultad', 'Sin asignar'),
-      'carrera': _getFieldValue(rawData, 'carrera', 'Sin asignar'),
+      'facultad': facultad, // ✅ Sobrescrito si es admin carrera
+      'carrera': carrera, // ✅ Sobrescrito si es admin carrera
       'modoContrato': _getFieldValue(rawData, 'modoContrato', null),
       'modalidadEstudio': _getFieldValue(rawData, 'modalidadEstudio', null),
-      'sede': _getFieldValue(rawData, 'sede', null),
+      'sede': sede, // ✅ Sobrescrito si es admin carrera
       'ciclo': _getFieldValue(rawData, 'ciclo', null),
       'grupo': _getFieldValue(rawData, 'grupo', null),
       'correoInstitucional': _getFieldValue(
@@ -1132,6 +1196,71 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // ✅ BANNER PARA ADMIN DE CARRERA
+          if (_isAdminCarrera) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.orange.shade50, Colors.orange.shade100],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.orange.shade300, width: 2),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade700,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.lock,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '⚠️ Modo: Admin de Carrera',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange.shade900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'TODOS los estudiantes del Excel se importarán a: $_adminCarreraCarrera',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange.shade700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Los datos de carrera en el Excel serán ignorados',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.orange.shade600,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // Card principal de instrucciones
           Card(
             elevation: 4,
             shadowColor: Colors.black26,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
+import '/admin/logica/filiales_service.dart';
 import 'estudiantes_registrados.dart';
 import 'datos_excel.dart';
 
@@ -28,9 +29,15 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
   late Animation<Offset> _headerSlideAnimation;
   late Animation<double> _formFadeAnimation;
 
+  bool _isAdminCarrera = false;
+  String? _adminCarreraFilial;
+  String? _adminCarreraFacultad;
+  String? _adminCarreraCarrera;
   bool _isLoading = false;
+  bool _isLoadingFiliales = true;
   String? _selectedModoContrato;
   String? _selectedModalidadEstudio;
+  String? _selectedFilial;
   String? _selectedFacultad;
   String? _selectedCarrera;
   String? _selectedCiclo;
@@ -56,32 +63,14 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
   ];
   final List<String> _grupos = ['Único', '1', '2', '3', '4'];
 
-  // ✅ CAMBIO PRINCIPAL: Ahora UPeU tiene ['SVA'] como opción
-  final Map<String, List<String>> _facultadesCarreras = {
-    'Universidad Peruana Unión': ['SVA'], // ✅ Antes era lista vacía []
-    'Facultad de Ciencias Empresariales': [
-      'EP Administración',
-      'EP Contabilidad',
-      'EP Gestión Tributaria y Aduanera',
-    ],
-    'Facultad de Ciencias Humanas y Educación': [
-      'EP Educación, Especialidad Inicial y Puericultura',
-      'EP Educación, Especialidad Primaria y Pedagogía Terapéutica',
-      'EP Educación, Especialidad Inglés y Español',
-    ],
-    'Facultad de Ciencias de la Salud': [
-      'EP Enfermería',
-      'EP Nutrición Humana',
-      'EP Psicología',
-    ],
-    'Facultad de Ingeniería y Arquitectura': [
-      'EP Ingeniería Civil',
-      'EP Arquitectura y Urbanismo',
-      'EP Ingeniería Ambiental',
-      'EP Ingeniería de Industrias Alimentarias',
-      'EP Ingeniería de Sistemas',
-    ],
-  };
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ ESTRUCTURA DE FILIALES DESDE FIREBASE
+  // ═══════════════════════════════════════════════════════════════
+  final FilialesService _filialesService = FilialesService();
+  Map<String, dynamic> _estructuraFiliales = {};
+  List<String> _filiales = [];
+  List<String> _facultadesDisponibles = [];
+  List<Map<String, dynamic>> _carrerasDisponibles = [];
 
   @override
   void initState() {
@@ -124,6 +113,104 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     _nombresController.addListener(_generateUsernameSuggestion);
     _apellidosController.addListener(_generateUsernameSuggestion);
     _correoController.addListener(_extractUsernameFromEmail);
+    _checkIfAdminCarrera();
+
+    // ✅ Cargar estructura de filiales
+    _loadFiliales();
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ CARGAR ESTRUCTURA DE FILIALES
+  // ═══════════════════════════════════════════════════════════════
+  Future<void> _loadFiliales() async {
+    setState(() {
+      _isLoadingFiliales = true;
+    });
+
+    try {
+      await _filialesService.inicializarSiEsNecesario();
+      _estructuraFiliales = await _filialesService.getEstructuraCompleta();
+      _filiales = _estructuraFiliales.keys.toList();
+
+      // ✅ Si es admin de carrera, preseleccionar y bloquear su carrera
+      if (_isAdminCarrera) {
+        setState(() {
+          _selectedFilial = _adminCarreraFilial;
+          _onFilialChanged(_selectedFilial);
+
+          // Esperar un frame para que se carguen las facultades
+          Future.delayed(const Duration(milliseconds: 100), () {
+            setState(() {
+              _selectedFacultad = _adminCarreraFacultad;
+              _onFacultadChanged(_selectedFacultad);
+
+              // Esperar otro frame para que se carguen las carreras
+              Future.delayed(const Duration(milliseconds: 100), () {
+                setState(() {
+                  _selectedCarrera = _adminCarreraCarrera;
+                });
+              });
+            });
+          });
+        });
+      }
+
+      print('✅ Filiales cargadas: $_filiales');
+    } catch (e) {
+      print('❌ Error cargando filiales: $e');
+      _showMessage('Error cargando filiales: $e');
+    }
+
+    setState(() {
+      _isLoadingFiliales = false;
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ ACTUALIZAR FACULTADES SEGÚN FILIAL
+  // ═══════════════════════════════════════════════════════════════
+  void _onFilialChanged(String? filial) {
+    setState(() {
+      _selectedFilial = filial;
+      _selectedFacultad = null;
+      _selectedCarrera = null;
+      _facultadesDisponibles = [];
+      _carrerasDisponibles = [];
+
+      if (filial != null && _estructuraFiliales.containsKey(filial)) {
+        final filialData = _estructuraFiliales[filial];
+        final facultades = filialData['facultades'] as Map<String, dynamic>?;
+
+        if (facultades != null) {
+          _facultadesDisponibles = facultades.keys.toList();
+        }
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ ACTUALIZAR CARRERAS SEGÚN FACULTAD
+  // ═══════════════════════════════════════════════════════════════
+  void _onFacultadChanged(String? facultad) {
+    setState(() {
+      _selectedFacultad = facultad;
+      _selectedCarrera = null;
+      _carrerasDisponibles = [];
+
+      if (_selectedFilial != null &&
+          facultad != null &&
+          _estructuraFiliales.containsKey(_selectedFilial)) {
+        final filialData = _estructuraFiliales[_selectedFilial!];
+        final facultades = filialData['facultades'] as Map<String, dynamic>?;
+
+        if (facultades != null && facultades.containsKey(facultad)) {
+          final facultadData = facultades[facultad];
+          _carrerasDisponibles = List<Map<String, dynamic>>.from(
+            facultadData['carreras'] ?? [],
+          );
+        }
+      }
+    });
   }
 
   void _extractUsernameFromEmail() {
@@ -233,12 +320,18 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     if (!_formKey.currentState!.validate()) {
       return;
     }
+
+    // ✅ Validaciones con filiales
+    if (_selectedFilial == null) {
+      _showMessage('Por favor selecciona una filial');
+      return;
+    }
+
     if (_selectedFacultad == null) {
       _showMessage('Por favor selecciona una facultad');
       return;
     }
 
-    // ✅ SIMPLIFICADO: Ahora SIEMPRE requiere carrera (incluye SVA para UPeU)
     if (_selectedCarrera == null) {
       _showMessage('Por favor selecciona una carrera');
       return;
@@ -248,12 +341,16 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
         '${_nombresController.text.trim()} ${_apellidosController.text.trim()}';
     final username = _usernameController.text.trim().toLowerCase();
 
+    // ✅ Obtener nombre de la sede desde FilialesService
+    final nombreSede = _filialesService.getNombreFilial(_selectedFilial!);
+
     setState(() {
       _isLoading = true;
     });
 
     try {
       print('🔍 Creando estudiante:');
+      print('   Filial: $_selectedFilial ($nombreSede)');
       print('   Facultad: $_selectedFacultad');
       print('   Carrera: $_selectedCarrera');
       print('   Username: $username');
@@ -265,10 +362,10 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
         codigoUniversitario: _codigoEstudianteController.text.trim(),
         dni: _documentoController.text.trim(),
         facultad: _selectedFacultad!,
-        carrera:
-            _selectedCarrera!, // ✅ Ahora usa directamente la carrera (puede ser 'SVA')
+        carrera: _selectedCarrera!,
         modoContrato: _selectedModoContrato,
         modalidadEstudio: _selectedModalidadEstudio,
+        sede: nombreSede, // ✅ Guardar nombre de la sede
         ciclo: _selectedCiclo,
         grupo: _selectedGrupo,
         celular: _celularController.text.trim(),
@@ -294,6 +391,28 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     });
   }
 
+  Future<void> _checkIfAdminCarrera() async {
+    final isAdminCarrera = await PrefsHelper.isAdminCarrera();
+
+    if (isAdminCarrera) {
+      final adminData = await PrefsHelper.getAdminCarreraData();
+
+      if (adminData != null) {
+        setState(() {
+          _isAdminCarrera = true;
+          _adminCarreraFilial = adminData['filial'];
+          _adminCarreraFacultad = adminData['facultad'];
+          _adminCarreraCarrera = adminData['carrera'];
+        });
+
+        print('✅ Admin de carrera detectado');
+        print('   Filial: $_adminCarreraFilial');
+        print('   Facultad: $_adminCarreraFacultad');
+        print('   Carrera: $_adminCarreraCarrera');
+      }
+    }
+  }
+
   void _showSuccessDialog(
     String username,
     String password,
@@ -313,17 +432,13 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     setState(() {
       _selectedModoContrato = null;
       _selectedModalidadEstudio = null;
+      _selectedFilial = null;
       _selectedFacultad = null;
       _selectedCarrera = null;
       _selectedCiclo = null;
       _selectedGrupo = null;
-    });
-  }
-
-  void _onFacultadChanged(String? facultad) {
-    setState(() {
-      _selectedFacultad = facultad;
-      _selectedCarrera = null; // Reset carrera cuando cambia facultad
+      _facultadesDisponibles = [];
+      _carrerasDisponibles = [];
     });
   }
 
@@ -467,11 +582,11 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                         ),
                       ),
                       const SizedBox(width: 16),
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
+                            const Text(
                               'Registro de Estudiantes',
                               style: TextStyle(
                                 fontSize: 20,
@@ -480,11 +595,15 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                               ),
                             ),
                             Text(
-                              'Crear nuevas cuentas',
-                              style: TextStyle(
+                              _isAdminCarrera
+                                  ? 'Carrera: $_adminCarreraCarrera'
+                                  : 'Crear nuevas cuentas',
+                              style: const TextStyle(
                                 fontSize: 13,
                                 color: Colors.white70,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
@@ -539,10 +658,25 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                       topRight: Radius.circular(30),
                     ),
                   ),
-                  child: _isLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(
-                            color: Color(0xFF1E3A5F),
+                  child: _isLoading || _isLoadingFiliales
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const CircularProgressIndicator(
+                                color: Color(0xFF1E3A5F),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                _isLoadingFiliales
+                                    ? 'Cargando filiales...'
+                                    : 'Creando estudiante...',
+                                style: const TextStyle(
+                                  color: Color(0xFF1E3A5F),
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
                           ),
                         )
                       : SingleChildScrollView(
@@ -552,6 +686,70 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
+                                // ✅ Banner informativo para admin de carrera (más compacto)
+                                if (_isAdminCarrera) ...[
+                                  Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Colors.blue.shade50,
+                                          Colors.blue.shade100,
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: Colors.blue.shade300,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue.shade700,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                          child: const Icon(
+                                            Icons.school,
+                                            color: Colors.white,
+                                            size: 20,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                'Registrando para: $_adminCarreraCarrera',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.blue.shade900,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                '$_adminCarreraFacultad - $_adminCarreraFilial',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.blue.shade700,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
+                                ],
+
                                 // Información personal
                                 _buildSectionCard(
                                   title: 'Información Personal',
@@ -722,51 +920,77 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                         () => _selectedModalidadEstudio = value,
                                       ),
                                     ),
-                                    const SizedBox(height: 16),
-                                    _buildDropdown<String>(
-                                      label: 'Unidad académica (Facultad)',
-                                      icon: Icons.account_balance,
-                                      value: _selectedFacultad,
-                                      items: _facultadesCarreras.keys.map((
-                                        facultad,
-                                      ) {
-                                        return DropdownMenuItem<String>(
-                                          value: facultad,
-                                          child: Text(
-                                            facultad,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        );
-                                      }).toList(),
-                                      onChanged: _onFacultadChanged,
-                                    ),
 
-                                    // ✅ SIEMPRE SE MUESTRA (sin condicionales)
-                                    const SizedBox(height: 16),
-                                    _buildDropdown<String>(
-                                      label: 'Programa estudio (Carrera)',
-                                      icon: Icons.menu_book,
-                                      value: _selectedCarrera,
-                                      items: _selectedFacultad != null
-                                          ? _facultadesCarreras[_selectedFacultad]!
-                                                .map((carrera) {
-                                                  return DropdownMenuItem<
-                                                    String
-                                                  >(
-                                                    value: carrera,
-                                                    child: Text(
-                                                      carrera,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                  );
-                                                })
-                                                .toList()
-                                          : [],
-                                      onChanged: (value) => setState(
-                                        () => _selectedCarrera = value,
+                                    // ✅ OCULTAR COMPLETAMENTE SI ES ADMIN DE CARRERA
+                                    if (!_isAdminCarrera) ...[
+                                      const SizedBox(height: 16),
+                                      // Selector de Filial (solo super admin)
+                                      _buildDropdown<String>(
+                                        label: 'Filial (Sede)',
+                                        icon: Icons.location_city,
+                                        value: _selectedFilial,
+                                        items: _filiales.map((filial) {
+                                          final nombre = _filialesService
+                                              .getNombreFilial(filial);
+                                          final ubicacion = _filialesService
+                                              .getUbicacionFilial(filial);
+                                          return DropdownMenuItem<String>(
+                                            value: filial,
+                                            child: Text(
+                                              '$nombre - $ubicacion',
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          );
+                                        }).toList(),
+                                        onChanged: _onFilialChanged,
                                       ),
-                                    ),
+
+                                      // Selector de Facultad (solo super admin)
+                                      if (_selectedFilial != null) ...[
+                                        const SizedBox(height: 16),
+                                        _buildDropdown<String>(
+                                          label: 'Unidad académica (Facultad)',
+                                          icon: Icons.account_balance,
+                                          value: _selectedFacultad,
+                                          items: _facultadesDisponibles.map((
+                                            facultad,
+                                          ) {
+                                            return DropdownMenuItem<String>(
+                                              value: facultad,
+                                              child: Text(
+                                                facultad,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            );
+                                          }).toList(),
+                                          onChanged: _onFacultadChanged,
+                                        ),
+                                      ],
+
+                                      // Selector de Carrera (solo super admin)
+                                      if (_selectedFacultad != null) ...[
+                                        const SizedBox(height: 16),
+                                        _buildDropdown<String>(
+                                          label: 'Programa estudio (Carrera)',
+                                          icon: Icons.menu_book,
+                                          value: _selectedCarrera,
+                                          items: _carrerasDisponibles.map((
+                                            carrera,
+                                          ) {
+                                            return DropdownMenuItem<String>(
+                                              value: carrera['nombre'],
+                                              child: Text(
+                                                carrera['nombre'],
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            );
+                                          }).toList(),
+                                          onChanged: (value) => setState(
+                                            () => _selectedCarrera = value,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
 
                                     const SizedBox(height: 16),
                                     Row(

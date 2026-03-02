@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'asistencias_estudiantes_resultados.dart';
+import 'filiales_service.dart';
+import 'gestion_criterios.dart';
 
 class AsistenciasEstudiantesScreen extends StatefulWidget {
   const AsistenciasEstudiantesScreen({super.key});
@@ -14,51 +16,35 @@ class _AsistenciasEstudiantesScreenState
     extends State<AsistenciasEstudiantesScreen>
     with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final RubricasService _rubricasService = RubricasService();
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
-  // Estructura de facultades y carreras
-  final Map<String, List<String>> facultadesCarreras = {
-    'Universidad Peruana Unión': [],
-    'Facultad de Ciencias Empresariales': [
-      'Administración',
-      'Contabilidad',
-      'Gestión Tributaria y Aduanera',
-    ],
-    'Facultad de Ciencias Humanas y Educación': [
-      'Educación, Especialidad Inicial y Puericultura',
-      'Educación, Especialidad Primaria y Pedagogía Terapéutica',
-      'Educación, Especialidad Inglés y Español',
-    ],
-    'Facultad de Ciencias de la Salud': [
-      'Enfermería',
-      'Nutrición Humana',
-      'Psicología',
-    ],
-    'Facultad de Ingeniería y Arquitectura': [
-      'Ingeniería Civil',
-      'Arquitectura y Urbanismo',
-      'Ingeniería Ambiental',
-      'Ingeniería de Industrias Alimentarias',
-      'Ingeniería de Sistemas',
-    ],
-  };
-
-  // FILTROS
+  // ── Filtros de ubicación ─────────────────────────────────────────
+  String? _filialSeleccionada;
+  String? _filialNombreSeleccionada; // ✅ nombre legible de la filial
   String? _facultadSeleccionada;
   String? _carreraSeleccionada;
-  List<String> _carrerasDisponibles = [];
 
-  // DATOS
+  List<String> _filialesDisponibles = [];
+  List<String> _facultadesDisponibles = [];
+  List<Map<String, dynamic>> _carrerasDisponibles = [];
+
+  // ── Datos de eventos ─────────────────────────────────────────────
   String? _eventoSeleccionado;
   Map<String, dynamic>? _eventoData;
   List<Map<String, dynamic>> _eventosDisponibles = [];
   List<Map<String, dynamic>> _eventosFiltrados = [];
 
-  // ESTADOS
+  // ── Estados ──────────────────────────────────────────────────────
+  bool _isLoadingInitial = true;
   bool _isLoadingEventos = false;
+
+  // ── Resumen de asistencias (para el banner informativo) ──────────
+  int _totalAsistencias = 0;
+  bool _isLoadingResumen = false;
 
   @override
   void initState() {
@@ -67,11 +53,9 @@ class _AsistenciasEstudiantesScreenState
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
-
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
     );
-
     _slideAnimation =
         Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
           CurvedAnimation(
@@ -81,7 +65,7 @@ class _AsistenciasEstudiantesScreenState
         );
 
     _animationController.forward();
-    _cargarEventos();
+    _cargarDatosIniciales();
   }
 
   @override
@@ -90,60 +74,122 @@ class _AsistenciasEstudiantesScreenState
     super.dispose();
   }
 
-  bool _requiereCarrera(String? facultad) {
-    if (facultad == null) return false;
-    return facultad != 'Universidad Peruana Unión';
+  // ═══════════════════════════════════════════════════════════════
+  // CARGA INICIAL
+  // ═══════════════════════════════════════════════════════════════
+  Future<void> _cargarDatosIniciales() async {
+    if (!mounted) return;
+    setState(() => _isLoadingInitial = true);
+
+    try {
+      final filiales = await _rubricasService.getFiliales();
+      if (mounted) {
+        setState(() => _filialesDisponibles = filiales);
+      }
+      await _cargarEventos();
+      if (mounted) {
+        setState(() => _isLoadingInitial = false);
+      }
+    } catch (e) {
+      print('Error cargando datos iniciales: $e');
+      if (mounted) {
+        setState(() => _isLoadingInitial = false);
+        _showSnackBar('Error al cargar datos: $e', isError: true);
+      }
+    }
   }
 
-  void _onFacultadChanged(String? facultad) {
+  // ── Cambio de filial ─────────────────────────────────────────────
+  Future<void> _onFilialChanged(String? filialId) async {
+    setState(() {
+      _filialSeleccionada = filialId;
+      _filialNombreSeleccionada = null;
+      _facultadSeleccionada = null;
+      _carreraSeleccionada = null;
+      _eventoSeleccionado = null;
+      _eventoData = null;
+      _facultadesDisponibles = [];
+      _carrerasDisponibles = [];
+      _totalAsistencias = 0;
+    });
+
+    if (filialId != null) {
+      // Obtener nombre legible de la filial
+      final nombre = await _rubricasService.getNombreFilial(filialId);
+      if (mounted) setState(() => _filialNombreSeleccionada = nombre);
+
+      final facultades = await _rubricasService.getFacultadesByFilial(filialId);
+      if (mounted) setState(() => _facultadesDisponibles = facultades);
+      _filtrarEventos();
+    }
+  }
+
+  // ── Cambio de facultad ───────────────────────────────────────────
+  Future<void> _onFacultadChanged(String? facultad) async {
     setState(() {
       _facultadSeleccionada = facultad;
       _carreraSeleccionada = null;
       _eventoSeleccionado = null;
       _eventoData = null;
-
-      if (facultad != null) {
-        _carrerasDisponibles = facultadesCarreras[facultad] ?? [];
-        _filtrarEventos();
-      } else {
-        _carrerasDisponibles = [];
-        _eventosFiltrados = [];
-      }
+      _carrerasDisponibles = [];
+      _totalAsistencias = 0;
     });
+
+    if (_filialSeleccionada != null && facultad != null) {
+      final carreras = await _rubricasService.getCarrerasByFacultad(
+        _filialSeleccionada!,
+        facultad,
+      );
+      if (mounted) setState(() => _carrerasDisponibles = carreras);
+    }
+    _filtrarEventos();
   }
 
+  // ── Cambio de carrera ────────────────────────────────────────────
   void _onCarreraChanged(String? carrera) {
     setState(() {
       _carreraSeleccionada = carrera;
       _eventoSeleccionado = null;
       _eventoData = null;
-      _filtrarEventos();
+      _totalAsistencias = 0;
     });
+    _filtrarEventos();
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ FILTRAR EVENTOS por filial + facultad + carrera
+  // ═══════════════════════════════════════════════════════════════
   void _filtrarEventos() {
-    if (_facultadSeleccionada == null) {
+    if (_filialSeleccionada == null) {
       setState(() => _eventosFiltrados = []);
       return;
     }
 
     List<Map<String, dynamic>> filtrados = _eventosDisponibles.where((evento) {
-      final facultadMatch = evento['facultad'] == _facultadSeleccionada;
+      // Comparar por filialId o filialNombre
+      final filialMatch =
+          evento['filialId'] == _filialSeleccionada ||
+          (_filialNombreSeleccionada != null &&
+              evento['filialNombre'] == _filialNombreSeleccionada);
 
-      if (_facultadSeleccionada == 'Universidad Peruana Unión') {
-        return facultadMatch;
+      if (!filialMatch) return false;
+
+      if (_facultadSeleccionada != null) {
+        if (evento['facultad'] != _facultadSeleccionada) return false;
+
+        if (_carreraSeleccionada != null) {
+          return evento['carreraNombre'] == _carreraSeleccionada ||
+              evento['carrera'] == _carreraSeleccionada;
+        }
+        return true;
       }
-
-      if (_carreraSeleccionada != null) {
-        return facultadMatch && evento['carrera'] == _carreraSeleccionada;
-      }
-
-      return facultadMatch;
+      return true;
     }).toList();
 
     setState(() => _eventosFiltrados = filtrados);
   }
 
+  // ── Cargar todos los eventos ─────────────────────────────────────
   Future<void> _cargarEventos() async {
     setState(() {
       _isLoadingEventos = true;
@@ -161,8 +207,14 @@ class _AsistenciasEstudiantesScreenState
         return {
           'id': doc.id,
           'name': data['name'] ?? 'Sin nombre',
+          'filialId': data['filialId'] ?? 'lima',
+          'filialNombre': data['filialNombre'] ?? data['sede'] ?? '',
           'facultad': data['facultad'] ?? '',
-          'carrera': data['carrera'] ?? 'General',
+          'carreraId': data['carreraId'] ?? '',
+          'carreraNombre': data['carreraNombre'] ?? data['carrera'] ?? '',
+          'carrera': data['carrera'] ?? '',
+          // ✅ Guardar sede del evento
+          'sede': data['sede'] ?? data['filialNombre'] ?? '',
         };
       }).toList();
 
@@ -173,7 +225,7 @@ class _AsistenciasEstudiantesScreenState
         });
       }
     } catch (e) {
-      print('Error al cargar eventos: $e');
+      print('Error cargando eventos: $e');
       if (mounted) {
         setState(() => _isLoadingEventos = false);
         _showSnackBar('Error al cargar eventos: $e', isError: true);
@@ -183,18 +235,39 @@ class _AsistenciasEstudiantesScreenState
 
   void _onEventoChanged(String? eventoId) {
     if (eventoId == null) return;
-
     final eventoData = _eventosFiltrados.firstWhere((e) => e['id'] == eventoId);
-
     setState(() {
       _eventoSeleccionado = eventoId;
       _eventoData = eventoData;
     });
+    _cargarResumenAsistencias(eventoId);
+  }
+
+  // ✅ Cargar número total de asistencias del evento seleccionado
+  Future<void> _cargarResumenAsistencias(String eventoId) async {
+    setState(() => _isLoadingResumen = true);
+    try {
+      final asistenciasSnap = await _firestore
+          .collection('events')
+          .doc(eventoId)
+          .collection('asistencias')
+          .get();
+      if (mounted)
+        setState(() => _totalAsistencias = asistenciasSnap.docs.length);
+    } catch (e) {
+      print('Error cargando resumen: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingResumen = false);
+    }
   }
 
   Future<void> _verAsistencias() async {
     if (_eventoSeleccionado == null) {
       _showSnackBar('Selecciona un evento primero', isError: true);
+      return;
+    }
+    if (_facultadSeleccionada == null) {
+      _showSnackBar('Selecciona una facultad primero', isError: true);
       return;
     }
 
@@ -204,6 +277,7 @@ class _AsistenciasEstudiantesScreenState
         builder: (context) => AsistenciasEstudiantesResultadosScreen(
           eventoId: _eventoSeleccionado!,
           eventoNombre: _eventoData!['name'],
+          filialId: _filialSeleccionada!,
           facultad: _facultadSeleccionada!,
           carrera: _carreraSeleccionada,
         ),
@@ -239,6 +313,64 @@ class _AsistenciasEstudiantesScreenState
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
+        // ✅ Mostrar sede seleccionada en el subtítulo del AppBar
+        bottom: _filialNombreSeleccionada != null
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(28),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.location_city,
+                        color: Colors.white70,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _filialNombreSeleccionada!,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
+                      ),
+                      if (_facultadSeleccionada != null) ...[
+                        const Text(
+                          ' › ',
+                          style: TextStyle(color: Colors.white38, fontSize: 13),
+                        ),
+                        Flexible(
+                          child: Text(
+                            _facultadSeleccionada!,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                      if (_carreraSeleccionada != null) ...[
+                        const Text(
+                          ' › ',
+                          style: TextStyle(color: Colors.white38, fontSize: 13),
+                        ),
+                        Flexible(
+                          child: Text(
+                            _carreraSeleccionada!,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              )
+            : null,
       ),
       body: FadeTransition(
         opacity: _fadeAnimation,
@@ -256,34 +388,60 @@ class _AsistenciasEstudiantesScreenState
                       topRight: Radius.circular(30),
                     ),
                   ),
-                  child: SingleChildScrollView(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // PASO 1: Filtros
-                          _buildFiltrosCard(),
+                  child: _isLoadingInitial
+                      ? const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircularProgressIndicator(
+                                color: Color(0xFF1A5490),
+                              ),
+                              SizedBox(height: 16),
+                              Text(
+                                'Cargando datos...',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // PASO 1: Filtros de ubicación
+                                _buildFiltrosCard(),
 
-                          // PASO 2: Selector de Evento
-                          if (_facultadSeleccionada != null &&
-                              (!_requiereCarrera(_facultadSeleccionada) ||
-                                  _carreraSeleccionada != null)) ...[
-                            const SizedBox(height: 16),
-                            _buildEventoCard(),
-                          ],
+                                // PASO 2: Selector de evento
+                                if (_filialSeleccionada != null &&
+                                    _facultadSeleccionada != null) ...[
+                                  const SizedBox(height: 16),
+                                  _buildEventoCard(),
+                                ],
 
-                          // PASO 3: Botón Ver Asistencias
-                          if (_eventoSeleccionado != null) ...[
-                            const SizedBox(height: 24),
-                            _buildBotonVerAsistencias(),
-                          ],
+                                // ✅ Resumen del evento seleccionado
+                                if (_eventoSeleccionado != null &&
+                                    _eventoData != null) ...[
+                                  const SizedBox(height: 16),
+                                  _buildResumenEventoCard(),
+                                ],
 
-                          const SizedBox(height: 20),
-                        ],
-                      ),
-                    ),
-                  ),
+                                // PASO 3: Botón ver asistencias
+                                if (_eventoSeleccionado != null) ...[
+                                  const SizedBox(height: 24),
+                                  _buildBotonVerAsistencias(),
+                                ],
+
+                                const SizedBox(height: 20),
+                              ],
+                            ),
+                          ),
+                        ),
                 ),
               ),
             ],
@@ -293,6 +451,9 @@ class _AsistenciasEstudiantesScreenState
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ CARD DE FILTROS CON RUTA DE NAVEGACIÓN (Filial › Facultad › Carrera)
+  // ═══════════════════════════════════════════════════════════════
   Widget _buildFiltrosCard() {
     return Card(
       elevation: 3,
@@ -321,7 +482,7 @@ class _AsistenciasEstudiantesScreenState
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
-                    '1. Filtrar por Facultad y Carrera',
+                    '1. Seleccionar Ubicación',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -331,55 +492,142 @@ class _AsistenciasEstudiantesScreenState
                 ),
               ],
             ),
+
+            // ✅ Breadcrumb visual
+            if (_filialNombreSeleccionada != null) ...[
+              const SizedBox(height: 12),
+              _buildBreadcrumb(),
+            ],
+
             const SizedBox(height: 16),
 
-            // Filtro Facultad
+            // Selector de Filial
             DropdownButtonFormField<String>(
-              value: _facultadSeleccionada,
+              value: _filialSeleccionada,
               isExpanded: true,
               decoration: InputDecoration(
-                labelText: 'Facultad',
-                prefixIcon: const Icon(Icons.school),
+                labelText: 'Filial / Sede',
+                prefixIcon: const Icon(
+                  Icons.location_city,
+                  color: Color(0xFF1E3A5F),
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
                 filled: true,
                 fillColor: Colors.white,
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF1E3A5F),
+                    width: 2,
+                  ),
+                ),
               ),
-              items: facultadesCarreras.keys.map((facultad) {
+              items: _filialesDisponibles.map((filialId) {
                 return DropdownMenuItem(
-                  value: facultad,
-                  child: Text(
-                    facultad,
-                    style: const TextStyle(fontSize: 14),
-                    overflow: TextOverflow.ellipsis,
+                  value: filialId,
+                  child: FutureBuilder<String>(
+                    future: _rubricasService.getNombreFilial(filialId),
+                    builder: (context, snapshot) {
+                      return Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            size: 16,
+                            color: Color(0xFF1E3A5F),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            snapshot.data ?? filialId,
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 );
               }).toList(),
-              onChanged: _onFacultadChanged,
+              onChanged: _onFilialChanged,
             ),
 
-            // Filtro Carrera
-            if (_facultadSeleccionada != null &&
-                _requiereCarrera(_facultadSeleccionada)) ...[
+            // Selector de Facultad
+            if (_filialSeleccionada != null) ...[
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: _carreraSeleccionada,
+                value: _facultadSeleccionada,
                 isExpanded: true,
                 decoration: InputDecoration(
-                  labelText: 'Carrera',
-                  prefixIcon: const Icon(Icons.menu_book),
+                  labelText: 'Facultad',
+                  prefixIcon: const Icon(
+                    Icons.account_balance,
+                    color: Color(0xFF3F51B5),
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   filled: true,
                   fillColor: Colors.white,
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF3F51B5),
+                      width: 2,
+                    ),
+                  ),
+                ),
+                items: _facultadesDisponibles.map((facultad) {
+                  return DropdownMenuItem(
+                    value: facultad,
+                    child: Text(
+                      facultad,
+                      style: const TextStyle(fontSize: 14),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }).toList(),
+                onChanged: _onFacultadChanged,
+              ),
+            ],
+
+            // Selector de Carrera (opcional)
+            if (_facultadSeleccionada != null &&
+                _carrerasDisponibles.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _carreraSeleccionada,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: 'Carrera (opcional)',
+                  prefixIcon: const Icon(
+                    Icons.menu_book,
+                    color: Color(0xFF00897B),
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF00897B),
+                      width: 2,
+                    ),
+                  ),
+                  suffixIcon: _carreraSeleccionada != null
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () => _onCarreraChanged(null),
+                          tooltip: 'Limpiar',
+                        )
+                      : null,
                 ),
                 items: _carrerasDisponibles.map((carrera) {
                   return DropdownMenuItem(
-                    value: carrera,
+                    value: carrera['nombre'] as String,
                     child: Text(
-                      carrera,
+                      carrera['nombre'] as String,
                       style: const TextStyle(fontSize: 13),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -389,16 +637,16 @@ class _AsistenciasEstudiantesScreenState
               ),
             ],
 
-            // Info de eventos disponibles
-            if (_facultadSeleccionada != null &&
-                (!_requiereCarrera(_facultadSeleccionada) ||
-                    _carreraSeleccionada != null)) ...[
+            // Contador de eventos disponibles
+            if (_filialSeleccionada != null &&
+                _facultadSeleccionada != null) ...[
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue.shade200),
                 ),
                 child: Row(
                   children: [
@@ -406,7 +654,7 @@ class _AsistenciasEstudiantesScreenState
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${_eventosFiltrados.length} evento(s) disponible(s)',
+                        '${_eventosFiltrados.length} evento(s) disponible(s)${_carreraSeleccionada != null ? ' para $_carreraSeleccionada' : ''}',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -424,6 +672,41 @@ class _AsistenciasEstudiantesScreenState
     );
   }
 
+  // ✅ Breadcrumb: Filial › Facultad › Carrera
+  Widget _buildBreadcrumb() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E3A5F).withOpacity(0.06),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.navigation, size: 14, color: Color(0xFF1E3A5F)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              [
+                _filialNombreSeleccionada ?? '',
+                if (_facultadSeleccionada != null) _facultadSeleccionada!,
+                if (_carreraSeleccionada != null) _carreraSeleccionada!,
+              ].where((s) => s.isNotEmpty).join(' › '),
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF1E3A5F),
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // CARD DE SELECCIÓN DE EVENTO
+  // ═══════════════════════════════════════════════════════════════
   Widget _buildEventoCard() {
     return Card(
       elevation: 3,
@@ -474,10 +757,26 @@ class _AsistenciasEstudiantesScreenState
               items: _eventosFiltrados.map((evento) {
                 return DropdownMenuItem(
                   value: evento['id'] as String,
-                  child: Text(
-                    evento['name'] as String,
-                    style: const TextStyle(fontSize: 14),
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        evento['name'] as String,
+                        style: const TextStyle(fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      // ✅ Mostrar sede del evento en el dropdown
+                      if ((evento['sede'] as String?)?.isNotEmpty == true)
+                        Text(
+                          '🏛️ ${evento['sede']}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.blue.shade600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
                   ),
                 );
               }).toList(),
@@ -490,6 +789,7 @@ class _AsistenciasEstudiantesScreenState
                 decoration: BoxDecoration(
                   color: Colors.green.shade50,
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green.shade300),
                 ),
                 child: Row(
                   children: [
@@ -500,13 +800,39 @@ class _AsistenciasEstudiantesScreenState
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        _eventoData!['name'],
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.green[900],
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _eventoData!['name'],
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green[900],
+                            ),
+                          ),
+                          // ✅ Sede del evento seleccionado
+                          if ((_eventoData!['sede'] as String?)?.isNotEmpty ==
+                              true)
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.location_city,
+                                  size: 12,
+                                  color: Colors.blue.shade600,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _eventoData!['sede'],
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.blue.shade700,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
                       ),
                     ),
                   ],
@@ -519,26 +845,191 @@ class _AsistenciasEstudiantesScreenState
     );
   }
 
-  Widget _buildBotonVerAsistencias() {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton.icon(
-        onPressed: _verAsistencias,
-        icon: const Icon(Icons.people_alt, size: 24),
-        label: const Text(
-          'Ver Asistencias',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF4A90E2),
-          foregroundColor: Colors.white,
-          elevation: 4,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ CARD RESUMEN DEL EVENTO (muestra sede + total asistencias)
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildResumenEventoCard() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF1E3A5F), Color(0xFF2A5298)],
           ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.analytics, color: Colors.white70, size: 18),
+                SizedBox(width: 8),
+                Text(
+                  'Resumen del Evento',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildResumenStat(
+                    icon: Icons.people_alt,
+                    label: 'Estudiantes',
+                    value: _isLoadingResumen ? '...' : '$_totalAsistencias',
+                    color: Colors.green.shade300,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildResumenStat(
+                    icon: Icons.location_city,
+                    label: 'Sede',
+                    value: _filialNombreSeleccionada ?? 'N/A',
+                    color: Colors.blue.shade300,
+                  ),
+                ),
+              ],
+            ),
+            if (_facultadSeleccionada != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.account_balance,
+                    color: Colors.white54,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _facultadSeleccionada!,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (_carreraSeleccionada != null) ...[
+                    const Text(
+                      ' › ',
+                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                    Flexible(
+                      child: Text(
+                        _carreraSeleccionada!,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildResumenStat({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // BOTÓN VER ASISTENCIAS
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildBotonVerAsistencias() {
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 56,
+          child: ElevatedButton.icon(
+            onPressed: _verAsistencias,
+            icon: const Icon(Icons.people_alt, size: 24),
+            label: const Text(
+              'Ver Asistencias',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4A90E2),
+              foregroundColor: Colors.white,
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+        if (_filialNombreSeleccionada != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Filtrando asistencias de: $_filialNombreSeleccionada${_carreraSeleccionada != null ? ' › $_carreraSeleccionada' : ''}',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+              fontStyle: FontStyle.italic,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ],
     );
   }
 }

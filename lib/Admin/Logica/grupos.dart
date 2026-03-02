@@ -32,6 +32,60 @@ class GruposService {
     }
   }
 
+  Future<void> actualizarCategoriaDeScansPorProyecto(
+    String eventId,
+    String codigoProyecto,
+    String nuevaCategoria,
+  ) async {
+    try {
+      print('🔄 Actualizando scans del proyecto: $codigoProyecto');
+      print('📝 Nueva categoría: $nuevaCategoria');
+
+      // Obtener todas las asistencias del evento
+      final asistenciasSnapshot = await _firestore
+          .collection('events')
+          .doc(eventId)
+          .collection('asistencias')
+          .get();
+
+      int scansActualizados = 0;
+      final batch = _firestore.batch();
+
+      // Recorrer cada estudiante
+      for (final estudianteDoc in asistenciasSnapshot.docs) {
+        // Buscar scans con el código del proyecto
+        final scansSnapshot = await _firestore
+            .collection('events')
+            .doc(eventId)
+            .collection('asistencias')
+            .doc(estudianteDoc.id)
+            .collection('scans')
+            .where('codigoProyecto', isEqualTo: codigoProyecto)
+            .get();
+
+        // Actualizar cada scan encontrado
+        for (final scanDoc in scansSnapshot.docs) {
+          batch.update(scanDoc.reference, {
+            'categoria': nuevaCategoria,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+          scansActualizados++;
+        }
+      }
+
+      // Ejecutar todas las actualizaciones
+      if (scansActualizados > 0) {
+        await batch.commit();
+        print('✅ Se actualizaron $scansActualizados scans');
+      } else {
+        print('ℹ️ No se encontraron scans para actualizar');
+      }
+    } catch (e) {
+      print('❌ Error al actualizar scans: $e');
+      rethrow;
+    }
+  }
+
   // Importar Excel y retornar los datos procesados
   Future<List<Map<String, dynamic>>?> importarExcel() async {
     try {
@@ -341,19 +395,44 @@ class GruposService {
     }
   }
 
-  // Actualizar un proyecto en Firebase
   Future<void> actualizarProyecto(
     String eventId,
     String docId,
     Map<String, dynamic> nuevosDatos,
   ) async {
     try {
+      // Primero, obtener los datos actuales del proyecto
+      final proyectoDoc = await _firestore
+          .collection('events')
+          .doc(eventId)
+          .collection('proyectos')
+          .doc(docId)
+          .get();
+
+      final datosAntiguos = proyectoDoc.data();
+
+      // Actualizar el proyecto
       await _firestore
           .collection('events')
           .doc(eventId)
           .collection('proyectos')
           .doc(docId)
           .update({...nuevosDatos, 'updatedAt': FieldValue.serverTimestamp()});
+
+      // ✅ Si cambió la clasificación, actualizar todos los scans relacionados
+      if (datosAntiguos != null &&
+          nuevosDatos.containsKey('Clasificación') &&
+          datosAntiguos['Clasificación'] != nuevosDatos['Clasificación']) {
+        final codigoProyecto = nuevosDatos['Código'] ?? datosAntiguos['Código'];
+        final nuevaCategoria = nuevosDatos['Clasificación'];
+
+        print('⚠️ La clasificación cambió. Actualizando scans...');
+        await actualizarCategoriaDeScansPorProyecto(
+          eventId,
+          codigoProyecto,
+          nuevaCategoria,
+        );
+      }
     } catch (e) {
       print('Error al actualizar proyecto: $e');
       rethrow;

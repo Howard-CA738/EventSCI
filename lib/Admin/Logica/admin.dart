@@ -4,12 +4,15 @@ import '/login.dart';
 import 'registro_estudiantes.dart';
 import '/admin/interfaz/crear_eventos_screen.dart';
 import 'gestion_grupos.dart';
-import '/admin/interfaz/seleccionar_ganadores_screen.dart';
+
 import 'reportes.dart';
 import 'asignar_proyectos.dart';
 import 'periodos.dart';
 import 'gestion_rubricas.dart';
-import 'evaluaciones.dart'; // ✅ NUEVA IMPORTACIÓN
+import 'evaluaciones.dart';
+import 'editar_admin.dart';
+import 'crear_filiales.dart';
+import '/admin_carrera/gestion_admins_carrera.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -141,6 +144,20 @@ class _AdminScreenState extends State<AdminScreen> {
                         },
                       ),
                       _buildMenuCard(
+                        imagePath:
+                            'assets/icons/admin_carrera.png', // Puedes usar otro icono si no tienes este
+                        title: 'Admins de\nCarrera',
+                        subtitle: 'Gestionar administradores',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const GestionAdminsCarreraScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _buildMenuCard(
                         imagePath: 'assets/icons/reunion.png',
                         title: 'Gestión de\nGrupos',
                         subtitle: 'Organizar estudiantes en grupos',
@@ -152,19 +169,7 @@ class _AdminScreenState extends State<AdminScreen> {
                           );
                         },
                       ),
-                      _buildMenuCard(
-                        imagePath: 'assets/icons/trofeo.png',
-                        title: 'Seleccionar\nGanadores',
-                        subtitle: 'Elegir grupos ganadores',
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const SeleccionarGanadorScreen(),
-                            ),
-                          );
-                        },
-                      ),
+
                       _buildMenuCard(
                         imagePath: 'assets/icons/criterios.png',
                         title: 'Gestión de\nRúbricas',
@@ -191,7 +196,6 @@ class _AdminScreenState extends State<AdminScreen> {
                           );
                         },
                       ),
-                      // ✅ NUEVA OPCIÓN: Ver Evaluaciones
                       _buildMenuCard(
                         imagePath: 'assets/icons/evaluaciones.png',
                         title: 'Ver\nEvaluaciones',
@@ -224,6 +228,31 @@ class _AdminScreenState extends State<AdminScreen> {
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (context) => const ReportesScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _buildMenuCard(
+                        imagePath: 'assets/icons/filiales.png',
+                        title: 'Gestión de\nFiliales',
+                        subtitle: 'Administrar filiales y carreras',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const CrearFilialesScreen(),
+                            ),
+                          );
+                        },
+                      ),
+
+                      _buildMenuCard(
+                        imagePath: 'assets/icons/admin.png',
+                        title: 'Editar\nCuenta',
+                        subtitle: 'Modificar datos de administrador',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const EditarAdminScreen(),
                             ),
                           );
                         },

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/admin/logica/gestion_criterios.dart';
+import '/admin/logica/filiales_service.dart';
 
 // Archivo: lib/admin/interfaz/evaluaciones.dart
 
@@ -14,38 +15,21 @@ class EvaluacionesScreen extends StatefulWidget {
 class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final RubricasService _rubricasService = RubricasService();
+  final FilialesService _filialesService = FilialesService();
 
-  // Estructura de facultades y carreras
-  final Map<String, List<String>> facultadesCarreras = {
-    'Universidad Peruana Unión': [],
-    'Facultad de Ciencias Empresariales': [
-      'Administración',
-      'Contabilidad',
-      'Gestión Tributaria y Aduanera',
-    ],
-    'Facultad de Ciencias Humanas y Educación': [
-      'Educación, Especialidad Inicial y Puericultura',
-      'Educación, Especialidad Primaria y Pedagogía Terapéutica',
-      'Educación, Especialidad Inglés y Español',
-    ],
-    'Facultad de Ciencias de la Salud': [
-      'Enfermería',
-      'Nutrición Humana',
-      'Psicología',
-    ],
-    'Facultad de Ingeniería y Arquitectura': [
-      'Ingeniería Civil',
-      'Arquitectura y Urbanismo',
-      'Ingeniería Ambiental',
-      'Ingeniería de Industrias Alimentarias',
-      'Ingeniería de Sistemas',
-    ],
-  };
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ ESTRUCTURA DE FILIALES DESDE FIREBASE
+  // ═══════════════════════════════════════════════════════════════
+  Map<String, dynamic> _estructuraFiliales = {};
+  List<String> _filiales = [];
+  List<String> _facultadesDisponibles = [];
+  List<Map<String, dynamic>> _carrerasDisponibles = [];
+  bool _isLoadingFiliales = true;
 
   // FILTROS
+  String? _filialSeleccionada;
   String? _facultadSeleccionada;
   String? _carreraSeleccionada;
-  List<String> _carrerasDisponibles = [];
 
   // DATOS
   String? _eventoSeleccionado;
@@ -62,14 +46,78 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
   @override
   void initState() {
     super.initState();
-    _cargarEventos();
+    _loadFiliales();
   }
 
-  bool _requiereCarrera(String? facultad) {
-    if (facultad == null) return false;
-    return facultad != 'Universidad Peruana Unión';
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ CARGAR ESTRUCTURA DE FILIALES
+  // ═══════════════════════════════════════════════════════════════
+  Future<void> _loadFiliales() async {
+    setState(() {
+      _isLoadingFiliales = true;
+    });
+
+    try {
+      // Inicializar si es necesario
+      await _filialesService.inicializarSiEsNecesario();
+
+      // Obtener estructura completa (con caché de 24h)
+      _estructuraFiliales = await _filialesService.getEstructuraCompleta();
+
+      // Obtener lista de filiales
+      _filiales = _estructuraFiliales.keys.toList();
+
+      print('✅ Filiales cargadas: $_filiales');
+
+      // Cargar eventos después de cargar filiales
+      await _cargarEventos();
+    } catch (e) {
+      print('❌ Error cargando filiales: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error cargando filiales: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+
+    setState(() {
+      _isLoadingFiliales = false;
+    });
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ ACTUALIZAR FACULTADES SEGÚN FILIAL
+  // ═══════════════════════════════════════════════════════════════
+  void _onFilialChanged(String? filial) {
+    setState(() {
+      _filialSeleccionada = filial;
+      _facultadSeleccionada = null;
+      _carreraSeleccionada = null;
+      _eventoSeleccionado = null;
+      _eventoData = null;
+      _evaluaciones.clear();
+      _facultadesDisponibles = [];
+      _carrerasDisponibles = [];
+
+      if (filial != null && _estructuraFiliales.containsKey(filial)) {
+        final filialData = _estructuraFiliales[filial];
+        final facultades = filialData['facultades'] as Map<String, dynamic>?;
+
+        if (facultades != null) {
+          _facultadesDisponibles = facultades.keys.toList();
+        }
+      }
+
+      _filtrarEventos();
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ ACTUALIZAR CARRERAS SEGÚN FACULTAD
+  // ═══════════════════════════════════════════════════════════════
   void _onFacultadChanged(String? facultad) {
     setState(() {
       _facultadSeleccionada = facultad;
@@ -77,14 +125,23 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
       _eventoSeleccionado = null;
       _eventoData = null;
       _evaluaciones.clear();
+      _carrerasDisponibles = [];
 
-      if (facultad != null) {
-        _carrerasDisponibles = facultadesCarreras[facultad] ?? [];
-        _filtrarEventos();
-      } else {
-        _carrerasDisponibles = [];
-        _eventosFiltrados = [];
+      if (_filialSeleccionada != null &&
+          facultad != null &&
+          _estructuraFiliales.containsKey(_filialSeleccionada)) {
+        final filialData = _estructuraFiliales[_filialSeleccionada!];
+        final facultades = filialData['facultades'] as Map<String, dynamic>?;
+
+        if (facultades != null && facultades.containsKey(facultad)) {
+          final facultadData = facultades[facultad];
+          _carrerasDisponibles = List<Map<String, dynamic>>.from(
+            facultadData['carreras'] ?? [],
+          );
+        }
       }
+
+      _filtrarEventos();
     });
   }
 
@@ -99,23 +156,28 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
   }
 
   void _filtrarEventos() {
-    if (_facultadSeleccionada == null) {
+    if (_filialSeleccionada == null || _facultadSeleccionada == null) {
       setState(() => _eventosFiltrados = []);
       return;
     }
 
+    final nombreSede = _filialesService.getNombreFilial(_filialSeleccionada!);
+
     List<Map<String, dynamic>> filtrados = _eventosDisponibles.where((evento) {
+      // Filtrar por sede
+      final sedeMatch = evento['sede'] == nombreSede;
+      if (!sedeMatch) return false;
+
+      // Filtrar por facultad
       final facultadMatch = evento['facultad'] == _facultadSeleccionada;
+      if (!facultadMatch) return false;
 
-      if (_facultadSeleccionada == 'Universidad Peruana Unión') {
-        return facultadMatch;
-      }
-
+      // Filtrar por carrera si está seleccionada
       if (_carreraSeleccionada != null) {
-        return facultadMatch && evento['carrera'] == _carreraSeleccionada;
+        return evento['carrera'] == _carreraSeleccionada;
       }
 
-      return facultadMatch;
+      return true;
     }).toList();
 
     setState(() => _eventosFiltrados = filtrados);
@@ -138,6 +200,7 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
         return {
           'id': doc.id,
           'name': data['name'] ?? 'Sin nombre',
+          'sede': data['sede'] ?? '',
           'facultad': data['facultad'] ?? '',
           'carrera': data['carrera'] ?? 'General',
         };
@@ -768,41 +831,59 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
                     topRight: Radius.circular(30),
                   ),
                 ),
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // PASO 1: Filtros
-                        _buildFiltrosCard(),
+                child: _isLoadingFiliales
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const CircularProgressIndicator(
+                              color: Color(0xFF1E3A5F),
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Cargando filiales...',
+                              style: TextStyle(
+                                color: Color(0xFF1E3A5F),
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : SingleChildScrollView(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // PASO 1: Filtros
+                              _buildFiltrosCard(),
 
-                        // PASO 2: Selector de Evento
-                        if (_facultadSeleccionada != null &&
-                            (!_requiereCarrera(_facultadSeleccionada) ||
-                                _carreraSeleccionada != null)) ...[
-                          const SizedBox(height: 16),
-                          _buildEventoCard(),
-                        ],
+                              // PASO 2: Selector de Evento
+                              if (_filialSeleccionada != null &&
+                                  _facultadSeleccionada != null) ...[
+                                const SizedBox(height: 16),
+                                _buildEventoCard(),
+                              ],
 
-                        // Resumen de evaluaciones
-                        if (_eventoSeleccionado != null &&
-                            !_isLoadingEvaluaciones) ...[
-                          const SizedBox(height: 16),
-                          _buildResumenCard(),
-                        ],
+                              // Resumen de evaluaciones
+                              if (_eventoSeleccionado != null &&
+                                  !_isLoadingEvaluaciones) ...[
+                                const SizedBox(height: 16),
+                                _buildResumenCard(),
+                              ],
 
-                        // Lista de evaluaciones
-                        if (_eventoSeleccionado != null) ...[
-                          const SizedBox(height: 16),
-                          _buildEvaluacionesCard(),
-                        ],
+                              // Lista de evaluaciones
+                              if (_eventoSeleccionado != null) ...[
+                                const SizedBox(height: 16),
+                                _buildEvaluacionesCard(),
+                              ],
 
-                        const SizedBox(height: 20),
-                      ],
-                    ),
-                  ),
-                ),
+                              const SizedBox(height: 20),
+                            ],
+                          ),
+                        ),
+                      ),
               ),
             ),
           ],
@@ -839,7 +920,7 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
-                    '1. Filtrar por Facultad y Carrera',
+                    '1. Filtrar por Filial, Facultad y Carrera',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -851,41 +932,72 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Filtro Facultad
+            // ✅ Filtro Filial
             DropdownButtonFormField<String>(
-              value: _facultadSeleccionada,
+              value: _filialSeleccionada,
               isExpanded: true,
               decoration: InputDecoration(
-                labelText: 'Facultad',
-                prefixIcon: const Icon(Icons.school),
+                labelText: 'Filial (Sede)',
+                prefixIcon: const Icon(Icons.location_city),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
                 filled: true,
                 fillColor: Colors.white,
               ),
-              items: facultadesCarreras.keys.map((facultad) {
+              items: _filiales.map((filial) {
+                final nombre = _filialesService.getNombreFilial(filial);
+                final ubicacion = _filialesService.getUbicacionFilial(filial);
                 return DropdownMenuItem(
-                  value: facultad,
+                  value: filial,
                   child: Text(
-                    facultad,
+                    '$nombre - $ubicacion',
                     style: const TextStyle(fontSize: 14),
                     overflow: TextOverflow.ellipsis,
                   ),
                 );
               }).toList(),
-              onChanged: _onFacultadChanged,
+              onChanged: _onFilialChanged,
             ),
 
-            // Filtro Carrera
+            // ✅ Filtro Facultad
+            if (_filialSeleccionada != null) ...[
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _facultadSeleccionada,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: 'Facultad',
+                  prefixIcon: const Icon(Icons.school),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+                items: _facultadesDisponibles.map((facultad) {
+                  return DropdownMenuItem(
+                    value: facultad,
+                    child: Text(
+                      facultad,
+                      style: const TextStyle(fontSize: 14),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }).toList(),
+                onChanged: _onFacultadChanged,
+              ),
+            ],
+
+            // ✅ Filtro Carrera
             if (_facultadSeleccionada != null &&
-                _requiereCarrera(_facultadSeleccionada)) ...[
+                _carrerasDisponibles.isNotEmpty) ...[
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: _carreraSeleccionada,
                 isExpanded: true,
                 decoration: InputDecoration(
-                  labelText: 'Carrera',
+                  labelText: 'Carrera (Opcional)',
                   prefixIcon: const Icon(Icons.menu_book),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -894,10 +1006,10 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
                   fillColor: Colors.white,
                 ),
                 items: _carrerasDisponibles.map((carrera) {
-                  return DropdownMenuItem(
-                    value: carrera,
+                  return DropdownMenuItem<String>(
+                    value: carrera['nombre'] as String,
                     child: Text(
-                      carrera,
+                      carrera['nombre'] as String,
                       style: const TextStyle(fontSize: 13),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -908,9 +1020,8 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
             ],
 
             // Info de eventos disponibles
-            if (_facultadSeleccionada != null &&
-                (!_requiereCarrera(_facultadSeleccionada) ||
-                    _carreraSeleccionada != null)) ...[
+            if (_filialSeleccionada != null &&
+                _facultadSeleccionada != null) ...[
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),

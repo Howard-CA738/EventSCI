@@ -18,7 +18,14 @@ class _EstudiantesRegistradosScreenState
   String? _selectedFacultad;
   String? _selectedCarrera;
   final _searchController = TextEditingController();
-
+  // Controladores para edición
+  final TextEditingController _editNombreController = TextEditingController();
+  final TextEditingController _editEmailController = TextEditingController();
+  final TextEditingController _editCodigoController = TextEditingController();
+  final TextEditingController _editDniController = TextEditingController();
+  final TextEditingController _editCelularController = TextEditingController();
+  final TextEditingController _editCorreoInstitucionalController =
+      TextEditingController();
   Set<String> _expandedStudents = {};
   late AnimationController _fabAnimationController;
   late AnimationController _filterAnimationController;
@@ -68,6 +75,13 @@ class _EstudiantesRegistradosScreenState
     _searchController.dispose();
     _fabAnimationController.dispose();
     _filterAnimationController.dispose();
+    // Agregar estos:
+    _editNombreController.dispose();
+    _editEmailController.dispose();
+    _editCodigoController.dispose();
+    _editDniController.dispose();
+    _editCelularController.dispose();
+    _editCorreoInstitucionalController.dispose();
     super.dispose();
   }
 
@@ -75,6 +89,387 @@ class _EstudiantesRegistradosScreenState
   bool _requiereCarrera(String? facultad) {
     if (facultad == null) return true;
     return facultad != 'Universidad Peruana Unión';
+  }
+
+  Future<void> _showEditDialog(
+    Map<String, dynamic> student,
+    String carreraPath,
+    String studentId,
+  ) async {
+    // Inicializar controladores con datos actuales
+    _editNombreController.text = student['name'] ?? '';
+    _editEmailController.text = student['email'] ?? '';
+    _editCodigoController.text = student['codigoUniversitario'] ?? '';
+    _editDniController.text = student['dni'] ?? '';
+    _editCelularController.text = student['celular'] ?? '';
+    _editCorreoInstitucionalController.text =
+        student['correoInstitucional'] ?? '';
+
+    // Listas de opciones válidas
+    final modoContratoOptions = ['Regular', 'Convenio', 'Especial'];
+    final modalidadEstudioOptions = ['Presencial', 'Semipresencial', 'Virtual'];
+    final cicloOptions = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+    final grupoOptions = ['Único', '1', '2', '3', '4'];
+
+    // Variables para dropdowns - validar que existan en las opciones
+    String? selectedModoContrato = student['modoContrato'];
+    if (selectedModoContrato != null &&
+        !modoContratoOptions.contains(selectedModoContrato)) {
+      selectedModoContrato = null;
+    }
+
+    String? selectedModalidadEstudio = student['modalidadEstudio'];
+    if (selectedModalidadEstudio != null &&
+        !modalidadEstudioOptions.contains(selectedModalidadEstudio)) {
+      selectedModalidadEstudio = null;
+    }
+
+    String? selectedCiclo = student['ciclo'];
+    if (selectedCiclo != null && !cicloOptions.contains(selectedCiclo)) {
+      selectedCiclo = null;
+    }
+
+    String? selectedGrupo = student['grupo'];
+    if (selectedGrupo != null && !grupoOptions.contains(selectedGrupo)) {
+      selectedGrupo = null;
+    }
+
+    String? selectedSede = student['sede'];
+
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.edit, color: Color(0xFF1E3A5F)),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Editar Estudiante',
+                  style: TextStyle(fontSize: 18),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.9,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Nombre
+                    TextFormField(
+                      controller: _editNombreController,
+                      decoration: InputDecoration(
+                        labelText: 'Nombre completo',
+                        prefixIcon: const Icon(Icons.person),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'El nombre es requerido';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Email
+                    TextFormField(
+                      controller: _editEmailController,
+                      decoration: InputDecoration(
+                        labelText: 'Email',
+                        prefixIcon: const Icon(Icons.email),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Código universitario
+                    TextFormField(
+                      controller: _editCodigoController,
+                      decoration: InputDecoration(
+                        labelText: 'Código universitario',
+                        prefixIcon: const Icon(Icons.badge),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // DNI
+                    TextFormField(
+                      controller: _editDniController,
+                      decoration: InputDecoration(
+                        labelText: 'DNI',
+                        prefixIcon: const Icon(Icons.credit_card),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Celular
+                    TextFormField(
+                      controller: _editCelularController,
+                      decoration: InputDecoration(
+                        labelText: 'Celular',
+                        prefixIcon: const Icon(Icons.phone),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Correo institucional
+                    TextFormField(
+                      controller: _editCorreoInstitucionalController,
+                      decoration: InputDecoration(
+                        labelText: 'Correo institucional',
+                        prefixIcon: const Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Modo Contrato
+                    DropdownButtonFormField<String>(
+                      value: selectedModoContrato,
+                      decoration: InputDecoration(
+                        labelText: 'Modo Contrato',
+                        prefixIcon: const Icon(Icons.description),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('Sin seleccionar'),
+                        ),
+                        ...modoContratoOptions.map(
+                          (modo) =>
+                              DropdownMenuItem(value: modo, child: Text(modo)),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setDialogState(() {
+                          selectedModoContrato = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Modalidad Estudio
+                    DropdownButtonFormField<String>(
+                      value: selectedModalidadEstudio,
+                      decoration: InputDecoration(
+                        labelText: 'Modalidad Estudio',
+                        prefixIcon: const Icon(Icons.school),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('Sin seleccionar'),
+                        ),
+                        ...modalidadEstudioOptions.map(
+                          (modalidad) => DropdownMenuItem(
+                            value: modalidad,
+                            child: Text(modalidad),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setDialogState(() {
+                          selectedModalidadEstudio = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Ciclo
+                    DropdownButtonFormField<String>(
+                      value: selectedCiclo,
+                      decoration: InputDecoration(
+                        labelText: 'Ciclo',
+                        prefixIcon: const Icon(Icons.layers),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('Sin seleccionar'),
+                        ),
+                        ...cicloOptions.map(
+                          (ciclo) => DropdownMenuItem(
+                            value: ciclo,
+                            child: Text('Ciclo $ciclo'),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setDialogState(() {
+                          selectedCiclo = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Grupo
+                    DropdownButtonFormField<String>(
+                      value: selectedGrupo,
+                      decoration: InputDecoration(
+                        labelText: 'Grupo',
+                        prefixIcon: const Icon(Icons.groups),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('Sin seleccionar'),
+                        ),
+                        ...grupoOptions.map(
+                          (grupo) => DropdownMenuItem(
+                            value: grupo,
+                            child: Text('Grupo $grupo'),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setDialogState(() {
+                          selectedGrupo = value;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (formKey.currentState!.validate()) {
+                  Navigator.of(context).pop();
+                  await _updateStudent(
+                    carreraPath: carreraPath,
+                    studentId: studentId,
+                    name: _editNombreController.text.trim(),
+                    email: _editEmailController.text.trim(),
+                    codigoUniversitario: _editCodigoController.text.trim(),
+                    dni: _editDniController.text.trim(),
+                    celular: _editCelularController.text.trim(),
+                    correoInstitucional: _editCorreoInstitucionalController.text
+                        .trim(),
+                    modoContrato: selectedModoContrato,
+                    modalidadEstudio: selectedModalidadEstudio,
+                    ciclo: selectedCiclo,
+                    grupo: selectedGrupo,
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1E3A5F),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _updateStudent({
+    required String carreraPath,
+    required String studentId,
+    String? name,
+    String? email,
+    String? codigoUniversitario,
+    String? dni,
+    String? celular,
+    String? correoInstitucional,
+    String? modoContrato,
+    String? modalidadEstudio,
+    String? ciclo,
+    String? grupo,
+  }) async {
+    setState(() => _isLoading = true);
+
+    try {
+      final success = await PrefsHelper.updateStudent(
+        carreraPath: carreraPath,
+        studentId: studentId,
+        name: name?.isNotEmpty == true ? name : null,
+        email: email?.isNotEmpty == true ? email : null,
+        codigoUniversitario: codigoUniversitario?.isNotEmpty == true
+            ? codigoUniversitario
+            : null,
+        dni: dni?.isNotEmpty == true ? dni : null,
+        celular: celular?.isNotEmpty == true ? celular : null,
+        correoInstitucional: correoInstitucional?.isNotEmpty == true
+            ? correoInstitucional
+            : null,
+        modoContrato: modoContrato,
+        modalidadEstudio: modalidadEstudio,
+        ciclo: ciclo,
+        grupo: grupo,
+      );
+
+      if (success) {
+        _showMessage('✅ Estudiante actualizado exitosamente');
+        await _loadStudents();
+      } else {
+        _showMessage('❌ Error actualizando estudiante');
+      }
+    } catch (e) {
+      _showMessage('❌ Error: $e');
+      print('Error actualizando estudiante: $e');
+    }
+
+    setState(() => _isLoading = false);
   }
 
   Future<void> _loadStudents() async {
@@ -981,6 +1376,16 @@ class _EstudiantesRegistradosScreenState
                       ),
                       itemBuilder: (context) => [
                         const PopupMenuItem<String>(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit, color: Color(0xFF1E3A5F)),
+                              SizedBox(width: 8),
+                              Text('Editar'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem<String>(
                           value: 'delete',
                           child: Row(
                             children: [
@@ -992,7 +1397,9 @@ class _EstudiantesRegistradosScreenState
                         ),
                       ],
                       onSelected: (value) {
-                        if (value == 'delete') {
+                        if (value == 'edit') {
+                          _showEditDialog(student, carreraPath, studentId);
+                        } else if (value == 'delete') {
                           _deleteStudent(
                             carreraPath,
                             studentId,

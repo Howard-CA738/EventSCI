@@ -9,16 +9,12 @@ import '/login.dart';
 import '/admin/logica/admin.dart';
 import '/usuarios/logica/estudiante.dart';
 import '/Asistentes/asistentes.dart';
-import '/Jurados/jurados.dart'; // ✅ AGREGADO
+import '/Jurados/jurados.dart';
 import '/prefs_helper.dart';
 
 void main() async {
-  // Asegurar que Flutter esté inicializado
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Inicializar Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
   runApp(const MyApp());
 }
 
@@ -48,9 +44,7 @@ class _MyAppState extends State<MyApp> {
     super.dispose();
   }
 
-  // Inicializar listener de deep links - USANDO APP_LINKS
   void _initDeepLinkListener() {
-    // Manejar deep link cuando la app ya está abierta
     _linkSubscription = _appLinks.uriLinkStream.listen(
       (Uri uri) {
         print('Deep link recibido: ${uri.toString()}');
@@ -61,11 +55,9 @@ class _MyAppState extends State<MyApp> {
       },
     );
 
-    // Manejar deep link cuando la app se abre por primera vez
     _handleInitialLink();
   }
 
-  // Manejar deep link inicial (cuando la app se abre desde cerrada)
   Future<void> _handleInitialLink() async {
     try {
       final Uri? initialUri = await _appLinks.getInitialAppLink();
@@ -78,7 +70,6 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
-  // Procesar el deep link
   void _handleDeepLink(String link) {
     try {
       final uri = Uri.parse(link);
@@ -88,13 +79,10 @@ class _MyAppState extends State<MyApp> {
 
         if (encodedData != null) {
           try {
-            // Decodificar los datos
             final String decodedData = Uri.decodeComponent(encodedData);
             final Map<String, dynamic> qrData = jsonDecode(decodedData);
 
             print('Datos del QR decodificados: $qrData');
-
-            // Navegar a la pantalla de asistencia
             _navigateToAsistencia(qrData);
           } catch (e) {
             print('Error decodificando datos del QR: $e');
@@ -113,13 +101,10 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
-  // Navegar a la pantalla de asistencia
   void _navigateToAsistencia(Map<String, dynamic> qrData) {
-    // Verificar si el usuario está logueado
     PrefsHelper.isLoggedIn().then((isLoggedIn) {
       if (!isLoggedIn) {
-        // Si no está logueado, guardar los datos y redirigir al login
-        _pendingDeepLink = null; // Limpiar pending link
+        _pendingDeepLink = null;
         _showErrorDialog(
           'Sesión requerida',
           'Necesitas iniciar sesión para registrar tu asistencia',
@@ -127,7 +112,6 @@ class _MyAppState extends State<MyApp> {
         return;
       }
 
-      // Verificar tipo de usuario
       PrefsHelper.getUserType().then((userType) {
         if (userType != PrefsHelper.userTypeStudent) {
           _showErrorDialog(
@@ -137,7 +121,6 @@ class _MyAppState extends State<MyApp> {
           return;
         }
 
-        // Navegar a la pantalla de registro de asistencia
         navigatorKey.currentState?.pushNamed(
           '/registro-asistencia',
           arguments: qrData,
@@ -146,7 +129,6 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
-  // Mostrar dialog de error
   void _showErrorDialog(String title, String message) {
     if (navigatorKey.currentContext != null) {
       showDialog(
@@ -175,38 +157,30 @@ class _MyAppState extends State<MyApp> {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      // Agregar soporte para localización
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('es', 'ES'), // Español
-        Locale('en', 'US'), // Inglés (fallback)
-      ],
+      supportedLocales: const [Locale('es', 'ES'), Locale('en', 'US')],
       locale: const Locale('es', 'ES'),
-
-      // Rutas de la aplicación - ACTUALIZADAS
       routes: {
         '/login': (context) => const LoginScreen(),
         '/admin': (context) => const AdminScreen(),
         '/estudiante': (context) => const EstudianteScreen(),
         '/asistente': (context) => const AsistentesScreen(),
-        '/jurado': (context) => const JuradosScreen(), // ✅ AGREGADO
+        '/jurado': (context) => const JuradosScreen(),
         '/registro-asistencia': (context) => RegistroAsistenciaScreen(
           qrData:
               ModalRoute.of(context)?.settings.arguments
                   as Map<String, dynamic>?,
         ),
       },
-
       home: AuthWrapper(pendingDeepLink: _pendingDeepLink),
     );
   }
 }
 
-// Widget que verifica si hay sesión activa - ACTUALIZADO ✅
 class AuthWrapper extends StatefulWidget {
   final String? pendingDeepLink;
 
@@ -220,7 +194,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void initState() {
     super.initState();
-    // Procesar deep link pendiente después de que se complete la autenticación
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _processPendingDeepLink();
     });
@@ -228,7 +201,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   void _processPendingDeepLink() {
     if (widget.pendingDeepLink != null) {
-      // Usar el contexto de MyApp para procesar el deep link
       final myAppState = context.findAncestorStateOfType<_MyAppState>();
       myAppState?._handleDeepLink(widget.pendingDeepLink!);
     }
@@ -255,7 +227,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
 
         if (snapshot.hasData && snapshot.data == true) {
-          // Hay sesión activa, verificar tipo de usuario
           return FutureBuilder<String?>(
             future: PrefsHelper.getUserType(),
             builder: (context, userTypeSnapshot) {
@@ -275,20 +246,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
               }
 
               final userType = userTypeSnapshot.data;
-              print('🔍 UserType detectado en AuthWrapper: $userType'); // ✅ LOG
+              print('🔍 UserType detectado en AuthWrapper: $userType');
 
               if (userType == PrefsHelper.userTypeAdmin) {
                 return const AdminScreen();
               } else if (userType == PrefsHelper.userTypeAsistente) {
                 return const AsistentesScreen();
               } else if (userType == PrefsHelper.userTypeJurado) {
-                // ✅ AGREGADO SOPORTE PARA JURADO
                 print('✅ Navegando a JuradosScreen');
                 return const JuradosScreen();
               } else if (userType == PrefsHelper.userTypeStudent) {
                 return const EstudianteScreen();
               } else {
-                // Tipo de usuario desconocido, cerrar sesión
                 print('❌ Tipo de usuario desconocido: $userType');
                 PrefsHelper.logout();
                 return const LoginScreen();
@@ -297,17 +266,28 @@ class _AuthWrapperState extends State<AuthWrapper> {
           );
         }
 
-        // No hay sesión activa
+        // No hay sesión activa o fue invalidada
         return const LoginScreen();
       },
     );
   }
 
+  // ✅ ACTUALIZADO: Verifica sesión activa Y que la contraseña no haya cambiado
   Future<bool> _checkAuthStatus() async {
     try {
       final isLoggedIn = await PrefsHelper.isLoggedIn();
       print('🔍 Estado de sesión: $isLoggedIn');
-      return isLoggedIn;
+      if (!isLoggedIn) return false;
+
+      // ✅ Verificar si la sesión sigue siendo válida (contraseña no cambió)
+      final isValid = await PrefsHelper.isSessionValid();
+      if (!isValid) {
+        print('🔒 Sesión invalidada por cambio de contraseña');
+        await PrefsHelper.logout();
+        return false;
+      }
+
+      return true;
     } catch (e) {
       print('Error verificando estado de autenticación: $e');
       return false;
@@ -315,7 +295,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 }
 
-// Pantalla para registrar asistencia (placeholder - debes implementarla)
 class RegistroAsistenciaScreen extends StatefulWidget {
   final Map<String, dynamic>? qrData;
 
@@ -343,10 +322,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
     });
 
     try {
-      // Aquí implementa la lógica para registrar la asistencia
-      // Usar widget.qrData para obtener la información del evento
-
-      await Future.delayed(const Duration(seconds: 2)); // Simulación
+      await Future.delayed(const Duration(seconds: 2));
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -356,7 +332,6 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
           ),
         );
 
-        // Regresar a la pantalla anterior después de un breve delay
         await Future.delayed(const Duration(seconds: 1));
         if (mounted) {
           Navigator.of(context).pop();

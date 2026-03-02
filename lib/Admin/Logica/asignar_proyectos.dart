@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'crear_jurados.dart';
 import 'gestion_criterios.dart';
+import 'filiales_service.dart';
 
 class AsignarProyectosScreen extends StatefulWidget {
   const AsignarProyectosScreen({super.key});
@@ -13,38 +14,17 @@ class AsignarProyectosScreen extends StatefulWidget {
 class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final RubricasService _rubricasService = RubricasService();
+  final FilialesService _filialesService = FilialesService();
 
-  // Estructura de facultades y carreras
-  final Map<String, List<String>> facultadesCarreras = {
-    'Universidad Peruana Unión': [],
-    'Facultad de Ciencias Empresariales': [
-      'Administración',
-      'Contabilidad',
-      'Gestión Tributaria y Aduanera',
-    ],
-    'Facultad de Ciencias Humanas y Educación': [
-      'Educación, Especialidad Inicial y Puericultura',
-      'Educación, Especialidad Primaria y Pedagogía Terapéutica',
-      'Educación, Especialidad Inglés y Español',
-    ],
-    'Facultad de Ciencias de la Salud': [
-      'Enfermería',
-      'Nutrición Humana',
-      'Psicología',
-    ],
-    'Facultad de Ingeniería y Arquitectura': [
-      'Ingeniería Civil',
-      'Arquitectura y Urbanismo',
-      'Ingeniería Ambiental',
-      'Ingeniería de Industrias Alimentarias',
-      'Ingeniería de Sistemas',
-    ],
-  };
-
-  // FILTROS PRINCIPALES
+  // ✅ NUEVO: Filtros con sistema de filiales
+  String? _filialSeleccionada;
   String? _facultadSeleccionada;
   String? _carreraSeleccionada;
-  List<String> _carrerasDisponibles = [];
+
+  // ✅ NUEVO: Listas dinámicas
+  List<String> _filialesDisponibles = [];
+  List<String> _facultadesDisponibles = [];
+  List<Map<String, dynamic>> _carrerasDisponibles = [];
 
   // Selección
   String? _eventoSeleccionado;
@@ -52,7 +32,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
   String? _juradoSeleccionado;
   Map<String, dynamic>? _juradoData;
 
-  // ✅ NUEVO: Variables para manejar múltiples rúbricas
+  // Variables para manejar múltiples rúbricas
   List<Rubrica> _rubricasDelJurado = [];
   Rubrica? _rubricaSeleccionada;
 
@@ -64,26 +44,72 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
   Map<String, List<Map<String, dynamic>>> _proyectosPorCategoria = {};
   Set<String> _proyectosSeleccionados = {};
 
+  // ✅ OPTIMIZACIÓN: Estado de carga inicial
+  bool _isLoadingInitial = true;
   bool _isLoadingEventos = false;
   bool _isLoadingJurados = false;
   bool _isLoadingProyectos = false;
   bool _isAsignando = false;
 
+  String _nombreFilialSeleccionada = '';
+
   @override
   void initState() {
     super.initState();
-    _cargarEventos();
+    // ✅ OPTIMIZACIÓN: Carga inmediata
+    _cargarDatosIniciales();
   }
 
-  bool _requiereCarrera(String? facultad) {
-    if (facultad == null) return false;
-    return facultad != 'Universidad Peruana Unión';
-  }
+  // ✅ OPTIMIZACIÓN: Función mejorada que muestra loading
+  Future<void> _cargarDatosIniciales() async {
+    if (!mounted) return;
 
-  void _onFacultadChanged(String? facultad) {
     setState(() {
-      _facultadSeleccionada = facultad;
+      _isLoadingInitial = true;
+    });
+
+    try {
+      // Cargar filiales primero (rápido)
+      final filiales = await _rubricasService.getFiliales();
+
+      if (mounted) {
+        setState(() {
+          _filialesDisponibles = filiales;
+        });
+      }
+
+      // Cargar todos los eventos en segundo plano
+      await _cargarEventos();
+
+      if (mounted) {
+        setState(() {
+          _isLoadingInitial = false;
+        });
+      }
+    } catch (e) {
+      print('Error al cargar datos iniciales: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingInitial = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar datos: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // ✅ NUEVO: Cuando cambia la filial
+  Future<void> _onFilialChanged(String? filial) async {
+    setState(() {
+      _filialSeleccionada = filial;
+      _facultadSeleccionada = null;
       _carreraSeleccionada = null;
+      _facultadesDisponibles = [];
+      _carrerasDisponibles = [];
       _eventoSeleccionado = null;
       _eventoData = null;
       _juradoSeleccionado = null;
@@ -94,15 +120,53 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       _proyectosDisponibles.clear();
       _proyectosPorCategoria.clear();
       _juradosDisponibles.clear();
-
-      if (facultad != null) {
-        _carrerasDisponibles = facultadesCarreras[facultad] ?? [];
-        _filtrarEventos();
-      } else {
-        _carrerasDisponibles = [];
-        _eventosFiltrados = [];
-      }
     });
+
+    if (filial != null) {
+      _nombreFilialSeleccionada = await _rubricasService.getNombreFilial(
+        filial,
+      );
+      final facultades = await _rubricasService.getFacultadesByFilial(filial);
+      if (mounted) {
+        setState(() {
+          _facultadesDisponibles = facultades;
+        });
+      }
+      _filtrarEventos();
+    }
+  }
+
+  // ✅ NUEVO: Cuando cambia la facultad
+  Future<void> _onFacultadChanged(String? facultad) async {
+    setState(() {
+      _facultadSeleccionada = facultad;
+      _carreraSeleccionada = null;
+      _carrerasDisponibles = [];
+      _eventoSeleccionado = null;
+      _eventoData = null;
+      _juradoSeleccionado = null;
+      _juradoData = null;
+      _rubricasDelJurado = [];
+      _rubricaSeleccionada = null;
+      _proyectosSeleccionados.clear();
+      _proyectosDisponibles.clear();
+      _proyectosPorCategoria.clear();
+      _juradosDisponibles.clear();
+    });
+
+    if (_filialSeleccionada != null && facultad != null) {
+      final carreras = await _rubricasService.getCarrerasByFacultad(
+        _filialSeleccionada!,
+        facultad,
+      );
+      if (mounted) {
+        setState(() {
+          _carrerasDisponibles = carreras;
+        });
+      }
+    }
+
+    _filtrarEventos();
   }
 
   void _onCarreraChanged(String? carrera) {
@@ -118,29 +182,34 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       _proyectosDisponibles.clear();
       _proyectosPorCategoria.clear();
       _juradosDisponibles.clear();
-
-      _filtrarEventos();
     });
+
+    _filtrarEventos();
   }
 
   void _filtrarEventos() {
-    if (_facultadSeleccionada == null) {
+    if (_filialSeleccionada == null) {
       setState(() => _eventosFiltrados = []);
       return;
     }
 
     List<Map<String, dynamic>> filtrados = _eventosDisponibles.where((evento) {
-      final facultadMatch = evento['facultad'] == _facultadSeleccionada;
+      final filialMatch = evento['filialId'] == _filialSeleccionada;
 
-      if (_facultadSeleccionada == 'Universidad Peruana Unión') {
-        return facultadMatch;
+      if (!filialMatch) return false;
+
+      if (_facultadSeleccionada != null) {
+        final facultadMatch = evento['facultad'] == _facultadSeleccionada;
+        if (!facultadMatch) return false;
+
+        if (_carreraSeleccionada != null) {
+          return evento['carreraNombre'] == _carreraSeleccionada;
+        }
+
+        return true;
       }
 
-      if (_carreraSeleccionada != null) {
-        return facultadMatch && evento['carrera'] == _carreraSeleccionada;
-      }
-
-      return facultadMatch;
+      return true;
     }).toList();
 
     setState(() => _eventosFiltrados = filtrados);
@@ -163,8 +232,11 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         return {
           'id': doc.id,
           'name': data['name'] ?? 'Sin nombre',
+          'filialId': data['filialId'] ?? 'lima',
+          'filialNombre': data['filialNombre'] ?? '',
           'facultad': data['facultad'] ?? '',
-          'carrera': data['carrera'] ?? 'General',
+          'carreraId': data['carreraId'] ?? '',
+          'carreraNombre': data['carreraNombre'] ?? '',
         };
       }).toList();
 
@@ -212,16 +284,19 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
     });
 
     try {
+      final filialEvento = _eventoData!['filialId'];
       final facultadEvento = _eventoData!['facultad'];
-      final carreraEvento = _eventoData!['carrera'];
+      final carreraEvento = _eventoData!['carreraNombre'];
 
       print('🔍 Buscando jurados para:');
+      print('   Filial: $filialEvento');
       print('   Facultad: $facultadEvento');
       print('   Carrera: $carreraEvento');
 
       final jurados = await _rubricasService.obtenerJurados(
+        filial: filialEvento,
         facultad: facultadEvento,
-        carrera: carreraEvento != 'General' ? carreraEvento : null,
+        carrera: carreraEvento.isNotEmpty ? carreraEvento : null,
       );
 
       if (mounted) {
@@ -232,14 +307,10 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
 
         if (jurados.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                carreraEvento != 'General'
-                    ? 'No hay jurados disponibles para $facultadEvento - $carreraEvento'
-                    : 'No hay jurados disponibles para $facultadEvento',
-              ),
+            const SnackBar(
+              content: Text('No hay jurados disponibles para esta ubicación'),
               backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 2),
+              duration: Duration(seconds: 2),
             ),
           );
         }
@@ -252,7 +323,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
     }
   }
 
-  // ✅ MODIFICADO: Ahora carga todas las rúbricas del jurado
   Future<void> _onJuradoChanged(String? juradoId) async {
     if (juradoId == null) return;
 
@@ -269,7 +339,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
     await _cargarRubricasDelJurado(juradoId);
   }
 
-  // ✅ NUEVO: Método para cargar TODAS las rúbricas del jurado
   Future<void> _cargarRubricasDelJurado(String juradoId) async {
     try {
       print('🔍 Buscando rúbricas del jurado...');
@@ -280,9 +349,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
           .toList();
 
       print('📚 Rúbricas encontradas: ${rubricasJurado.length}');
-      for (var r in rubricasJurado) {
-        print('   - ${r.nombre} (${r.facultad} - ${r.carrera ?? "General"})');
-      }
 
       if (rubricasJurado.isEmpty) {
         if (mounted) {
@@ -298,17 +364,20 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       }
 
       // Filtrar rúbricas compatibles con el evento
+      final eventoFilial = _eventoData!['filialId'];
       final eventoFacultad = _eventoData!['facultad'];
-      final eventoCarrera = _eventoData!['carrera'];
+      final eventoCarrera = _eventoData!['carreraNombre'];
 
       final rubricasCompatibles = rubricasJurado.where((rubrica) {
+        final filialMatch = eventoFilial == rubrica.filial;
+        if (!filialMatch) return false;
+
         final facultadMatch =
             eventoFacultad.trim().toLowerCase() ==
             rubrica.facultad.trim().toLowerCase();
-
         if (!facultadMatch) return false;
 
-        if (rubrica.carrera != null && rubrica.carrera != 'General') {
+        if (rubrica.carrera != null && rubrica.carrera!.isNotEmpty) {
           return eventoCarrera.trim().toLowerCase() ==
               rubrica.carrera!.trim().toLowerCase();
         }
@@ -321,12 +390,12 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       if (rubricasCompatibles.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+            const SnackBar(
               content: Text(
-                '⚠️ El jurado tiene rúbricas pero ninguna es compatible con el evento ($eventoFacultad - $eventoCarrera)',
+                '⚠️ El jurado tiene rúbricas pero ninguna es compatible con el evento',
               ),
               backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 4),
+              duration: Duration(seconds: 4),
             ),
           );
         }
@@ -337,7 +406,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         setState(() {
           _rubricasDelJurado = rubricasCompatibles;
 
-          // Si solo hay UNA rúbrica, seleccionarla automáticamente
           if (rubricasCompatibles.length == 1) {
             _rubricaSeleccionada = rubricasCompatibles.first;
             _cargarProyectosConRubrica(_rubricaSeleccionada!);
@@ -357,7 +425,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
     }
   }
 
-  // ✅ NUEVO: Cuando se selecciona una rúbrica, cargar proyectos
   Future<void> _onRubricaChanged(String? rubricaId) async {
     if (rubricaId == null) return;
 
@@ -373,7 +440,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
     await _cargarProyectosConRubrica(rubrica);
   }
 
-  // ✅ MODIFICADO: Ahora recibe la rúbrica como parámetro y filtra por categorías del jurado
   Future<void> _cargarProyectosConRubrica(Rubrica rubrica) async {
     if (_eventoSeleccionado == null || _juradoSeleccionado == null) return;
 
@@ -382,7 +448,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
     try {
       print('📦 Cargando proyectos del evento con rúbrica: ${rubrica.nombre}');
 
-      // ✅ NUEVO: Obtener las categorías del jurado
+      // Obtener las categorías del jurado
       final juradoDoc = await _firestore
           .collection('users')
           .doc(_juradoSeleccionado)
@@ -442,8 +508,9 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
 
       // Construir lista de proyectos
       final Map<String, Map<String, dynamic>> proyectosMap = {};
+      final eventoFilial = _eventoData!['filialId'];
       final eventoFacultad = _eventoData!['facultad'];
-      final eventoCarrera = _eventoData!['carrera'];
+      final eventoCarrera = _eventoData!['carreraNombre'];
       int proyectosFiltrados = 0;
 
       for (var proyectoDoc in proyectosSnapshot.docs) {
@@ -453,7 +520,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
 
         if (codigo.isEmpty) continue;
 
-        // ✅ FILTRAR: Solo incluir proyectos de las categorías del jurado
+        // Filtrar por categorías del jurado
         if (!categoriasJurado.contains(clasificacion)) {
           proyectosFiltrados++;
           continue;
@@ -470,8 +537,9 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
             'integrantes': data['Integrantes'] ?? '',
             'sala': data['Sala'] ?? '',
             'clasificacion': clasificacion,
+            'filialId': eventoFilial,
             'facultad': eventoFacultad,
-            'carrera': eventoCarrera,
+            'carreraNombre': eventoCarrera,
             'yaAsignado': yaAsignado,
           };
         }
@@ -510,13 +578,9 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
           _isLoadingProyectos = false;
         });
 
-        print(
-          '✅ ${_proyectosDisponibles.length} proyectos disponibles para este jurado',
-        );
-        print('📂 ${_proyectosPorCategoria.length} categorías del jurado');
-        print('✅ ${_proyectosSeleccionados.length} pre-seleccionados');
+        print('✅ ${_proyectosDisponibles.length} proyectos disponibles');
+        print('📂 ${_proyectosPorCategoria.length} categorías');
 
-        // ✅ MOSTRAR INFO AL USUARIO
         if (proyectosList.isEmpty && proyectosFiltrados > 0) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -733,8 +797,9 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
             'juradoNombre': _juradoData!['nombre'],
             'rubricaId': _rubricaSeleccionada!.id,
             'rubricaNombre': _rubricaSeleccionada!.nombre,
+            'filialId': _rubricaSeleccionada!.filial,
             'facultad': _rubricaSeleccionada!.facultad,
-            'carrera': _rubricaSeleccionada!.carrera,
+            'carreraNombre': _rubricaSeleccionada!.carrera,
             'evaluada': false,
             'bloqueada': false,
             'notaTotal': 0.0,
@@ -800,50 +865,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.arrow_back,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Asignar Proyectos a Jurados',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.people,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const CrearJuradosScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-
-            // Content
+            _buildHeader(),
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -853,61 +875,116 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
                     topRight: Radius.circular(30),
                   ),
                 ),
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // PASO 1: Filtros
-                        _buildFiltrosCard(),
+                // ✅ OPTIMIZACIÓN: Mostrar loading mientras carga datos iniciales
+                child: _isLoadingInitial
+                    ? const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(color: Color(0xFF1A5490)),
+                            SizedBox(height: 16),
+                            Text(
+                              'Cargando datos...',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : SingleChildScrollView(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // PASO 1: Filtros
+                              _buildFiltrosCard(),
 
-                        // PASO 2: Evento
-                        if (_facultadSeleccionada != null &&
-                            (!_requiereCarrera(_facultadSeleccionada) ||
-                                _carreraSeleccionada != null)) ...[
-                          const SizedBox(height: 16),
-                          _buildEventoCard(),
-                        ],
+                              // PASO 2: Evento
+                              if (_filialSeleccionada != null &&
+                                  _facultadSeleccionada != null) ...[
+                                const SizedBox(height: 16),
+                                _buildEventoCard(),
+                              ],
 
-                        // PASO 3: Jurado
-                        if (_eventoSeleccionado != null) ...[
-                          const SizedBox(height: 16),
-                          _buildJuradoCard(),
-                        ],
+                              // PASO 3: Jurado
+                              if (_eventoSeleccionado != null) ...[
+                                const SizedBox(height: 16),
+                                _buildJuradoCard(),
+                              ],
 
-                        // ✅ NUEVO: PASO 4: Selector de Rúbrica
-                        if (_rubricasDelJurado.isNotEmpty) ...[
-                          const SizedBox(height: 16),
-                          _buildRubricasCard(),
-                        ],
+                              // PASO 4: Selector de Rúbrica
+                              if (_rubricasDelJurado.isNotEmpty) ...[
+                                const SizedBox(height: 16),
+                                _buildRubricasCard(),
+                              ],
 
-                        // Info Rúbrica seleccionada
-                        if (_rubricaSeleccionada != null) ...[
-                          const SizedBox(height: 16),
-                          _buildRubricaInfoCard(),
-                        ],
+                              // Info Rúbrica seleccionada
+                              if (_rubricaSeleccionada != null) ...[
+                                const SizedBox(height: 16),
+                                _buildRubricaInfoCard(),
+                              ],
 
-                        // Proyectos
-                        if (_rubricaSeleccionada != null) ...[
-                          const SizedBox(height: 16),
-                          _buildProyectosPorCategoriaCard(),
-                        ],
+                              // Proyectos
+                              if (_rubricaSeleccionada != null) ...[
+                                const SizedBox(height: 16),
+                                _buildProyectosPorCategoriaCard(),
+                              ],
 
-                        const SizedBox(height: 24),
+                              const SizedBox(height: 24),
 
-                        // Botón Asignar
-                        if (_rubricaSeleccionada != null) _buildBotonAsignar(),
+                              // Botón Asignar
+                              if (_rubricaSeleccionada != null)
+                                _buildBotonAsignar(),
 
-                        const SizedBox(height: 20),
-                      ],
-                    ),
-                  ),
-                ),
+                              const SizedBox(height: 20),
+                            ],
+                          ),
+                        ),
+                      ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'Asignar Proyectos a Jurados',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.people, color: Colors.white, size: 28),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CrearJuradosScreen(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -939,7 +1016,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
                 ),
                 const SizedBox(width: 12),
                 const Text(
-                  '1. Filtrar',
+                  '1. Filtrar Ubicación',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -949,34 +1026,75 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
               ],
             ),
             const SizedBox(height: 16),
+
+            // ✅ Filial
             DropdownButtonFormField<String>(
-              value: _facultadSeleccionada,
+              value: _filialSeleccionada,
               isExpanded: true,
               decoration: InputDecoration(
-                labelText: 'Facultad',
-                prefixIcon: const Icon(Icons.school),
+                labelText: 'Filial',
+                prefixIcon: const Icon(Icons.location_city),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
                 filled: true,
                 fillColor: Colors.white,
               ),
-              items: facultadesCarreras.keys.map((facultad) {
+              items: _filialesDisponibles.map((filialId) {
                 return DropdownMenuItem(
-                  value: facultad,
-                  child: Text(facultad, style: const TextStyle(fontSize: 14)),
+                  value: filialId,
+                  child: FutureBuilder<String>(
+                    future: _rubricasService.getNombreFilial(filialId),
+                    builder: (context, snapshot) {
+                      return Text(
+                        snapshot.data ?? filialId,
+                        style: const TextStyle(fontSize: 14),
+                      );
+                    },
+                  ),
                 );
               }).toList(),
-              onChanged: _onFacultadChanged,
+              onChanged: _onFilialChanged,
             ),
+
+            // ✅ Facultad
+            if (_filialSeleccionada != null) ...[
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _facultadSeleccionada,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: 'Facultad',
+                  prefixIcon: const Icon(Icons.school),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+                items: _facultadesDisponibles.map((facultad) {
+                  return DropdownMenuItem(
+                    value: facultad,
+                    child: Text(
+                      facultad,
+                      style: const TextStyle(fontSize: 14),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }).toList(),
+                onChanged: _onFacultadChanged,
+              ),
+            ],
+
+            // ✅ Carrera (opcional)
             if (_facultadSeleccionada != null &&
-                _requiereCarrera(_facultadSeleccionada)) ...[
+                _carrerasDisponibles.isNotEmpty) ...[
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: _carreraSeleccionada,
                 isExpanded: true,
                 decoration: InputDecoration(
-                  labelText: 'Carrera',
+                  labelText: 'Carrera (opcional)',
                   prefixIcon: const Icon(Icons.menu_book),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -986,16 +1104,21 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
                 ),
                 items: _carrerasDisponibles.map((carrera) {
                   return DropdownMenuItem(
-                    value: carrera,
-                    child: Text(carrera, style: const TextStyle(fontSize: 13)),
+                    value: carrera['nombre'] as String,
+                    child: Text(
+                      carrera['nombre'] as String,
+                      style: const TextStyle(fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   );
                 }).toList(),
                 onChanged: _onCarreraChanged,
               ),
             ],
-            if (_facultadSeleccionada != null &&
-                (!_requiereCarrera(_facultadSeleccionada) ||
-                    _carreraSeleccionada != null)) ...[
+
+            // Info
+            if (_filialSeleccionada != null &&
+                _facultadSeleccionada != null) ...[
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),
@@ -1155,7 +1278,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
     );
   }
 
-  // ✅ NUEVO: Card para seleccionar rúbrica
   Widget _buildRubricasCard() {
     return Card(
       elevation: 3,
@@ -1253,7 +1375,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
                   filled: true,
                   fillColor: Colors.white,
                 ),
-                // ✅ ARREGLADO: selectedItemBuilder para mostrar versión compacta cuando está seleccionado
                 selectedItemBuilder: (BuildContext context) {
                   return _rubricasDelJurado.map((rubrica) {
                     return Align(
@@ -1270,7 +1391,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
                     );
                   }).toList();
                 },
-                // ✅ ARREGLADO: items del menú con padding y altura adecuada
                 items: _rubricasDelJurado.map((rubrica) {
                   return DropdownMenuItem<String>(
                     value: rubrica.id,
@@ -1291,7 +1411,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '${rubrica.totalCriterios} criterios • ${rubrica.facultad.length > 20 ? rubrica.facultad.substring(0, 20) + '...' : rubrica.facultad}',
+                            '${rubrica.totalCriterios} criterios • ${rubrica.facultad}',
                             style: TextStyle(
                               fontSize: 11,
                               color: Colors.grey[600],
@@ -1305,32 +1425,8 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
                   );
                 }).toList(),
                 onChanged: _onRubricaChanged,
-                // ✅ AGREGADO: Altura máxima del menú
                 menuMaxHeight: 300,
               ),
-
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.purple.shade50,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, size: 18, color: Colors.purple[700]),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _rubricasDelJurado.length > 1
-                          ? 'Este jurado tiene múltiples rúbricas. Selecciona la que usarás.'
-                          : 'Esta es la única rúbrica asignada a este jurado.',
-                      style: TextStyle(fontSize: 12, color: Colors.purple[900]),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),

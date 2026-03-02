@@ -72,6 +72,17 @@ class _PerfilScreenState extends State<PerfilScreen>
     }
   }
 
+  /// Devuelve el nombre de la filial/sede del estudiante.
+  /// Prioriza el campo 'sede', si no existe usa 'filial', y si no hay ninguno
+  /// retorna null para que el widget no se muestre.
+  String? _getSede() {
+    final sede = _userData?['sede']?.toString() ?? '';
+    final filial = _userData?['filial']?.toString() ?? '';
+    if (sede.isNotEmpty) return sede;
+    if (filial.isNotEmpty) return filial;
+    return null;
+  }
+
   Widget _buildInfoCard({
     required String title,
     required String value,
@@ -181,6 +192,42 @@ class _PerfilScreenState extends State<PerfilScreen>
     );
   }
 
+  /// Badge compacto que muestra la filial/sede del estudiante en el header
+  Widget _buildFilialBadge(String sede) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1565C0), Color(0xFF1976D2)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1565C0).withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.location_city, color: Colors.white, size: 14),
+          const SizedBox(width: 6),
+          Text(
+            sede,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -188,7 +235,7 @@ class _PerfilScreenState extends State<PerfilScreen>
       body: SafeArea(
         child: Column(
           children: [
-            // Header
+            // ── Header ──────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.all(20.0),
               child: Row(
@@ -226,7 +273,8 @@ class _PerfilScreenState extends State<PerfilScreen>
                 ],
               ),
             ),
-            // Content Area
+
+            // ── Content ──────────────────────────────────────────────────
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -301,7 +349,7 @@ class _PerfilScreenState extends State<PerfilScreen>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Header con avatar
+                                // ── Avatar + nombre + badges ─────────────
                                 Center(
                                   child: Column(
                                     children: [
@@ -312,12 +360,12 @@ class _PerfilScreenState extends State<PerfilScreen>
                                           height: 110,
                                           decoration: BoxDecoration(
                                             shape: BoxShape.circle,
-                                            gradient: LinearGradient(
+                                            gradient: const LinearGradient(
                                               begin: Alignment.topLeft,
                                               end: Alignment.bottomRight,
                                               colors: [
-                                                const Color(0xFF1E3A5F),
-                                                const Color(0xFF2E4A6F),
+                                                Color(0xFF1E3A5F),
+                                                Color(0xFF2E4A6F),
                                               ],
                                             ),
                                             boxShadow: [
@@ -348,6 +396,8 @@ class _PerfilScreenState extends State<PerfilScreen>
                                         textAlign: TextAlign.center,
                                       ),
                                       const SizedBox(height: 8),
+
+                                      // Badge "Estudiante"
                                       Container(
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 16,
@@ -382,11 +432,15 @@ class _PerfilScreenState extends State<PerfilScreen>
                                           ),
                                         ),
                                       ),
+
+                                      // Badge filial/sede (solo si existe)
+                                      if (_getSede() != null)
+                                        _buildFilialBadge(_getSede()!),
                                     ],
                                   ),
                                 ),
 
-                                // Información Personal
+                                // ── Sección: Información Personal ─────────
                                 _buildSectionTitle(
                                   'Información Personal',
                                   Icons.person_outline,
@@ -406,10 +460,9 @@ class _PerfilScreenState extends State<PerfilScreen>
                                   iconColor: const Color(0xFFFF9800),
                                   delay: 1,
                                 ),
-                                if (_userData!['correoInstitucional'] != null &&
-                                    _userData!['correoInstitucional']
-                                        .toString()
-                                        .isNotEmpty)
+                                if ((_userData!['correoInstitucional'] ?? '')
+                                    .toString()
+                                    .isNotEmpty)
                                   _buildInfoCard(
                                     title: 'Email Institucional',
                                     value: _userData!['correoInstitucional'],
@@ -424,8 +477,9 @@ class _PerfilScreenState extends State<PerfilScreen>
                                   iconColor: const Color(0xFF9C27B0),
                                   delay: 3,
                                 ),
-                                if (_userData!['celular'] != null &&
-                                    _userData!['celular'].toString().isNotEmpty)
+                                if ((_userData!['celular'] ?? '')
+                                    .toString()
+                                    .isNotEmpty)
                                   _buildInfoCard(
                                     title: 'Celular',
                                     value: _userData!['celular'],
@@ -434,11 +488,22 @@ class _PerfilScreenState extends State<PerfilScreen>
                                     delay: 4,
                                   ),
 
-                                // Información Académica
+                                // ── Sección: Información Académica ────────
                                 _buildSectionTitle(
                                   'Información Académica',
                                   Icons.school,
                                 ),
+
+                                // Filial / Sede
+                                if (_getSede() != null)
+                                  _buildInfoCard(
+                                    title: 'Filial / Sede',
+                                    value: _getSede()!,
+                                    icon: Icons.location_city,
+                                    iconColor: const Color(0xFF1565C0),
+                                    delay: 0,
+                                  ),
+
                                 _buildInfoCard(
                                   title: 'Código Universitario',
                                   value:
@@ -446,42 +511,66 @@ class _PerfilScreenState extends State<PerfilScreen>
                                       'No disponible',
                                   icon: Icons.badge,
                                   iconColor: const Color(0xFF009688),
-                                  delay: 0,
+                                  delay: 1,
                                 ),
                                 _buildInfoCard(
                                   title: 'Facultad',
                                   value:
                                       _userData!['facultad'] ?? 'No disponible',
-                                  icon: Icons.school,
+                                  icon: Icons.account_balance,
                                   iconColor: const Color(0xFF3F51B5),
-                                  delay: 1,
+                                  delay: 2,
                                 ),
                                 _buildInfoCard(
                                   title: 'Carrera',
                                   value:
                                       _userData!['carrera'] ?? 'No disponible',
-                                  icon: Icons.book,
+                                  icon: Icons.menu_book,
                                   iconColor: const Color(0xFF795548),
-                                  delay: 2,
+                                  delay: 3,
                                 ),
-                                if (_userData!['ciclo'] != null &&
-                                    _userData!['ciclo'].toString().isNotEmpty)
+                                if ((_userData!['modalidadEstudio'] ?? '')
+                                    .toString()
+                                    .isNotEmpty)
+                                  _buildInfoCard(
+                                    title: 'Modalidad de Estudio',
+                                    value: _userData!['modalidadEstudio'],
+                                    icon: Icons.laptop_mac,
+                                    iconColor: const Color(0xFF00ACC1),
+                                    delay: 4,
+                                  ),
+                                if ((_userData!['modoContrato'] ?? '')
+                                    .toString()
+                                    .isNotEmpty)
+                                  _buildInfoCard(
+                                    title: 'Modo Contrato',
+                                    value: _userData!['modoContrato'],
+                                    icon: Icons.description_outlined,
+                                    iconColor: const Color(0xFF8D6E63),
+                                    delay: 5,
+                                  ),
+                                if ((_userData!['ciclo'] ?? '')
+                                    .toString()
+                                    .isNotEmpty)
                                   _buildInfoCard(
                                     title: 'Ciclo',
                                     value: 'Ciclo ${_userData!['ciclo']}',
                                     icon: Icons.layers,
                                     iconColor: const Color(0xFF673AB7),
-                                    delay: 3,
+                                    delay: 6,
                                   ),
-                                if (_userData!['grupo'] != null &&
-                                    _userData!['grupo'].toString().isNotEmpty)
+                                if ((_userData!['grupo'] ?? '')
+                                    .toString()
+                                    .isNotEmpty)
                                   _buildInfoCard(
                                     title: 'Grupo',
                                     value: 'Grupo ${_userData!['grupo']}',
                                     icon: Icons.groups,
                                     iconColor: const Color(0xFF00BCD4),
-                                    delay: 4,
+                                    delay: 7,
                                   ),
+
+                                const SizedBox(height: 20),
                               ],
                             ),
                           ),

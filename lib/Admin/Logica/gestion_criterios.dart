@@ -1,7 +1,8 @@
 // gestion_criterios.dart
-// Este archivo contiene todos los modelos de datos para las rúbricas
+// Modelos de datos actualizados para usar sistema de filiales
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'filiales_service.dart';
 
 /// Modelo para un criterio individual de evaluación
 class Criterio {
@@ -35,7 +36,6 @@ class Criterio {
     );
   }
 
-  // Crear una copia del criterio
   Criterio copyWith({
     String? id,
     String? descripcion,
@@ -51,7 +51,7 @@ class Criterio {
   }
 }
 
-/// Modelo para una sección de la rúbrica (agrupa varios criterios)
+/// Modelo para una sección de la rúbrica
 class SeccionRubrica {
   String id;
   String nombre;
@@ -87,17 +87,14 @@ class SeccionRubrica {
     );
   }
 
-  // Calcular el total de pesos de los criterios
   double get totalPesosCriterios {
     return criterios.fold(0.0, (sum, criterio) => sum + criterio.peso);
   }
 
-  // Verificar si los pesos están balanceados
   bool get pesosBalanceados {
     return (totalPesosCriterios - pesoTotal).abs() < 0.01;
   }
 
-  // Crear una copia de la sección
   SeccionRubrica copyWith({
     String? id,
     String? nombre,
@@ -113,7 +110,7 @@ class SeccionRubrica {
   }
 }
 
-/// Modelo principal para una rúbrica completa
+/// Modelo principal para una rúbrica completa - ACTUALIZADO CON FILIAL
 class Rubrica {
   String id;
   String nombre;
@@ -122,7 +119,8 @@ class Rubrica {
   List<String> juradosAsignados;
   DateTime fechaCreacion;
   double puntajeMaximo;
-  // ✅ NUEVO: Agregar facultad y carrera
+  // ✅ NUEVO: Sistema de filiales
+  String filial;
   String facultad;
   String? carrera;
 
@@ -134,12 +132,13 @@ class Rubrica {
     required this.juradosAsignados,
     required this.fechaCreacion,
     this.puntajeMaximo = 20,
+    required this.filial,
     required this.facultad,
     this.carrera,
   });
 
   Map<String, dynamic> toMap() {
-    final map = {
+    return {
       'id': id,
       'nombre': nombre,
       'descripcion': descripcion,
@@ -147,17 +146,10 @@ class Rubrica {
       'juradosAsignados': juradosAsignados,
       'fechaCreacion': Timestamp.fromDate(fechaCreacion),
       'puntajeMaximo': puntajeMaximo,
+      'filial': filial,
       'facultad': facultad,
+      'carrera': carrera,
     };
-
-    // Solo agregar carrera si existe
-    if (carrera != null && carrera!.isNotEmpty) {
-      map['carrera'] = carrera!;
-    } else if (facultad == 'Universidad Peruana Unión') {
-      map['carrera'] = 'General';
-    }
-
-    return map;
   }
 
   factory Rubrica.fromMap(Map<String, dynamic> map) {
@@ -174,12 +166,12 @@ class Rubrica {
       fechaCreacion:
           (map['fechaCreacion'] as Timestamp?)?.toDate() ?? DateTime.now(),
       puntajeMaximo: (map['puntajeMaximo'] ?? 20).toDouble(),
-      facultad: map['facultad'] ?? 'Universidad Peruana Unión',
+      filial: map['filial'] ?? 'lima',
+      facultad: map['facultad'] ?? '',
       carrera: map['carrera'],
     );
   }
 
-  // Obtener el total de criterios en toda la rúbrica
   int get totalCriterios {
     return secciones.fold<int>(
       0,
@@ -187,12 +179,10 @@ class Rubrica {
     );
   }
 
-  // Obtener el total de secciones
   int get totalSecciones {
     return secciones.length;
   }
 
-  // Verificar si la rúbrica está completa
   bool get estaCompleta {
     if (nombre.isEmpty) return false;
     if (secciones.isEmpty) return false;
@@ -202,7 +192,6 @@ class Rubrica {
     return true;
   }
 
-  // Crear una copia de la rúbrica
   Rubrica copyWith({
     String? id,
     String? nombre,
@@ -211,6 +200,7 @@ class Rubrica {
     List<String>? juradosAsignados,
     DateTime? fechaCreacion,
     double? puntajeMaximo,
+    String? filial,
     String? facultad,
     String? carrera,
   }) {
@@ -222,67 +212,63 @@ class Rubrica {
       juradosAsignados: juradosAsignados ?? List.from(this.juradosAsignados),
       fechaCreacion: fechaCreacion ?? this.fechaCreacion,
       puntajeMaximo: puntajeMaximo ?? this.puntajeMaximo,
+      filial: filial ?? this.filial,
       facultad: facultad ?? this.facultad,
       carrera: carrera ?? this.carrera,
     );
   }
 }
 
-/// Servicio para manejar las operaciones de Firestore
+/// Servicio actualizado para usar FilialesService
 class RubricasService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FilialesService _filialesService = FilialesService();
   final String _collection = 'rubricas';
 
-  // ✅ NUEVO: Estructura de facultades y carreras (igual que EventosService)
-  final Map<String, List<String>> facultadesCarreras = {
-    'Universidad Peruana Unión': [],
-    'Facultad de Ciencias Empresariales': [
-      'Administración',
-      'Contabilidad',
-      'Gestión Tributaria y Aduanera',
-    ],
-    'Facultad de Ciencias Humanas y Educación': [
-      'Educación, Especialidad Inicial y Puericultura',
-      'Educación, Especialidad Primaria y Pedagogía Terapéutica',
-      'Educación, Especialidad Inglés y Español',
-    ],
-    'Facultad de Ciencias de la Salud': [
-      'Enfermería',
-      'Nutrición Humana',
-      'Psicología',
-    ],
-    'Facultad de Ingeniería y Arquitectura': [
-      'Ingeniería Civil',
-      'Arquitectura y Urbanismo',
-      'Ingeniería Ambiental',
-      'Ingeniería de Industrias Alimentarias',
-      'Ingeniería de Sistemas',
-    ],
-  };
+  // ✅ Cache para estructura de filiales
+  Map<String, dynamic>? _estructuraCache;
 
-  // ✅ NUEVO: Verificar si la facultad requiere carrera
-  bool requiereCarrera(String? facultad) {
-    if (facultad == null) return true;
-    return facultad != 'Universidad Peruana Unión';
+  // ✅ Obtener estructura completa de filiales
+  Future<Map<String, dynamic>> getEstructuraCompleta() async {
+    if (_estructuraCache != null) {
+      return _estructuraCache!;
+    }
+
+    _estructuraCache = await _filialesService.getEstructuraCompleta();
+    return _estructuraCache!;
   }
 
-  // ✅ NUEVO: Validar facultad
-  String? validateFacultad(String? facultad) {
-    if (facultad == null) {
-      return 'Por favor selecciona una facultad';
-    }
-    return null;
+  // ✅ Obtener lista de filiales
+  Future<List<String>> getFiliales() async {
+    final estructura = await getEstructuraCompleta();
+    return estructura.keys.toList();
   }
 
-  // ✅ NUEVO: Validar carrera
-  String? validateCarrera(String? carrera, String? facultad) {
-    if (facultad == 'Universidad Peruana Unión') {
-      return null;
-    }
-    if (carrera == null) {
-      return 'Por favor selecciona una carrera';
-    }
-    return null;
+  // ✅ Obtener nombre de filial
+  Future<String> getNombreFilial(String filialId) async {
+    final estructura = await getEstructuraCompleta();
+    return estructura[filialId]?['nombre'] ?? filialId;
+  }
+
+  // ✅ Obtener facultades de una filial
+  Future<List<String>> getFacultadesByFilial(String filialId) async {
+    final estructura = await getEstructuraCompleta();
+    final filial = estructura[filialId];
+    if (filial == null) return [];
+
+    final facultades = filial['facultades'] as Map<String, dynamic>;
+    return facultades.keys.toList();
+  }
+
+  // ✅ Obtener carreras de una facultad
+  Future<List<Map<String, dynamic>>> getCarrerasByFacultad(
+    String filialId,
+    String facultadNombre,
+  ) async {
+    return await _filialesService.getCarrerasByFacultad(
+      filialId,
+      facultadNombre,
+    );
   }
 
   // Obtener todas las rúbricas
@@ -297,36 +283,36 @@ class RubricasService {
     }
   }
 
-  // ✅ NUEVO: Obtener rúbricas filtradas por facultad
-  Future<List<Rubrica>> obtenerRubricasPorFacultad(String facultad) async {
+  // ✅ Obtener rúbricas por filial
+  Future<List<Rubrica>> obtenerRubricasPorFilial(String filial) async {
     try {
       final snapshot = await _firestore
           .collection(_collection)
-          .where('facultad', isEqualTo: facultad)
+          .where('filial', isEqualTo: filial)
           .get();
       return snapshot.docs.map((doc) => Rubrica.fromMap(doc.data())).toList()
         ..sort((a, b) => b.fechaCreacion.compareTo(a.fechaCreacion));
     } catch (e) {
-      print('Error al obtener rúbricas por facultad: $e');
+      print('Error al obtener rúbricas por filial: $e');
       return [];
     }
   }
 
-  // ✅ NUEVO: Obtener rúbricas filtradas por facultad y carrera
-  Future<List<Rubrica>> obtenerRubricasPorFacultadYCarrera(
+  // ✅ Obtener rúbricas por filial y facultad
+  Future<List<Rubrica>> obtenerRubricasPorFilialYFacultad(
+    String filial,
     String facultad,
-    String carrera,
   ) async {
     try {
       final snapshot = await _firestore
           .collection(_collection)
+          .where('filial', isEqualTo: filial)
           .where('facultad', isEqualTo: facultad)
-          .where('carrera', isEqualTo: carrera)
           .get();
       return snapshot.docs.map((doc) => Rubrica.fromMap(doc.data())).toList()
         ..sort((a, b) => b.fechaCreacion.compareTo(a.fechaCreacion));
     } catch (e) {
-      print('Error al obtener rúbricas por facultad y carrera: $e');
+      print('Error al obtener rúbricas: $e');
       return [];
     }
   }
@@ -384,69 +370,65 @@ class RubricasService {
     }
   }
 
-  // ✅ MODIFICADO: Obtener jurados filtrados por facultad y carrera
+  // ✅ Obtener jurados filtrados por filial, facultad y carrera
   Future<List<Map<String, dynamic>>> obtenerJurados({
+    String? filial,
     String? facultad,
     String? carrera,
   }) async {
     try {
-      print('Intentando obtener jurados de Firestore...');
-      print('Filtros - Facultad: $facultad, Carrera: $carrera');
+      print('🔍 Buscando jurados...');
+      print('   Filial: $filial');
+      print('   Facultad: $facultad');
+      print('   Carrera: $carrera');
 
       Query query = _firestore
           .collection('users')
           .where('userType', isEqualTo: 'jurado');
 
-      // Aplicar filtro por facultad si se proporciona
+      // Aplicar filtros
+      if (filial != null && filial.isNotEmpty) {
+        query = query.where('filial', isEqualTo: filial);
+      }
+
       if (facultad != null && facultad.isNotEmpty) {
         query = query.where('facultad', isEqualTo: facultad);
       }
 
-      // Aplicar filtro por carrera si se proporciona y no es UPeU
-      if (carrera != null &&
-          carrera.isNotEmpty &&
-          facultad != 'Universidad Peruana Unión') {
+      if (carrera != null && carrera.isNotEmpty) {
         query = query.where('carrera', isEqualTo: carrera);
       }
 
       final snapshot = await query.get();
+      print('✅ ${snapshot.docs.length} jurados encontrados');
 
-      print('Documentos encontrados: ${snapshot.docs.length}');
-
-      final jurados = snapshot.docs.map((doc) {
-        print('Jurado ID: ${doc.id}, Data: ${doc.data()}');
+      return snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         return {
           'id': doc.id,
           'nombre': data['name'] ?? data['nombre'] ?? '',
           'usuario': data['usuario'] ?? '',
+          'filial': data['filial'] ?? '',
           'facultad': data['facultad'] ?? '',
           'carrera': data['carrera'] ?? '',
           'categoria': data['categoria'] ?? '',
         };
       }).toList();
-
-      print('Total de jurados procesados: ${jurados.length}');
-      return jurados;
     } catch (e) {
-      print('Error al obtener jurados: $e');
+      print('❌ Error al obtener jurados: $e');
       return [];
     }
   }
 
-  // ✅ NUEVO: Eliminar evaluaciones cuando se remueven jurados de una rúbrica
+  // Eliminar evaluaciones cuando se remueven jurados
   Future<void> eliminarEvaluacionesDeJurados({
     required String rubricaId,
     required List<String> juradosIds,
   }) async {
     try {
-      print('🗑️ Iniciando eliminación de evaluaciones...');
-      print('   Rúbrica ID: $rubricaId');
-      print('   Jurados a remover: ${juradosIds.length}');
+      print('🗑️ Eliminando evaluaciones de jurados removidos...');
 
-      // Buscar todos los proyectos que usan esta rúbrica
       final eventosSnapshot = await _firestore.collection('events').get();
-
       int evaluacionesEliminadas = 0;
 
       for (var eventoDoc in eventosSnapshot.docs) {
@@ -457,7 +439,6 @@ class RubricasService {
             .get();
 
         for (var proyectoDoc in proyectosSnapshot.docs) {
-          // Para cada jurado removido, eliminar su evaluación si existe
           for (var juradoId in juradosIds) {
             final evaluacionDoc = await _firestore
                 .collection('events')
@@ -468,54 +449,51 @@ class RubricasService {
                 .doc(juradoId)
                 .get();
 
-            // Solo eliminar si la evaluación usa esta rúbrica
             if (evaluacionDoc.exists) {
               final data = evaluacionDoc.data();
               if (data != null && data['rubricaId'] == rubricaId) {
                 await evaluacionDoc.reference.delete();
                 evaluacionesEliminadas++;
-                print(
-                  '   ✅ Evaluación eliminada: ${eventoDoc.id}/${proyectoDoc.id}/$juradoId',
-                );
               }
             }
           }
         }
       }
 
-      print('✅ Total de evaluaciones eliminadas: $evaluacionesEliminadas');
+      print('✅ $evaluacionesEliminadas evaluaciones eliminadas');
     } catch (e) {
-      print('❌ Error al eliminar evaluaciones de jurados: $e');
+      print('❌ Error al eliminar evaluaciones: $e');
       rethrow;
     }
   }
 
-  // ✅ NUEVO: Filtrar rúbricas en memoria (para uso local)
+  // ✅ Filtrar rúbricas en memoria
   List<Rubrica> filtrarRubricas(
     List<Rubrica> rubricas, {
+    String? filial,
     String? facultad,
     String? carrera,
   }) {
     var resultado = rubricas;
+
+    if (filial != null && filial.isNotEmpty) {
+      resultado = resultado.where((r) => r.filial == filial).toList();
+    }
 
     if (facultad != null && facultad.isNotEmpty) {
       resultado = resultado.where((r) => r.facultad == facultad).toList();
     }
 
     if (carrera != null && carrera.isNotEmpty) {
-      if (carrera == 'General') {
-        resultado = resultado
-            .where(
-              (r) =>
-                  r.carrera == 'General' &&
-                  r.facultad == 'Universidad Peruana Unión',
-            )
-            .toList();
-      } else {
-        resultado = resultado.where((r) => r.carrera == carrera).toList();
-      }
+      resultado = resultado.where((r) => r.carrera == carrera).toList();
     }
 
     return resultado;
+  }
+
+  // ✅ Limpiar cache
+  void clearCache() {
+    _estructuraCache = null;
+    FilialesService.clearCache();
   }
 }

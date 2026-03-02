@@ -6,6 +6,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
 class ReportesAsistenciasExcelService {
+  // Umbral de tiempo en minutos para considerar asistencias sospechosas
+  static const int _umbralMinutos = 5;
+  // Número mínimo de grupos sospechosos para incluir en reporte de fraude
+  static const int _minimoGruposSospechosos = 3;
+
   Future<bool> generarReporteAsistencias({
     required List<Map<String, dynamic>> estudiantes,
     required String eventoNombre,
@@ -17,11 +22,25 @@ class ReportesAsistenciasExcelService {
 
       final excel = Excel.createExcel();
 
+      // Analizar estudiantes con asistencias sospechosas
+      final estudiantesConAnalisis = _analizarAsistenciasSospechosas(
+        estudiantes,
+      );
+
       // Crear hojas
-      _crearHojaResumen(excel, estudiantes, eventoNombre, facultad, carrera);
-      _crearHojaDetallada(excel, estudiantes);
-      _crearHojaPorEstudiante(excel, estudiantes);
-      _crearHojaEstadisticas(excel, estudiantes);
+      _crearHojaResumen(
+        excel,
+        estudiantesConAnalisis,
+        eventoNombre,
+        facultad,
+        carrera,
+      );
+      _crearHojaDetallada(excel, estudiantesConAnalisis);
+      _crearHojaPorEstudiante(excel, estudiantesConAnalisis);
+      _crearHojaEstadisticas(excel, estudiantesConAnalisis);
+
+      // ✅ NUEVA HOJA: Reporte de asistencias sospechosas
+      _crearHojaAsistenciasSospechosas(excel, estudiantesConAnalisis);
 
       // Eliminar hoja por defecto
       if (excel.sheets.containsKey('Sheet1')) {
@@ -36,6 +55,96 @@ class ReportesAsistenciasExcelService {
       print('❌ Error al generar Excel: $e');
       return false;
     }
+  }
+
+  // ✅ NUEVA FUNCIÓN: Analizar asistencias sospechosas (CORREGIDA)
+  List<Map<String, dynamic>> _analizarAsistenciasSospechosas(
+    List<Map<String, dynamic>> estudiantes,
+  ) {
+    print('🔍 Analizando asistencias sospechosas...');
+
+    for (var estudiante in estudiantes) {
+      final scans = estudiante['scans'] as List<dynamic>;
+
+      if (scans.isEmpty) continue;
+
+      // Ordenar scans por timestamp
+      scans.sort((a, b) {
+        final timestampA = (a['timestamp'] as Timestamp?)?.toDate();
+        final timestampB = (b['timestamp'] as Timestamp?)?.toDate();
+        if (timestampA == null || timestampB == null) return 0;
+        return timestampA.compareTo(timestampB);
+      });
+
+      // Inicializar todos como no sospechosos
+      for (var scan in scans) {
+        scan['esSospechoso'] = false;
+      }
+
+      // Analizar grupos de asistencias cercanas
+      List<List<int>> gruposSospechosos = [];
+
+      for (int i = 0; i < scans.length; i++) {
+        // Saltar si ya fue marcado como parte de un grupo
+        if (scans[i]['esSospechoso'] == true) continue;
+
+        final timestampActual = (scans[i]['timestamp'] as Timestamp?)?.toDate();
+        if (timestampActual == null) continue;
+
+        // Buscar todos los scans cercanos a este
+        List<int> grupoActual = [i];
+
+        for (int j = i + 1; j < scans.length; j++) {
+          final timestampSiguiente = (scans[j]['timestamp'] as Timestamp?)
+              ?.toDate();
+          if (timestampSiguiente == null) continue;
+
+          final diferencia = timestampSiguiente
+              .difference(timestampActual)
+              .inMinutes
+              .abs();
+
+          // Si está dentro del umbral, agregarlo al grupo
+          if (diferencia <= _umbralMinutos) {
+            grupoActual.add(j);
+          } else {
+            // Ya no hay más scans cercanos
+            break;
+          }
+        }
+
+        // Si encontramos un grupo (2 o más asistencias cercanas)
+        if (grupoActual.length >= 2) {
+          gruposSospechosos.add(List.from(grupoActual));
+
+          // Marcar todos los scans del grupo como sospechosos
+          for (int index in grupoActual) {
+            scans[index]['esSospechoso'] = true;
+          }
+
+          print(
+            '   📍 Grupo detectado: ${grupoActual.length} scans entre ${DateFormat('HH:mm').format((scans[grupoActual.first]['timestamp'] as Timestamp).toDate())} - ${DateFormat('HH:mm').format((scans[grupoActual.last]['timestamp'] as Timestamp).toDate())}',
+          );
+        }
+      }
+
+      // Guardar información de análisis
+      estudiante['gruposSospechosos'] = gruposSospechosos;
+      estudiante['totalGruposSospechosos'] = gruposSospechosos.length;
+      estudiante['totalAsistenciasSospechosas'] = scans
+          .where((s) => s['esSospechoso'] == true)
+          .length;
+      estudiante['tieneFraude'] =
+          gruposSospechosos.length >= _minimoGruposSospechosos;
+
+      if (gruposSospechosos.isNotEmpty) {
+        print(
+          '⚠️ ${estudiante['nombre']}: ${gruposSospechosos.length} grupos sospechosos (${estudiante['totalAsistenciasSospechosas']} asistencias marcadas)',
+        );
+      }
+    }
+
+    return estudiantes;
   }
 
   void _crearHojaResumen(
@@ -86,6 +195,11 @@ class ReportesAsistenciasExcelService {
         ? totalAsistencias / totalEstudiantes
         : 0;
 
+    // ✅ NUEVA ESTADÍSTICA: Estudiantes con fraude
+    final estudiantesConFraude = estudiantes
+        .where((e) => e['tieneFraude'] == true)
+        .length;
+
     var statsHeader = sheet.cell(
       CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
     );
@@ -119,6 +233,31 @@ class ReportesAsistenciasExcelService {
       'Promedio por estudiante:',
       promedioAsistencias.toStringAsFixed(2),
     );
+
+    // ✅ AGREGAR ALERTA DE FRAUDE
+    if (estudiantesConFraude > 0) {
+      var fraudeCell = sheet.cell(
+        CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+      );
+      fraudeCell.value = TextCellValue(
+        '⚠️ Estudiantes con asistencias sospechosas:',
+      );
+      fraudeCell.cellStyle = CellStyle(
+        bold: true,
+        fontColorHex: ExcelColor.fromHexString('#E74C3C'),
+      );
+
+      var fraudeValueCell = sheet.cell(
+        CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row),
+      );
+      fraudeValueCell.value = TextCellValue(estudiantesConFraude.toString());
+      fraudeValueCell.cellStyle = CellStyle(
+        bold: true,
+        fontColorHex: ExcelColor.fromHexString('#E74C3C'),
+      );
+      row++;
+    }
+
     row += 1;
 
     // Distribución de asistencias
@@ -137,7 +276,6 @@ class ReportesAsistenciasExcelService {
     );
     row += 1;
 
-    // Contar estudiantes por rango de asistencias
     final con1a3 = estudiantes
         .where((e) => e['totalScans'] >= 1 && e['totalScans'] <= 3)
         .length;
@@ -160,7 +298,7 @@ class ReportesAsistenciasExcelService {
     );
     row += 1;
 
-    // Top 10 estudiantes con más asistencias
+    // Top 10 estudiantes
     var topHeader = sheet.cell(
       CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
     );
@@ -176,10 +314,8 @@ class ReportesAsistenciasExcelService {
     );
     row += 1;
 
-    // Headers
     _agregarFilaHeader(sheet, row++, ['Nombre', 'Código', 'Total Asistencias']);
 
-    // Ordenar y tomar top 10
     final estudiantesOrdenados = List<Map<String, dynamic>>.from(estudiantes);
     estudiantesOrdenados.sort(
       (a, b) => (b['totalScans'] as int).compareTo(a['totalScans'] as int),
@@ -194,19 +330,12 @@ class ReportesAsistenciasExcelService {
       ]);
     }
 
-    // Ajustar anchos de columna
     sheet.setColumnWidth(0, 30);
     sheet.setColumnWidth(1, 20);
     sheet.setColumnWidth(2, 18);
     sheet.setColumnWidth(3, 15);
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // FUNCIONES COMPLETAS PARA reportes_asistencias_excel.dart
-  // REEMPLAZA LAS FUNCIONES EXISTENTES CON ESTAS
-  // ══════════════════════════════════════════════════════════════
-
-  // 1️⃣ FUNCIÓN COMPLETA: _crearHojaDetallada
   void _crearHojaDetallada(
     Excel excel,
     List<Map<String, dynamic>> estudiantes,
@@ -215,7 +344,6 @@ class ReportesAsistenciasExcelService {
 
     int row = 0;
 
-    // ✅ HEADERS CON CICLO Y GRUPO AGREGADOS
     final headers = [
       'Nombre',
       'Usuario',
@@ -223,19 +351,19 @@ class ReportesAsistenciasExcelService {
       'Código',
       'Facultad',
       'Carrera',
-      'Ciclo', // ← NUEVO
-      'Grupo', // ← NUEVO
+      'Ciclo',
+      'Grupo',
       'Total Asistencias',
       'Última Asistencia',
+      '⚠️ Sospechoso',
     ];
 
     _agregarFilaHeader(sheet, row++, headers);
 
-    // Datos
     for (var estudiante in estudiantes) {
       final lastScan = (estudiante['lastScan'] as Timestamp?)?.toDate();
+      final tieneFraude = estudiante['tieneFraude'] ?? false;
 
-      // ✅ DATOS CON CICLO Y GRUPO
       final datos = [
         estudiante['nombre'],
         '@${estudiante['username']}',
@@ -243,12 +371,13 @@ class ReportesAsistenciasExcelService {
         estudiante['codigo'],
         estudiante['facultad'],
         estudiante['carrera'],
-        estudiante['ciclo'] ?? 'N/A', // ← NUEVO
-        estudiante['grupo'] ?? 'N/A', // ← NUEVO
+        estudiante['ciclo'] ?? 'N/A',
+        estudiante['grupo'] ?? 'N/A',
         estudiante['totalScans'].toString(),
         lastScan != null
             ? DateFormat('dd/MM/yyyy HH:mm').format(lastScan)
             : '-',
+        tieneFraude ? 'SÍ' : '',
       ];
 
       for (int i = 0; i < datos.length; i++) {
@@ -257,8 +386,16 @@ class ReportesAsistenciasExcelService {
         );
         cell.value = TextCellValue(datos[i]);
 
-        // Colorear columna de total asistencias (ahora en índice 8 en lugar de 6)
-        if (i == 8) {
+        // Colorear si es sospechoso
+        if (i == 10 && tieneFraude) {
+          cell.cellStyle = CellStyle(
+            backgroundColorHex: ExcelColor.fromHexString('#FADBD8'),
+            fontColorHex: ExcelColor.fromHexString('#E74C3C'),
+            bold: true,
+          );
+        }
+        // Colorear columna de total asistencias
+        else if (i == 8) {
           final total = estudiante['totalScans'] as int;
           if (total >= 10) {
             cell.cellStyle = CellStyle(
@@ -282,20 +419,20 @@ class ReportesAsistenciasExcelService {
       row++;
     }
 
-    // ✅ AJUSTAR ANCHOS CON LAS NUEVAS COLUMNAS
-    sheet.setColumnWidth(0, 30); // Nombre
-    sheet.setColumnWidth(1, 15); // Usuario
-    sheet.setColumnWidth(2, 12); // DNI
-    sheet.setColumnWidth(3, 15); // Código
-    sheet.setColumnWidth(4, 35); // Facultad
-    sheet.setColumnWidth(5, 35); // Carrera
-    sheet.setColumnWidth(6, 10); // Ciclo ← NUEVO
-    sheet.setColumnWidth(7, 10); // Grupo ← NUEVO
-    sheet.setColumnWidth(8, 18); // Total
-    sheet.setColumnWidth(9, 18); // Última
+    sheet.setColumnWidth(0, 30);
+    sheet.setColumnWidth(1, 15);
+    sheet.setColumnWidth(2, 12);
+    sheet.setColumnWidth(3, 15);
+    sheet.setColumnWidth(4, 35);
+    sheet.setColumnWidth(5, 35);
+    sheet.setColumnWidth(6, 10);
+    sheet.setColumnWidth(7, 10);
+    sheet.setColumnWidth(8, 18);
+    sheet.setColumnWidth(9, 18);
+    sheet.setColumnWidth(10, 15);
   }
 
-  // 2️⃣ FUNCIÓN COMPLETA: _crearHojaPorEstudiante
+  // ✅ MODIFICADA: Colorear asistencias sospechosas en rojo
   void _crearHojaPorEstudiante(
     Excel excel,
     List<Map<String, dynamic>> estudiantes,
@@ -308,11 +445,17 @@ class ReportesAsistenciasExcelService {
       var estudianteHeader = sheet.cell(
         CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
       );
-      estudianteHeader.value = TextCellValue(
-        'ESTUDIANTE: ${estudiante['nombre']}',
-      );
+
+      final tieneFraude = estudiante['tieneFraude'] ?? false;
+      final headerText = tieneFraude
+          ? '⚠️ ESTUDIANTE: ${estudiante['nombre']} (ASISTENCIAS SOSPECHOSAS)'
+          : 'ESTUDIANTE: ${estudiante['nombre']}';
+
+      estudianteHeader.value = TextCellValue(headerText);
       estudianteHeader.cellStyle = CellStyle(
-        backgroundColorHex: ExcelColor.fromHexString('#4A90E2'),
+        backgroundColorHex: tieneFraude
+            ? ExcelColor.fromHexString('#E74C3C')
+            : ExcelColor.fromHexString('#4A90E2'),
         fontColorHex: ExcelColor.white,
         bold: true,
       );
@@ -332,17 +475,24 @@ class ReportesAsistenciasExcelService {
       );
       _agregarFilaSimple(sheet, row++, 'Facultad:', estudiante['facultad']);
       _agregarFilaSimple(sheet, row++, 'Carrera:', estudiante['carrera']);
-
-      // ✅ AGREGAR CICLO Y GRUPO
       _agregarFilaSimple(sheet, row++, 'Ciclo:', estudiante['ciclo'] ?? 'N/A');
       _agregarFilaSimple(sheet, row++, 'Grupo:', estudiante['grupo'] ?? 'N/A');
-
       _agregarFilaSimple(
         sheet,
         row++,
         'Total de asistencias:',
         estudiante['totalScans'].toString(),
       );
+
+      if (tieneFraude) {
+        _agregarFilaSimple(
+          sheet,
+          row++,
+          '⚠️ Grupos sospechosos:',
+          (estudiante['totalGruposSospechosos'] ?? 0).toString(),
+        );
+      }
+
       row++;
 
       // Headers de asistencias
@@ -358,8 +508,9 @@ class ReportesAsistenciasExcelService {
       final scans = estudiante['scans'] as List<dynamic>;
       for (var scan in scans) {
         final timestamp = (scan['timestamp'] as Timestamp?)?.toDate();
+        final esSospechoso = scan['esSospechoso'] ?? false;
 
-        _agregarFilaDatos(sheet, row++, [
+        final datos = [
           scan['codigoProyecto'] ?? 'Sin código',
           scan['tituloProyecto'] ?? 'Sin título',
           scan['categoria'] ?? 'Sin categoría',
@@ -367,21 +518,36 @@ class ReportesAsistenciasExcelService {
           timestamp != null
               ? DateFormat('dd/MM/yyyy HH:mm').format(timestamp)
               : '-',
-        ]);
+        ];
+
+        // ✅ COLOREAR EN ROJO SI ES SOSPECHOSO
+        for (int i = 0; i < datos.length; i++) {
+          var cell = sheet.cell(
+            CellIndex.indexByColumnRow(columnIndex: i, rowIndex: row),
+          );
+          cell.value = TextCellValue(datos[i]);
+
+          if (esSospechoso) {
+            cell.cellStyle = CellStyle(
+              fontColorHex: ExcelColor.fromHexString('#E74C3C'),
+              bold: true,
+            );
+          }
+        }
+
+        row++;
       }
 
-      row += 2; // Espacio entre estudiantes
+      row += 2;
     }
 
-    // Ajustar anchos
-    sheet.setColumnWidth(0, 15); // Código Proyecto
-    sheet.setColumnWidth(1, 40); // Título
-    sheet.setColumnWidth(2, 20); // Categoría
-    sheet.setColumnWidth(3, 12); // Grupo
-    sheet.setColumnWidth(4, 18); // Fecha
+    sheet.setColumnWidth(0, 15);
+    sheet.setColumnWidth(1, 40);
+    sheet.setColumnWidth(2, 20);
+    sheet.setColumnWidth(3, 12);
+    sheet.setColumnWidth(4, 18);
   }
 
-  // 3️⃣ FUNCIÓN COMPLETA: _crearHojaEstadisticas (CON ESTADÍSTICAS DE CICLO)
   void _crearHojaEstadisticas(
     Excel excel,
     List<Map<String, dynamic>> estudiantes,
@@ -442,7 +608,7 @@ class ReportesAsistenciasExcelService {
 
     row += 2;
 
-    // ✅ NUEVA SECCIÓN: ESTADÍSTICAS POR CICLO
+    // Estadísticas por ciclo
     var cicloHeader = sheet.cell(
       CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
     );
@@ -458,7 +624,6 @@ class ReportesAsistenciasExcelService {
     );
     row += 1;
 
-    // Agrupar por ciclo
     final ciclosMap = <String, Map<String, int>>{};
     for (var estudiante in estudiantes) {
       final ciclo = estudiante['ciclo'] ?? 'N/A';
@@ -480,30 +645,24 @@ class ReportesAsistenciasExcelService {
 
       final ciclos = ciclosMap.keys.toList()..sort();
       for (var ciclo in ciclos) {
-        final estudiantes = ciclosMap[ciclo]!['estudiantes']!;
+        final estudiantesCount = ciclosMap[ciclo]!['estudiantes']!;
         final asistencias = ciclosMap[ciclo]!['asistencias']!;
-        final promedio = estudiantes > 0
-            ? (asistencias / estudiantes).toStringAsFixed(2)
+        final promedio = estudiantesCount > 0
+            ? (asistencias / estudiantesCount).toStringAsFixed(2)
             : '0.00';
 
         _agregarFilaDatos(sheet, row++, [
           ciclo,
-          estudiantes.toString(),
+          estudiantesCount.toString(),
           asistencias.toString(),
           promedio,
         ]);
       }
-    } else {
-      var noCicloCell = sheet.cell(
-        CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
-      );
-      noCicloCell.value = TextCellValue('No hay datos de ciclos registrados');
-      row++;
     }
 
     row += 2;
 
-    // Estadísticas por grupo (si existen)
+    // Estadísticas por grupo
     var grupoHeader = sheet.cell(
       CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
     );
@@ -519,7 +678,6 @@ class ReportesAsistenciasExcelService {
     );
     row += 1;
 
-    // Agrupar por grupo de ESTUDIANTES (no de scans)
     final gruposEstudiantesMap = <String, Map<String, int>>{};
     for (var estudiante in estudiantes) {
       final grupo = estudiante['grupo'] ?? 'N/A';
@@ -545,32 +703,258 @@ class ReportesAsistenciasExcelService {
 
       final grupos = gruposEstudiantesMap.keys.toList()..sort();
       for (var grupo in grupos) {
-        final estudiantes = gruposEstudiantesMap[grupo]!['estudiantes']!;
+        final estudiantesCount = gruposEstudiantesMap[grupo]!['estudiantes']!;
         final asistencias = gruposEstudiantesMap[grupo]!['asistencias']!;
-        final promedio = estudiantes > 0
-            ? (asistencias / estudiantes).toStringAsFixed(2)
+        final promedio = estudiantesCount > 0
+            ? (asistencias / estudiantesCount).toStringAsFixed(2)
             : '0.00';
 
         _agregarFilaDatos(sheet, row++, [
           grupo,
-          estudiantes.toString(),
+          estudiantesCount.toString(),
           asistencias.toString(),
           promedio,
         ]);
       }
-    } else {
-      var noGrupoCell = sheet.cell(
-        CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
-      );
-      noGrupoCell.value = TextCellValue('No hay datos de grupos registrados');
-      row++;
     }
 
-    // Ajustar anchos
     sheet.setColumnWidth(0, 30);
     sheet.setColumnWidth(1, 20);
     sheet.setColumnWidth(2, 20);
     sheet.setColumnWidth(3, 15);
+  }
+
+  // ✅ NUEVA HOJA: Reporte de Asistencias Sospechosas
+  void _crearHojaAsistenciasSospechosas(
+    Excel excel,
+    List<Map<String, dynamic>> estudiantes,
+  ) {
+    final sheet = excel['🚨 Asistencias Sospechosas'];
+    int row = 0;
+
+    // Título
+    var titleCell = sheet.cell(CellIndex.indexByString('A1'));
+    titleCell.value = TextCellValue('🚨 REPORTE DE ASISTENCIAS SOSPECHOSAS');
+    titleCell.cellStyle = CellStyle(
+      backgroundColorHex: ExcelColor.fromHexString('#E74C3C'),
+      fontColorHex: ExcelColor.white,
+      bold: true,
+      fontSize: 14,
+      horizontalAlign: HorizontalAlign.Center,
+    );
+    sheet.merge(CellIndex.indexByString('A1'), CellIndex.indexByString('F1'));
+    row += 2;
+
+    // Descripción
+    var descCell = sheet.cell(
+      CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+    );
+    descCell.value = TextCellValue(
+      'Este reporte muestra estudiantes con $_minimoGruposSospechosos o más grupos de asistencias '
+      'registradas en un margen de $_umbralMinutos minutos o menos.',
+    );
+    sheet.merge(
+      CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+      CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row),
+    );
+    row += 2;
+
+    // Filtrar estudiantes con fraude
+    final estudiantesConFraude = estudiantes
+        .where((e) => e['tieneFraude'] == true)
+        .toList();
+
+    if (estudiantesConFraude.isEmpty) {
+      var noFraudeCell = sheet.cell(
+        CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+      );
+      noFraudeCell.value = TextCellValue(
+        '✅ No se detectaron estudiantes con asistencias sospechosas',
+      );
+      noFraudeCell.cellStyle = CellStyle(
+        fontColorHex: ExcelColor.fromHexString('#27AE60'),
+        bold: true,
+        fontSize: 13,
+      );
+      sheet.setColumnWidth(0, 50);
+      return;
+    }
+
+    // Headers
+    _agregarFilaHeader(sheet, row++, [
+      'Nombre',
+      'Código',
+      'DNI',
+      'Total Asistencias',
+      'Grupos Sospechosos',
+      'Ver Detalle',
+    ]);
+
+    // Ordenar por más grupos sospechosos
+    estudiantesConFraude.sort((a, b) {
+      return (b['totalGruposSospechosos'] as int).compareTo(
+        a['totalGruposSospechosos'] as int,
+      );
+    });
+
+    // Datos de estudiantes con fraude
+    for (var estudiante in estudiantesConFraude) {
+      final datos = [
+        estudiante['nombre'],
+        estudiante['codigo'],
+        estudiante['dni'],
+        estudiante['totalScans'].toString(),
+        (estudiante['totalGruposSospechosos'] ?? 0).toString(),
+        '→ Ver en "Por Estudiante"',
+      ];
+
+      for (int i = 0; i < datos.length; i++) {
+        var cell = sheet.cell(
+          CellIndex.indexByColumnRow(columnIndex: i, rowIndex: row),
+        );
+        cell.value = TextCellValue(datos[i]);
+
+        // Colorear columna de grupos sospechosos
+        if (i == 4) {
+          cell.cellStyle = CellStyle(
+            backgroundColorHex: ExcelColor.fromHexString('#FADBD8'),
+            fontColorHex: ExcelColor.fromHexString('#E74C3C'),
+            bold: true,
+          );
+        }
+      }
+      row++;
+    }
+
+    row += 2;
+
+    // Sección de detalle por estudiante
+    var detalleHeader = sheet.cell(
+      CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+    );
+    detalleHeader.value = TextCellValue('DETALLE DE ASISTENCIAS SOSPECHOSAS');
+    detalleHeader.cellStyle = CellStyle(
+      backgroundColorHex: ExcelColor.fromHexString('#E74C3C'),
+      fontColorHex: ExcelColor.white,
+      bold: true,
+    );
+    sheet.merge(
+      CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+      CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row),
+    );
+    row += 2;
+
+    // Detalle de cada estudiante
+    for (var estudiante in estudiantesConFraude) {
+      // Nombre del estudiante
+      var estudianteCell = sheet.cell(
+        CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+      );
+      estudianteCell.value = TextCellValue(
+        '⚠️ ${estudiante['nombre']} (${estudiante['codigo']})',
+      );
+      estudianteCell.cellStyle = CellStyle(
+        backgroundColorHex: ExcelColor.fromHexString('#F8D7DA'),
+        fontColorHex: ExcelColor.fromHexString('#721C24'),
+        bold: true,
+      );
+      sheet.merge(
+        CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row),
+        CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row),
+      );
+      row++;
+
+      // Información básica
+      _agregarFilaSimple(
+        sheet,
+        row++,
+        'Total de asistencias:',
+        estudiante['totalScans'].toString(),
+      );
+      _agregarFilaSimple(
+        sheet,
+        row++,
+        'Asistencias sospechosas:',
+        '${estudiante['totalAsistenciasSospechosas'] ?? 0} de ${estudiante['totalScans']}',
+      );
+      _agregarFilaSimple(
+        sheet,
+        row++,
+        'Grupos sospechosos detectados:',
+        (estudiante['totalGruposSospechosos'] ?? 0).toString(),
+      );
+      row++;
+
+      // Headers para asistencias
+      _agregarFilaHeader(sheet, row++, [
+        'Código Proyecto',
+        'Título',
+        'Categoría',
+        'Fecha y Hora',
+        'Diferencia',
+        '⚠️',
+      ]);
+
+      // Mostrar asistencias con detección de grupos
+      final scans = estudiante['scans'] as List<dynamic>;
+      final gruposSospechosos =
+          estudiante['gruposSospechosos'] as List<dynamic>;
+
+      for (int i = 0; i < scans.length; i++) {
+        final scan = scans[i];
+        final timestamp = (scan['timestamp'] as Timestamp?)?.toDate();
+        final esSospechoso = scan['esSospechoso'] ?? false;
+
+        // Calcular diferencia con el anterior
+        String diferencia = '-';
+        if (i > 0 && timestamp != null) {
+          final timestampAnterior = (scans[i - 1]['timestamp'] as Timestamp?)
+              ?.toDate();
+          if (timestampAnterior != null) {
+            final diff = timestamp.difference(timestampAnterior).inMinutes;
+            diferencia = '$diff min';
+          }
+        }
+
+        final datos = [
+          scan['codigoProyecto'] ?? 'Sin código',
+          scan['tituloProyecto'] ?? 'Sin título',
+          scan['categoria'] ?? 'Sin categoría',
+          timestamp != null
+              ? DateFormat('dd/MM/yyyy HH:mm').format(timestamp)
+              : '-',
+          diferencia,
+          esSospechoso ? '⚠️ SOSPECHOSO' : '',
+        ];
+
+        for (int j = 0; j < datos.length; j++) {
+          var cell = sheet.cell(
+            CellIndex.indexByColumnRow(columnIndex: j, rowIndex: row),
+          );
+          cell.value = TextCellValue(datos[j]);
+
+          // Colorear si es sospechoso
+          if (esSospechoso) {
+            cell.cellStyle = CellStyle(
+              backgroundColorHex: ExcelColor.fromHexString('#FADBD8'),
+              fontColorHex: ExcelColor.fromHexString('#E74C3C'),
+              bold: j == 5, // Más bold en la columna de advertencia
+            );
+          }
+        }
+        row++;
+      }
+
+      row += 2;
+    }
+
+    // Ajustar anchos
+    sheet.setColumnWidth(0, 18);
+    sheet.setColumnWidth(1, 40);
+    sheet.setColumnWidth(2, 20);
+    sheet.setColumnWidth(3, 18);
+    sheet.setColumnWidth(4, 12);
+    sheet.setColumnWidth(5, 18);
   }
 
   // Métodos auxiliares
@@ -618,11 +1002,9 @@ class ReportesAsistenciasExcelService {
     String? carrera,
   ) async {
     try {
-      // Generar nombre de archivo
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       final nombreEvento = eventoNombre.replaceAll(' ', '_');
 
-      // Agregar carrera al nombre si existe
       String sufijo = '';
       if (carrera != null && carrera != 'General') {
         sufijo = '_${carrera.replaceAll(' ', '_')}';
@@ -631,13 +1013,10 @@ class ReportesAsistenciasExcelService {
       final fileName =
           'Reporte_Asistencias_${nombreEvento}${sufijo}_$timestamp.xlsx';
 
-      // Obtener directorio de Documentos
       Directory? directory;
       if (Platform.isAndroid) {
-        // Usar Downloads que es más accesible sin permisos especiales
         directory = Directory('/storage/emulated/0/Download');
 
-        // Verificar si existe, si no, intentar con Documents
         if (!await directory.exists()) {
           directory = Directory('/storage/emulated/0/Documents');
 
@@ -645,7 +1024,6 @@ class ReportesAsistenciasExcelService {
             try {
               await directory.create(recursive: true);
             } catch (e) {
-              // Si falla, usar getExternalStorageDirectory
               final appDir = await getExternalStorageDirectory();
               directory = Directory('${appDir?.path}/Download');
               await directory.create(recursive: true);
@@ -660,7 +1038,6 @@ class ReportesAsistenciasExcelService {
         throw Exception('No se pudo acceder al directorio de descargas');
       }
 
-      // Guardar archivo
       final filePath = '${directory.path}/$fileName';
       final fileBytes = excel.save();
 

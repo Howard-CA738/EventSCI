@@ -1,51 +1,68 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'filiales_service.dart';
 
 class EventosService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FilialesService _filialesService = FilialesService();
 
-  // Estructura de facultades y carreras
-  final Map<String, List<String>> facultadesCarreras = {
-    'Universidad Peruana Unión': [],
-    'Facultad de Ciencias Empresariales': [
-      'Administración',
-      'Contabilidad',
-      'Gestión Tributaria y Aduanera',
-    ],
-    'Facultad de Ciencias Humanas y Educación': [
-      'Educación, Especialidad Inicial y Puericultura',
-      'Educación, Especialidad Primaria y Pedagogía Terapéutica',
-      'Educación, Especialidad Inglés y Español',
-    ],
-    'Facultad de Ciencias de la Salud': [
-      'Enfermería',
-      'Nutrición Humana',
-      'Psicología',
-    ],
-    'Facultad de Ingeniería y Arquitectura': [
-      'Ingeniería Civil',
-      'Arquitectura y Urbanismo',
-      'Ingeniería Ambiental',
-      'Ingeniería de Industrias Alimentarias',
-      'Ingeniería de Sistemas',
-    ],
-  };
-
-  bool requiereCarrera(String? facultad) {
-    if (facultad == null) return true;
-    return facultad != 'Universidad Peruana Unión';
+  // ✅ Obtener filiales disponibles
+  Future<List<Map<String, String>>> getFiliales() async {
+    final filiales = await _filialesService.getFiliales();
+    return filiales.map((id) {
+      return {
+        'id': id,
+        'nombre': _filialesService.getNombreFilial(id),
+        'ubicacion': _filialesService.getUbicacionFilial(id),
+      };
+    }).toList();
   }
 
-  // Crear nuevo evento con período
+  // ✅ Obtener facultades por filial
+  Future<List<String>> getFacultadesByFilial(String filialId) async {
+    return await _filialesService.getFacultadesByFilial(filialId);
+  }
+
+  // ✅ Obtener carreras por facultad
+  Future<List<Map<String, dynamic>>> getCarrerasByFacultad(
+    String filialId,
+    String facultadNombre,
+  ) async {
+    return await _filialesService.getCarrerasByFacultad(
+      filialId,
+      facultadNombre,
+    );
+  }
+
+  // ✅ Verificar si requiere facultad
+  bool requiereFacultad(String? filialId) {
+    // Siempre requiere facultad
+    return filialId != null;
+  }
+
+  // ✅ Verificar si requiere carrera
+  bool requiereCarrera(String? facultadNombre) {
+    // Siempre requiere carrera si hay facultad
+    return facultadNombre != null;
+  }
+
+  // Crear nuevo evento
   Future<void> createEvent({
     required String name,
+    required String filialId,
+    required String filialNombre,
     required String facultad,
-    String? carrera,
+    required String carreraId,
+    required String carreraNombre,
     required String periodoId,
     required String periodoNombre,
   }) async {
     final eventData = {
       'name': name,
+      'filialId': filialId,
+      'filialNombre': filialNombre,
       'facultad': facultad,
+      'carreraId': carreraId,
+      'carreraNombre': carreraNombre,
       'periodoId': periodoId,
       'periodoNombre': periodoNombre,
       'createdAt': FieldValue.serverTimestamp(),
@@ -56,39 +73,31 @@ class EventosService {
       'ponentes': [],
     };
 
-    // Solo agregar carrera si se proporciona
-    if (carrera != null && carrera.isNotEmpty) {
-      eventData['carrera'] = carrera;
-    } else {
-      eventData['carrera'] = 'General'; // Valor por defecto para UPeU
-    }
-
     await _firestore.collection('events').add(eventData);
   }
 
-  // Editar evento CON PERÍODO
+  // Editar evento
   Future<void> updateEvent({
     required String eventId,
     required String name,
+    required String filialId,
+    required String filialNombre,
     required String facultad,
-    String? carrera,
+    required String carreraId,
+    required String carreraNombre,
     String? periodoId,
     String? periodoNombre,
   }) async {
     final updateData = {
       'name': name,
+      'filialId': filialId,
+      'filialNombre': filialNombre,
       'facultad': facultad,
+      'carreraId': carreraId,
+      'carreraNombre': carreraNombre,
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
-    // Solo agregar carrera si se proporciona o si no es UPeU
-    if (carrera != null && carrera.isNotEmpty) {
-      updateData['carrera'] = carrera;
-    } else if (facultad == 'Universidad Peruana Unión') {
-      updateData['carrera'] = 'General';
-    }
-
-    // Solo agregar período si se proporciona
     if (periodoId != null) {
       updateData['periodoId'] = periodoId;
     }
@@ -125,6 +134,14 @@ class EventosService {
     return null;
   }
 
+  // Validar filial
+  String? validateFilial(String? filialId) {
+    if (filialId == null) {
+      return 'Por favor selecciona una filial';
+    }
+    return null;
+  }
+
   // Validar facultad
   String? validateFacultad(String? facultad) {
     if (facultad == null) {
@@ -133,12 +150,9 @@ class EventosService {
     return null;
   }
 
-  // ✅ Validar carrera (con 2 parámetros)
-  String? validateCarrera(String? carrera, String? facultad) {
-    if (facultad == 'Universidad Peruana Unión') {
-      return null;
-    }
-    if (carrera == null) {
+  // Validar carrera
+  String? validateCarrera(String? carreraId) {
+    if (carreraId == null) {
       return 'Por favor selecciona una carrera';
     }
     return null;
@@ -157,6 +171,18 @@ class EventosService {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 
+  // Filtrar eventos por filial
+  List<QueryDocumentSnapshot> filterByFilial(
+    List<QueryDocumentSnapshot> events,
+    String? filtroFilial,
+  ) {
+    if (filtroFilial == null) return events;
+    return events.where((event) {
+      final data = event.data() as Map<String, dynamic>;
+      return data['filialId'] == filtroFilial;
+    }).toList();
+  }
+
   // Filtrar eventos por facultad
   List<QueryDocumentSnapshot> filterByFacultad(
     List<QueryDocumentSnapshot> events,
@@ -169,26 +195,15 @@ class EventosService {
     }).toList();
   }
 
-  // ✅ MEJORADO: Filtrar eventos por carrera
-  // Ahora maneja correctamente el caso de "General" para UPeU
+  // Filtrar eventos por carrera
   List<QueryDocumentSnapshot> filterByCarrera(
     List<QueryDocumentSnapshot> events,
-    String? filtroCarrera,
+    String? filtroCarreraId,
   ) {
-    if (filtroCarrera == null) return events;
-
+    if (filtroCarreraId == null) return events;
     return events.where((event) {
       final data = event.data() as Map<String, dynamic>;
-      final eventCarrera = data['carrera'];
-
-      // Si el filtro es "General", solo mostrar eventos de UPeU
-      if (filtroCarrera == 'General') {
-        return eventCarrera == 'General' &&
-            data['facultad'] == 'Universidad Peruana Unión';
-      }
-
-      // Para otras carreras, comparación normal
-      return eventCarrera == filtroCarrera;
+      return data['carreraId'] == filtroCarreraId;
     }).toList();
   }
 

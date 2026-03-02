@@ -1360,18 +1360,20 @@ class DetalleProyectoScreen extends StatelessWidget {
   }
 
   Widget _buildActionButtons(BuildContext context) {
-    return Row(
+    return Column(
       children: [
-        Expanded(
+        // Botón NUEVO: Actualizar asistencias registradas
+        SizedBox(
+          width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: () => _editarProyecto(context),
-            icon: const Icon(Icons.edit, size: 20),
+            onPressed: () => _actualizarScansExistentes(context),
+            icon: const Icon(Icons.sync, size: 20),
             label: const Text(
-              'Editar Proyecto',
+              'Actualizar Asistencias Registradas',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2196F3),
+              backgroundColor: const Color(0xFFFF9800),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
@@ -1381,28 +1383,170 @@ class DetalleProyectoScreen extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: () => _eliminarProyecto(context),
-            icon: const Icon(Icons.delete, size: 20),
-            label: const Text(
-              'Eliminar',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFF44336),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+        const SizedBox(height: 12),
+
+        // Botones originales (Editar y Eliminar)
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => _editarProyecto(context),
+                icon: const Icon(Icons.edit, size: 20),
+                label: const Text(
+                  'Editar Proyecto',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2196F3),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
               ),
-              elevation: 0,
             ),
-          ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => _eliminarProyecto(context),
+                icon: const Icon(Icons.delete, size: 20),
+                label: const Text(
+                  'Eliminar',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF44336),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
+  }
+
+  Future<void> _actualizarScansExistentes(BuildContext context) async {
+    // Mostrar diálogo de confirmación
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF9800).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.sync, color: Color(0xFFFF9800)),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(child: Text('Actualizar Asistencias')),
+            ],
+          ),
+          content: Text(
+            '¿Deseas actualizar todas las asistencias registradas del proyecto "${proyecto['Código']}" con la nueva clasificación "${proyecto['Clasificación']}"?\n\nEsto afectará todos los registros de asistencia existentes.',
+            style: const TextStyle(fontSize: 15),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+              ),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF9800),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              child: const Text('Actualizar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmar != true) return;
+
+    // Mostrar diálogo de progreso
+    if (context.mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 20),
+              const Text(
+                'Actualizando asistencias...',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Esto puede tomar unos momentos',
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    try {
+      await gruposService.actualizarCategoriaDeScansPorProyecto(
+        eventData['id'],
+        proyecto['Código'],
+        proyecto['Clasificación'],
+      );
+
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Cerrar diálogo de progreso
+        onProyectoActualizado();
+        _mostrarMensaje(
+          context,
+          'Todas las asistencias fueron actualizadas exitosamente',
+          Colors.green,
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Cerrar diálogo de progreso
+        _mostrarError(context, 'Error al actualizar las asistencias: $e');
+      }
+    }
   }
 
   void _editarProyecto(BuildContext context) {
@@ -1559,19 +1703,65 @@ class DetalleProyectoScreen extends StatelessWidget {
     BuildContext context,
     Map<String, dynamic> nuevosDatos,
   ) async {
+    // Verificar si cambió la clasificación
+    final clasificacionCambio =
+        proyecto['Clasificación'] != nuevosDatos['Clasificación'];
+
     try {
+      // Mostrar diálogo de progreso si cambió la clasificación
+      if (clasificacionCambio) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 20),
+                const Text(
+                  'Actualizando proyecto...',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'También se actualizarán las asistencias registradas',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
       await gruposService.actualizarProyecto(
         eventData['id'],
         proyecto['docId'],
         nuevosDatos,
       );
+
+      if (clasificacionCambio && context.mounted) {
+        Navigator.of(context).pop(); // Cerrar diálogo de progreso
+      }
+
       onProyectoActualizado();
+
       _mostrarMensaje(
         context,
-        'Proyecto actualizado exitosamente',
+        clasificacionCambio
+            ? 'Proyecto y asistencias actualizados exitosamente'
+            : 'Proyecto actualizado exitosamente',
         Colors.green,
       );
     } catch (e) {
+      if (clasificacionCambio && context.mounted) {
+        Navigator.of(context).pop(); // Cerrar diálogo de progreso si hubo error
+      }
       _mostrarError(context, 'Error al actualizar el proyecto');
     }
   }

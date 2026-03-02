@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'filiales_service.dart';
+import 'gestion_criterios.dart';
 
 class EditarJuradosScreen extends StatefulWidget {
   const EditarJuradosScreen({super.key});
@@ -10,97 +12,115 @@ class EditarJuradosScreen extends StatefulWidget {
 
 class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final RubricasService _rubricasService = RubricasService();
 
+  // ✅ NUEVO: Valores con sistema de filiales
+  String? _filialSeleccionada;
   String? _facultadSeleccionada;
   String? _carreraSeleccionada;
 
-  List<String> _facultades = [];
-  List<String> _carrerasDisponibles = [];
+  // ✅ NUEVO: Listas dinámicas
+  List<String> _filialesDisponibles = [];
+  List<String> _facultadesDisponibles = [];
+  List<Map<String, dynamic>> _carrerasDisponibles = [];
   List<Map<String, dynamic>> _jurados = [];
 
-  bool _isLoadingFacultades = true;
+  bool _isLoadingFiliales = true;
   bool _isLoadingJurados = false;
-
-  Map<String, Set<String>> _carrerasPorFacultad = {};
 
   @override
   void initState() {
     super.initState();
-    _cargarFacultades();
+    _cargarFiliales();
   }
 
-  Future<void> _cargarFacultades() async {
+  // ✅ NUEVO: Cargar filiales
+  Future<void> _cargarFiliales() async {
     setState(() {
-      _isLoadingFacultades = true;
+      _isLoadingFiliales = true;
     });
 
     try {
-      final eventsSnapshot = await _firestore.collection('events').get();
-
-      final Set<String> facultadesSet = {};
-      final Map<String, Set<String>> carrerasMap = {};
-
-      for (var doc in eventsSnapshot.docs) {
-        final data = doc.data();
-        final facultad = data['facultad'] as String?;
-        final carrera = data['carrera'] as String?;
-
-        if (facultad != null && facultad.isNotEmpty) {
-          facultadesSet.add(facultad);
-
-          if (carrera != null && carrera.isNotEmpty) {
-            if (!carrerasMap.containsKey(facultad)) {
-              carrerasMap[facultad] = {};
-            }
-            carrerasMap[facultad]!.add(carrera);
-          }
-        }
-      }
-
+      final filiales = await _rubricasService.getFiliales();
       if (mounted) {
         setState(() {
-          _facultades = facultadesSet.toList()..sort();
-          _carrerasPorFacultad = carrerasMap;
-          _isLoadingFacultades = false;
+          _filialesDisponibles = filiales;
+          _isLoadingFiliales = false;
         });
       }
     } catch (e) {
-      print('Error al cargar facultades: $e');
+      print('Error al cargar filiales: $e');
       if (mounted) {
         setState(() {
-          _isLoadingFacultades = false;
+          _isLoadingFiliales = false;
         });
       }
     }
   }
 
-  void _onFacultadChanged(String? facultad) {
+  // ✅ NUEVO: Cuando cambia la filial
+  Future<void> _onFilialChanged(String? filial) async {
+    setState(() {
+      _filialSeleccionada = filial;
+      _facultadSeleccionada = null;
+      _carreraSeleccionada = null;
+      _jurados = [];
+      _facultadesDisponibles = [];
+      _carrerasDisponibles = [];
+    });
+
+    if (filial != null) {
+      final facultades = await _rubricasService.getFacultadesByFilial(filial);
+      if (mounted) {
+        setState(() {
+          _facultadesDisponibles = facultades;
+        });
+      }
+    }
+  }
+
+  // ✅ NUEVO: Cuando cambia la facultad
+  Future<void> _onFacultadChanged(String? facultad) async {
     setState(() {
       _facultadSeleccionada = facultad;
       _carreraSeleccionada = null;
       _jurados = [];
-
-      if (facultad != null && _carrerasPorFacultad.containsKey(facultad)) {
-        _carrerasDisponibles = _carrerasPorFacultad[facultad]!.toList()..sort();
-      } else {
-        _carrerasDisponibles = [];
-      }
+      _carrerasDisponibles = [];
     });
+
+    if (_filialSeleccionada != null && facultad != null) {
+      final carreras = await _rubricasService.getCarrerasByFacultad(
+        _filialSeleccionada!,
+        facultad,
+      );
+      if (mounted) {
+        setState(() {
+          _carrerasDisponibles = carreras;
+        });
+      }
+    }
   }
 
-  Future<void> _onCarreraChanged(String? carrera) async {
+  Future<void> _onCarreraChanged(String? carreraNombre) async {
     setState(() {
-      _carreraSeleccionada = carrera;
+      _carreraSeleccionada = carreraNombre;
       _jurados = [];
     });
 
-    if (carrera != null && _facultadSeleccionada != null) {
+    if (carreraNombre != null &&
+        _facultadSeleccionada != null &&
+        _filialSeleccionada != null) {
       await _cargarJurados();
     }
   }
 
+  // ✅ ACTUALIZADO: Cargar jurados filtrando por filial, facultad y carrera
   Future<void> _cargarJurados() async {
-    if (_facultadSeleccionada == null || _carreraSeleccionada == null) return;
+    if (_filialSeleccionada == null ||
+        _facultadSeleccionada == null ||
+        _carreraSeleccionada == null) {
+      return;
+    }
 
     setState(() {
       _isLoadingJurados = true;
@@ -110,7 +130,9 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
       final juradosSnapshot = await _firestore
           .collection('users')
           .where('userType', isEqualTo: 'jurado')
+          .where('filial', isEqualTo: _filialSeleccionada)
           .where('facultad', isEqualTo: _facultadSeleccionada)
+          .where('carrera', isEqualTo: _carreraSeleccionada)
           .get();
 
       final List<Map<String, dynamic>> juradosList = [];
@@ -118,26 +140,25 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
       for (var doc in juradosSnapshot.docs) {
         final data = doc.data();
 
-        if (data['carrera'] == _carreraSeleccionada) {
-          // CAMBIO: Manejar categorías como lista
-          List<String> categorias = [];
-          if (data['categorias'] != null) {
-            categorias = List<String>.from(data['categorias']);
-          } else if (data['categoria'] != null) {
-            // Compatibilidad con datos antiguos
-            categorias = [data['categoria']];
-          }
-
-          juradosList.add({
-            'id': doc.id,
-            'nombre': data['name'] ?? '',
-            'usuario': data['usuario'] ?? '',
-            'password': data['password'] ?? '',
-            'facultad': data['facultad'] ?? '',
-            'carrera': data['carrera'] ?? '',
-            'categorias': categorias,
-          });
+        // Manejar categorías como lista
+        List<String> categorias = [];
+        if (data['categorias'] != null) {
+          categorias = List<String>.from(data['categorias']);
+        } else if (data['categoria'] != null) {
+          // Compatibilidad con datos antiguos
+          categorias = [data['categoria']];
         }
+
+        juradosList.add({
+          'id': doc.id,
+          'nombre': data['name'] ?? '',
+          'usuario': data['usuario'] ?? '',
+          'password': data['password'] ?? '',
+          'filial': data['filial'] ?? '',
+          'facultad': data['facultad'] ?? '',
+          'carrera': data['carrera'] ?? '',
+          'categorias': categorias,
+        });
       }
 
       if (mounted) {
@@ -214,6 +235,58 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // ✅ NUEVO: Mostrar ubicación del jurado (no editable)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.location_on,
+                            color: Colors.blue.shade700,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Ubicación del Jurado',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue.shade900,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      FutureBuilder<String>(
+                        future: _rubricasService.getNombreFilial(
+                          jurado['filial'],
+                        ),
+                        builder: (context, snapshot) {
+                          final nombreFilial =
+                              snapshot.data ?? jurado['filial'];
+                          return Text(
+                            'Campus: $nombreFilial\nFacultad: ${jurado['facultad']}\nCarrera: ${jurado['carrera']}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.blue.shade800,
+                              height: 1.4,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
                 TextField(
                   controller: nombreController,
                   decoration: InputDecoration(
@@ -278,9 +351,13 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // NUEVO: Selector de múltiples categorías
+                // Selector de múltiples categorías
                 FutureBuilder<List<String>>(
-                  future: _obtenerCategorias(),
+                  future: _obtenerCategorias(
+                    jurado['filial'],
+                    jurado['facultad'],
+                    jurado['carrera'],
+                  ),
                   builder: (context, catSnapshot) {
                     if (!catSnapshot.hasData) {
                       return const CircularProgressIndicator();
@@ -463,12 +540,18 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
     );
   }
 
-  Future<List<String>> _obtenerCategorias() async {
+  // ✅ ACTUALIZADO: Obtener categorías usando filialId
+  Future<List<String>> _obtenerCategorias(
+    String filialId,
+    String facultad,
+    String carreraNombre,
+  ) async {
     try {
       final eventsSnapshot = await _firestore
           .collection('events')
-          .where('facultad', isEqualTo: _facultadSeleccionada)
-          .where('carrera', isEqualTo: _carreraSeleccionada)
+          .where('filialId', isEqualTo: filialId)
+          .where('facultad', isEqualTo: facultad)
+          .where('carreraNombre', isEqualTo: carreraNombre)
           .get();
 
       final Set<String> categoriasSet = {};
@@ -505,12 +588,11 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
     List<String> categorias,
   ) async {
     try {
-      // CAMBIO: Actualizar con lista de categorías
       await _firestore.collection('users').doc(id).update({
         'name': nombre,
         'usuario': usuario,
         'password': password,
-        'categorias': categorias, // Lista de categorías
+        'categorias': categorias,
       });
 
       if (mounted) {
@@ -688,6 +770,69 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                           ),
                           const SizedBox(height: 24),
 
+                          // ✅ NUEVO: Filial
+                          DropdownButtonFormField<String>(
+                            value: _filialSeleccionada,
+                            isExpanded: true,
+                            decoration: InputDecoration(
+                              labelText: 'Filial',
+                              prefixIcon: const Icon(
+                                Icons.location_city,
+                                color: Color(0xFF1A5490),
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(15),
+                                borderSide: BorderSide(
+                                  color: Colors.grey[300]!,
+                                  width: 1.5,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(15),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFF1A5490),
+                                  width: 2,
+                                ),
+                              ),
+                              filled: true,
+                              fillColor: Colors.white,
+                            ),
+                            selectedItemBuilder: (context) {
+                              return _filialesDisponibles.map((filialId) {
+                                return FutureBuilder<String>(
+                                  future: _rubricasService.getNombreFilial(
+                                    filialId,
+                                  ),
+                                  builder: (context, snapshot) {
+                                    return Text(
+                                      snapshot.data ?? filialId,
+                                      overflow: TextOverflow.ellipsis,
+                                    );
+                                  },
+                                );
+                              }).toList();
+                            },
+                            items: _filialesDisponibles.map((filialId) {
+                              return DropdownMenuItem(
+                                value: filialId,
+                                child: FutureBuilder<String>(
+                                  future: _rubricasService.getNombreFilial(
+                                    filialId,
+                                  ),
+                                  builder: (context, snapshot) {
+                                    return Text(snapshot.data ?? filialId);
+                                  },
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: _onFilialChanged,
+                            menuMaxHeight: 300,
+                          ),
+                          const SizedBox(height: 16),
+
                           // Facultad
                           DropdownButtonFormField<String>(
                             value: _facultadSeleccionada,
@@ -719,20 +864,22 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                               fillColor: Colors.white,
                             ),
                             selectedItemBuilder: (context) {
-                              return _facultades.map((value) {
+                              return _facultadesDisponibles.map((value) {
                                 return Text(
                                   value,
                                   overflow: TextOverflow.ellipsis,
                                 );
                               }).toList();
                             },
-                            items: _facultades.map((facultad) {
+                            items: _facultadesDisponibles.map((facultad) {
                               return DropdownMenuItem(
                                 value: facultad,
                                 child: Text(facultad),
                               );
                             }).toList(),
-                            onChanged: _onFacultadChanged,
+                            onChanged: _filialSeleccionada == null
+                                ? null
+                                : _onFacultadChanged,
                             menuMaxHeight: 300,
                           ),
                           const SizedBox(height: 16),
@@ -768,17 +915,17 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                               fillColor: Colors.white,
                             ),
                             selectedItemBuilder: (context) {
-                              return _carrerasDisponibles.map((value) {
+                              return _carrerasDisponibles.map((carrera) {
                                 return Text(
-                                  value,
+                                  carrera['nombre'] as String,
                                   overflow: TextOverflow.ellipsis,
                                 );
                               }).toList();
                             },
                             items: _carrerasDisponibles.map((carrera) {
                               return DropdownMenuItem(
-                                value: carrera,
-                                child: Text(carrera),
+                                value: carrera['nombre'] as String,
+                                child: Text(carrera['nombre'] as String),
                               );
                             }).toList(),
                             onChanged: _facultadSeleccionada == null
@@ -810,9 +957,10 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                                   ),
                                   const SizedBox(height: 16),
                                   Text(
-                                    _facultadSeleccionada == null ||
+                                    _filialSeleccionada == null ||
+                                            _facultadSeleccionada == null ||
                                             _carreraSeleccionada == null
-                                        ? 'Seleccione facultad y carrera'
+                                        ? 'Seleccione filial, facultad y carrera'
                                         : 'No hay jurados registrados',
                                     style: TextStyle(
                                       fontSize: 16,

@@ -5,6 +5,8 @@ import '/Admin/logica/admin.dart';
 import '/usuarios/logica/estudiante.dart';
 import '/Asistentes/asistentes.dart';
 import '/Jurados/jurados.dart';
+import '/admin_carrera/admin_carrera_service.dart';
+import '/admin_carrera/admin_carrera_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -37,7 +39,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _precacheImages() async {
     try {
-      await precacheImage(const AssetImage('assets/images/logo.png'), context);
+      await precacheImage(
+        const AssetImage('assets/images/logoupeu.jpg'),
+        context,
+      );
       for (var bg in _backgrounds) {
         await precacheImage(AssetImage(bg), context);
       }
@@ -93,24 +98,58 @@ class _LoginScreenState extends State<LoginScreen> {
       final username = _userController.text.trim();
       final password = _passwordController.text;
 
+      // ✅ 1. INTENTAR LOGIN COMO ADMIN O ASISTENTE
       if (username == PrefsHelper.adminEmail ||
           username == PrefsHelper.asistenteEmail) {
         success = await PrefsHelper.loginAdmin(username, password);
         if (success) {
           loggedInUserType = await PrefsHelper.getUserType();
         }
-      } else {
-        success = await PrefsHelper.loginJurado(username, password);
-        if (success) {
-          loggedInUserType = await PrefsHelper.getUserType();
-        } else {
-          success = await PrefsHelper.loginStudent(username, password);
+      }
+      // ✅ 2. INTENTAR LOGIN COMO ADMIN DE CARRERA
+      else {
+        // Importar el servicio al inicio del archivo:
+        // import 'admin_carrera_service.dart';
+
+        final adminCarreraService = AdminCarreraService();
+        final adminCarreraData = await adminCarreraService.loginAdminCarrera(
+          usuario: username,
+          password: password,
+        );
+
+        if (adminCarreraData != null) {
+          // Login exitoso como admin de carrera
+          await PrefsHelper.saveAdminCarreraData(
+            userId: adminCarreraData['id'],
+            userName: adminCarreraData['nombre'],
+            filial: adminCarreraData['filial'],
+            filialNombre: adminCarreraData['filialNombre'],
+            facultad: adminCarreraData['facultad'],
+            carrera: adminCarreraData['carrera'],
+            carreraId: adminCarreraData['carreraId'],
+            permisos: adminCarreraData['permisos'],
+          );
+
+          success = true;
+          loggedInUserType = PrefsHelper.userTypeAdminCarrera;
+        }
+        // ✅ 3. INTENTAR LOGIN COMO JURADO
+        else {
+          success = await PrefsHelper.loginJurado(username, password);
           if (success) {
             loggedInUserType = await PrefsHelper.getUserType();
+          }
+          // ✅ 4. INTENTAR LOGIN COMO ESTUDIANTE
+          else {
+            success = await PrefsHelper.loginStudent(username, password);
+            if (success) {
+              loggedInUserType = await PrefsHelper.getUserType();
+            }
           }
         }
       }
 
+      // ✅ 5. REDIRIGIR SEGÚN EL TIPO DE USUARIO
       if (success && loggedInUserType != null) {
         if (loggedInUserType == PrefsHelper.userTypeAdmin) {
           if (mounted) {
@@ -122,6 +161,15 @@ class _LoginScreenState extends State<LoginScreen> {
           if (mounted) {
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (context) => const AsistentesScreen()),
+            );
+          }
+        } else if (loggedInUserType == PrefsHelper.userTypeAdminCarrera) {
+          // ✅ REDIRIGIR AL PANEL DE ADMIN DE CARRERA
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) => const AdminCarreraScreen(),
+              ),
             );
           }
         } else if (loggedInUserType == PrefsHelper.userTypeJurado) {

@@ -5,6 +5,7 @@ import 'reportes_asistencias_excel.dart';
 class AsistenciasEstudiantesResultadosScreen extends StatefulWidget {
   final String eventoId;
   final String eventoNombre;
+  final String filialId; // ✅ NUEVO
   final String facultad;
   final String? carrera;
 
@@ -12,6 +13,7 @@ class AsistenciasEstudiantesResultadosScreen extends StatefulWidget {
     super.key,
     required this.eventoId,
     required this.eventoNombre,
+    required this.filialId, // ✅ NUEVO
     required this.facultad,
     this.carrera,
   });
@@ -484,6 +486,10 @@ class _AsistenciasEstudiantesResultadosScreenState
                         'Carrera',
                         estudiante['carrera'],
                       ),
+                      const SizedBox(height: 8),
+                      _buildInfoRow(Icons.class_, 'Ciclo', estudiante['ciclo']),
+                      const SizedBox(height: 8),
+                      _buildInfoRow(Icons.group, 'Grupo', estudiante['grupo']),
                     ],
                   ),
                 ),
@@ -828,7 +834,7 @@ class _AsistenciasEstudiantesResultadosScreenState
                                     _buildOrdenChip(
                                       'Ciclo/Grupo',
                                       'ciclo-grupo',
-                                    ), // ✅ NUEVO
+                                    ),
                                     _buildOrdenChip('Nombre', 'nombre'),
                                     _buildOrdenChip(
                                       'Asistencias',
@@ -1129,11 +1135,10 @@ class _AsistenciasEstudiantesResultadosScreenState
 
   int _parseCiclo(String? ciclo) {
     if (ciclo == null || ciclo.isEmpty || ciclo == 'N/A') {
-      return 999; // Los N/A van al final
+      return 999;
     }
 
     try {
-      // Intentar extraer número del ciclo
       final match = RegExp(r'\d+').firstMatch(ciclo);
       if (match != null) {
         return int.parse(match.group(0)!);
@@ -1145,21 +1150,17 @@ class _AsistenciasEstudiantesResultadosScreenState
     return 999;
   }
 
-  /// Convierte el grupo a número para ordenar correctamente
-  /// Ejemplos: "1" → 1, "Único" → 0, "N/A" → 999
   int _parseGrupo(String? grupo) {
     if (grupo == null || grupo.isEmpty || grupo == 'N/A') {
-      return 999; // Los N/A van al final
+      return 999;
     }
 
-    // Casos especiales
     final grupoLower = grupo.toLowerCase();
     if (grupoLower.contains('único') || grupoLower.contains('unico')) {
-      return 0; // "Único" va primero
+      return 0;
     }
 
     try {
-      // Intentar extraer número del grupo
       final match = RegExp(r'\d+').firstMatch(grupo);
       if (match != null) {
         return int.parse(match.group(0)!);

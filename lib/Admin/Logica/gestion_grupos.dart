@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/admin/interfaz/grupos_screen.dart';
+import '/admin/logica/filiales_service.dart';
 
 class GestionGruposScreen extends StatefulWidget {
   const GestionGruposScreen({super.key});
@@ -12,43 +13,24 @@ class GestionGruposScreen extends StatefulWidget {
 class _GestionGruposScreenState extends State<GestionGruposScreen>
     with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FilialesService _filialesService = FilialesService();
+
+  // Selecciones actuales
+  String? _selectedFilialId;
+  String? _selectedFilialNombre;
   String? _selectedFacultad;
-  String? _selectedCarrera;
+  String? _selectedCarreraId;
+  String? _selectedCarreraNombre;
+
+  // Datos dinámicos
+  List<Map<String, String>> _filiales = [];
+  List<String> _facultades = [];
+  List<Map<String, dynamic>> _carreras = [];
+  bool _isLoadingData = true;
+
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
-
-  final Map<String, List<String>> _facultadesCarreras = {
-    'Universidad Peruana Unión': [], // ✅ Nueva opción agregada
-    'Facultad de Ciencias Empresariales': [
-      'Administración',
-      'Contabilidad',
-      'Gestión Tributaria y Aduanera',
-    ],
-    'Facultad de Ciencias Humanas y Educación': [
-      'Educación, Especialidad Inicial y Puericultura',
-      'Educación, Especialidad Primaria y Pedagogía Terapéutica',
-      'Educación, Especialidad Inglés y Español',
-    ],
-    'Facultad de Ciencias de la Salud': [
-      'Enfermería',
-      'Nutrición Humana',
-      'Psicología',
-    ],
-    'Facultad de Ingeniería y Arquitectura': [
-      'Ingeniería Civil',
-      'Arquitectura y Urbanismo',
-      'Ingeniería Ambiental',
-      'Ingeniería de Industrias Alimentarias',
-      'Ingeniería de Sistemas',
-    ],
-  };
-
-  // ✅ Método para verificar si se requiere selección de carrera
-  bool _requiereCarrera(String? facultad) {
-    if (facultad == null) return true;
-    return facultad != 'Universidad Peruana Unión';
-  }
 
   @override
   void initState() {
@@ -71,12 +53,89 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
         );
 
     _animationController.forward();
+    _loadInitialData();
   }
 
   @override
   void dispose() {
     _animationController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadInitialData() async {
+    setState(() => _isLoadingData = true);
+
+    try {
+      final filiales = await _filialesService.getFiliales();
+      final filialesData = <Map<String, String>>[];
+
+      for (var filialId in filiales) {
+        filialesData.add({
+          'id': filialId,
+          'nombre': _filialesService.getNombreFilial(filialId),
+          'ubicacion': _filialesService.getUbicacionFilial(filialId),
+        });
+      }
+
+      setState(() {
+        _filiales = filialesData;
+        _isLoadingData = false;
+
+        // Seleccionar primera filial por defecto
+        if (_filiales.isNotEmpty) {
+          _selectedFilialId = _filiales.first['id'];
+          _selectedFilialNombre = _filiales.first['nombre'];
+          _loadFacultades(_selectedFilialId!);
+        }
+      });
+    } catch (e) {
+      print('Error cargando datos iniciales: $e');
+      setState(() => _isLoadingData = false);
+      _showSnackBar('Error al cargar datos', isError: true);
+    }
+  }
+
+  Future<void> _loadFacultades(String filialId) async {
+    try {
+      final facultades = await _filialesService.getFacultadesByFilial(filialId);
+      setState(() {
+        _facultades = facultades;
+        _selectedFacultad = null;
+        _selectedCarreraId = null;
+        _selectedCarreraNombre = null;
+        _carreras = [];
+      });
+    } catch (e) {
+      print('Error cargando facultades: $e');
+      _showSnackBar('Error al cargar facultades', isError: true);
+    }
+  }
+
+  Future<void> _loadCarreras(String filialId, String facultadNombre) async {
+    try {
+      final carreras = await _filialesService.getCarrerasByFacultad(
+        filialId,
+        facultadNombre,
+      );
+      setState(() {
+        _carreras = carreras;
+        _selectedCarreraId = null;
+        _selectedCarreraNombre = null;
+      });
+    } catch (e) {
+      print('Error cargando carreras: $e');
+      _showSnackBar('Error al cargar carreras', isError: true);
+    }
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -96,38 +155,51 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: SlideTransition(
-          position: _slideAnimation,
-          child: Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFFF5F7FA),
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(30),
-                topRight: Radius.circular(30),
-              ),
-            ),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20.0),
+      body: _isLoadingData
+          ? const Center(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _buildFilterSection(),
-                  const SizedBox(height: 24),
-                  // ✅ Condición actualizada para mostrar eventos
-                  if (_selectedFacultad != null &&
-                      (!_requiereCarrera(_selectedFacultad) ||
-                          _selectedCarrera != null))
-                    _buildEventsSection()
-                  else
-                    _buildEmptyState(),
+                  CircularProgressIndicator(color: Colors.white),
+                  SizedBox(height: 16),
+                  Text(
+                    'Cargando datos...',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
                 ],
               ),
+            )
+          : FadeTransition(
+              opacity: _fadeAnimation,
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF5F7FA),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(30),
+                      topRight: Radius.circular(30),
+                    ),
+                  ),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildFilterSection(),
+                        const SizedBox(height: 24),
+                        if (_selectedFilialId != null &&
+                            _selectedFacultad != null &&
+                            _selectedCarreraId != null)
+                          _buildEventsSection()
+                        else
+                          _buildEmptyState(),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -185,41 +257,76 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
                     ],
                   ),
                   const SizedBox(height: 24),
+
+                  // Dropdown de Filial
+                  _buildAnimatedDropdown(
+                    value: _selectedFilialId,
+                    label: 'Filial / Campus',
+                    icon: Icons.location_city_rounded,
+                    items: _filiales.map((f) => f['id']!).toList(),
+                    itemLabels: _filiales.map((f) {
+                      return '${f['nombre']} - ${f['ubicacion']}';
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        final filial = _filiales.firstWhere(
+                          (f) => f['id'] == value,
+                        );
+                        setState(() {
+                          _selectedFilialId = value;
+                          _selectedFilialNombre = filial['nombre'];
+                        });
+                        _loadFacultades(value);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Dropdown de Facultad
                   _buildAnimatedDropdown(
                     value: _selectedFacultad,
                     label: 'Facultad',
                     icon: Icons.school_rounded,
-                    items: _facultadesCarreras.keys.toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedFacultad = value;
-                        _selectedCarrera = null;
-                      });
-                    },
+                    items: _facultades,
+                    onChanged: _selectedFilialId != null
+                        ? (value) {
+                            if (value != null) {
+                              setState(() => _selectedFacultad = value);
+                              _loadCarreras(_selectedFilialId!, value);
+                            }
+                          }
+                        : null,
                   ),
+                  const SizedBox(height: 16),
 
-                  // ✅ Solo mostrar dropdown de carrera si se requiere
-                  if (_requiereCarrera(_selectedFacultad)) ...[
-                    const SizedBox(height: 16),
-                    _buildAnimatedDropdown(
-                      value: _selectedCarrera,
-                      label: 'Carrera Profesional',
-                      icon: Icons.book_rounded,
-                      items: _selectedFacultad != null
-                          ? _facultadesCarreras[_selectedFacultad]!
-                          : [],
-                      onChanged: _selectedFacultad != null
-                          ? (value) {
+                  // Dropdown de Carrera
+                  _buildAnimatedDropdown(
+                    value: _selectedCarreraId,
+                    label: 'Carrera Profesional',
+                    icon: Icons.book_rounded,
+                    items: _carreras.map((c) => c['id'] as String).toList(),
+                    itemLabels: _carreras
+                        .map((c) => c['nombre'] as String)
+                        .toList(),
+                    onChanged: _selectedFacultad != null
+                        ? (value) {
+                            if (value != null) {
+                              final carrera = _carreras.firstWhere(
+                                (c) => c['id'] == value,
+                              );
                               setState(() {
-                                _selectedCarrera = value;
+                                _selectedCarreraId = value;
+                                _selectedCarreraNombre = carrera['nombre'];
                               });
                             }
-                          : null,
-                    ),
-                  ],
+                          }
+                        : null,
+                  ),
 
-                  // ✅ Mensaje informativo cuando se selecciona UPeU
-                  if (_selectedFacultad == 'Universidad Peruana Unión')
+                  // Mensaje informativo
+                  if (_selectedFilialId != null &&
+                      _selectedFacultad != null &&
+                      _selectedCarreraId != null)
                     Container(
                       margin: const EdgeInsets.only(top: 16),
                       padding: const EdgeInsets.all(12),
@@ -240,7 +347,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Mostrando eventos generales de la universidad',
+                              'Mostrando eventos de $_selectedCarreraNombre',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: Colors.white.withOpacity(0.95),
@@ -265,6 +372,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
     required String label,
     required IconData icon,
     required List<String> items,
+    List<String>? itemLabels,
     required void Function(String?)? onChanged,
   }) {
     return Column(
@@ -315,11 +423,11 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
               ),
             ),
             dropdownColor: Colors.white,
-            items: items.map((String item) {
+            items: List.generate(items.length, (index) {
               return DropdownMenuItem<String>(
-                value: item,
+                value: items[index],
                 child: Text(
-                  item,
+                  itemLabels != null ? itemLabels[index] : items[index],
                   style: const TextStyle(
                     fontSize: 14,
                     color: Color(0xFF1E3A5F),
@@ -327,7 +435,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
                   overflow: TextOverflow.ellipsis,
                 ),
               );
-            }).toList(),
+            }),
             onChanged: onChanged,
           ),
         ),
@@ -477,29 +585,22 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
     );
   }
 
-  // ✅ Método para construir la query correcta según la selección
   Stream<QuerySnapshot> _buildEventsQuery() {
-    Query query = _firestore
+    return _firestore
         .collection('events')
-        .where('facultad', isEqualTo: _selectedFacultad);
-
-    // Si se requiere carrera (no es UPeU), agregar filtro por carrera
-    if (_requiereCarrera(_selectedFacultad) && _selectedCarrera != null) {
-      query = query.where('carrera', isEqualTo: _selectedCarrera);
-    }
-
-    return query.orderBy('createdAt', descending: true).snapshots();
+        .where('filialId', isEqualTo: _selectedFilialId)
+        .where('facultad', isEqualTo: _selectedFacultad)
+        .where('carreraId', isEqualTo: _selectedCarreraId)
+        .orderBy('createdAt', descending: true)
+        .snapshots();
   }
 
   Widget _buildEventCard(DocumentSnapshot event, int index) {
     final eventData = event.data() as Map<String, dynamic>;
     final eventName = eventData['name'] ?? 'Sin nombre';
+    final carreraNombre = eventData['carreraNombre'] ?? 'Sin carrera';
+    final filialNombre = eventData['filialNombre'] ?? 'Sin filial';
     final eventId = event.id;
-
-    // ✅ Mostrar carrera o "Universidad Peruana Unión" según corresponda
-    final displayCarrera = _selectedFacultad == 'Universidad Peruana Unión'
-        ? 'Universidad Peruana Unión'
-        : (_selectedCarrera ?? 'Sin carrera');
 
     return TweenAnimationBuilder<double>(
       duration: Duration(milliseconds: 300 + (index * 100)),
@@ -573,13 +674,41 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
                                 overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 6),
-                              Text(
-                                displayCarrera,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey[600],
-                                  fontWeight: FontWeight.w500,
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
                                 ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE8F5E9),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  carreraNombre,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF4CAF50),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.location_city,
+                                    size: 12,
+                                    color: Colors.grey[500],
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    filialNombre,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
                               ),
                               if (eventData['createdAt'] != null) ...[
                                 const SizedBox(height: 4),
@@ -609,7 +738,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFE8F5E9),
+                                    color: const Color(0xFFE3F2FD),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Row(
@@ -618,14 +747,14 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
                                       const Icon(
                                         Icons.folder_rounded,
                                         size: 14,
-                                        color: Color(0xFF4CAF50),
+                                        color: Color(0xFF2196F3),
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
                                         '${eventData['proyectosCount']} proyectos',
                                         style: const TextStyle(
                                           fontSize: 11,
-                                          color: Color(0xFF4CAF50),
+                                          color: Color(0xFF2196F3),
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -697,11 +826,9 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Text(
-                    _selectedFacultad == 'Universidad Peruana Unión'
-                        ? 'Selecciona la Universidad'
-                        : 'Selecciona Facultad y Carrera',
-                    style: const TextStyle(
+                  const Text(
+                    'Selecciona Filial, Facultad y Carrera',
+                    style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF1E3A5F),
@@ -711,9 +838,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 40),
                     child: Text(
-                      _selectedFacultad == 'Universidad Peruana Unión'
-                          ? 'Has seleccionado eventos generales de la universidad.\nPuedes ver los eventos disponibles.'
-                          : 'Elige la facultad y carrera para ver\nlos eventos disponibles',
+                      'Elige la filial, facultad y carrera para ver\nlos eventos disponibles',
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey[600],
@@ -761,9 +886,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 40),
             child: Text(
-              _selectedFacultad == 'Universidad Peruana Unión'
-                  ? 'No hay eventos generales registrados.\nCrea uno en Gestión de Eventos.'
-                  : 'No hay eventos registrados para esta carrera.\nCrea uno en Gestión de Eventos.',
+              'No hay eventos registrados para esta carrera.\nCrea uno en Gestión de Eventos.',
               style: TextStyle(
                 fontSize: 14,
                 color: Colors.grey[600],

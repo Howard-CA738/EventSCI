@@ -4,9 +4,9 @@ import 'dart:convert';
 class GenerarQRController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ✅ AGREGADA la opción "Universidad Peruana Unión"
+  // ✅ Incluye "Universidad Peruana Unión" para eventos generales sin restricción de carrera
   final Map<String, List<String>> facultadesCarreras = {
-    'Universidad Peruana Unión': [], // ✅ Nueva opción sin carreras
+    'Universidad Peruana Unión': [],
     'Facultad de Ciencias Empresariales': [
       'Administración',
       'Contabilidad',
@@ -31,26 +31,37 @@ class GenerarQRController {
     ],
   };
 
-  // ✅ NUEVO MÉTODO: Verifica si se requiere carrera
+  // ─────────────────────────────────────────────────────────────────
+  // Devuelve true si la facultad seleccionada requiere elegir carrera
+  // ─────────────────────────────────────────────────────────────────
   bool requiereCarrera(String? facultad) {
     if (facultad == null) return true;
     return facultad != 'Universidad Peruana Unión';
   }
 
+  // ─────────────────────────────────────────────────────────────────
+  // ✅ BUSCAR EVENTOS (con soporte de sede/filial)
+  // ─────────────────────────────────────────────────────────────────
+  /// [sede] es opcional. Si se pasa, filtra también por sede.
+  /// Si la facultad es UPeU, busca eventos con carrera == 'General'.
   Future<List<QueryDocumentSnapshot>> buscarEventos({
     required String facultad,
-    String? carrera, // ✅ Ahora es opcional
+    String? carrera,
+    String? sede, // ✅ NUEVO parámetro
   }) async {
     Query query = _firestore
         .collection('events')
         .where('facultad', isEqualTo: facultad);
 
-    // ✅ Solo agregar filtro de carrera si se proporciona
     if (carrera != null && carrera.isNotEmpty) {
       query = query.where('carrera', isEqualTo: carrera);
     } else if (facultad == 'Universidad Peruana Unión') {
-      // Para UPeU, buscar eventos con carrera "General"
       query = query.where('carrera', isEqualTo: 'General');
+    }
+
+    // ✅ Filtrar por sede si se proporciona
+    if (sede != null && sede.isNotEmpty) {
+      query = query.where('sede', isEqualTo: sede);
     }
 
     final QuerySnapshot snapshot = await query
@@ -60,6 +71,9 @@ class GenerarQRController {
     return snapshot.docs;
   }
 
+  // ─────────────────────────────────────────────────────────────────
+  // Cargar categorías de un evento
+  // ─────────────────────────────────────────────────────────────────
   Future<List<String>> cargarCategorias(String eventId) async {
     final QuerySnapshot proyectosSnapshot = await _firestore
         .collection('events')
@@ -75,16 +89,19 @@ class GenerarQRController {
         categoriasSet.add(clasificacion);
       }
     }
-
     return categoriasSet.toList()..sort();
   }
 
+  // ─────────────────────────────────────────────────────────────────
+  // ✅ GENERAR QR (siempre con sede incluida si se proporciona)
+  // ─────────────────────────────────────────────────────────────────
   Future<Map<String, String>> generarQRParaTodasLasCategorias({
     required String eventId,
     required String eventName,
     required String facultad,
     required String carrera,
     required List<String> categorias,
+    String? sede, // ✅ NUEVO
   }) async {
     final Map<String, String> qrData = {};
 
@@ -93,7 +110,6 @@ class GenerarQRController {
         eventId: eventId,
         categoria: categoria,
       );
-
       final primerProyecto = proyectos.isNotEmpty ? proyectos.first : null;
 
       final qrInfo = _crearQRInfo(
@@ -105,11 +121,10 @@ class GenerarQRController {
         codigoProyecto: primerProyecto?['Código']?.toString(),
         tituloProyecto: primerProyecto?['Título']?.toString(),
         grupo: primerProyecto?['Sala']?.toString(),
+        sede: sede,
       );
-
       qrData[categoria] = jsonEncode(qrInfo);
     }
-
     return qrData;
   }
 
@@ -122,6 +137,7 @@ class GenerarQRController {
     required String codigoProyecto,
     required String tituloProyecto,
     String? grupo,
+    String? sede, // ✅ NUEVO
   }) async {
     final qrInfo = _crearQRInfo(
       eventId: eventId,
@@ -132,13 +148,11 @@ class GenerarQRController {
       codigoProyecto: codigoProyecto,
       tituloProyecto: tituloProyecto,
       grupo: grupo,
+      sede: sede,
     );
 
     print('🔧 QR generado para proyecto:');
-    print('   Código: $codigoProyecto');
-    print('   Título: $tituloProyecto');
-    print('   Categoría: $categoria');
-    print('   Grupo: $grupo');
+    print('   Código: $codigoProyecto | Sede: $sede');
 
     return jsonEncode(qrInfo);
   }
@@ -152,6 +166,7 @@ class GenerarQRController {
     String? codigoProyecto,
     String? tituloProyecto,
     String? grupo,
+    String? sede, // ✅ NUEVO
   }) {
     final qrInfo = _crearQRInfo(
       eventId: eventId,
@@ -162,10 +177,14 @@ class GenerarQRController {
       codigoProyecto: codigoProyecto,
       tituloProyecto: tituloProyecto,
       grupo: grupo,
+      sede: sede,
     );
     return jsonEncode(qrInfo);
   }
 
+  // ─────────────────────────────────────────────────────────────────
+  // ✅ CREAR ESTRUCTURA INTERNA DEL QR (incluye sede si se provee)
+  // ─────────────────────────────────────────────────────────────────
   Map<String, dynamic> _crearQRInfo({
     required String eventId,
     required String eventName,
@@ -175,6 +194,7 @@ class GenerarQRController {
     String? codigoProyecto,
     String? tituloProyecto,
     String? grupo,
+    String? sede, // ✅ NUEVO
   }) {
     final grupoValido =
         grupo != null &&
@@ -182,7 +202,9 @@ class GenerarQRController {
         grupo.toLowerCase() != 'sin grupo' &&
         grupo.toLowerCase() != 'null';
 
-    final qrData = {
+    final sedeValida = sede != null && sede.trim().isNotEmpty;
+
+    final qrData = <String, dynamic>{
       'eventId': eventId,
       'eventName': eventName,
       'facultad': facultad,
@@ -194,16 +216,22 @@ class GenerarQRController {
       'type': 'asistencia_categoria',
     };
 
+    // ✅ Incluir sede solo si es válida
+    if (sedeValida) {
+      qrData['sede'] = sede!.trim();
+      print('✅ Sede incluida en QR: $sede');
+    }
+
     if (grupoValido) {
       qrData['grupo'] = grupo;
-      print('✅ Grupo válido incluido en QR: $grupo');
-    } else {
-      print('⚠️ Grupo no válido, no se incluye en QR: $grupo');
     }
 
     return qrData;
   }
 
+  // ─────────────────────────────────────────────────────────────────
+  // Obtener proyectos por categoría
+  // ─────────────────────────────────────────────────────────────────
   Future<List<Map<String, dynamic>>> _obtenerProyectosPorCategoria({
     required String eventId,
     required String categoria,
@@ -243,9 +271,9 @@ class GenerarQRController {
     required String facultad,
     required String carrera,
     required String categoria,
+    String? sede, // ✅ NUEVO
   }) async {
     final Map<String, String> qrsPorProyecto = {};
-
     final proyectos = await obtenerProyectosDeCategoria(
       eventId: eventId,
       categoria: categoria,
@@ -265,14 +293,12 @@ class GenerarQRController {
         codigoProyecto: codigo,
         tituloProyecto: titulo,
         grupo: sala,
+        sede: sede,
       );
-
       qrsPorProyecto[codigo] = qrData;
     }
 
-    print(
-      '✅ Generados ${qrsPorProyecto.length} QRs para categoría: $categoria',
-    );
+    print('✅ Generados ${qrsPorProyecto.length} QRs para: $categoria');
     return qrsPorProyecto;
   }
 
