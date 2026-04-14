@@ -7,14 +7,21 @@ class AdminCarreraService {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  static const List<String> _permisosCompletos = [
+    'estudiantes',
+    'grupos',
+    'proyectos',
+    'evaluaciones',
+    'reportes',
+    'eventos',
+  ];
+
   // ═══════════════════════════════════════════════════════════════
   // ✅ CREAR ADMIN DE CARRERA
   // ═══════════════════════════════════════════════════════════════
   Future<bool> crearAdminCarrera({
-    required String nombre,
     required String usuario,
     required String password,
-    required String email,
     required String filial,
     required String filialNombre,
     required String facultad,
@@ -23,7 +30,6 @@ class AdminCarreraService {
     List<String>? permisos,
   }) async {
     try {
-      // Verificar si ya existe un admin con ese usuario
       final existingAdmin = await _firestore
           .collection('admins_carrera')
           .where('usuario', isEqualTo: usuario.trim().toLowerCase())
@@ -35,28 +41,20 @@ class AdminCarreraService {
         return false;
       }
 
-      // Permisos por defecto
-      final permisosFinales =
-          permisos ??
-          ['estudiantes', 'grupos', 'proyectos', 'evaluaciones', 'reportes'];
-
-      // Crear el admin
       await _firestore.collection('admins_carrera').add({
-        'nombre': nombre.trim(),
         'usuario': usuario.trim().toLowerCase(),
         'password': password,
-        'email': email.trim(),
         'filial': filial,
         'filialNombre': filialNombre,
         'facultad': facultad,
         'carrera': carrera,
         'carreraId': carreraId,
-        'permisos': permisosFinales,
+        'permisos': _permisosCompletos,
         'activo': true,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Admin de carrera creado: $nombre');
+      print('✅ Admin de carrera creado: $usuario');
       return true;
     } catch (e) {
       print('❌ Error creando admin de carrera: $e');
@@ -94,19 +92,29 @@ class AdminCarreraService {
         return null;
       }
 
-      print('✅ Login exitoso para admin de carrera: ${adminData['nombre']}');
+      final permisosBD = List<String>.from(adminData['permisos'] ?? []);
+      final tienePermisosFaltantes =
+          _permisosCompletos.any((p) => !permisosBD.contains(p));
+
+      if (tienePermisosFaltantes) {
+        await _firestore
+            .collection('admins_carrera')
+            .doc(adminDoc.id)
+            .update({'permisos': _permisosCompletos});
+        print('🔄 Permisos migrados para: ${adminData['usuario']}');
+      }
+
+      print('✅ Login exitoso: ${adminData['usuario']}');
 
       return {
         'id': adminDoc.id,
-        'nombre': adminData['nombre'],
         'usuario': adminData['usuario'],
-        'email': adminData['email'],
         'filial': adminData['filial'],
         'filialNombre': adminData['filialNombre'],
         'facultad': adminData['facultad'],
         'carrera': adminData['carrera'],
         'carreraId': adminData['carreraId'],
-        'permisos': List<String>.from(adminData['permisos'] ?? []),
+        'permisos': _permisosCompletos,
       };
     } catch (e) {
       print('❌ Error en login de admin carrera: $e');
@@ -161,10 +169,13 @@ class AdminCarreraService {
   // ═══════════════════════════════════════════════════════════════
   Future<bool> actualizarAdminCarrera({
     required String adminId,
-    String? nombre,
     String? usuario,
     String? password,
-    String? email,
+    String? filial,
+    String? filialNombre,
+    String? facultad,
+    String? carrera,
+    String? carreraId,
     List<String>? permisos,
     bool? activo,
   }) async {
@@ -173,25 +184,27 @@ class AdminCarreraService {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      if (nombre != null) updateData['nombre'] = nombre.trim();
       if (usuario != null) {
-        // Verificar que no exista otro admin con ese usuario
         final existing = await _firestore
             .collection('admins_carrera')
             .where('usuario', isEqualTo: usuario.trim().toLowerCase())
             .limit(1)
             .get();
 
-        if (existing.docs.isNotEmpty && existing.docs.first.id != adminId) {
+        if (existing.docs.isNotEmpty &&
+            existing.docs.first.id != adminId) {
           print('❌ Ya existe otro admin con ese usuario');
           return false;
         }
-
         updateData['usuario'] = usuario.trim().toLowerCase();
       }
+
       if (password != null) updateData['password'] = password;
-      if (email != null) updateData['email'] = email.trim();
-      if (permisos != null) updateData['permisos'] = permisos;
+      if (filial != null) updateData['filial'] = filial;
+      if (filialNombre != null) updateData['filialNombre'] = filialNombre;
+      if (facultad != null) updateData['facultad'] = facultad;
+      if (carrera != null) updateData['carrera'] = carrera;
+      if (carreraId != null) updateData['carreraId'] = carreraId;
       if (activo != null) updateData['activo'] = activo;
 
       await _firestore
@@ -212,7 +225,10 @@ class AdminCarreraService {
   // ═══════════════════════════════════════════════════════════════
   Future<bool> eliminarAdminCarrera(String adminId) async {
     try {
-      await _firestore.collection('admins_carrera').doc(adminId).delete();
+      await _firestore
+          .collection('admins_carrera')
+          .doc(adminId)
+          .delete();
       print('✅ Admin de carrera eliminado');
       return true;
     } catch (e) {
@@ -250,17 +266,11 @@ class AdminCarreraService {
         return data;
       }).toList();
 
-      // Filtrar por término de búsqueda
       if (searchTerm != null && searchTerm.isNotEmpty) {
         final searchLower = searchTerm.toLowerCase();
         admins = admins.where((admin) {
-          final nombre = (admin['nombre'] ?? '').toString().toLowerCase();
           final usuario = (admin['usuario'] ?? '').toString().toLowerCase();
-          final email = (admin['email'] ?? '').toString().toLowerCase();
-
-          return nombre.contains(searchLower) ||
-              usuario.contains(searchLower) ||
-              email.contains(searchLower);
+          return usuario.contains(searchLower);
         }).toList();
       }
 
@@ -272,16 +282,10 @@ class AdminCarreraService {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // ✅ VERIFICAR SI TIENE PERMISO
-  // ═══════════════════════════════════════════════════════════════
-  bool tienePermiso(List<String> permisos, String permiso) {
-    return permisos.contains(permiso);
-  }
-
-  // ═══════════════════════════════════════════════════════════════
   // ✅ OBTENER ADMINS POR CARRERA
   // ═══════════════════════════════════════════════════════════════
-  Future<List<Map<String, dynamic>>> getAdminsPorCarrera(String carrera) async {
+  Future<List<Map<String, dynamic>>> getAdminsPorCarrera(
+      String carrera) async {
     try {
       final adminsQuery = await _firestore
           .collection('admins_carrera')
@@ -298,5 +302,12 @@ class AdminCarreraService {
       print('❌ Error obteniendo admins por carrera: $e');
       return [];
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ VERIFICAR SI TIENE PERMISO
+  // ═══════════════════════════════════════════════════════════════
+  bool tienePermiso(List<String> permisos, String permiso) {
+    return permisos.contains(permiso);
   }
 }

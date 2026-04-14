@@ -44,7 +44,110 @@ class PrefsHelper {
     _studentsCacheTimestamp = null;
     print('🗑️ Caché de estudiantes limpiado');
   }
+static String _generateToken() {
+  return DateTime.now().millisecondsSinceEpoch.toString();
+}
+static Future<String> verificarSesionEstudiante({
+  required String carreraPath,
+  required String studentId,
+}) async {
+  try {
+    final doc = await _firestore
+        .collection('users')
+        .doc(carreraPath)
+        .collection('students')
+        .doc(studentId)
+        .get();
 
+    if (!doc.exists) return 'error';
+
+    final data = doc.data()!;
+    final sessionActive = data['sessionActive'] ?? false;
+
+    if (sessionActive == true) {
+      return 'bloqueado';
+    }
+    return 'libre';
+  } catch (e) {
+    print('❌ Error verificando sesión estudiante: $e');
+    return 'error';
+  }
+}
+static Future<bool> activarSesionEstudiante({
+  required String carreraPath,
+  required String studentId,
+}) async {
+  try {
+    final token = _generateToken();
+
+    // Verificar si es primera vez ANTES de activar
+    final doc = await _firestore
+        .collection('users')
+        .doc(carreraPath)
+        .collection('students')
+        .doc(studentId)
+        .get();
+
+    final esPrimeraVez = doc.exists
+        ? (doc.data()?['primeraVez'] ?? true) == true
+        : true;
+
+    await _firestore
+        .collection('users')
+        .doc(carreraPath)
+        .collection('students')
+        .doc(studentId)
+        .update({
+      'sessionActive': true,
+      'sessionToken': token,
+      'lastLogin': FieldValue.serverTimestamp(),
+      'primeraVez': false, // Ya no es primera vez
+    });
+
+    // Guardar token y flag de primera vez localmente
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keySessionToken, token);
+    await prefs.setBool('es_primera_vez_advertencia', esPrimeraVez);
+
+    print('✅ Sesión estudiante activada. Primera vez: $esPrimeraVez');
+    return true;
+  } catch (e) {
+    print('❌ Error activando sesión estudiante: $e');
+    return false;
+  }
+}
+/// Se consume una sola vez (se borra tras leerlo).
+static Future<bool> debemostrarAdvertenciaPrimeraVez() async {
+  final prefs = await SharedPreferences.getInstance();
+  final valor = prefs.getBool('es_primera_vez_advertencia') ?? false;
+  // Limpiar para no volver a mostrarlo
+  await prefs.remove('es_primera_vez_advertencia');
+  return valor;
+}
+static Future<void> cerrarSesionEstudiante() async {
+  try {
+    final userIdPath = await getCurrentUserId();
+    if (userIdPath == null || !userIdPath.contains('/')) return;
+
+    final parts = userIdPath.split('/');
+    final carreraPath = parts[0];
+    final studentId = parts[1];
+
+    await _firestore
+        .collection('users')
+        .doc(carreraPath)
+        .collection('students')
+        .doc(studentId)
+        .update({
+      'sessionActive': true,
+      'sessionToken': null,
+    });
+
+    print('✅ Sesión estudiante cerrada en Firestore');
+  } catch (e) {
+    print('❌ Error cerrando sesión estudiante en Firestore: $e');
+  }
+}
   // ✅ NUEVO: Verificar si la sesión del admin sigue siendo válida
   static Future<bool> isSessionValid() async {
     try {

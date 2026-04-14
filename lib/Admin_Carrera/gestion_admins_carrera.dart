@@ -28,7 +28,6 @@ class _GestionAdminsCarreraScreenState
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-
     try {
       await _filialesService.inicializarSiEsNecesario();
       _estructuraFiliales = await _filialesService.getEstructuraCompleta();
@@ -37,28 +36,21 @@ class _GestionAdminsCarreraScreenState
       print('Error cargando datos: $e');
       _showMessage('Error al cargar datos', isError: true);
     }
-
     setState(() => _isLoading = false);
   }
 
   List<Map<String, dynamic>> get _adminsFiltrados {
     if (_searchTerm.isEmpty) return _admins;
-
     return _admins.where((admin) {
-      final nombre = (admin['nombre'] ?? '').toString().toLowerCase();
       final usuario = (admin['usuario'] ?? '').toString().toLowerCase();
       final carrera = (admin['carrera'] ?? '').toString().toLowerCase();
       final search = _searchTerm.toLowerCase();
-
-      return nombre.contains(search) ||
-          usuario.contains(search) ||
-          carrera.contains(search);
+      return usuario.contains(search) || carrera.contains(search);
     }).toList();
   }
 
   void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -82,7 +74,22 @@ class _GestionAdminsCarreraScreenState
     );
   }
 
-  Future<void> _confirmarEliminar(String adminId, String nombre) async {
+  Future<void> _mostrarDialogoEditarAdmin(
+      Map<String, dynamic> admin) async {
+    await showDialog(
+      context: context,
+      builder: (context) => _DialogoEditarAdmin(
+        admin: admin,
+        estructuraFiliales: _estructuraFiliales,
+        onSuccess: () {
+          _loadData();
+          _showMessage('Admin actualizado exitosamente');
+        },
+      ),
+    );
+  }
+
+  Future<void> _confirmarEliminar(String adminId, String usuario) async {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -94,7 +101,7 @@ class _GestionAdminsCarreraScreenState
           ],
         ),
         content: Text(
-          '¿Estás seguro de que deseas eliminar a "$nombre"?\n\nEsta acción no se puede deshacer.',
+          '¿Estás seguro de que deseas eliminar al admin "@$usuario"?\n\nEsta acción no se puede deshacer.',
         ),
         actions: [
           TextButton(
@@ -148,11 +155,8 @@ class _GestionAdminsCarreraScreenState
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(
-                      Icons.admin_panel_settings,
-                      color: Colors.white,
-                      size: 24,
-                    ),
+                    child: const Icon(Icons.admin_panel_settings,
+                        color: Colors.white, size: 24),
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
@@ -192,12 +196,11 @@ class _GestionAdminsCarreraScreenState
                           Padding(
                             padding: const EdgeInsets.all(20.0),
                             child: TextField(
-                              onChanged: (value) {
-                                setState(() => _searchTerm = value);
-                              },
+                              onChanged: (value) =>
+                                  setState(() => _searchTerm = value),
                               decoration: InputDecoration(
                                 hintText:
-                                    'Buscar por nombre, usuario o carrera...',
+                                    'Buscar por usuario o carrera...',
                                 prefixIcon: const Icon(Icons.search),
                                 filled: true,
                                 fillColor: Colors.white,
@@ -209,7 +212,7 @@ class _GestionAdminsCarreraScreenState
                             ),
                           ),
 
-                          // Lista de admins
+                          // Lista
                           Expanded(
                             child: _adminsFiltrados.isEmpty
                                 ? Center(
@@ -217,32 +220,28 @@ class _GestionAdminsCarreraScreenState
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
                                       children: [
-                                        Icon(
-                                          Icons.inbox,
-                                          size: 64,
-                                          color: Colors.grey[400],
-                                        ),
+                                        Icon(Icons.inbox,
+                                            size: 64,
+                                            color: Colors.grey[400]),
                                         const SizedBox(height: 16),
                                         Text(
                                           _searchTerm.isEmpty
                                               ? 'No hay admins de carrera'
                                               : 'No se encontraron resultados',
                                           style: TextStyle(
-                                            fontSize: 16,
-                                            color: Colors.grey[600],
-                                          ),
+                                              fontSize: 16,
+                                              color: Colors.grey[600]),
                                         ),
                                       ],
                                     ),
                                   )
                                 : ListView.builder(
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                    ),
+                                        horizontal: 20),
                                     itemCount: _adminsFiltrados.length,
                                     itemBuilder: (context, index) {
-                                      final admin = _adminsFiltrados[index];
-                                      return _buildAdminCard(admin);
+                                      return _buildAdminCard(
+                                          _adminsFiltrados[index]);
                                     },
                                   ),
                           ),
@@ -263,7 +262,6 @@ class _GestionAdminsCarreraScreenState
   }
 
   Widget _buildAdminCard(Map<String, dynamic> admin) {
-    final permisos = List<String>.from(admin['permisos'] ?? []);
     final activo = admin['activo'] ?? true;
 
     return Card(
@@ -278,69 +276,56 @@ class _GestionAdminsCarreraScreenState
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: activo
-                      ? const Color(0xFF1E3A5F)
-                      : Colors.grey,
+                  backgroundColor:
+                      activo ? const Color(0xFF1E3A5F) : Colors.grey,
                   child: Text(
-                    admin['nombre'][0].toUpperCase(),
+                    (admin['usuario'] as String)[0].toUpperCase(),
                     style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
+                        color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              admin['nombre'],
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E3A5F),
-                              ),
-                            ),
+                      Expanded(
+                        child: Text(
+                          '@${admin['usuario']}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E3A5F),
                           ),
-                          if (!activo)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.red.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text(
-                                'Inactivo',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.red,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                        ],
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '@${admin['usuario']}',
-                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                      ),
+                      if (!activo)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'Inactivo',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.red,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
                     ],
                   ),
                 ),
                 PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'eliminar') {
-                      _confirmarEliminar(admin['id'], admin['nombre']);
+                  onSelected: (value) async {
+                    if (value == 'editar') {
+                      await _mostrarDialogoEditarAdmin(admin);
+                    } else if (value == 'eliminar') {
+                      _confirmarEliminar(
+                          admin['id'], admin['usuario']);
                     } else if (value == 'activar') {
-                      _adminService.actualizarAdminCarrera(
+                      await _adminService.actualizarAdminCarrera(
                         adminId: admin['id'],
                         activo: !activo,
                       );
@@ -348,6 +333,17 @@ class _GestionAdminsCarreraScreenState
                     }
                   },
                   itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'editar',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit,
+                              size: 18, color: Color(0xFF1E3A5F)),
+                          SizedBox(width: 8),
+                          Text('Editar'),
+                        ],
+                      ),
+                    ),
                     PopupMenuItem(
                       value: 'activar',
                       child: Row(
@@ -377,36 +373,12 @@ class _GestionAdminsCarreraScreenState
               ],
             ),
             const Divider(height: 16),
-            _buildInfoRow(Icons.location_city, admin['filialNombre']),
+            _buildInfoRow(
+                Icons.location_city, admin['filialNombre'] ?? ''),
             const SizedBox(height: 6),
-            _buildInfoRow(Icons.business, admin['facultad']),
+            _buildInfoRow(Icons.business, admin['facultad'] ?? ''),
             const SizedBox(height: 6),
-            _buildInfoRow(Icons.school, admin['carrera']),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: permisos.map((permiso) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E3A5F).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    permiso,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFF1E3A5F),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
+            _buildInfoRow(Icons.school, admin['carrera'] ?? ''),
           ],
         ),
       ),
@@ -419,10 +391,8 @@ class _GestionAdminsCarreraScreenState
         Icon(icon, size: 16, color: Colors.grey[600]),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(
-            text,
-            style: TextStyle(fontSize: 13, color: Colors.grey[700]),
-          ),
+          child: Text(text,
+              style: TextStyle(fontSize: 13, color: Colors.grey[700])),
         ),
       ],
     );
@@ -430,7 +400,7 @@ class _GestionAdminsCarreraScreenState
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ✅ DIÁLOGO PARA CREAR ADMIN
+// DIÁLOGO CREAR ADMIN
 // ═══════════════════════════════════════════════════════════════
 class _DialogoCrearAdmin extends StatefulWidget {
   final Map<String, dynamic> estructuraFiliales;
@@ -447,10 +417,9 @@ class _DialogoCrearAdmin extends StatefulWidget {
 
 class __DialogoCrearAdminState extends State<_DialogoCrearAdmin> {
   final _formKey = GlobalKey<FormState>();
-  final _nombreController = TextEditingController();
   final _usuarioController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _emailController = TextEditingController();
+  bool _obscurePassword = true;
 
   final AdminCarreraService _service = AdminCarreraService();
   final FilialesService _filialesService = FilialesService();
@@ -463,30 +432,12 @@ class __DialogoCrearAdminState extends State<_DialogoCrearAdmin> {
   List<String> _facultadesDisponibles = [];
   List<Map<String, dynamic>> _carrerasDisponibles = [];
 
-  final List<String> _permisosDisponibles = [
-    'estudiantes',
-    'grupos',
-    'proyectos',
-    'evaluaciones',
-    'reportes',
-  ];
-
-  final Set<String> _permisosSeleccionados = {
-    'estudiantes',
-    'grupos',
-    'proyectos',
-    'evaluaciones',
-    'reportes',
-  };
-
   bool _isCreating = false;
 
   @override
   void dispose() {
-    _nombreController.dispose();
     _usuarioController.dispose();
     _passwordController.dispose();
-    _emailController.dispose();
     super.dispose();
   }
 
@@ -499,10 +450,11 @@ class __DialogoCrearAdminState extends State<_DialogoCrearAdmin> {
       _facultadesDisponibles = [];
       _carrerasDisponibles = [];
 
-      if (filial != null && widget.estructuraFiliales.containsKey(filial)) {
+      if (filial != null &&
+          widget.estructuraFiliales.containsKey(filial)) {
         final filialData = widget.estructuraFiliales[filial];
-        final facultades = filialData['facultades'] as Map<String, dynamic>?;
-
+        final facultades =
+            filialData['facultades'] as Map<String, dynamic>?;
         if (facultades != null) {
           _facultadesDisponibles = facultades.keys.toList();
         }
@@ -521,13 +473,12 @@ class __DialogoCrearAdminState extends State<_DialogoCrearAdmin> {
           facultad != null &&
           widget.estructuraFiliales.containsKey(_selectedFilial)) {
         final filialData = widget.estructuraFiliales[_selectedFilial!];
-        final facultades = filialData['facultades'] as Map<String, dynamic>?;
-
+        final facultades =
+            filialData['facultades'] as Map<String, dynamic>?;
         if (facultades != null && facultades.containsKey(facultad)) {
           final facultadData = facultades[facultad];
           _carrerasDisponibles = List<Map<String, dynamic>>.from(
-            facultadData['carreras'] ?? [],
-          );
+              facultadData['carreras'] ?? []);
         }
       }
     });
@@ -538,10 +489,12 @@ class __DialogoCrearAdminState extends State<_DialogoCrearAdmin> {
 
     if (_selectedFilial == null ||
         _selectedFacultad == null ||
-        _selectedCarrera == null) {
+        _selectedCarrera == null ||
+        _selectedCarreraId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Por favor completa todos los campos'),
+          content:
+              Text('Por favor selecciona filial, facultad y carrera'),
           backgroundColor: Colors.red,
         ),
       );
@@ -552,16 +505,14 @@ class __DialogoCrearAdminState extends State<_DialogoCrearAdmin> {
 
     try {
       final success = await _service.crearAdminCarrera(
-        nombre: _nombreController.text.trim(),
         usuario: _usuarioController.text.trim(),
         password: _passwordController.text,
-        email: _emailController.text.trim(),
         filial: _selectedFilial!,
-        filialNombre: _filialesService.getNombreFilial(_selectedFilial!),
+        filialNombre:
+            _filialesService.getNombreFilial(_selectedFilial!),
         facultad: _selectedFacultad!,
         carrera: _selectedCarrera!,
         carreraId: _selectedCarreraId!,
-        permisos: _permisosSeleccionados.toList(),
       );
 
       if (success) {
@@ -576,7 +527,11 @@ class __DialogoCrearAdminState extends State<_DialogoCrearAdmin> {
         );
       }
     } catch (e) {
-      print('Error creando admin: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Error inesperado: $e'),
+            backgroundColor: Colors.red),
+      );
     }
 
     setState(() => _isCreating = false);
@@ -587,7 +542,8 @@ class __DialogoCrearAdminState extends State<_DialogoCrearAdmin> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 700),
+        constraints:
+            const BoxConstraints(maxWidth: 500, maxHeight: 540),
         padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,
@@ -595,111 +551,139 @@ class __DialogoCrearAdminState extends State<_DialogoCrearAdmin> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Crear Admin de Carrera',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E3A5F),
-                ),
+              // Título
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.admin_panel_settings,
+                        color: Color(0xFF1E3A5F), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Crear Admin de Carrera',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E3A5F),
+                          ),
+                        ),
+                        Text(
+                          'Tendrá acceso a todas las funciones',
+                          style: TextStyle(
+                              fontSize: 11, color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
+
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
-                      TextFormField(
-                        controller: _nombreController,
-                        decoration: const InputDecoration(
-                          labelText: 'Nombre completo',
-                          prefixIcon: Icon(Icons.person),
-                        ),
-                        validator: (v) => v!.isEmpty ? 'Requerido' : null,
-                      ),
-                      const SizedBox(height: 16),
+                      // Usuario
                       TextFormField(
                         controller: _usuarioController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Usuario',
-                          prefixIcon: Icon(Icons.account_circle),
+                          prefixIcon: const Icon(Icons.account_circle),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
                         ),
-                        validator: (v) => v!.isEmpty ? 'Requerido' : null,
+                        validator: (v) =>
+                            v!.trim().isEmpty ? 'Requerido' : null,
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
+
+                      // Contraseña
                       TextFormField(
                         controller: _passwordController,
-                        decoration: const InputDecoration(
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
                           labelText: 'Contraseña',
-                          prefixIcon: Icon(Icons.lock),
+                          prefixIcon: const Icon(Icons.lock),
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility),
+                            onPressed: () => setState(() =>
+                                _obscurePassword = !_obscurePassword),
+                          ),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
                         ),
-                        obscureText: true,
-                        validator: (v) =>
-                            v!.length < 6 ? 'Mínimo 6 caracteres' : null,
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _emailController,
-                        decoration: const InputDecoration(
-                          labelText: 'Correo electrónico',
-                          prefixIcon: Icon(Icons.email),
-                        ),
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (v) =>
-                            !RegExp(
-                              r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                            ).hasMatch(v!)
-                            ? 'Correo inválido'
+                        validator: (v) => v!.length < 6
+                            ? 'Mínimo 6 caracteres'
                             : null,
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
+
+                      // Filial
                       DropdownButtonFormField<String>(
                         value: _selectedFilial,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Filial (Sede)',
-                          prefixIcon: Icon(Icons.location_city),
+                          prefixIcon: const Icon(Icons.location_city),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
                         ),
-                        items: widget.estructuraFiliales.keys.map((filial) {
-                          final nombre = _filialesService.getNombreFilial(
-                            filial,
-                          );
+                        items: widget.estructuraFiliales.keys
+                            .map((filial) {
                           return DropdownMenuItem<String>(
                             value: filial,
-                            child: Text(nombre),
+                            child: Text(
+                                _filialesService.getNombreFilial(filial)),
                           );
                         }).toList(),
                         onChanged: _onFilialChanged,
                         validator: (v) => v == null ? 'Requerido' : null,
                       ),
+
                       if (_selectedFilial != null) ...[
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 14),
                         DropdownButtonFormField<String>(
                           value: _selectedFacultad,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Facultad',
-                            prefixIcon: Icon(Icons.business),
+                            prefixIcon: const Icon(Icons.business),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12)),
                           ),
                           items: _facultadesDisponibles.map((f) {
                             return DropdownMenuItem<String>(
-                              value: f,
-                              child: Text(f),
-                            );
+                                value: f, child: Text(f));
                           }).toList(),
                           onChanged: _onFacultadChanged,
                           validator: (v) => v == null ? 'Requerido' : null,
                         ),
                       ],
+
                       if (_selectedFacultad != null) ...[
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 14),
                         DropdownButtonFormField<String>(
                           value: _selectedCarrera,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Carrera',
-                            prefixIcon: Icon(Icons.school),
+                            prefixIcon: const Icon(Icons.school),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12)),
                           ),
                           items: _carrerasDisponibles.map((c) {
                             return DropdownMenuItem<String>(
                               value: c['nombre'],
-                              onTap: () => _selectedCarreraId = c['id'],
+                              onTap: () =>
+                                  _selectedCarreraId = c['id'],
                               child: Text(c['nombre']),
                             );
                           }).toList(),
@@ -708,40 +692,27 @@ class __DialogoCrearAdminState extends State<_DialogoCrearAdmin> {
                           validator: (v) => v == null ? 'Requerido' : null,
                         ),
                       ],
-                      const SizedBox(height: 16),
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Permisos:',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
+
                       const SizedBox(height: 8),
-                      ..._permisosDisponibles.map((permiso) {
-                        return CheckboxListTile(
-                          title: Text(permiso),
-                          value: _permisosSeleccionados.contains(permiso),
-                          onChanged: (checked) {
-                            setState(() {
-                              if (checked == true) {
-                                _permisosSeleccionados.add(permiso);
-                              } else {
-                                _permisosSeleccionados.remove(permiso);
-                              }
-                            });
-                          },
-                        );
-                      }),
                     ],
                   ),
                 ),
               ),
+
               const SizedBox(height: 16),
+
+              // Botones
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
                       child: const Text('Cancelar'),
                     ),
                   ),
@@ -751,17 +722,456 @@ class __DialogoCrearAdminState extends State<_DialogoCrearAdmin> {
                       onPressed: _isCreating ? null : _crearAdmin,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF1E3A5F),
+                        foregroundColor: Colors.white,
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                       child: _isCreating
                           ? const SizedBox(
                               height: 20,
                               width: 20,
                               child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
+                                  color: Colors.white, strokeWidth: 2),
                             )
-                          : const Text('Crear'),
+                          : const Text('Crear',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DIÁLOGO EDITAR ADMIN
+// ═══════════════════════════════════════════════════════════════
+class _DialogoEditarAdmin extends StatefulWidget {
+  final Map<String, dynamic> admin;
+  final Map<String, dynamic> estructuraFiliales;
+  final VoidCallback onSuccess;
+
+  const _DialogoEditarAdmin({
+    required this.admin,
+    required this.estructuraFiliales,
+    required this.onSuccess,
+  });
+
+  @override
+  State<_DialogoEditarAdmin> createState() => __DialogoEditarAdminState();
+}
+
+class __DialogoEditarAdminState extends State<_DialogoEditarAdmin> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _usuarioController;
+  final TextEditingController _passwordController =
+      TextEditingController();
+  bool _obscurePassword = true;
+  bool _activo = true;
+
+  final AdminCarreraService _service = AdminCarreraService();
+  final FilialesService _filialesService = FilialesService();
+
+  String? _selectedFilial;
+  String? _selectedFacultad;
+  String? _selectedCarrera;
+  String? _selectedCarreraId;
+
+  List<String> _facultadesDisponibles = [];
+  List<Map<String, dynamic>> _carrerasDisponibles = [];
+
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _usuarioController =
+        TextEditingController(text: widget.admin['usuario'] ?? '');
+    _activo = widget.admin['activo'] ?? true;
+
+    _selectedFilial = widget.admin['filial'];
+    _selectedFacultad = widget.admin['facultad'];
+    _selectedCarrera = widget.admin['carrera'];
+    _selectedCarreraId = widget.admin['carreraId'];
+
+    if (_selectedFilial != null &&
+        widget.estructuraFiliales.containsKey(_selectedFilial)) {
+      final filialData = widget.estructuraFiliales[_selectedFilial!];
+      final facultades =
+          filialData['facultades'] as Map<String, dynamic>?;
+      if (facultades != null) {
+        _facultadesDisponibles = facultades.keys.toList();
+
+        if (_selectedFacultad != null &&
+            facultades.containsKey(_selectedFacultad)) {
+          final facultadData = facultades[_selectedFacultad!];
+          _carrerasDisponibles = List<Map<String, dynamic>>.from(
+              facultadData['carreras'] ?? []);
+        }
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _usuarioController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  void _onFilialChanged(String? filial) {
+    setState(() {
+      _selectedFilial = filial;
+      _selectedFacultad = null;
+      _selectedCarrera = null;
+      _selectedCarreraId = null;
+      _facultadesDisponibles = [];
+      _carrerasDisponibles = [];
+
+      if (filial != null &&
+          widget.estructuraFiliales.containsKey(filial)) {
+        final filialData = widget.estructuraFiliales[filial];
+        final facultades =
+            filialData['facultades'] as Map<String, dynamic>?;
+        if (facultades != null) {
+          _facultadesDisponibles = facultades.keys.toList();
+        }
+      }
+    });
+  }
+
+  void _onFacultadChanged(String? facultad) {
+    setState(() {
+      _selectedFacultad = facultad;
+      _selectedCarrera = null;
+      _selectedCarreraId = null;
+      _carrerasDisponibles = [];
+
+      if (_selectedFilial != null &&
+          facultad != null &&
+          widget.estructuraFiliales.containsKey(_selectedFilial)) {
+        final filialData = widget.estructuraFiliales[_selectedFilial!];
+        final facultades =
+            filialData['facultades'] as Map<String, dynamic>?;
+        if (facultades != null && facultades.containsKey(facultad)) {
+          final facultadData = facultades[facultad];
+          _carrerasDisponibles = List<Map<String, dynamic>>.from(
+              facultadData['carreras'] ?? []);
+        }
+      }
+    });
+  }
+
+  Future<void> _guardarCambios() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    if (_selectedFilial == null ||
+        _selectedFacultad == null ||
+        _selectedCarrera == null ||
+        _selectedCarreraId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Por favor selecciona filial, facultad y carrera'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final success = await _service.actualizarAdminCarrera(
+        adminId: widget.admin['id'],
+        usuario: _usuarioController.text.trim(),
+        password: _passwordController.text.isNotEmpty
+            ? _passwordController.text
+            : null,
+        filial: _selectedFilial,
+        filialNombre:
+            _filialesService.getNombreFilial(_selectedFilial!),
+        facultad: _selectedFacultad,
+        carrera: _selectedCarrera,
+        carreraId: _selectedCarreraId,
+        activo: _activo,
+      );
+
+      if (success) {
+        Navigator.pop(context);
+        widget.onSuccess();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ya existe otro admin con ese usuario'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
+
+    setState(() => _isSaving = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        constraints:
+            const BoxConstraints(maxWidth: 500, maxHeight: 620),
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Título
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.edit,
+                        color: Color(0xFF1E3A5F), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Editar Admin de Carrera',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E3A5F),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      // Toggle activo/inactivo
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _activo
+                              ? Colors.green.withOpacity(0.08)
+                              : Colors.red.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _activo
+                                ? Colors.green.withOpacity(0.3)
+                                : Colors.red.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _activo
+                                  ? Icons.check_circle
+                                  : Icons.block,
+                              color: _activo ? Colors.green : Colors.red,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _activo
+                                    ? 'Cuenta activa'
+                                    : 'Cuenta inactiva',
+                                style: TextStyle(
+                                  color: _activo
+                                      ? Colors.green[700]
+                                      : Colors.red[700],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Switch(
+                              value: _activo,
+                              onChanged: (v) =>
+                                  setState(() => _activo = v),
+                              activeColor: Colors.green,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Usuario
+                      TextFormField(
+                        controller: _usuarioController,
+                        decoration: InputDecoration(
+                          labelText: 'Usuario',
+                          prefixIcon:
+                              const Icon(Icons.account_circle),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) =>
+                            v!.trim().isEmpty ? 'Requerido' : null,
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Contraseña opcional
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
+                          labelText: 'Nueva contraseña (opcional)',
+                          hintText: 'Dejar vacío para no cambiar',
+                          prefixIcon: const Icon(Icons.lock),
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility),
+                            onPressed: () => setState(() =>
+                                _obscurePassword = !_obscurePassword),
+                          ),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) {
+                          if (v != null &&
+                              v.isNotEmpty &&
+                              v.length < 6) {
+                            return 'Mínimo 6 caracteres';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Filial
+                      DropdownButtonFormField<String>(
+                        value: _selectedFilial,
+                        decoration: InputDecoration(
+                          labelText: 'Filial (Sede)',
+                          prefixIcon: const Icon(Icons.location_city),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                        items: widget.estructuraFiliales.keys
+                            .map((filial) {
+                          return DropdownMenuItem<String>(
+                            value: filial,
+                            child: Text(
+                                _filialesService.getNombreFilial(filial)),
+                          );
+                        }).toList(),
+                        onChanged: _onFilialChanged,
+                        validator: (v) => v == null ? 'Requerido' : null,
+                      ),
+
+                      if (_selectedFilial != null) ...[
+                        const SizedBox(height: 14),
+                        DropdownButtonFormField<String>(
+                          value: _selectedFacultad,
+                          decoration: InputDecoration(
+                            labelText: 'Facultad',
+                            prefixIcon: const Icon(Icons.business),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                          items: _facultadesDisponibles.map((f) {
+                            return DropdownMenuItem<String>(
+                                value: f, child: Text(f));
+                          }).toList(),
+                          onChanged: _onFacultadChanged,
+                          validator: (v) => v == null ? 'Requerido' : null,
+                        ),
+                      ],
+
+                      if (_selectedFacultad != null) ...[
+                        const SizedBox(height: 14),
+                        DropdownButtonFormField<String>(
+                          value: _selectedCarrera,
+                          decoration: InputDecoration(
+                            labelText: 'Carrera',
+                            prefixIcon: const Icon(Icons.school),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                          items: _carrerasDisponibles.map((c) {
+                            return DropdownMenuItem<String>(
+                              value: c['nombre'],
+                              onTap: () =>
+                                  _selectedCarreraId = c['id'],
+                              child: Text(c['nombre']),
+                            );
+                          }).toList(),
+                          onChanged: (v) =>
+                              setState(() => _selectedCarrera = v),
+                          validator: (v) => v == null ? 'Requerido' : null,
+                        ),
+                      ],
+
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Botones
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Cancelar'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _isSaving ? null : _guardarCambios,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1E3A5F),
+                        foregroundColor: Colors.white,
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: _isSaving
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Text('Guardar',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],

@@ -7,7 +7,7 @@ import 'dart:typed_data';
 class GruposService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Cargar proyectos existentes desde Firebase
+  // ── Cargar proyectos existentes desde Firebase ────────────────────────────
   Future<List<Map<String, dynamic>>> cargarProyectosExistentes(
     String eventId,
   ) async {
@@ -19,19 +19,18 @@ class GruposService {
           .orderBy('importedAt', descending: true)
           .get();
 
-      final proyectos = querySnapshot.docs.map((doc) {
+      return querySnapshot.docs.map((doc) {
         final data = doc.data();
         data['docId'] = doc.id;
         return data;
       }).toList();
-
-      return proyectos;
     } catch (e) {
       print('Error al cargar proyectos existentes: $e');
       rethrow;
     }
   }
 
+  // ── Actualizar categoría de scans por proyecto ────────────────────────────
   Future<void> actualizarCategoriaDeScansPorProyecto(
     String eventId,
     String codigoProyecto,
@@ -41,7 +40,6 @@ class GruposService {
       print('🔄 Actualizando scans del proyecto: $codigoProyecto');
       print('📝 Nueva categoría: $nuevaCategoria');
 
-      // Obtener todas las asistencias del evento
       final asistenciasSnapshot = await _firestore
           .collection('events')
           .doc(eventId)
@@ -51,9 +49,7 @@ class GruposService {
       int scansActualizados = 0;
       final batch = _firestore.batch();
 
-      // Recorrer cada estudiante
       for (final estudianteDoc in asistenciasSnapshot.docs) {
-        // Buscar scans con el código del proyecto
         final scansSnapshot = await _firestore
             .collection('events')
             .doc(eventId)
@@ -63,7 +59,6 @@ class GruposService {
             .where('codigoProyecto', isEqualTo: codigoProyecto)
             .get();
 
-        // Actualizar cada scan encontrado
         for (final scanDoc in scansSnapshot.docs) {
           batch.update(scanDoc.reference, {
             'categoria': nuevaCategoria,
@@ -73,7 +68,6 @@ class GruposService {
         }
       }
 
-      // Ejecutar todas las actualizaciones
       if (scansActualizados > 0) {
         await batch.commit();
         print('✅ Se actualizaron $scansActualizados scans');
@@ -86,7 +80,7 @@ class GruposService {
     }
   }
 
-  // Importar Excel y retornar los datos procesados
+  // ── Importar Excel y retornar los datos procesados ────────────────────────
   Future<List<Map<String, dynamic>>?> importarExcel() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -110,7 +104,7 @@ class GruposService {
     }
   }
 
-  // Procesar archivo Excel desde bytes con DETECCIÓN AUTOMÁTICA
+  // ── Procesar archivo Excel desde bytes con DETECCIÓN AUTOMÁTICA ───────────
   Future<List<Map<String, dynamic>>> procesarArchivoBytesExcel(
     Uint8List bytes,
   ) async {
@@ -130,11 +124,9 @@ class GruposService {
 
         print('Headers encontrados: $headers');
 
-        // 🔍 DETECCIÓN AUTOMÁTICA DEL FORMATO
         final tipoFormato = detectarFormatoExcel(headers);
         print('Formato detectado: $tipoFormato');
 
-        // 📌 Variable para recordar el último SUBEVENTOS/EVENTO (para merged cells)
         String? ultimoSubevento;
         String? ultimoEvento;
 
@@ -143,15 +135,12 @@ class GruposService {
           Map<String, dynamic> proyecto = {};
 
           if (tipoFormato == 'PROYECTOS') {
-            // Formato original: CÓDIGO, TÍTULO, INTEGRANTES, CLASIFICACIÓN
             proyecto = procesarFormatoProyectos(headers, row);
-            // Validar que tenga los datos mínimos requeridos
             if (proyecto.containsKey('Código') &&
                 proyecto.containsKey('Clasificación')) {
               proyectos.add(proyecto);
             }
           } else if (tipoFormato == 'EVENTOS') {
-            // Formato nuevo: EVENTO, SUBEVENTOS, TÍTULO DE PROGRAMA, ENCARGADO, LUGAR
             proyecto = procesarFormatoEventos(
               headers,
               row,
@@ -160,7 +149,6 @@ class GruposService {
               ultimoEvento,
             );
 
-            // Actualizar los últimos valores conocidos
             if (proyecto.containsKey('Subevento') &&
                 proyecto['Subevento'] != null) {
               ultimoSubevento = proyecto['Subevento'];
@@ -170,7 +158,6 @@ class GruposService {
               ultimoEvento = proyecto['EventoPrincipal'];
             }
 
-            // Para eventos, validar que tenga al menos título y clasificación
             if (proyecto.isNotEmpty &&
                 proyecto.containsKey('Título') &&
                 proyecto['Título'].toString().isNotEmpty &&
@@ -192,11 +179,10 @@ class GruposService {
     }
   }
 
-  // 🔍 Detectar el formato del Excel basado en los headers
+  // ── Detectar el formato del Excel basado en los headers ───────────────────
   String detectarFormatoExcel(List<String> headers) {
     final headersUpper = headers.map((h) => h.toUpperCase().trim()).toList();
 
-    // Verificar si es formato de EVENTOS
     bool tieneEvento = headersUpper.any((h) => h.contains('EVENTO'));
     bool tieneSubeventos = headersUpper.any((h) => h.contains('SUBEVENTOS'));
     bool tieneEncargado = headersUpper.any((h) => h.contains('ENCARGADO'));
@@ -206,7 +192,6 @@ class GruposService {
       return 'EVENTOS';
     }
 
-    // Verificar si es formato de PROYECTOS
     bool tieneCodigo = headersUpper.any((h) => h.contains('CÓDIGO'));
     bool tieneClasificacion = headersUpper.any(
       (h) => h.contains('CLASIFICACIÓN'),
@@ -216,11 +201,10 @@ class GruposService {
       return 'PROYECTOS';
     }
 
-    // Por defecto, asumir formato de proyectos
     return 'PROYECTOS';
   }
 
-  // 📋 Procesar formato PROYECTOS (original)
+  // ── Procesar formato PROYECTOS (original) ─────────────────────────────────
   Map<String, dynamic> procesarFormatoProyectos(
     List<String> headers,
     List<Data?> row,
@@ -238,7 +222,7 @@ class GruposService {
     return proyecto;
   }
 
-  // 🎭 Procesar formato EVENTOS (nuevo)
+  // ── Procesar formato EVENTOS (nuevo) ──────────────────────────────────────
   Map<String, dynamic> procesarFormatoEventos(
     List<String> headers,
     List<Data?> row,
@@ -248,13 +232,11 @@ class GruposService {
   ) {
     Map<String, dynamic> proyecto = {};
 
-    // Crear un mapa temporal con los datos
     Map<String, String> datosRaw = {};
     for (int j = 0; j < headers.length && j < row.length; j++) {
       final cellValue = row[j]?.value?.toString().trim();
       if (cellValue != null && cellValue.isNotEmpty) {
         String headerKey = headers[j].toUpperCase().trim();
-        // Normalizar variaciones del nombre de columna
         if (headerKey.contains('TÍTULO') && headerKey.contains('PROGRAMA')) {
           headerKey = 'TÍTULO DE PROGRAMA / PONENCIA';
         }
@@ -262,68 +244,52 @@ class GruposService {
       }
     }
 
-    // TÍTULO: Usamos TÍTULO DE PROGRAMA/PONENCIA (este será nuestro identificador único)
     String titulo = datosRaw['TÍTULO DE PROGRAMA / PONENCIA'] ?? '';
-    if (titulo.isEmpty) {
-      return {}; // Si no hay título, no procesamos esta fila
-    }
+    if (titulo.isEmpty) return {};
     proyecto['Título'] = titulo;
 
-    // CÓDIGO: Generamos uno corto y limpio basado en el índice de la fila
     proyecto['Código'] = 'PON-${rowIndex.toString().padLeft(3, '0')}';
 
-    // INTEGRANTES: Usamos ENCARGADO
     if (datosRaw.containsKey('ENCARGADO')) {
       proyecto['Integrantes'] = datosRaw['ENCARGADO'];
     }
 
-    // 🔑 CLASIFICACIÓN: Usamos SUBEVENTOS con manejo de merged cells
     String? clasificacion;
 
-    // Intentar obtener de la celda actual primero
     if (datosRaw.containsKey('SUBEVENTOS') &&
         datosRaw['SUBEVENTOS']!.isNotEmpty) {
       clasificacion = datosRaw['SUBEVENTOS'];
-    }
-    // Si la celda está vacía (merged), usar el último valor conocido
-    else if (ultimoSubevento != null && ultimoSubevento.isNotEmpty) {
+    } else if (ultimoSubevento != null && ultimoSubevento.isNotEmpty) {
       clasificacion = ultimoSubevento;
       print(
         'Usando último subevento conocido: $ultimoSubevento para fila $rowIndex',
       );
-    }
-    // Último recurso: usar EVENTO
-    else if (datosRaw.containsKey('EVENTO') && datosRaw['EVENTO']!.isNotEmpty) {
+    } else if (datosRaw.containsKey('EVENTO') &&
+        datosRaw['EVENTO']!.isNotEmpty) {
       clasificacion = datosRaw['EVENTO'];
-    }
-    // O el último evento conocido
-    else if (ultimoEvento != null && ultimoEvento.isNotEmpty) {
+    } else if (ultimoEvento != null && ultimoEvento.isNotEmpty) {
       clasificacion = ultimoEvento;
     }
 
     if (clasificacion != null && clasificacion.isNotEmpty) {
       proyecto['Clasificación'] = clasificacion;
     } else {
-      print('⚠️ Fila $rowIndex sin clasificación: ${datosRaw}');
-      return {}; // Si no hay clasificación, no procesamos esta fila
+      print('⚠️ Fila $rowIndex sin clasificación: $datosRaw');
+      return {};
     }
 
-    // SALA: Usamos LUGAR (también puede estar merged)
     if (datosRaw.containsKey('LUGAR') && datosRaw['LUGAR']!.isNotEmpty) {
       proyecto['Sala'] = datosRaw['LUGAR'];
     }
 
-    // Agregar campos adicionales para referencia
     proyecto['TipoImportacion'] = 'EVENTOS';
 
-    // Guardar EVENTO actual o el último conocido
     if (datosRaw.containsKey('EVENTO') && datosRaw['EVENTO']!.isNotEmpty) {
       proyecto['EventoPrincipal'] = datosRaw['EVENTO'];
     } else if (ultimoEvento != null) {
       proyecto['EventoPrincipal'] = ultimoEvento;
     }
 
-    // Guardar SUBEVENTOS actual o el último conocido
     if (datosRaw.containsKey('SUBEVENTOS') &&
         datosRaw['SUBEVENTOS']!.isNotEmpty) {
       proyecto['Subevento'] = datosRaw['SUBEVENTOS'];
@@ -334,7 +300,7 @@ class GruposService {
     return proyecto;
   }
 
-  // Normalizar las claves de las columnas del Excel (formato PROYECTOS)
+  // ── Normalizar claves del Excel (formato PROYECTOS) ───────────────────────
   String normalizarClaveProyectos(String clave) {
     final claveNormalizada = clave.toUpperCase().trim();
 
@@ -359,14 +325,23 @@ class GruposService {
     }
   }
 
-  // Guardar proyectos en Firebase
+  // ── Guardar proyectos en Firebase ─────────────────────────────────────────
+  // [FIX] Ahora recibe eventData para guardar filialId, facultad y carrera
+  // en cada proyecto, haciendo que sean filtrables de forma segura.
   Future<void> guardarProyectosEnEvento(
     String eventId,
-    List<Map<String, dynamic>> proyectos,
-  ) async {
+    List<Map<String, dynamic>> proyectos, {
+    Map<String, dynamic>? eventData, // ← nuevo parámetro opcional
+  }) async {
     if (proyectos.isEmpty) return;
 
     try {
+      // Extraer campos de ubicación del evento si están disponibles
+      final String? filialId = eventData?['filialId'] as String?;
+      final String? facultad = eventData?['facultad'] as String?;
+      final String? carreraId = eventData?['carreraId'] as String?;
+      final String? carreraNombre = eventData?['carreraNombre'] as String?;
+
       final batch = _firestore.batch();
 
       for (final proyecto in proyectos) {
@@ -378,6 +353,14 @@ class GruposService {
 
         batch.set(docRef, {
           ...proyecto,
+          // ── Campos de ubicación ──────────────────────────────────────
+          // Solo se agregan si el evento los tiene disponibles.
+          // Permiten filtrar proyectos con collectionGroup en el futuro.
+          if (filialId != null) 'filialId': filialId,
+          if (facultad != null) 'facultad': facultad,
+          if (carreraId != null) 'carreraId': carreraId,
+          if (carreraNombre != null) 'carreraNombre': carreraNombre,
+          // ────────────────────────────────────────────────────────────
           'importedAt': FieldValue.serverTimestamp(),
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -395,13 +378,13 @@ class GruposService {
     }
   }
 
+  // ── Actualizar proyecto ───────────────────────────────────────────────────
   Future<void> actualizarProyecto(
     String eventId,
     String docId,
     Map<String, dynamic> nuevosDatos,
   ) async {
     try {
-      // Primero, obtener los datos actuales del proyecto
       final proyectoDoc = await _firestore
           .collection('events')
           .doc(eventId)
@@ -411,7 +394,6 @@ class GruposService {
 
       final datosAntiguos = proyectoDoc.data();
 
-      // Actualizar el proyecto
       await _firestore
           .collection('events')
           .doc(eventId)
@@ -419,7 +401,6 @@ class GruposService {
           .doc(docId)
           .update({...nuevosDatos, 'updatedAt': FieldValue.serverTimestamp()});
 
-      // ✅ Si cambió la clasificación, actualizar todos los scans relacionados
       if (datosAntiguos != null &&
           nuevosDatos.containsKey('Clasificación') &&
           datosAntiguos['Clasificación'] != nuevosDatos['Clasificación']) {
@@ -439,7 +420,7 @@ class GruposService {
     }
   }
 
-  // Eliminar un proyecto individual de Firebase
+  // ── Eliminar un proyecto individual ──────────────────────────────────────
   Future<void> eliminarProyectoIndividual(String eventId, String docId) async {
     try {
       await _firestore
@@ -458,7 +439,7 @@ class GruposService {
     }
   }
 
-  // Eliminar todos los proyectos de Firebase
+  // ── Eliminar todos los proyectos ──────────────────────────────────────────
   Future<void> eliminarTodosLosProyectos(String eventId) async {
     try {
       final batch = _firestore.batch();
@@ -485,7 +466,7 @@ class GruposService {
     }
   }
 
-  // Agrupar proyectos por categoría
+  // ── Agrupar proyectos por categoría ──────────────────────────────────────
   Map<String, List<Map<String, dynamic>>> agruparPorCategoria(
     List<Map<String, dynamic>> proyectos,
   ) {
@@ -502,7 +483,7 @@ class GruposService {
     return grupos;
   }
 
-  // Formatear fecha de timestamp
+  // ── Formatear fecha de timestamp ──────────────────────────────────────────
   String formatDate(dynamic timestamp) {
     if (timestamp is Timestamp) {
       final date = timestamp.toDate();

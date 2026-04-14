@@ -53,21 +53,21 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
 
   void _initializeZoom() async {
     await Future.delayed(const Duration(milliseconds: 500));
-    print('✅ Zoom inicializado');
+    debugPrint('Zoom inicializado');
   }
 
   void _handleScaleStart(ScaleStartDetails details) {}
 
   void _handleScaleUpdate(ScaleUpdateDetails details) {
     if (details.scale == 1.0) return;
-    double zoomDelta = (details.scale - 1.0) * 0.05;
-    double newZoom = (_currentZoom + zoomDelta).clamp(0.0, 1.0);
+    final double zoomDelta = (details.scale - 1.0) * 0.05;
+    final double newZoom = (_currentZoom + zoomDelta).clamp(0.0, 1.0);
     if ((newZoom - _currentZoom).abs() > 0.01) {
       setState(() => _currentZoom = newZoom);
       try {
         cameraController.setZoomScale(_currentZoom);
       } catch (e) {
-        print('⚠️ Error al ajustar zoom: $e');
+        debugPrint('Error al ajustar zoom: $e');
       }
     }
   }
@@ -111,8 +111,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
           _studentCarrera = userData['carrera']?.toString();
         }
       });
-
-      print('✅ Usuario cargado: $_currentUserName | Sede: $_studentSede');
     } catch (e) {
       _showSnackBar('Error al obtener usuario: $e', isError: true);
     }
@@ -247,7 +245,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         return;
       }
 
-      final requiredFields = [
+      const requiredFields = [
         'eventId',
         'eventName',
         'facultad',
@@ -265,7 +263,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
       }
 
       // ── Verificar estado del QR en Firestore ─────────────────────
-      print('🔍 Verificando QR: $qrId');
       final qrDoc = await _firestore
           .collection('events')
           .doc(qrInfo['eventId'])
@@ -310,12 +307,11 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
 
       // ══════════════════════════════════════════════════════════════
       // ✅ VALIDACIÓN DE FILIAL / SEDE
-      // Primero se verifica la sede, luego facultad/carrera.
       // ══════════════════════════════════════════════════════════════
       final esUniversitario = _esEventoUniversitario(qrInfo);
 
       if (!esUniversitario) {
-        // ── Validar sede (solo si el QR trae sede y el evento no es general) ──
+        // ── Validar sede ──────────────────────────────────────────
         if (!_sedeCoincide(qrInfo)) {
           final qrSede = qrInfo['sede']?.toString() ?? 'Sin sede';
           _showResult(
@@ -364,7 +360,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
       final studentId = parts[1];
 
       final scanId = '${qrInfo['eventId']}_${studentId}_$codigoProyecto';
-      print('🔍 Verificando duplicado: $scanId');
 
       // ── Verificar duplicado ──────────────────────────────────────
       final existingDoc = await _firestore
@@ -447,7 +442,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
           'studentCodigo': _cachedUserData!['codigoUniversitario'],
           'facultad': _cachedUserData!['facultad'],
           'carrera': _cachedUserData!['carrera'],
-          // ✅ NUEVO: incluir sede/filial en el resumen de asistencia
+          // ✅ incluir sede/filial en el resumen de asistencia
           'sede': _studentSede ?? '',
           'ciclo': _cachedUserData!['ciclo'],
           'grupo': _cachedUserData!['grupo'],
@@ -456,14 +451,9 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
           'lastScan': FieldValue.serverTimestamp(),
           'totalScans': FieldValue.increment(1),
         }, SetOptions(merge: true));
-
-        print('✅ Asistencia con resumen (escaneo #$_escaneosDeSesion)');
-      } else {
-        print('✅ Asistencia sin resumen (escaneo #$_escaneosDeSesion)');
       }
 
       await batch.commit();
-      print('✅ Asistencia guardada: $scanId');
 
       _showResult(
         success: true,
@@ -474,7 +464,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         sede: qrInfo['sede']?.toString(),
       );
     } catch (e) {
-      print('❌ Error procesando asistencia: $e');
+      debugPrint('Error procesando asistencia: $e');
       _showResult(success: false, message: 'Error al procesar asistencia: $e');
     } finally {
       setState(() => _isProcessing = false);
@@ -533,7 +523,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // ── Icono animado ──────────────────────────────
-                  TweenAnimationBuilder(
+                  TweenAnimationBuilder<double>(
                     duration: const Duration(milliseconds: 600),
                     tween: Tween<double>(begin: 0, end: 1),
                     builder: (context, double value, child) {
@@ -548,7 +538,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                             boxShadow: [
                               BoxShadow(
                                 color: (success ? Colors.green : Colors.red)
-                                    .withOpacity(0.3),
+                                    .withValues(alpha: 0.3),
                                 blurRadius: 20,
                                 spreadRadius: 5,
                               ),
@@ -866,7 +856,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                       children: [
                         Container(
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: IconButton(
@@ -911,7 +901,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                               scale: _pulseAnimation.value,
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
+                                  color: Colors.white.withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: IconButton(
@@ -954,7 +944,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
+                                  color: Colors.black.withValues(alpha: 0.05),
                                   blurRadius: 10,
                                   offset: const Offset(0, 4),
                                 ),
@@ -1041,7 +1031,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                 borderRadius: BorderRadius.circular(20),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.3),
+                                    color: Colors.black.withValues(alpha: 0.3),
                                     blurRadius: 15,
                                     offset: const Offset(0, 5),
                                   ),
@@ -1080,7 +1070,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                           vertical: 8,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: Colors.black.withOpacity(0.6),
+                                          color: Colors.black
+                                              .withValues(alpha: 0.6),
                                           borderRadius: BorderRadius.circular(
                                             20,
                                           ),
@@ -1120,7 +1111,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                               top: index < 2 ? 0 : null,
                                               bottom: index >= 2 ? 0 : null,
                                               left: index % 2 == 0 ? 0 : null,
-                                              right: index % 2 == 1 ? 0 : null,
+                                              right:
+                                                  index % 2 == 1 ? 0 : null,
                                               child: Container(
                                                 width: 40,
                                                 height: 40,
@@ -1161,15 +1153,15 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                             animation: _scanLineAnimation,
                                             builder: (context, child) {
                                               return Positioned(
-                                                top:
-                                                    250 *
+                                                top: 250 *
                                                     _scanLineAnimation.value,
                                                 left: 0,
                                                 right: 0,
                                                 child: Container(
                                                   height: 2,
                                                   decoration: BoxDecoration(
-                                                    gradient: LinearGradient(
+                                                    gradient:
+                                                        LinearGradient(
                                                       colors: [
                                                         Colors.transparent,
                                                         Colors.green.shade400,
@@ -1181,7 +1173,9 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                                         color: Colors
                                                             .green
                                                             .shade400
-                                                            .withOpacity(0.5),
+                                                            .withValues(
+                                                              alpha: 0.5,
+                                                            ),
                                                         blurRadius: 8,
                                                         spreadRadius: 2,
                                                       ),
@@ -1240,7 +1234,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
+                                  color: Colors.black.withValues(alpha: 0.05),
                                   blurRadius: 10,
                                   offset: const Offset(0, 4),
                                 ),
@@ -1253,7 +1247,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                   decoration: BoxDecoration(
                                     color: const Color(
                                       0xFF1E3A5F,
-                                    ).withOpacity(0.1),
+                                    ).withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: const Icon(
@@ -1308,9 +1302,9 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

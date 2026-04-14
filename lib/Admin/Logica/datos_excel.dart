@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 
-// Estructura para agrupar estudiantes duplicados
 class StudentGroup {
   final String normalizedName;
   final List<Map<String, dynamic>> records;
@@ -51,40 +50,38 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
 
   static const int BATCH_SIZE = 500;
 
+  // ── Columnas del Excel ────────────────────────────────────────────────────
+  // Se agrega 'Filial' / 'Sede' para que el super admin también lea la filial
+  // desde el propio archivo. 'Sede' se mantiene como alias por compatibilidad
+  // con archivos viejos, pero internamente todo se guarda como 'filial'.
   final Map<String, String> _columnMapping = {
-    'Modo contrato': 'modoContrato',
-    'Código estudiante': 'codigoUniversitario',
-    'Estudiante': 'name',
-    'Ciclo': 'ciclo',
-    'Celular': 'celular',
-    'Usuario': 'username',
-    'Documento': 'dni',
-    'Unidad académica': 'facultad',
-    'Programa estudio': 'carrera',
-    'Modalidad estudio': 'modalidadEstudio',
-    'Sede': 'sede',
-    'Grupo': 'grupo',
-    'Correo': 'email',
-    'Correo Institucional': 'correoInstitucional',
-    'id_persona': 'idPersona',
+    'Ciclo'             : 'ciclo',
+    'Grupo'             : 'grupo',
+    'Código estudiante' : 'codigoUniversitario',
+    'Estudiante'        : 'name',
+    'Documento'         : 'dni',
+    'Correo'            : 'email',
+    'Celular'           : 'celular',
+    'Programa estudio'  : 'carrera',      // → carrera
+    'Usuario'           : 'username',
+    'Unidad académica'  : 'facultad',     // → facultad
+    'Pago'              : 'pago',
+    'Filial'            : 'filial',       // ← NUEVO: filial del estudiante
+    'Sede'              : 'filial',       // ← alias para archivos anteriores
   };
 
   @override
   void initState() {
     super.initState();
-
-    // Detectar si es admin de carrera
     _checkIfAdminCarrera();
 
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
-
     _slideAnimation =
         Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
           CurvedAnimation(
@@ -92,7 +89,6 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
             curve: Curves.easeOutCubic,
           ),
         );
-
     _animationController.forward();
   }
 
@@ -102,92 +98,65 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     super.dispose();
   }
 
-  // Función para normalizar nombres (eliminar acentos, espacios extra, etc)
+  // ── Normalizar nombre para detección de duplicados ────────────────────────
   String _normalizeStudentName(String name) {
     String normalized = name.trim().toLowerCase();
-
     const accents = {
-      'á': 'a',
-      'à': 'a',
-      'ä': 'a',
-      'â': 'a',
-      'é': 'e',
-      'è': 'e',
-      'ë': 'e',
-      'ê': 'e',
-      'í': 'i',
-      'ì': 'i',
-      'ï': 'i',
-      'î': 'i',
-      'ó': 'o',
-      'ò': 'o',
-      'ö': 'o',
-      'ô': 'o',
-      'ú': 'u',
-      'ù': 'u',
-      'ü': 'u',
-      'û': 'u',
-      'ñ': 'n',
-      'ç': 'c',
+      'á': 'a', 'à': 'a', 'ä': 'a', 'â': 'a',
+      'é': 'e', 'è': 'e', 'ë': 'e', 'ê': 'e',
+      'í': 'i', 'ì': 'i', 'ï': 'i', 'î': 'i',
+      'ó': 'o', 'ò': 'o', 'ö': 'o', 'ô': 'o',
+      'ú': 'u', 'ù': 'u', 'ü': 'u', 'û': 'u',
+      'ñ': 'n', 'ç': 'c',
     };
-
     accents.forEach((accent, replacement) {
       normalized = normalized.replaceAll(accent, replacement);
     });
-
     normalized = normalized.replaceAll(RegExp(r'\s+'), ' ');
-
     return normalized;
   }
 
-  // Función para detectar y eliminar estudiantes duplicados (solo mantiene el primero)
+  // ── Eliminar duplicados dentro del propio Excel ───────────────────────────
   Map<String, Map<String, dynamic>> _removeDuplicateStudents(
     List<Map<String, dynamic>> allData,
   ) {
-    Map<String, Map<String, dynamic>> uniqueStudents = {};
-
+    final Map<String, Map<String, dynamic>> uniqueStudents = {};
     for (var studentData in allData) {
-      String fullName = _getFieldValue(studentData, 'name', '');
+      final fullName = _getFieldValue(studentData, 'name', '');
       if (fullName.isEmpty) continue;
-
-      String normalizedName = _normalizeStudentName(fullName);
-
-      // Solo agregar si NO existe ya (mantener el primero)
-      if (!uniqueStudents.containsKey(normalizedName)) {
-        uniqueStudents[normalizedName] = studentData;
-      }
+      final normalizedName = _normalizeStudentName(fullName);
+      uniqueStudents.putIfAbsent(normalizedName, () => studentData);
     }
-
     return uniqueStudents;
   }
 
+  // ── Detectar si es admin de carrera ──────────────────────────────────────
   Future<void> _checkIfAdminCarrera() async {
     final isAdminCarrera = await PrefsHelper.isAdminCarrera();
-
     if (isAdminCarrera) {
       final adminData = await PrefsHelper.getAdminCarreraData();
-
       if (adminData != null) {
         setState(() {
-          _isAdminCarrera = true;
-          _adminCarreraFilial = adminData['filialNombre'];
+          _isAdminCarrera       = true;
+          _adminCarreraFilial   = adminData['filialNombre'];
           _adminCarreraFacultad = adminData['facultad'];
-          _adminCarreraCarrera = adminData['carrera'];
+          _adminCarreraCarrera  = adminData['carrera'];
         });
-
         print('✅ Admin de carrera detectado en importación Excel');
-        print('   Carrera: $_adminCarreraCarrera');
+        print('   Filial   : $_adminCarreraFilial');
+        print('   Facultad : $_adminCarreraFacultad');
+        print('   Carrera  : $_adminCarreraCarrera');
       }
     }
   }
 
+  // ── Seleccionar archivo Excel ─────────────────────────────────────────────
   Future<void> _pickExcelFile() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['xlsx', 'xls'],
       );
-
       if (result != null) {
         setState(() {
           _isLoading = true;
@@ -198,68 +167,65 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
           _currentProgress = 0;
           _duplicatesDetected = 0;
         });
-
-        File file = File(result.files.single.path!);
+        final file = File(result.files.single.path!);
         await _readExcelFile(file);
-
         setState(() {
           _fileSelected = true;
           _isLoading = false;
         });
       }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
       _showMessage('Error al seleccionar archivo: $e');
     }
   }
 
+  // ── Leer Excel y mapear columnas ──────────────────────────────────────────
   Future<void> _readExcelFile(File file) async {
     try {
-      var bytes = file.readAsBytesSync();
-      var excelFile = excel_pkg.Excel.decodeBytes(bytes);
-
-      var sheet = excelFile.tables.keys.first;
-      var table = excelFile.tables[sheet];
+      final bytes     = file.readAsBytesSync();
+      final excelFile = excel_pkg.Excel.decodeBytes(bytes);
+      final sheet     = excelFile.tables.keys.first;
+      final table     = excelFile.tables[sheet];
 
       if (table == null || table.rows.isEmpty) {
         _showMessage('El archivo Excel está vacío');
         return;
       }
 
-      List<String?> headers = table.rows.first
+      final headers = table.rows.first
           .map((cell) => cell?.value?.toString().trim())
           .toList();
 
-      if (!_validateHeaders(headers)) {
-        return;
-      }
+      if (!_validateHeaders(headers)) return;
 
       _allData.clear();
       for (int i = 1; i < table.rows.length; i++) {
-        var row = table.rows[i];
-        Map<String, dynamic> rowData = {};
-
+        final row    = table.rows[i];
+        final rowData = <String, dynamic>{};
         bool hasAnyData = false;
 
         for (int j = 0; j < headers.length; j++) {
           if (j < row.length) {
-            String? header = headers[j];
+            final header = headers[j];
             if (header != null && _columnMapping.containsKey(header)) {
-              String fieldName = _columnMapping[header]!;
-              var cellValue = row[j]?.value;
+              final fieldName = _columnMapping[header]!;
+              final cellValue = row[j]?.value;
 
-              String? value;
               if (cellValue != null) {
+                String value;
                 if (cellValue is int || cellValue is double) {
                   value = cellValue.toString();
                 } else {
                   value = cellValue.toString().trim();
                 }
-
                 if (value.isNotEmpty) {
                   hasAnyData = true;
+                  // Para 'filial' solo guarda si aún no hay valor
+                  // (evita que 'Sede' sobreescriba 'Filial' si ambas existen)
+                  if (fieldName == 'filial' && rowData.containsKey('filial')) {
+                    continue;
+                  }
                   rowData[fieldName] = value;
                 }
               }
@@ -273,7 +239,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
         }
       }
 
-      _totalRows = _allData.length;
+      _totalRows   = _allData.length;
       _previewData = _allData.take(5).toList();
 
       if (_totalRows == 0) {
@@ -288,9 +254,8 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
   }
 
   bool _validateHeaders(List<String?> headers) {
-    List<String> requiredColumns = ['Estudiante', 'Documento'];
-    bool hasAtLeastOne = requiredColumns.any((col) => headers.contains(col));
-
+    final requiredColumns = ['Estudiante', 'Documento'];
+    final hasAtLeastOne = requiredColumns.any((col) => headers.contains(col));
     if (!hasAtLeastOne) {
       _showMessage(
         'El archivo debe tener al menos la columna "Estudiante" o "Documento"',
@@ -300,13 +265,14 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     return true;
   }
 
+  // ── Confirmar e iniciar importación ──────────────────────────────────────
   Future<void> _importData() async {
     if (_allData.isEmpty) {
       _showMessage('No hay datos para importar');
       return;
     }
 
-    bool? confirm = await showDialog<bool>(
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -357,7 +323,8 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Se eliminarán automáticamente los registros duplicados (solo se importará el primero de cada estudiante)',
+                      'Se eliminarán automáticamente los registros duplicados '
+                      '(solo se importará el primero de cada estudiante)',
                       style: TextStyle(fontSize: 12, color: Color(0xFF1E3A5F)),
                     ),
                   ),
@@ -369,9 +336,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFF64748B),
-            ),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFF64748B)),
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
@@ -380,8 +345,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
               backgroundColor: const Color(0xFF1E3A5F),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+                  borderRadius: BorderRadius.circular(12)),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
             child: const Text('Importar'),
@@ -393,131 +357,81 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     if (confirm != true) return;
 
     setState(() {
-      _isLoading = true;
-      _successCount = 0;
-      _errorCount = 0;
-      _currentProgress = 0;
+      _isLoading          = true;
+      _successCount       = 0;
+      _errorCount         = 0;
+      _currentProgress    = 0;
       _duplicatesDetected = 0;
       _errors.clear();
     });
 
     await _processBatchImport();
-
-    setState(() {
-      _isLoading = false;
-    });
-
+    setState(() => _isLoading = false);
     _showResultsDialog();
   }
 
-  Widget _buildFeatureItem(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: const BoxDecoration(
-              color: Color(0xFF1E3A5F),
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: const TextStyle(fontSize: 14, color: Color(0xFF64748B)),
-          ),
-        ],
-      ),
-    );
-  }
-
+  // ── Proceso principal de importación ─────────────────────────────────────
+  // Clave del documento en Firestore: "filial_carrera"
+  // · Admin de carrera → usa SU filial y carrera (ignora Excel)
+  // · Super admin      → lee filial y carrera del Excel por cada fila
   Future<void> _processBatchImport() async {
-    Map<String, List<Map<String, dynamic>>> studentsByCarrera = {};
+    // key = "filial_carrera"
+    final Map<String, List<Map<String, dynamic>>> studentsByKey = {};
 
-    // ✅ Si es admin de carrera, TODOS van a su carrera
     if (_isAdminCarrera) {
-      print(
-        '🔒 Modo admin de carrera: Importando todo a $_adminCarreraCarrera',
-      );
-
-      // Agrupar todos los estudiantes en la carrera del admin
-      for (var studentData in _allData) {
-        if (!studentsByCarrera.containsKey(_adminCarreraCarrera)) {
-          studentsByCarrera[_adminCarreraCarrera!] = [];
-        }
-        studentsByCarrera[_adminCarreraCarrera!]!.add(studentData);
-      }
+      final key = '${_adminCarreraFilial}_$_adminCarreraCarrera';
+      print('🔒 Modo admin de carrera: Importando todo a "$key"');
+      studentsByKey[key] = List.from(_allData);
     } else {
-      // Super admin: usar carrera del Excel
+      // Super admin: agrupar por filial + carrera leídos del Excel
       for (var studentData in _allData) {
-        String carrera = _getFieldValue(studentData, 'carrera', 'Sin asignar');
-        if (!studentsByCarrera.containsKey(carrera)) {
-          studentsByCarrera[carrera] = [];
-        }
-        studentsByCarrera[carrera]!.add(studentData);
+        final filial  = _getFieldValue(studentData, 'filial',  'Sin filial');
+        final carrera = _getFieldValue(studentData, 'carrera', 'Sin asignar');
+        final key     = '${filial}_$carrera';
+        studentsByKey.putIfAbsent(key, () => []).add(studentData);
       }
     }
 
     int totalProcessed = 0;
 
-    for (var entry in studentsByCarrera.entries) {
-      String carrera = entry.key;
-      List<Map<String, dynamic>> students = entry.value;
+    for (final entry in studentsByKey.entries) {
+      final docKey   = entry.key;
+      final students = entry.value;
 
-      print('📚 Procesando carrera: $carrera');
+      print('📚 Procesando: "$docKey"');
       print('   Total registros en Excel: ${students.length}');
 
-      // Eliminar duplicados (solo mantener el primero de cada estudiante)
-      Map<String, Map<String, dynamic>> uniqueStudentsMap =
-          _removeDuplicateStudents(students);
+      final uniqueMap   = _removeDuplicateStudents(students);
+      final uniqueList  = uniqueMap.values.toList();
+      final dupsInGroup = students.length - uniqueList.length;
+      _duplicatesDetected += dupsInGroup;
 
-      List<Map<String, dynamic>> uniqueStudents = uniqueStudentsMap.values
-          .toList();
+      print('   Estudiantes únicos: ${uniqueList.length}');
+      if (dupsInGroup > 0) print('   🗑️ Duplicados en Excel: $dupsInGroup');
 
-      print('   Estudiantes únicos detectados: ${uniqueStudents.length}');
+      final existingUsers = await _getExistingUsersInCarrera(docKey);
+      final List<Map<String, dynamic>> validStudents = [];
 
-      int duplicatesInCarrera = students.length - uniqueStudents.length;
-      _duplicatesDetected += duplicatesInCarrera;
-
-      if (duplicatesInCarrera > 0) {
-        print('   🗑️ Se eliminaron $duplicatesInCarrera registros duplicados');
-      }
-
-      final existingUsers = await _getExistingUsersInCarrera(carrera);
-      List<Map<String, dynamic>> validStudents = [];
-
-      // Procesar cada estudiante único
-      for (int i = 0; i < uniqueStudents.length; i++) {
-        var studentData = uniqueStudents[i];
-
-        final preparedData = _prepareStudentData(studentData, totalProcessed);
-
-        final isDuplicate = _checkDuplicate(preparedData, existingUsers);
+      for (int i = 0; i < uniqueList.length; i++) {
+        final prepared    = _prepareStudentData(uniqueList[i], totalProcessed);
+        final isDuplicate = _checkDuplicate(prepared, existingUsers);
 
         if (isDuplicate) {
           _errorCount++;
           _errors.add(
-            'Estudiante ${preparedData['name']} - Ya existe en $carrera (DNI: ${preparedData['dni']})',
+            'Estudiante ${prepared['name']} - '
+            'Ya existe en "$docKey" (DNI: ${prepared['dni']})',
           );
         } else {
-          validStudents.add(preparedData);
+          validStudents.add(prepared);
         }
 
-        setState(() {
-          _currentProgress++;
-        });
-
+        setState(() => _currentProgress++);
         totalProcessed++;
       }
 
-      // Actualizar progreso por los duplicados eliminados
-      setState(() {
-        _currentProgress += duplicatesInCarrera;
-      });
-
-      await _batchWriteToFirestoreByCarrera(carrera, validStudents);
+      setState(() => _currentProgress += dupsInGroup);
+      await _batchWriteToFirestore(docKey, validStudents);
     }
 
     if (_duplicatesDetected > 0) {
@@ -527,39 +441,30 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     }
   }
 
+  // ── Obtener usuarios existentes en Firestore ──────────────────────────────
   Future<Set<Map<String, String>>> _getExistingUsersInCarrera(
-    String carrera,
+    String docKey,
   ) async {
     try {
-      print('🔎 Buscando usuarios existentes en carrera: "$carrera"');
-
+      print('🔎 Buscando usuarios existentes en: "$docKey"');
       final snapshot = await _firestore
           .collection('users')
-          .doc(carrera)
+          .doc(docKey)
           .collection('students')
           .get();
+      print('   📊 Encontrados ${snapshot.docs.length} en Firestore');
 
-      print(
-        '   📊 Encontrados ${snapshot.docs.length} estudiantes en Firestore',
-      );
-
-      Set<Map<String, String>> existingData = {};
-
-      for (var doc in snapshot.docs) {
+      return snapshot.docs.map((doc) {
         final data = doc.data();
-        existingData.add({
-          'dni': (data['dni'] ?? '').toString().toLowerCase(),
-          'email': (data['email'] ?? '').toString().toLowerCase(),
-          'codigo': (data['codigoUniversitario'] ?? '')
-              .toString()
-              .toLowerCase(),
-          'username': (data['username'] ?? '').toString().toLowerCase(),
-        });
-      }
-
-      return existingData;
+        return {
+          'dni'     : (data['dni']                  ?? '').toString().toLowerCase(),
+          'email'   : (data['email']                ?? '').toString().toLowerCase(),
+          'codigo'  : (data['codigoUniversitario']  ?? '').toString().toLowerCase(),
+          'username': (data['username']             ?? '').toString().toLowerCase(),
+        };
+      }).toSet();
     } catch (e) {
-      print('❌ Error obteniendo usuarios existentes en $carrera: $e');
+      print('❌ Error obteniendo existentes en "$docKey": $e');
       return {};
     }
   }
@@ -568,112 +473,125 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     Map<String, dynamic> studentData,
     Set<Map<String, String>> existingUsers,
   ) {
-    final dni = studentData['dni'].toString().toLowerCase();
-    final email = studentData['email'].toString().toLowerCase();
-    final codigo = studentData['codigoUniversitario'].toString().toLowerCase();
+    final dni      = studentData['dni'].toString().toLowerCase();
+    final email    = studentData['email'].toString().toLowerCase();
+    final codigo   = studentData['codigoUniversitario'].toString().toLowerCase();
     final username = studentData['username'].toString().toLowerCase();
 
-    for (var existing in existingUsers) {
-      if (existing['dni'] == dni ||
-          existing['email'] == email ||
-          existing['codigo'] == codigo ||
-          existing['username'] == username) {
-        return true;
-      }
-    }
-
-    return false;
+    return existingUsers.any((e) =>
+        e['dni']      == dni      ||
+        e['email']    == email    ||
+        e['codigo']   == codigo   ||
+        e['username'] == username);
   }
 
+  // ── Preparar datos del estudiante ─────────────────────────────────────────
+  // Se elimina por completo el campo 'sede'. Todo usa 'filial'.
+  // La clave del documento padre se construye como "filial_carrera".
   Map<String, dynamic> _prepareStudentData(
     Map<String, dynamic> rawData,
     int index,
   ) {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
 
-    String name = _getFieldValue(rawData, 'name', 'Estudiante ${index + 1}');
-    String dni = _getFieldValue(rawData, 'dni', 'DNI${timestamp % 100000000}');
+    final name  = _getFieldValue(rawData, 'name', 'Estudiante ${index + 1}');
+    final dni   = _getFieldValue(rawData, 'dni', 'DNI${timestamp % 100000000}');
 
     String username = _getFieldValue(rawData, 'username', '');
-    if (username.isEmpty) {
-      username = _generateUsernameFromName(name);
-    }
+    if (username.isEmpty) username = _generateUsernameFromName(name);
 
-    String codigoUniversitario = _getFieldValue(
-      rawData,
-      'codigoUniversitario',
-      'COD${timestamp % 1000000}',
+    final codigoUniversitario = _getFieldValue(
+      rawData, 'codigoUniversitario', 'COD${timestamp % 1000000}',
     );
 
-    // ✅ SOBRESCRIBIR DATOS SI ES ADMIN DE CARRERA
-    String facultad;
-    String carrera;
-    String sede;
+    // ── Filial / Facultad / Carrera ───────────────────────────────────────
+    // Admin de carrera → SIEMPRE usa los datos de su sesión.
+    // Super admin      → Lee del Excel; si falta algún campo, usa fallback.
+    final String filial;
+    final String facultad;
+    final String carrera;
 
     if (_isAdminCarrera) {
-      // Forzar la carrera del admin
+      filial   = _adminCarreraFilial!;
       facultad = _adminCarreraFacultad!;
-      carrera = _adminCarreraCarrera!;
-      sede = _adminCarreraFilial!;
-
-      print('🔒 Admin de carrera: Forzando carrera a $carrera');
+      carrera  = _adminCarreraCarrera!;
+      print('🔒 Forzando: filial=$filial | facultad=$facultad | carrera=$carrera');
     } else {
-      // Super admin: usar datos del Excel
+      filial   = _getFieldValue(rawData, 'filial',   'Sin filial');
       facultad = _getFieldValue(rawData, 'facultad', 'Sin asignar');
-      carrera = _getFieldValue(rawData, 'carrera', 'Sin asignar');
-      sede = _getFieldValue(rawData, 'sede', null);
+      carrera  = _getFieldValue(rawData, 'carrera',  'Sin asignar');
     }
 
+    // ── Documento final (sin 'sede', sin duplicados de filial) ───────────
     return {
-      'name': name,
-      'username': username.toLowerCase(),
-      'codigoUniversitario': codigoUniversitario,
-      'dni': dni,
-      'documento': dni,
-      'facultad': facultad, // ✅ Sobrescrito si es admin carrera
-      'carrera': carrera, // ✅ Sobrescrito si es admin carrera
-      'modoContrato': _getFieldValue(rawData, 'modoContrato', null),
-      'modalidadEstudio': _getFieldValue(rawData, 'modalidadEstudio', null),
-      'sede': sede, // ✅ Sobrescrito si es admin carrera
-      'ciclo': _getFieldValue(rawData, 'ciclo', null),
-      'grupo': _getFieldValue(rawData, 'grupo', null),
-      'correoInstitucional': _getFieldValue(
-        rawData,
-        'correoInstitucional',
-        null,
-      ),
-      'celular': _getFieldValue(rawData, 'celular', null),
-      'email': _getFieldValue(rawData, 'email', ''),
-      'userType': 'student',
-      'createdAt': FieldValue.serverTimestamp(),
+      'name'                : name,
+      'username'            : username.toLowerCase(),
+      'codigoUniversitario' : codigoUniversitario,
+      'dni'                 : dni,
+      'documento'           : dni,          // alias para compatibilidad
+      'filial'              : filial,       // ← único campo de sede/filial
+      'facultad'            : facultad,
+      'carrera'             : carrera,
+      'ciclo'               : _getFieldValue(rawData, 'ciclo',   null),
+      'grupo'               : _getFieldValue(rawData, 'grupo',   null),
+      'celular'             : _getFieldValue(rawData, 'celular', null),
+      'email'               : _getFieldValue(rawData, 'email',   ''),
+      'pago'                : _getFieldValue(rawData, 'pago',    null),
+      'userType'            : 'student',
+      'createdAt'           : FieldValue.serverTimestamp(),
     };
   }
 
-  Future<void> _batchWriteToFirestoreByCarrera(
-    String carrera,
+  // ── Escribir en Firestore bajo users/{filial_carrera}/students/ ───────────
+  // El documento padre guarda filial, facultad y carrera para que
+  // EstudianteScreen pueda leerlos aunque el doc del estudiante no los tenga.
+  Future<void> _batchWriteToFirestore(
+    String docKey,
     List<Map<String, dynamic>> students,
   ) async {
     try {
-      final carreraDocRef = _firestore.collection('users').doc(carrera);
+      final carreraDocRef = _firestore.collection('users').doc(docKey);
 
-      final carreraDoc = await carreraDocRef.get();
-      if (!carreraDoc.exists) {
-        await carreraDocRef.set({
-          'name': carrera,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-        print('📁 Documento de carrera creado: $carrera');
+      // Determinar filial/facultad/carrera para el doc padre
+      String filialParaPadre;
+      String facultadParaPadre;
+      String carreraParaPadre;
+
+      if (_isAdminCarrera) {
+        filialParaPadre   = _adminCarreraFilial!;
+        facultadParaPadre = _adminCarreraFacultad!;
+        carreraParaPadre  = _adminCarreraCarrera!;
+      } else {
+        // Derivar del docKey: "filial_carrera"
+        final parts = docKey.split('_');
+        filialParaPadre   = parts.first;
+        carreraParaPadre  = parts.length > 1 ? parts.skip(1).join('_') : docKey;
+        // Facultad: tomar del primer estudiante válido
+        facultadParaPadre = students.isNotEmpty
+            ? (students.first['facultad'] ?? 'Sin asignar')
+            : 'Sin asignar';
       }
 
-      for (int i = 0; i < students.length; i += BATCH_SIZE) {
-        WriteBatch batch = _firestore.batch();
+      // Crear/actualizar doc padre con campos limpios y unificados
+      await carreraDocRef.set({
+        'name'      : docKey,
+        'filial'    : filialParaPadre,
+        'facultad'  : facultadParaPadre,
+        'carrera'   : carreraParaPadre,
+        'updatedAt' : FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
-        int end = (i + BATCH_SIZE < students.length)
+      print('📁 Doc padre actualizado: "$docKey"');
+
+      // Escribir estudiantes en lotes
+      for (int i = 0; i < students.length; i += BATCH_SIZE) {
+        final batch = _firestore.batch();
+        final end   = (i + BATCH_SIZE < students.length)
             ? i + BATCH_SIZE
             : students.length;
 
         for (int j = i; j < end; j++) {
-          DocumentReference docRef = carreraDocRef.collection('students').doc();
+          final docRef = carreraDocRef.collection('students').doc();
           batch.set(docRef, students[j]);
         }
 
@@ -682,19 +600,20 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
         setState(() {});
       }
 
-      print('✅ Importados ${students.length} estudiantes en $carrera');
+      print('✅ Importados ${students.length} estudiantes en "$docKey"');
     } catch (e) {
-      print('Error en batch write para $carrera: $e');
-      _showMessage('Error durante la importación en $carrera: $e');
+      print('❌ Error en batch write para "$docKey": $e');
+      _showMessage('Error durante la importación en "$docKey": $e');
     }
   }
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
   String _getFieldValue(
     Map<String, dynamic> data,
     String field,
     String? defaultValue,
   ) {
-    var value = data[field];
+    final value = data[field];
     if (value == null || value.toString().trim().isEmpty) {
       return defaultValue ?? '';
     }
@@ -705,23 +624,20 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     if (fullName.isEmpty || fullName == 'Sin nombre') {
       return 'usuario${DateTime.now().millisecondsSinceEpoch % 10000}';
     }
-
     final parts = fullName
         .toLowerCase()
         .split(' ')
         .where((p) => p.isNotEmpty)
         .toList();
-    if (parts.length >= 2) {
-      return '${parts[0]}.${parts[parts.length - 1]}';
-    }
+    if (parts.length >= 2) return '${parts[0]}.${parts[parts.length - 1]}';
     return parts.isNotEmpty ? parts[0] : 'usuario';
   }
 
   void _showResultsDialog() {
-    int totalRegistros = _totalRows;
-    int usuariosCreados = _successCount;
-    int duplicadosOmitidos = _errorCount;
-    int registrosEliminados = _duplicatesDetected;
+    final totalRegistros      = _totalRows;
+    final usuariosCreados     = _successCount;
+    final duplicadosOmitidos  = _errorCount;
+    final registrosEliminados = _duplicatesDetected;
 
     showDialog(
       context: context,
@@ -773,7 +689,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
               if (registrosEliminados > 0) ...[
                 const SizedBox(height: 12),
                 _buildResultCard(
-                  'Duplicados eliminados',
+                  'Duplicados eliminados del Excel',
                   '$registrosEliminados',
                   Icons.delete_outline,
                   Colors.red.shade600,
@@ -819,7 +735,9 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Se detectaron estudiantes repetidos en el Excel y se eliminaron automáticamente, manteniendo solo el primer registro',
+                          'Se detectaron estudiantes repetidos en el Excel y '
+                          'se eliminaron automáticamente, manteniendo solo el '
+                          'primer registro de cada uno.',
                           style: TextStyle(
                             fontSize: 13,
                             color: Colors.red.shade900,
@@ -910,9 +828,9 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
               backgroundColor: const Color(0xFF1E3A5F),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  borderRadius: BorderRadius.circular(12)),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
             child: const Text('Cerrar'),
           ),
@@ -964,15 +882,15 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
         SnackBar(
           content: Text(message),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           backgroundColor: const Color(0xFF1E3A5F),
         ),
       );
     }
   }
 
+  // ── BUILD ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1009,11 +927,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      size: 28,
-                    ),
+                    icon: const Icon(Icons.close, color: Colors.white, size: 28),
                     onPressed: () => Navigator.pop(context),
                     tooltip: 'Cerrar',
                   ),
@@ -1105,11 +1019,12 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: LinearProgressIndicator(
-                      value: _totalRows > 0 ? _currentProgress / _totalRows : 0,
+                      value: _totalRows > 0
+                          ? _currentProgress / _totalRows
+                          : 0,
                       backgroundColor: Colors.grey[200],
                       valueColor: const AlwaysStoppedAnimation<Color>(
-                        Color(0xFF1E3A5F),
-                      ),
+                          Color(0xFF1E3A5F)),
                       minHeight: 12,
                     ),
                   ),
@@ -1139,11 +1054,8 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
               children: [
                 Column(
                   children: [
-                    const Icon(
-                      Icons.check_circle,
-                      color: Colors.green,
-                      size: 24,
-                    ),
+                    const Icon(Icons.check_circle,
+                        color: Colors.green, size: 24),
                     const SizedBox(height: 4),
                     Text(
                       '$_successCount',
@@ -1153,20 +1065,16 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                         fontSize: 16,
                       ),
                     ),
-                    const Text(
-                      'Creados',
-                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                    ),
+                    const Text('Creados',
+                        style:
+                            TextStyle(fontSize: 12, color: Color(0xFF64748B))),
                   ],
                 ),
                 Container(width: 1, height: 40, color: Colors.grey.shade300),
                 Column(
                   children: [
-                    const Icon(
-                      Icons.delete_outline,
-                      color: Colors.red,
-                      size: 24,
-                    ),
+                    const Icon(Icons.delete_outline,
+                        color: Colors.red, size: 24),
                     const SizedBox(height: 4),
                     Text(
                       '$_duplicatesDetected',
@@ -1176,10 +1084,9 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                         fontSize: 16,
                       ),
                     ),
-                    const Text(
-                      'Eliminados',
-                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                    ),
+                    const Text('Eliminados',
+                        style:
+                            TextStyle(fontSize: 12, color: Color(0xFF64748B))),
                   ],
                 ),
               ],
@@ -1196,7 +1103,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ✅ BANNER PARA ADMIN DE CARRERA
+          // ── Banner admin de carrera ───────────────────────────────────────
           if (_isAdminCarrera) ...[
             Container(
               padding: const EdgeInsets.all(16),
@@ -1215,11 +1122,8 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                       color: Colors.orange.shade700,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(
-                      Icons.lock,
-                      color: Colors.white,
-                      size: 24,
-                    ),
+                    child:
+                        const Icon(Icons.lock, color: Colors.white, size: 24),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1236,15 +1140,21 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'TODOS los estudiantes del Excel se importarán a: $_adminCarreraCarrera',
+                          'Filial: $_adminCarreraFilial',
                           style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.orange.shade700,
-                          ),
+                              fontSize: 12,
+                              color: Colors.orange.shade800,
+                              fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Los datos de carrera en el Excel serán ignorados',
+                          'Carrera: $_adminCarreraCarrera',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.orange.shade700),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Los datos de carrera/filial del Excel serán ignorados',
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.orange.shade600,
@@ -1260,13 +1170,12 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
             const SizedBox(height: 16),
           ],
 
-          // Card principal de instrucciones
+          // ── Card principal ────────────────────────────────────────────────
           Card(
             elevation: 4,
             shadowColor: Colors.black26,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             color: Colors.white,
             child: Padding(
               padding: const EdgeInsets.all(24.0),
@@ -1279,43 +1188,35 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                       color: const Color(0xFF1E3A5F).withOpacity(0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.upload_file,
-                      size: 40,
-                      color: Color(0xFF1E3A5F),
-                    ),
+                    child: const Icon(Icons.upload_file,
+                        size: 40, color: Color(0xFF1E3A5F)),
                   ),
                   const SizedBox(height: 20),
                   Text(
                     'Importar Estudiantes desde Excel',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF1E3A5F),
-                    ),
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF1E3A5F),
+                        ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 12),
                   Text(
                     'Selecciona un archivo Excel (.xlsx o .xls)',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF64748B),
-                    ),
+                          color: const Color(0xFF64748B),
+                        ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 20),
-                  _buildFeatureRow(
-                    Icons.check_circle_outline,
-                    'Acepta celdas vacías',
-                  ),
+                  _buildFeatureRow(Icons.check_circle_outline, 'Acepta celdas vacías'),
                   const SizedBox(height: 8),
                   _buildFeatureRow(Icons.bolt, 'Importación ultra rápida'),
                   const SizedBox(height: 8),
                   _buildFeatureRow(Icons.delete_sweep, 'Elimina duplicados'),
                   const SizedBox(height: 8),
                   _buildFeatureRow(
-                    Icons.folder_special,
-                    'Organizado por carrera',
-                  ),
+                      Icons.folder_special, 'Separado por filial y carrera'),
                   const SizedBox(height: 24),
                   ElevatedButton.icon(
                     onPressed: _pickExcelFile,
@@ -1325,12 +1226,9 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                       backgroundColor: const Color(0xFF1E3A5F),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
-                      ),
+                          horizontal: 32, vertical: 16),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                          borderRadius: BorderRadius.circular(12)),
                       elevation: 2,
                     ),
                   ),
@@ -1341,10 +1239,8 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                       decoration: BoxDecoration(
                         color: Colors.green.shade50,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.green.shade300,
-                          width: 2,
-                        ),
+                        border:
+                            Border.all(color: Colors.green.shade300, width: 2),
                       ),
                       child: Row(
                         children: [
@@ -1354,11 +1250,8 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                               color: Colors.green.shade100,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Icon(
-                              Icons.check_circle,
-                              color: Colors.green.shade700,
-                              size: 24,
-                            ),
+                            child: Icon(Icons.check_circle,
+                                color: Colors.green.shade700, size: 24),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -1368,9 +1261,8 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                                 const Text(
                                   'Archivo seleccionado',
                                   style: TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFF64748B),
-                                  ),
+                                      fontSize: 12,
+                                      color: Color(0xFF64748B)),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
@@ -1394,14 +1286,15 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
               ),
             ),
           ),
+
+          // ── Vista previa ──────────────────────────────────────────────────
           if (_fileSelected && _previewData.isNotEmpty) ...[
             const SizedBox(height: 20),
             Card(
               elevation: 4,
               shadowColor: Colors.black26,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
+                  borderRadius: BorderRadius.circular(20)),
               color: Colors.white,
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
@@ -1416,11 +1309,8 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                             color: Colors.blue.shade50,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Icon(
-                            Icons.preview,
-                            color: Colors.blue.shade600,
-                            size: 24,
-                          ),
+                          child: Icon(Icons.preview,
+                              color: Colors.blue.shade600, size: 24),
                         ),
                         const SizedBox(width: 12),
                         const Expanded(
@@ -1435,9 +1325,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
+                              horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
                             color: const Color(0xFF1E3A5F),
                             borderRadius: BorderRadius.circular(20),
@@ -1459,7 +1347,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: _previewData.length,
                       itemBuilder: (context, index) {
-                        var student = _previewData[index];
+                        final student = _previewData[index];
                         return Container(
                           margin: const EdgeInsets.only(bottom: 12),
                           decoration: BoxDecoration(
@@ -1469,9 +1357,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                           ),
                           child: ListTile(
                             contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
+                                horizontal: 16, vertical: 8),
                             leading: Container(
                               width: 45,
                               height: 45,
@@ -1503,43 +1389,66 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.school,
-                                        size: 14,
-                                        color: Colors.grey.shade600,
-                                      ),
+                                  // Filial
+                                  if (student['filial'] != null)
+                                    Row(children: [
+                                      Icon(Icons.location_city,
+                                          size: 14,
+                                          color: Colors.grey.shade600),
                                       const SizedBox(width: 4),
                                       Expanded(
                                         child: Text(
-                                          'Carrera: ${student['carrera'] ?? "Sin dato"}',
+                                          'Filial: ${student['filial']}',
                                           style: TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.grey.shade700,
-                                          ),
+                                              fontSize: 13,
+                                              color: Colors.grey.shade700),
                                         ),
                                       ),
-                                    ],
-                                  ),
+                                    ]),
                                   const SizedBox(height: 2),
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.badge,
+                                  // Carrera
+                                  Row(children: [
+                                    Icon(Icons.school,
                                         size: 14,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'DNI: ${student['dni'] ?? "Sin dato"}',
+                                        color: Colors.grey.shade600),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        'Carrera: ${student['carrera'] ?? "Sin dato"}',
                                         style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.grey.shade700,
-                                        ),
+                                            fontSize: 13,
+                                            color: Colors.grey.shade700),
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                  ]),
+                                  const SizedBox(height: 2),
+                                  // DNI
+                                  Row(children: [
+                                    Icon(Icons.badge,
+                                        size: 14,
+                                        color: Colors.grey.shade600),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'DNI: ${student['dni'] ?? "Sin dato"}',
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey.shade700),
+                                    ),
+                                  ]),
+                                  const SizedBox(height: 2),
+                                  // Pago
+                                  Row(children: [
+                                    Icon(Icons.payment,
+                                        size: 14,
+                                        color: Colors.grey.shade600),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Pago: ${student['pago'] ?? "Sin dato"}',
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey.shade700),
+                                    ),
+                                  ]),
                                 ],
                               ),
                             ),
@@ -1549,10 +1458,8 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                                 color: Colors.blue.shade50,
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Icon(
-                                Icons.person,
-                                color: Colors.blue.shade600,
-                              ),
+                              child:
+                                  Icon(Icons.person, color: Colors.blue.shade600),
                             ),
                           ),
                         );
@@ -1563,9 +1470,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                       Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 10,
-                          ),
+                              horizontal: 20, vertical: 10),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade100,
                             borderRadius: BorderRadius.circular(20),
@@ -1590,17 +1495,14 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                         label: const Text(
                           'Importar Eliminando Duplicados',
                           style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                              fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 18),
                           backgroundColor: const Color(0xFF1E3A5F),
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                              borderRadius: BorderRadius.circular(12)),
                           elevation: 3,
                         ),
                       ),
@@ -1610,13 +1512,13 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
               ),
             ),
           ],
+
           if (_fileSelected && _previewData.isEmpty) ...[
             const SizedBox(height: 20),
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
+                  borderRadius: BorderRadius.circular(20)),
               color: Colors.orange.shade50,
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
@@ -1628,20 +1530,17 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                         color: Colors.orange.shade100,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(
-                        Icons.warning_amber_rounded,
-                        color: Colors.orange.shade700,
-                        size: 28,
-                      ),
+                      child: Icon(Icons.warning_amber_rounded,
+                          color: Colors.orange.shade700, size: 28),
                     ),
                     const SizedBox(width: 16),
                     const Expanded(
                       child: Text(
-                        'No se encontraron datos válidos. Verifica que el archivo tenga al menos la columna "Estudiante" o "Documento".',
-                        style: TextStyle(
-                          color: Color(0xFF1E3A5F),
-                          fontSize: 14,
-                        ),
+                        'No se encontraron datos válidos. Verifica que el '
+                        'archivo tenga al menos la columna "Estudiante" o '
+                        '"Documento".',
+                        style:
+                            TextStyle(color: Color(0xFF1E3A5F), fontSize: 14),
                       ),
                     ),
                   ],
@@ -1659,10 +1558,8 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       children: [
         Icon(icon, size: 20, color: const Color(0xFF1E3A5F)),
         const SizedBox(width: 10),
-        Text(
-          text,
-          style: const TextStyle(fontSize: 14, color: Color(0xFF64748B)),
-        ),
+        Text(text,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF64748B))),
       ],
     );
   }

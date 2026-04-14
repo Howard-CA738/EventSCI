@@ -137,7 +137,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
       });
       _filtrarAsistencias();
     } catch (e) {
-      print('Error cargando períodos: $e');
       _showSnackBar('Error al cargar períodos: $e', isError: true);
     }
   }
@@ -215,8 +214,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
       if (parts.length != 2) throw Exception('ID de usuario inválido');
       final studentId = parts[1];
 
-      print('👤 Cargando asistencias para: $studentId | Sede: $_studentSede');
-
       final hoy = DateTime.now();
       final inicioHoy = DateTime(hoy.year, hoy.month, hoy.day);
 
@@ -278,7 +275,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
       }
     } catch (e) {
       _showSnackBar('Error al cargar asistencias: $e', isError: true);
-      print('❌ Error: $e');
     } finally {
       setState(() => _isLoadingAsistencias = false);
     }
@@ -346,7 +342,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
         'eventDate': eventData['date'],
         'eventFacultad': eventData['facultad'] ?? '',
         'eventCarrera': eventData['carrera'] ?? '',
-        'eventSede': eventSede, // ✅ NUEVO
+        'eventSede': eventSede,
         'asistencias': asistencias,
       });
 
@@ -359,7 +355,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
         'sede': eventSede,
       };
     } catch (e) {
-      print('❌ Error cargando evento ${eventDoc.id}: $e');
+      debugPrint('Error cargando evento ${eventDoc.id}: $e');
     }
   }
 
@@ -388,17 +384,17 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   Color _getColorByCategoria(String? categoria) {
     if (categoria == null || categoria.isEmpty) return const Color(0xFF5A6C7D);
     final hash = categoria.hashCode;
-    final colors = [
-      const Color(0xFF2563EB),
-      const Color(0xFF059669),
-      const Color(0xFFD97706),
-      const Color(0xFF7C3AED),
-      const Color(0xFF0891B2),
-      const Color(0xFF4F46E5),
-      const Color(0xFF6366F1),
-      const Color(0xFF0D9488),
-      const Color(0xFF1E40AF),
-      const Color(0xFF15803D),
+    const colors = [
+      Color(0xFF2563EB),
+      Color(0xFF059669),
+      Color(0xFFD97706),
+      Color(0xFF7C3AED),
+      Color(0xFF0891B2),
+      Color(0xFF4F46E5),
+      Color(0xFF6366F1),
+      Color(0xFF0D9488),
+      Color(0xFF1E40AF),
+      Color(0xFF15803D),
     ];
     return colors[hash.abs() % colors.length];
   }
@@ -406,19 +402,35 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   IconData _getIconByCategoria(String? categoria) {
     if (categoria == null || categoria.isEmpty) return Icons.help;
     final c = categoria.toLowerCase();
-    if (c.contains('revisión') || c.contains('revision'))
+    if (c.contains('revisión') || c.contains('revision')) {
       return Icons.library_books;
-    if (c.contains('empírico') || c.contains('empirico')) return Icons.science;
+    }
+    if (c.contains('empírico') || c.contains('empirico')) {
+      return Icons.science;
+    }
     if (c.contains('innovación') ||
         c.contains('innovacion') ||
-        c.contains('tecnológica'))
+        c.contains('tecnológica')) {
       return Icons.lightbulb;
-    if (c.contains('narrativa')) return Icons.auto_stories;
-    if (c.contains('descriptiv')) return Icons.description;
-    if (c.contains('experimental')) return Icons.biotech;
-    if (c.contains('teóric') || c.contains('teorico')) return Icons.psychology;
-    if (c.contains('cualitativ')) return Icons.forum;
-    if (c.contains('cuantitativ')) return Icons.analytics;
+    }
+    if (c.contains('narrativa')) {
+      return Icons.auto_stories;
+    }
+    if (c.contains('descriptiv')) {
+      return Icons.description;
+    }
+    if (c.contains('experimental')) {
+      return Icons.biotech;
+    }
+    if (c.contains('teóric') || c.contains('teorico')) {
+      return Icons.psychology;
+    }
+    if (c.contains('cualitativ')) {
+      return Icons.forum;
+    }
+    if (c.contains('cuantitativ')) {
+      return Icons.analytics;
+    }
     return Icons.assignment;
   }
 
@@ -434,15 +446,15 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [const Color(0xFF1E3A5F), const Color(0xFF2A5298)],
+          colors: [Color(0xFF1E3A5F), Color(0xFF2A5298)],
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1E3A5F).withOpacity(0.3),
+            color: const Color(0xFF1E3A5F).withValues(alpha: 0.3),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -456,7 +468,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.school, color: Colors.white, size: 20),
@@ -522,9 +534,12 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: bgColor.withOpacity(0.7),
+        color: bgColor.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.3),
+          width: 1,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -565,27 +580,30 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           shape: BoxShape.circle,
           gradient: RadialGradient(
             colors: [
-              color.withOpacity(0.8),
-              color.withOpacity(0.6),
-              color.withOpacity(0.4),
+              color.withValues(alpha: 0.8),
+              color.withValues(alpha: 0.6),
+              color.withValues(alpha: 0.4),
             ],
             stops: const [0.0, 0.7, 1.0],
           ),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.3),
+              color: color.withValues(alpha: 0.3),
               blurRadius: 8,
               spreadRadius: 2,
               offset: const Offset(0, 4),
             ),
           ],
-          border: Border.all(color: color.withOpacity(0.8), width: 3),
+          border: Border.all(
+            color: color.withValues(alpha: 0.8),
+            width: 3,
+          ),
         ),
         child: Stack(
           children: [
             Positioned.fill(
               child: CustomPaint(
-                painter: SelloPainter(color: color.withOpacity(0.2)),
+                painter: SelloPainter(color: color.withValues(alpha: 0.2)),
               ),
             ),
             Center(
@@ -595,7 +613,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                 size: 22,
                 shadows: [
                   Shadow(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withValues(alpha: 0.3),
                     offset: const Offset(1, 1),
                     blurRadius: 2,
                   ),
@@ -633,8 +651,9 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   }
 
   Widget _buildFiltroPeriodo() {
-    if (_periodosDisponibles.isEmpty && _eventosDisponibles.isEmpty)
+    if (_periodosDisponibles.isEmpty && _eventosDisponibles.isEmpty) {
       return const SizedBox.shrink();
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -644,7 +663,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             spreadRadius: 2,
             blurRadius: 10,
             offset: const Offset(0, 4),
@@ -660,7 +679,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                    color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
@@ -704,7 +723,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2563EB).withOpacity(0.1),
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
@@ -746,7 +765,9 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           color: isSelected ? const Color(0xFF1E3A5F) : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? const Color(0xFF1E3A5F) : Colors.grey.shade300,
+            color: isSelected
+                ? const Color(0xFF1E3A5F)
+                : Colors.grey.shade300,
             width: 1.5,
           ),
         ),
@@ -790,7 +811,10 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                 const SizedBox(width: 8),
                 Text(
                   'Todos los eventos',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 13,
+                  ),
                 ),
               ],
             ),
@@ -801,7 +825,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           ),
           items: [
             DropdownMenuItem<String>(
-              value: null,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Row(
@@ -814,7 +837,10 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                     const SizedBox(width: 8),
                     const Text(
                       'Todos los eventos',
-                      style: TextStyle(fontSize: 13, color: Color(0xFF1E3A5F)),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF1E3A5F),
+                      ),
                     ),
                   ],
                 ),
@@ -827,10 +853,10 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.event,
                         size: 18,
-                        color: const Color(0xFF2563EB),
+                        color: Color(0xFF2563EB),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -874,7 +900,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               spreadRadius: 2,
               blurRadius: 10,
               offset: const Offset(0, 4),
@@ -959,7 +985,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF1E3A5F).withOpacity(0.3),
+                        color: const Color(0xFF1E3A5F).withValues(alpha: 0.3),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -1033,7 +1059,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                 ),
                 itemCount: totalSellos,
                 itemBuilder: (context, index) {
-                  return TweenAnimationBuilder(
+                  return TweenAnimationBuilder<double>(
                     tween: Tween<double>(begin: 0, end: 1),
                     duration: Duration(milliseconds: 300 + (index * 50)),
                     curve: Curves.elasticOut,
@@ -1168,7 +1194,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                             _currentUserName!,
                             style: TextStyle(
                               fontSize: 13,
-                              color: Colors.white.withOpacity(0.8),
+                              color: Colors.white.withValues(alpha: 0.8),
                             ),
                           ),
                         // ✅ Sede del estudiante en el header
@@ -1178,14 +1204,14 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                               Icon(
                                 Icons.location_city,
                                 size: 12,
-                                color: Colors.white.withOpacity(0.7),
+                                color: Colors.white.withValues(alpha: 0.7),
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 _studentSede!,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Colors.white.withOpacity(0.7),
+                                  color: Colors.white.withValues(alpha: 0.7),
                                   fontWeight: FontWeight.w500,
                                 ),
                                 overflow: TextOverflow.ellipsis,
@@ -1384,7 +1410,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               spreadRadius: 2,
               blurRadius: 10,
               offset: const Offset(0, 4),
@@ -1509,7 +1535,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                 itemCount: _asistenciasFiltradas.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 16),
                 itemBuilder: (context, index) {
-                  return TweenAnimationBuilder(
+                  return TweenAnimationBuilder<double>(
                     tween: Tween<double>(begin: 0, end: 1),
                     duration: Duration(milliseconds: 300 + (index * 100)),
                     curve: Curves.easeOut,
@@ -1558,17 +1584,17 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           end: Alignment.bottomRight,
           colors: [
             Colors.white,
-            _getColorByCategoria(categoria).withOpacity(0.03),
+            _getColorByCategoria(categoria).withValues(alpha: 0.03),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: _getColorByCategoria(categoria).withOpacity(0.3),
+          color: _getColorByCategoria(categoria).withValues(alpha: 0.3),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: _getColorByCategoria(categoria).withOpacity(0.1),
+            color: _getColorByCategoria(categoria).withValues(alpha: 0.1),
             spreadRadius: 0,
             blurRadius: 12,
             offset: const Offset(0, 4),
@@ -1582,7 +1608,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: _getColorByCategoria(categoria).withOpacity(0.08),
+              color: _getColorByCategoria(categoria).withValues(alpha: 0.08),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
@@ -1597,7 +1623,9 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                     borderRadius: BorderRadius.circular(10),
                     boxShadow: [
                       BoxShadow(
-                        color: _getColorByCategoria(categoria).withOpacity(0.3),
+                        color: _getColorByCategoria(
+                          categoria,
+                        ).withValues(alpha: 0.3),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -1719,12 +1747,12 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                       decoration: BoxDecoration(
                         color: _getColorByCategoria(
                           categoria,
-                        ).withOpacity(0.15),
+                        ).withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: _getColorByCategoria(
                             categoria,
-                          ).withOpacity(0.3),
+                          ).withValues(alpha: 0.3),
                         ),
                       ),
                       child: Row(
@@ -1754,10 +1782,10 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF7C3AED).withOpacity(0.15),
+                          color: const Color(0xFF7C3AED).withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: const Color(0xFF7C3AED).withOpacity(0.3),
+                            color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
                           ),
                         ),
                         child: Row(
@@ -1789,10 +1817,10 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF4F46E5).withOpacity(0.1),
+                      color: const Color(0xFF4F46E5).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: const Color(0xFF4F46E5).withOpacity(0.2),
+                        color: const Color(0xFF4F46E5).withValues(alpha: 0.2),
                       ),
                     ),
                     child: Row(
@@ -1801,7 +1829,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF4F46E5).withOpacity(0.15),
+                            color: const Color(0xFF4F46E5).withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Icon(
@@ -1930,9 +1958,9 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1975,7 +2003,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
 // ══════════════════════════════════════════════════════════════════
 class SelloPainter extends CustomPainter {
   final Color color;
-  SelloPainter({required this.color});
+  const SelloPainter({required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -2003,10 +2031,12 @@ class SelloPainter extends CustomPainter {
 }
 
 class TextoCurvadoPainter extends CustomPainter {
+  const TextoCurvadoPainter();
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withOpacity(0.3)
+      ..color = Colors.white.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
     canvas.drawCircle(

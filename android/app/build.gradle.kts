@@ -16,7 +16,7 @@ android {
 
     defaultConfig {
         applicationId = "com.upeu.eventos"
-        minSdk = 23
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

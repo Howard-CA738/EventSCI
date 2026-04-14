@@ -12,6 +12,8 @@ dependencies:
     sdk: flutter
   firebase_core: ^3.8.1
   firebase_auth: ^5.3.3
+  firebase_storage: ^12.0.0
+  http: ^1.2.0
   cloud_firestore: ^5.5.2
   shared_preferences: ^2.2.2
   intl: ^0.20.2
@@ -20,10 +22,13 @@ dependencies:
   file_picker: ^8.1.2
   excel: ^4.0.3
   app_links: ^3.4.3
-  device_info_plus: ^10.1.0
+  device_info_plus: ^11.5.0
   path_provider: ^2.1.1
   open_file: ^3.3.2
   permission_handler: ^11.1.0
+  pdf: ^3.10.8
+  printing: ^5.12.0
+  share_plus: ^10.0.2
 
 dev_dependencies:
   flutter_test:
@@ -37,6 +42,20 @@ flutter:
   assets:
     - assets/icons/
     - assets/images/
+    - assets/certificado.jpg
+    - assets/fonts/
+
+  fonts:
+    - family: Montserrat
+      fonts:
+        - asset: assets/fonts/Montserrat-Regular.ttf
+        - asset: assets/fonts/Montserrat-Bold.ttf
+        - asset: assets/fonts/Montserrat-Italic.ttf
+        - asset: assets/fonts/Cinzel-Regular.ttf
+          weight: 700
+    - family: GreatVibes  
+      fonts:
+        - asset: assets/fonts/GreatVibes-Regular.ttf
 
 flutter_launcher_icons:
   android: true

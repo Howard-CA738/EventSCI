@@ -2,11 +2,18 @@ import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
 import '/login.dart';
 import '/admin/logica/registro_estudiantes.dart';
-import '/admin/logica/gestion_grupos.dart';
 import '/admin/logica/reportes.dart';
-import '/admin/logica/asignar_proyectos.dart';
 import '/admin/logica/evaluaciones.dart';
 import 'editar_admin_carrera.dart';
+import 'crear_eventos_carrera_screen.dart';
+import 'gestion_grupos_carrera_screen.dart';
+import 'asignar_proyectos_carrera_screen.dart';
+import 'gestion_rubricas_carrera_screen.dart';
+import 'gestion_jurados_carrera_screen.dart';
+import 'gestion_pagos_screen.dart'; 
+import 'generar_certificados_screen.dart';
+import 'gestion_sesiones_screen.dart';
+
 
 class AdminCarreraScreen extends StatefulWidget {
   const AdminCarreraScreen({super.key});
@@ -31,10 +38,8 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
 
   Future<void> _loadAdminData() async {
     setState(() => _isLoading = true);
-
     try {
       final adminData = await PrefsHelper.getAdminCarreraData();
-
       if (adminData != null) {
         setState(() {
           _adminName = adminData['userName'] ?? 'Administrador';
@@ -45,9 +50,8 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
         });
       }
     } catch (e) {
-      print('Error cargando datos del admin: $e');
+      debugPrint('Error cargando datos del admin: $e');
     }
-
     setState(() => _isLoading = false);
   }
 
@@ -55,14 +59,12 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
     await PrefsHelper.logout();
     if (mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
       );
     }
   }
 
-  bool _tienePermiso(String permiso) {
-    return _permisos.contains(permiso);
-  }
+  bool _tienePermiso(String permiso) => _permisos.contains(permiso);
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +80,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header
+            // ── Header ────────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.all(20.0),
               child: Column(
@@ -95,13 +97,11 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                         child: Image.asset(
                           'assets/logo.png',
                           fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Icon(
-                              Icons.school,
-                              color: Color(0xFF1E3A5F),
-                              size: 30,
-                            );
-                          },
+                          errorBuilder: (_, __, ___) => const Icon(
+                            Icons.school,
+                            color: Color(0xFF1E3A5F),
+                            size: 30,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -120,75 +120,58 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                             Text(
                               _adminName,
                               style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.white70,
-                              ),
+                                  fontSize: 14, color: Colors.white70),
                             ),
                           ],
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(
-                          Icons.logout,
-                          color: Colors.white,
-                          size: 28,
-                        ),
+                        icon: const Icon(Icons.logout,
+                            color: Colors.white, size: 28),
                         onPressed: _logout,
                         tooltip: 'Cerrar Sesión',
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  // Información de la carrera
+
+                  // Tarjeta de información de carrera
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.2),
-                        width: 1,
-                      ),
+                          color: Colors.white.withOpacity(0.2), width: 1),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            const Icon(
-                              Icons.business,
-                              color: Colors.white70,
-                              size: 16,
-                            ),
+                            const Icon(Icons.business,
+                                color: Colors.white70, size: 16),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Text(
-                                _facultad,
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                ),
-                              ),
+                              child: Text(_facultad,
+                                  style: const TextStyle(
+                                      color: Colors.white70, fontSize: 12)),
                             ),
                           ],
                         ),
                         const SizedBox(height: 6),
                         Row(
                           children: [
-                            const Icon(
-                              Icons.school,
-                              color: Colors.white,
-                              size: 18,
-                            ),
+                            const Icon(Icons.school,
+                                color: Colors.white, size: 18),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 _carrera,
                                 style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600),
                               ),
                             ),
                           ],
@@ -196,19 +179,12 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                         const SizedBox(height: 6),
                         Row(
                           children: [
-                            const Icon(
-                              Icons.location_on,
-                              color: Colors.white70,
-                              size: 16,
-                            ),
+                            const Icon(Icons.location_on,
+                                color: Colors.white70, size: 16),
                             const SizedBox(width: 8),
-                            Text(
-                              _sede,
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
+                            Text(_sede,
+                                style: const TextStyle(
+                                    color: Colors.white70, fontSize: 12)),
                           ],
                         ),
                       ],
@@ -217,7 +193,8 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                 ],
               ),
             ),
-            // Content Area
+
+            // ── Content Area ──────────────────────────────────────────────
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -241,6 +218,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
+
                       GridView.count(
                         crossAxisCount: 2,
                         crossAxisSpacing: 16,
@@ -249,103 +227,161 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         children: [
-                          // Registrar Estudiantes
+
+                          // ── Registrar Estudiantes ──────────────────────
                           if (_tienePermiso('estudiantes'))
                             _buildMenuCard(
                               imagePath: 'assets/icons/usuario.png',
                               title: 'Registrar\nEstudiantes',
                               subtitle: 'Crear cuentas de estudiantes',
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const RegistroEstudiantesScreen(),
-                                  ),
-                                );
-                              },
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const RegistroEstudiantesScreen(),
+                                ),
+                              ),
                             ),
 
-                          // Gestión de Grupos
+                          // ── Gestión de Grupos ──────────────────────────
                           if (_tienePermiso('grupos'))
                             _buildMenuCard(
                               imagePath: 'assets/icons/reunion.png',
                               title: 'Gestión de\nGrupos',
-                              subtitle: 'Organizar estudiantes en grupos',
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const GestionGruposScreen(),
-                                  ),
-                                );
-                              },
+                              subtitle: 'Organizar estudiantes en grupos', 
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const GestionGruposCarreraScreen(),
+                                ),
+                              ),
                             ),
 
-                          // Asignar Proyectos
+                          // ── Gestión de Jurados ─────────────────────────
+                          if (_tienePermiso('proyectos'))
+                            _buildMenuCard(
+                              imagePath: 'assets/icons/jurado.png',
+                              title: 'Gestión de\nJurados',
+                              subtitle: 'Ver y gestionar jurados',
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const GestionJuradosCarreraScreen(),
+                                ),
+                              ),
+                            ),
+
+                          // ── Asignar Proyectos ──────────────────────────
                           if (_tienePermiso('proyectos'))
                             _buildMenuCard(
                               imagePath: 'assets/icons/notas.png',
                               title: 'Asignar\nProyectos',
                               subtitle: 'Asignar proyectos a jurados',
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const AsignarProyectosScreen(),
-                                  ),
-                                );
-                              },
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const AsignarProyectosCarreraScreen(),
+                                ),
+                              ),
                             ),
 
-                          // Ver Evaluaciones
+                          // ── Gestión de Rúbricas ────────────────────────
+                          if (_tienePermiso('proyectos'))
+                            _buildMenuCard(
+                              imagePath: 'assets/icons/criterios.png',
+                              title: 'Gestión de\nRúbricas',
+                              subtitle: 'Crear y editar rúbricas',
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const GestionRubricasCarreraScreen(),
+                                ),
+                              ),
+                            ),
+
+                          // ── Ver Evaluaciones ───────────────────────────
                           if (_tienePermiso('evaluaciones'))
                             _buildMenuCard(
                               imagePath: 'assets/icons/evaluaciones.png',
                               title: 'Ver\nEvaluaciones',
                               subtitle: 'Revisar evaluaciones de jurados',
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const EvaluacionesScreen(),
-                                  ),
-                                );
-                              },
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const EvaluacionesScreen(),
+                                ),
+                              ),
                             ),
-
-                          // Reportes
+_buildMenuCard(
+  imagePath: 'assets/icons/sesion.png',
+  title: 'Gestión de\nSesiones',
+  subtitle: 'Controlar sesiones de estudiantes',
+  onTap: () => Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => const GestionSesionesScreen(),
+    ),
+  ),
+),
+                          // ── Gestión de Eventos ─────────────────────────
+                          if (_tienePermiso('eventos'))
+                            _buildMenuCard(
+                              imagePath: 'assets/icons/evento.png',
+                              title: 'Gestión de\nEventos',
+                              subtitle: 'Crear y ver eventos',
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const CrearEventosCarreraScreen(),
+                                ),
+                              ),
+                            ),
+                                                    _buildMenuCard(
+                              imagePath: 'assets/icons/certificado.png',
+                              title: 'Generar\nCertificados',
+                              subtitle: 'Emitir certificados PDF',
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const GenerarCertificadosScreen(),
+                                ),
+                              ),
+                            ),
+                          // ── Reportes ───────────────────────────────────
                           if (_tienePermiso('reportes'))
                             _buildMenuCard(
                               imagePath: 'assets/icons/reporte.png',
                               title: 'Reportes',
                               subtitle: 'Ver estadísticas y reportes',
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const ReportesScreen(),
-                                  ),
-                                );
-                              },
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const ReportesScreen(),
+                                ),
+                              ),
                             ),
-
-                          // Editar Cuenta
+_buildMenuCard(
+  imagePath: 'assets/icons/pagos.png',  // o usa el icono de abajo
+  title: 'Gestión de\nPagos',
+  subtitle: 'Controlar acceso por pago',
+  onTap: () => Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => const GestionPagosScreen(),
+    ),
+  ),
+),
+                          // ── Editar Cuenta (siempre visible) ────────────
                           _buildMenuCard(
                             imagePath: 'assets/icons/admin.png',
                             title: 'Editar\nCuenta',
                             subtitle: 'Modificar datos personales',
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const EditarAdminCarreraScreen(),
-                                ),
-                              );
-                            },
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const EditarAdminCarreraScreen(),
+                              ),
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 24),
+
                       // Nota informativa
                       Container(
                         padding: const EdgeInsets.all(16),
@@ -353,24 +389,19 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                           color: Colors.blue.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: Colors.blue.withOpacity(0.3),
-                          ),
+                              color: Colors.blue.withOpacity(0.3)),
                         ),
                         child: Row(
                           children: [
-                            Icon(
-                              Icons.info_outline,
-                              color: Colors.blue[700],
-                              size: 24,
-                            ),
+                            Icon(Icons.info_outline,
+                                color: Colors.blue[700], size: 22),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
-                                'Solo puedes gestionar estudiantes y grupos de $_carrera',
+                                'Solo puedes gestionar datos de $_carrera. '
+                                'Todos los filtros se aplican automáticamente.',
                                 style: TextStyle(
-                                  color: Colors.blue[700],
-                                  fontSize: 13,
-                                ),
+                                    color: Colors.blue[700], fontSize: 13),
                               ),
                             ),
                           ],
@@ -389,6 +420,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
 
   Widget _buildMenuCard({
     required String imagePath,
+    IconData? iconData, 
     required String title,
     required String subtitle,
     required VoidCallback onTap,
@@ -396,7 +428,8 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
     return Card(
       elevation: 2,
       shadowColor: Colors.black26,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       color: Colors.white,
       child: InkWell(
         onTap: onTap,
@@ -418,13 +451,11 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                 child: Image.asset(
                   imagePath,
                   fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Icon(
-                      Icons.image_not_supported,
-                      size: 32,
-                      color: Colors.grey[400],
-                    );
-                  },
+                  errorBuilder: (_, __, ___) => Icon(
+                    Icons.image_not_supported,
+                    size: 32,
+                    color: Colors.grey[400],
+                  ),
                 ),
               ),
               const SizedBox(height: 8),

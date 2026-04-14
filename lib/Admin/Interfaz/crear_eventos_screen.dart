@@ -927,19 +927,21 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
     List<Map<String, dynamic>> editCarreras = [];
 
     if (editFilialId != null) {
-      editFacultades = await _eventosService.getFacultadesByFilial(
-        editFilialId,
-      );
-      if (editFacultad != null) {
-        editCarreras = await _eventosService.getCarrerasByFacultad(
-          editFilialId,
-          editFacultad,
-        );
-      }
-    }
+  editFacultades = await _eventosService.getFacultadesByFilial(
+    editFilialId,
+  );
+  if (editFacultad != null) {
+    editCarreras = await _eventosService.getCarrerasByFacultad(
+      editFilialId,
+      editFacultad,
+    );
+  }
+}
 
-    showDialog(
-      context: context,
+if (!mounted) return; // ✅ AGREGAR ESTA LÍNEA
+
+showDialog(
+  context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(

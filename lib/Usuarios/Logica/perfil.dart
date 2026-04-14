@@ -76,11 +76,16 @@ class _PerfilScreenState extends State<PerfilScreen>
   /// Prioriza el campo 'sede', si no existe usa 'filial', y si no hay ninguno
   /// retorna null para que el widget no se muestre.
   String? _getSede() {
-    final sede = _userData?['sede']?.toString() ?? '';
+    final sede   = _userData?['sede']?.toString()   ?? '';
     final filial = _userData?['filial']?.toString() ?? '';
-    if (sede.isNotEmpty) return sede;
+    if (sede.isNotEmpty)   return sede;
     if (filial.isNotEmpty) return filial;
     return null;
+  }
+
+  String? _getCampo(String key) {
+    final valor = (_userData?[key] ?? '').toString();
+    return valor.isNotEmpty ? valor : null;
   }
 
   Widget _buildInfoCard({
@@ -117,21 +122,7 @@ class _PerfilScreenState extends State<PerfilScreen>
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: (iconColor ?? const Color(0xFF1E3A5F)).withOpacity(
-                      0.1,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: iconColor ?? const Color(0xFF1E3A5F),
-                    size: 24,
-                  ),
-                ),
+                _buildCardIcon(icon, iconColor),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -161,6 +152,22 @@ class _PerfilScreenState extends State<PerfilScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCardIcon(IconData icon, Color? iconColor) {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: (iconColor ?? const Color(0xFF1E3A5F)).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(
+        icon,
+        color: iconColor ?? const Color(0xFF1E3A5F),
+        size: 24,
       ),
     );
   }
@@ -235,361 +242,330 @@ class _PerfilScreenState extends State<PerfilScreen>
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ──────────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.arrow_back,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  const Expanded(
-                    child: Text(
-                      'Mi Perfil',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.refresh,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                    onPressed: () {
-                      _animationController.reset();
-                      _loadUserData();
-                    },
-                    tooltip: 'Actualizar',
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Content ──────────────────────────────────────────────────
+            _buildAppBar(),
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
                   color: Color(0xFFE8EDF2),
                   borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(30),
+                    topLeft:  Radius.circular(30),
                     topRight: Radius.circular(30),
                   ),
                 ),
-                child: _isLoading
-                    ? const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(color: Color(0xFF1E3A5F)),
-                            SizedBox(height: 16),
-                            Text(
-                              'Cargando información...',
-                              style: TextStyle(
-                                color: Color(0xFF64748B),
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : _errorMessage != null
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              size: 64,
-                              color: Colors.red,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              _errorMessage!,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                color: Colors.red,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: _loadUserData,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1E3A5F),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 32,
-                                  vertical: 12,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: const Text('Reintentar'),
-                            ),
-                          ],
-                        ),
-                      )
-                    : _userData != null
-                    ? FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: SlideTransition(
-                          position: _slideAnimation,
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // ── Avatar + nombre + badges ─────────────
-                                Center(
-                                  child: Column(
-                                    children: [
-                                      Hero(
-                                        tag: 'profile_avatar',
-                                        child: Container(
-                                          width: 110,
-                                          height: 110,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            gradient: const LinearGradient(
-                                              begin: Alignment.topLeft,
-                                              end: Alignment.bottomRight,
-                                              colors: [
-                                                Color(0xFF1E3A5F),
-                                                Color(0xFF2E4A6F),
-                                              ],
-                                            ),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: const Color(
-                                                  0xFF1E3A5F,
-                                                ).withOpacity(0.3),
-                                                blurRadius: 20,
-                                                offset: const Offset(0, 10),
-                                              ),
-                                            ],
-                                          ),
-                                          child: const Icon(
-                                            Icons.person,
-                                            size: 60,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        _userData!['name'] ?? 'Sin nombre',
-                                        style: const TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF1E3A5F),
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(height: 8),
-
-                                      // Badge "Estudiante"
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 8,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          gradient: const LinearGradient(
-                                            colors: [
-                                              Color(0xFF4CAF50),
-                                              Color(0xFF45A049),
-                                            ],
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: const Color(
-                                                0xFF4CAF50,
-                                              ).withOpacity(0.3),
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 4),
-                                            ),
-                                          ],
-                                        ),
-                                        child: const Text(
-                                          'Estudiante',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ),
-
-                                      // Badge filial/sede (solo si existe)
-                                      if (_getSede() != null)
-                                        _buildFilialBadge(_getSede()!),
-                                    ],
-                                  ),
-                                ),
-
-                                // ── Sección: Información Personal ─────────
-                                _buildSectionTitle(
-                                  'Información Personal',
-                                  Icons.person_outline,
-                                ),
-                                _buildInfoCard(
-                                  title: 'Nombre de Usuario',
-                                  value:
-                                      _userData!['username'] ?? 'No disponible',
-                                  icon: Icons.account_circle,
-                                  iconColor: const Color(0xFF1E3A5F),
-                                  delay: 0,
-                                ),
-                                _buildInfoCard(
-                                  title: 'Email Personal',
-                                  value: _userData!['email'] ?? 'No disponible',
-                                  icon: Icons.email,
-                                  iconColor: const Color(0xFFFF9800),
-                                  delay: 1,
-                                ),
-                                if ((_userData!['correoInstitucional'] ?? '')
-                                    .toString()
-                                    .isNotEmpty)
-                                  _buildInfoCard(
-                                    title: 'Email Institucional',
-                                    value: _userData!['correoInstitucional'],
-                                    icon: Icons.email_outlined,
-                                    iconColor: const Color(0xFFFF5722),
-                                    delay: 2,
-                                  ),
-                                _buildInfoCard(
-                                  title: 'DNI',
-                                  value: _userData!['dni'] ?? 'No disponible',
-                                  icon: Icons.credit_card,
-                                  iconColor: const Color(0xFF9C27B0),
-                                  delay: 3,
-                                ),
-                                if ((_userData!['celular'] ?? '')
-                                    .toString()
-                                    .isNotEmpty)
-                                  _buildInfoCard(
-                                    title: 'Celular',
-                                    value: _userData!['celular'],
-                                    icon: Icons.phone,
-                                    iconColor: const Color(0xFF4CAF50),
-                                    delay: 4,
-                                  ),
-
-                                // ── Sección: Información Académica ────────
-                                _buildSectionTitle(
-                                  'Información Académica',
-                                  Icons.school,
-                                ),
-
-                                // Filial / Sede
-                                if (_getSede() != null)
-                                  _buildInfoCard(
-                                    title: 'Filial / Sede',
-                                    value: _getSede()!,
-                                    icon: Icons.location_city,
-                                    iconColor: const Color(0xFF1565C0),
-                                    delay: 0,
-                                  ),
-
-                                _buildInfoCard(
-                                  title: 'Código Universitario',
-                                  value:
-                                      _userData!['codigoUniversitario'] ??
-                                      'No disponible',
-                                  icon: Icons.badge,
-                                  iconColor: const Color(0xFF009688),
-                                  delay: 1,
-                                ),
-                                _buildInfoCard(
-                                  title: 'Facultad',
-                                  value:
-                                      _userData!['facultad'] ?? 'No disponible',
-                                  icon: Icons.account_balance,
-                                  iconColor: const Color(0xFF3F51B5),
-                                  delay: 2,
-                                ),
-                                _buildInfoCard(
-                                  title: 'Carrera',
-                                  value:
-                                      _userData!['carrera'] ?? 'No disponible',
-                                  icon: Icons.menu_book,
-                                  iconColor: const Color(0xFF795548),
-                                  delay: 3,
-                                ),
-                                if ((_userData!['modalidadEstudio'] ?? '')
-                                    .toString()
-                                    .isNotEmpty)
-                                  _buildInfoCard(
-                                    title: 'Modalidad de Estudio',
-                                    value: _userData!['modalidadEstudio'],
-                                    icon: Icons.laptop_mac,
-                                    iconColor: const Color(0xFF00ACC1),
-                                    delay: 4,
-                                  ),
-                                if ((_userData!['modoContrato'] ?? '')
-                                    .toString()
-                                    .isNotEmpty)
-                                  _buildInfoCard(
-                                    title: 'Modo Contrato',
-                                    value: _userData!['modoContrato'],
-                                    icon: Icons.description_outlined,
-                                    iconColor: const Color(0xFF8D6E63),
-                                    delay: 5,
-                                  ),
-                                if ((_userData!['ciclo'] ?? '')
-                                    .toString()
-                                    .isNotEmpty)
-                                  _buildInfoCard(
-                                    title: 'Ciclo',
-                                    value: 'Ciclo ${_userData!['ciclo']}',
-                                    icon: Icons.layers,
-                                    iconColor: const Color(0xFF673AB7),
-                                    delay: 6,
-                                  ),
-                                if ((_userData!['grupo'] ?? '')
-                                    .toString()
-                                    .isNotEmpty)
-                                  _buildInfoCard(
-                                    title: 'Grupo',
-                                    value: 'Grupo ${_userData!['grupo']}',
-                                    icon: Icons.groups,
-                                    iconColor: const Color(0xFF00BCD4),
-                                    delay: 7,
-                                  ),
-
-                                const SizedBox(height: 20),
-                              ],
-                            ),
-                          ),
-                        ),
-                      )
-                    : const Center(
-                        child: Text(
-                          'No hay datos disponibles',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Color(0xFF64748B),
-                          ),
-                        ),
-                      ),
+                child: _buildBodyContent(),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAppBar() {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          const Expanded(
+            child: Text(
+              'Mi Perfil',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white, size: 28),
+            onPressed: () {
+              _animationController.reset();
+              _loadUserData();
+            },
+            tooltip: 'Actualizar',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBodyContent() {
+    if (_isLoading)          return _buildLoading();
+    if (_errorMessage != null) return _buildError();
+    if (_userData != null)   return _buildProfile();
+    return _buildNoData();
+  }
+
+  Widget _buildLoading() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(color: Color(0xFF1E3A5F)),
+          SizedBox(height: 16),
+          Text(
+            'Cargando información...',
+            style: TextStyle(color: Color(0xFF64748B), fontSize: 16),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildError() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.error_outline, size: 64, color: Colors.red),
+          const SizedBox(height: 16),
+          Text(
+            _errorMessage!,
+            style: const TextStyle(fontSize: 16, color: Colors.red),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _loadUserData,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1E3A5F),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Reintentar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoData() {
+    return const Center(
+      child: Text(
+        'No hay datos disponibles',
+        style: TextStyle(fontSize: 16, color: Color(0xFF64748B)),
+      ),
+    );
+  }
+
+  Widget _buildProfile() {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildAvatarSection(),
+              _buildSeccionPersonal(),
+              _buildSeccionAcademica(),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatarSection() {
+    final sede = _getSede();
+    return Center(
+      child: Column(
+        children: [
+          _buildAvatar(),
+          const SizedBox(height: 16),
+          Text(
+            _userData!['name'] ?? 'Sin nombre',
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E3A5F),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          _buildEstudianteBadge(),
+          if (sede != null) _buildFilialBadge(sede),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAvatar() {
+    return Hero(
+      tag: 'profile_avatar',
+      child: Container(
+        width: 110,
+        height: 110,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF1E3A5F), Color(0xFF2E4A6F)],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF1E3A5F).withOpacity(0.3),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: const Icon(Icons.person, size: 60, color: Colors.white),
+      ),
+    );
+  }
+
+  Widget _buildEstudianteBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF4CAF50), Color(0xFF45A049)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF4CAF50).withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: const Text(
+        'Estudiante',
+        style: TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+          fontSize: 14,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSeccionPersonal() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle('Información Personal', Icons.person_outline),
+        _buildInfoCard(
+          title: 'Nombre de Usuario',
+          value: _userData!['username'] ?? 'No disponible',
+          icon: Icons.account_circle,
+          iconColor: const Color(0xFF1E3A5F),
+          delay: 0,
+        ),
+        _buildInfoCard(
+          title: 'Email Personal',
+          value: _userData!['email'] ?? 'No disponible',
+          icon: Icons.email,
+          iconColor: const Color(0xFFFF9800),
+          delay: 1,
+        ),
+        if (_getCampo('correoInstitucional') != null)
+          _buildInfoCard(
+            title: 'Email Institucional',
+            value: _getCampo('correoInstitucional')!,
+            icon: Icons.email_outlined,
+            iconColor: const Color(0xFFFF5722),
+            delay: 2,
+          ),
+        _buildInfoCard(
+          title: 'DNI',
+          value: _userData!['dni'] ?? 'No disponible',
+          icon: Icons.credit_card,
+          iconColor: const Color(0xFF9C27B0),
+          delay: 3,
+        ),
+        if (_getCampo('celular') != null)
+          _buildInfoCard(
+            title: 'Celular',
+            value: _getCampo('celular')!,
+            icon: Icons.phone,
+            iconColor: const Color(0xFF4CAF50),
+            delay: 4,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSeccionAcademica() {
+    final sede = _getSede();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle('Información Académica', Icons.school),
+        if (sede != null)
+          _buildInfoCard(
+            title: 'Filial / Sede',
+            value: sede,
+            icon: Icons.location_city,
+            iconColor: const Color(0xFF1565C0),
+            delay: 0,
+          ),
+        _buildInfoCard(
+          title: 'Código Universitario',
+          value: _userData!['codigoUniversitario'] ?? 'No disponible',
+          icon: Icons.badge,
+          iconColor: const Color(0xFF009688),
+          delay: 1,
+        ),
+        _buildInfoCard(
+          title: 'Facultad',
+          value: _userData!['facultad'] ?? 'No disponible',
+          icon: Icons.account_balance,
+          iconColor: const Color(0xFF3F51B5),
+          delay: 2,
+        ),
+        _buildInfoCard(
+          title: 'Carrera',
+          value: _userData!['carrera'] ?? 'No disponible',
+          icon: Icons.menu_book,
+          iconColor: const Color(0xFF795548),
+          delay: 3,
+        ),
+        if (_getCampo('modalidadEstudio') != null)
+          _buildInfoCard(
+            title: 'Modalidad de Estudio',
+            value: _getCampo('modalidadEstudio')!,
+            icon: Icons.laptop_mac,
+            iconColor: const Color(0xFF00ACC1),
+            delay: 4,
+          ),
+        if (_getCampo('modoContrato') != null)
+          _buildInfoCard(
+            title: 'Modo Contrato',
+            value: _getCampo('modoContrato')!,
+            icon: Icons.description_outlined,
+            iconColor: const Color(0xFF8D6E63),
+            delay: 5,
+          ),
+        if (_getCampo('ciclo') != null)
+          _buildInfoCard(
+            title: 'Ciclo',
+            value: 'Ciclo ${_getCampo('ciclo')}',
+            icon: Icons.layers,
+            iconColor: const Color(0xFF673AB7),
+            delay: 6,
+          ),
+        if (_getCampo('grupo') != null)
+          _buildInfoCard(
+            title: 'Grupo',
+            value: 'Grupo ${_getCampo('grupo')}',
+            icon: Icons.groups,
+            iconColor: const Color(0xFF00BCD4),
+            delay: 7,
+          ),
+      ],
     );
   }
 }

@@ -12,8 +12,6 @@ class EditarAdminCarreraScreen extends StatefulWidget {
 
 class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nombreController = TextEditingController();
-  final _emailController = TextEditingController();
   final _usuarioController = TextEditingController();
   final _passwordActualController = TextEditingController();
   final _passwordNuevaController = TextEditingController();
@@ -46,13 +44,12 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
       final adminData = await PrefsHelper.getAdminCarreraData();
 
       if (adminData != null) {
-        final adminCompleto = await _service.getAdminById(adminData['userId']);
+        final adminCompleto =
+            await _service.getAdminById(adminData['userId']);
 
         if (adminCompleto != null) {
           setState(() {
             _adminId = adminCompleto['id'];
-            _nombreController.text = adminCompleto['nombre'] ?? '';
-            _emailController.text = adminCompleto['email'] ?? '';
             _usuarioController.text = adminCompleto['usuario'] ?? '';
             _carrera = adminCompleto['carrera'] ?? '';
             _facultad = adminCompleto['facultad'] ?? '';
@@ -70,18 +67,15 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
   }
 
   Future<void> _guardarCambios() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
-    // Si está cambiando contraseña, validar
     if (_passwordNuevaController.text.isNotEmpty) {
       if (_passwordActualController.text != _passwordActual) {
         _showMessage('La contraseña actual es incorrecta', isError: true);
         return;
       }
-
-      if (_passwordNuevaController.text != _passwordConfirmarController.text) {
+      if (_passwordNuevaController.text !=
+          _passwordConfirmarController.text) {
         _showMessage('Las contraseñas nuevas no coinciden', isError: true);
         return;
       }
@@ -92,20 +86,19 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
     try {
       final success = await _service.actualizarAdminCarrera(
         adminId: _adminId,
-        nombre: _nombreController.text.trim(),
-        email: _emailController.text.trim(),
+        usuario: _usuarioController.text.trim(),
         password: _passwordNuevaController.text.isNotEmpty
             ? _passwordNuevaController.text
             : null,
       );
 
       if (success) {
-        // Actualizar nombre en sesión
         await PrefsHelper.saveAdminCarreraData(
           userId: _adminId,
-          userName: _nombreController.text.trim(),
+          userName: _usuarioController.text.trim(),
           filial: (await PrefsHelper.getAdminCarreraFilial())!,
-          filialNombre: (await PrefsHelper.getAdminCarreraFilialNombre())!,
+          filialNombre:
+              (await PrefsHelper.getAdminCarreraFilialNombre())!,
           facultad: (await PrefsHelper.getAdminCarreraFacultad())!,
           carrera: (await PrefsHelper.getAdminCarreraCarrera())!,
           carreraId: (await PrefsHelper.getAdminCarreraCarreraId())!,
@@ -114,15 +107,14 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
 
         _showMessage('Datos actualizados correctamente');
 
-        // Limpiar campos de contraseña
         _passwordActualController.clear();
         _passwordNuevaController.clear();
         _passwordConfirmarController.clear();
 
-        // Recargar datos
         await _loadAdminData();
       } else {
-        _showMessage('Error al actualizar los datos', isError: true);
+        _showMessage('Ya existe otro admin con ese usuario',
+            isError: true);
       }
     } catch (e) {
       print('Error guardando cambios: $e');
@@ -134,7 +126,6 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
 
   void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -147,8 +138,6 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
 
   @override
   void dispose() {
-    _nombreController.dispose();
-    _emailController.dispose();
     _usuarioController.dispose();
     _passwordActualController.dispose();
     _passwordNuevaController.dispose();
@@ -180,11 +169,8 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(
-                      Icons.edit,
-                      color: Colors.white,
-                      size: 24,
-                    ),
+                    child: const Icon(Icons.edit,
+                        color: Colors.white, size: 24),
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
@@ -220,7 +206,7 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              // Información de la carrera (solo lectura)
+                              // Info carrera (solo lectura)
                               Card(
                                 elevation: 2,
                                 shape: RoundedRectangleBorder(
@@ -234,14 +220,12 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
                                     children: [
                                       Row(
                                         children: [
-                                          Icon(
-                                            Icons.info_outline,
-                                            color: Colors.blue[700],
-                                            size: 20,
-                                          ),
+                                          Icon(Icons.info_outline,
+                                              color: Colors.blue[700],
+                                              size: 20),
                                           const SizedBox(width: 8),
                                           const Text(
-                                            'Tu Carrera Asignada',
+                                            'Carrera Asignada',
                                             style: TextStyle(
                                               fontSize: 16,
                                               fontWeight: FontWeight.bold,
@@ -252,29 +236,20 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
                                       ),
                                       const SizedBox(height: 12),
                                       _buildInfoRow(
-                                        Icons.location_city,
-                                        'Sede',
-                                        _sede,
-                                      ),
+                                          Icons.location_city, 'Sede', _sede),
+                                      const Divider(height: 16),
+                                      _buildInfoRow(Icons.business,
+                                          'Facultad', _facultad),
                                       const Divider(height: 16),
                                       _buildInfoRow(
-                                        Icons.business,
-                                        'Facultad',
-                                        _facultad,
-                                      ),
-                                      const Divider(height: 16),
-                                      _buildInfoRow(
-                                        Icons.school,
-                                        'Carrera',
-                                        _carrera,
-                                      ),
+                                          Icons.school, 'Carrera', _carrera),
                                     ],
                                   ),
                                 ),
                               ),
                               const SizedBox(height: 20),
 
-                              // Datos personales
+                              // Datos de la cuenta
                               Card(
                                 elevation: 2,
                                 shape: RoundedRectangleBorder(
@@ -288,14 +263,12 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
                                     children: [
                                       const Row(
                                         children: [
-                                          Icon(
-                                            Icons.person,
-                                            color: Color(0xFF1E3A5F),
-                                            size: 20,
-                                          ),
+                                          Icon(Icons.manage_accounts,
+                                              color: Color(0xFF1E3A5F),
+                                              size: 20),
                                           SizedBox(width: 8),
                                           Text(
-                                            'Datos Personales',
+                                            'Datos de la Cuenta',
                                             style: TextStyle(
                                               fontSize: 16,
                                               fontWeight: FontWeight.bold,
@@ -305,69 +278,29 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
                                         ],
                                       ),
                                       const SizedBox(height: 16),
-                                      TextFormField(
-                                        controller: _nombreController,
-                                        decoration: InputDecoration(
-                                          labelText: 'Nombre completo',
-                                          prefixIcon: const Icon(Icons.person),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                        ),
-                                        validator: (value) {
-                                          if (value == null ||
-                                              value.trim().isEmpty) {
-                                            return 'El nombre es requerido';
-                                          }
-                                          return null;
-                                        },
-                                      ),
-                                      const SizedBox(height: 16),
-                                      TextFormField(
-                                        controller: _emailController,
-                                        decoration: InputDecoration(
-                                          labelText: 'Correo electrónico',
-                                          prefixIcon: const Icon(Icons.email),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                        ),
-                                        keyboardType:
-                                            TextInputType.emailAddress,
-                                        validator: (value) {
-                                          if (value == null ||
-                                              value.trim().isEmpty) {
-                                            return 'El correo es requerido';
-                                          }
-                                          if (!RegExp(
-                                            r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                                          ).hasMatch(value)) {
-                                            return 'Ingresa un correo válido';
-                                          }
-                                          return null;
-                                        },
-                                      ),
-                                      const SizedBox(height: 16),
+
+                                      // Usuario
                                       TextFormField(
                                         controller: _usuarioController,
                                         decoration: InputDecoration(
-                                          labelText: 'Usuario (no editable)',
+                                          labelText: 'Usuario',
                                           prefixIcon: const Icon(
-                                            Icons.account_circle,
-                                          ),
+                                              Icons.account_circle),
                                           border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
-                                          filled: true,
-                                          fillColor: Colors.grey[200],
                                         ),
-                                        enabled: false,
+                                        validator: (value) {
+                                          if (value == null ||
+                                              value.trim().isEmpty) {
+                                            return 'El usuario es requerido';
+                                          }
+                                          if (value.trim().length < 4) {
+                                            return 'Mínimo 4 caracteres';
+                                          }
+                                          return null;
+                                        },
                                       ),
                                     ],
                                   ),
@@ -389,11 +322,9 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
                                     children: [
                                       const Row(
                                         children: [
-                                          Icon(
-                                            Icons.lock,
-                                            color: Color(0xFF1E3A5F),
-                                            size: 20,
-                                          ),
+                                          Icon(Icons.lock,
+                                              color: Color(0xFF1E3A5F),
+                                              size: 20),
                                           SizedBox(width: 8),
                                           Text(
                                             'Cambiar Contraseña',
@@ -409,69 +340,66 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
                                       Text(
                                         'Deja los campos vacíos si no deseas cambiar la contraseña',
                                         style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey[600],
-                                        ),
+                                            fontSize: 12,
+                                            color: Colors.grey[600]),
                                       ),
                                       const SizedBox(height: 16),
+
+                                      // Contraseña actual
                                       TextFormField(
-                                        controller: _passwordActualController,
+                                        controller:
+                                            _passwordActualController,
                                         obscureText: _obscurePasswordActual,
                                         decoration: InputDecoration(
                                           labelText: 'Contraseña actual',
-                                          prefixIcon: const Icon(Icons.lock),
+                                          prefixIcon:
+                                              const Icon(Icons.lock),
                                           suffixIcon: IconButton(
                                             icon: Icon(
                                               _obscurePasswordActual
                                                   ? Icons.visibility_off
                                                   : Icons.visibility,
                                             ),
-                                            onPressed: () {
-                                              setState(() {
-                                                _obscurePasswordActual =
-                                                    !_obscurePasswordActual;
-                                              });
-                                            },
+                                            onPressed: () => setState(() {
+                                              _obscurePasswordActual =
+                                                  !_obscurePasswordActual;
+                                            }),
                                           ),
                                           border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
                                         ),
                                       ),
                                       const SizedBox(height: 16),
+
+                                      // Nueva contraseña
                                       TextFormField(
                                         controller: _passwordNuevaController,
                                         obscureText: _obscurePasswordNueva,
                                         decoration: InputDecoration(
                                           labelText: 'Nueva contraseña',
                                           prefixIcon: const Icon(
-                                            Icons.lock_outline,
-                                          ),
+                                              Icons.lock_outline),
                                           suffixIcon: IconButton(
                                             icon: Icon(
                                               _obscurePasswordNueva
                                                   ? Icons.visibility_off
                                                   : Icons.visibility,
                                             ),
-                                            onPressed: () {
-                                              setState(() {
-                                                _obscurePasswordNueva =
-                                                    !_obscurePasswordNueva;
-                                              });
-                                            },
+                                            onPressed: () => setState(() {
+                                              _obscurePasswordNueva =
+                                                  !_obscurePasswordNueva;
+                                            }),
                                           ),
                                           border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
                                         ),
                                         validator: (value) {
                                           if (_passwordActualController
-                                              .text
-                                              .isNotEmpty) {
+                                              .text.isNotEmpty) {
                                             if (value == null ||
                                                 value.isEmpty) {
                                               return 'Ingresa la nueva contraseña';
@@ -484,39 +412,37 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
                                         },
                                       ),
                                       const SizedBox(height: 16),
+
+                                      // Confirmar contraseña
                                       TextFormField(
                                         controller:
                                             _passwordConfirmarController,
-                                        obscureText: _obscurePasswordConfirmar,
+                                        obscureText:
+                                            _obscurePasswordConfirmar,
                                         decoration: InputDecoration(
                                           labelText:
                                               'Confirmar nueva contraseña',
                                           prefixIcon: const Icon(
-                                            Icons.lock_outline,
-                                          ),
+                                              Icons.lock_outline),
                                           suffixIcon: IconButton(
                                             icon: Icon(
                                               _obscurePasswordConfirmar
                                                   ? Icons.visibility_off
                                                   : Icons.visibility,
                                             ),
-                                            onPressed: () {
-                                              setState(() {
-                                                _obscurePasswordConfirmar =
-                                                    !_obscurePasswordConfirmar;
-                                              });
-                                            },
+                                            onPressed: () => setState(() {
+                                              _obscurePasswordConfirmar =
+                                                  !_obscurePasswordConfirmar;
+                                            }),
                                           ),
                                           border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
                                         ),
                                         validator: (value) {
                                           if (_passwordNuevaController
-                                              .text
-                                              .isNotEmpty) {
+                                              .text.isNotEmpty) {
                                             if (value == null ||
                                                 value.isEmpty) {
                                               return 'Confirma la contraseña';
@@ -535,13 +461,16 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen> {
                               SizedBox(
                                 height: 56,
                                 child: ElevatedButton(
-                                  onPressed: _isSaving ? null : _guardarCambios,
+                                  onPressed:
+                                      _isSaving ? null : _guardarCambios,
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF1E3A5F),
+                                    backgroundColor:
+                                        const Color(0xFF1E3A5F),
                                     foregroundColor: Colors.white,
                                     elevation: 3,
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
+                                      borderRadius:
+                                          BorderRadius.circular(16),
                                     ),
                                   ),
                                   child: _isSaving
