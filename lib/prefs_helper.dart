@@ -1,12 +1,19 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/admin/logica/filiales_service.dart';
+import '/device_helper.dart';
 
 class PrefsHelper {
   static const String userTypeAdminCarrera = 'admin_carrera';
   static const String _keyAdminCarreraFilial = 'admin_carrera_filial';
   static const String _keyAdminCarreraFilialNombre =
       'admin_carrera_filial_nombre';
+      // Agrega estas constantes junto a las otras _key...
+static const String _keyAsistenteFilial = 'asistente_filial';
+static const String _keyAsistenteFilialNombre = 'asistente_filial_nombre';
+static const String _keyAsistenteFacultad = 'asistente_facultad';
+static const String _keyAsistenteCarreraId = 'asistente_carrera_id';
+static const String _keyAsistenteCarreraNombre = 'asistente_carrera_nombre';
   static const String _keyAdminCarreraFacultad = 'admin_carrera_facultad';
   static const String _keyAdminCarreraCarrera = 'admin_carrera_carrera';
   static const String _keyAdminCarreraCarreraId = 'admin_carrera_carrera_id';
@@ -47,6 +54,7 @@ class PrefsHelper {
 static String _generateToken() {
   return DateTime.now().millisecondsSinceEpoch.toString();
 }
+
 static Future<String> verificarSesionEstudiante({
   required String carreraPath,
   required String studentId,
@@ -63,15 +71,51 @@ static Future<String> verificarSesionEstudiante({
 
     final data = doc.data()!;
     final sessionActive = data['sessionActive'] ?? false;
+    final registeredDeviceId = data['deviceId'] as String?;
 
-    if (sessionActive == true) {
-      return 'bloqueado';
+    // Si ya tiene sesión activa → bloqueado (sin importar dispositivo)
+    if (sessionActive == true) return 'bloqueado';
+
+    // Obtener deviceId del celular actual
+    final currentDeviceId = await DeviceHelper.getDeviceId();
+
+    // Si ya tiene un dispositivo registrado y es diferente al actual → bloqueado
+    if (registeredDeviceId != null &&
+        registeredDeviceId.isNotEmpty &&
+        registeredDeviceId != currentDeviceId) {
+      return 'dispositivo_bloqueado';
     }
+
     return 'libre';
   } catch (e) {
     print('❌ Error verificando sesión estudiante: $e');
     return 'error';
   }
+}
+static Future<void> saveAsistenteQRData({
+  required String filialId,
+  required String filialNombre,
+  required String facultad,
+  required String carreraId,
+  required String carreraNombre,
+}) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString(_keyAsistenteFilial, filialId);
+  await prefs.setString(_keyAsistenteFilialNombre, filialNombre);
+  await prefs.setString(_keyAsistenteFacultad, facultad);
+  await prefs.setString(_keyAsistenteCarreraId, carreraId);
+  await prefs.setString(_keyAsistenteCarreraNombre, carreraNombre);
+  print('✅ Datos de asistente QR guardados');
+}
+static Future<Map<String, String?>> getAsistenteQRData() async {
+  final prefs = await SharedPreferences.getInstance();
+  return {
+    'filialId':       prefs.getString(_keyAsistenteFilial),
+    'filialNombre':   prefs.getString(_keyAsistenteFilialNombre),
+    'facultad':       prefs.getString(_keyAsistenteFacultad),
+    'carreraId':      prefs.getString(_keyAsistenteCarreraId),
+    'carreraNombre':  prefs.getString(_keyAsistenteCarreraNombre),
+  };
 }
 static Future<bool> activarSesionEstudiante({
   required String carreraPath,
@@ -79,8 +123,8 @@ static Future<bool> activarSesionEstudiante({
 }) async {
   try {
     final token = _generateToken();
+    final currentDeviceId = await DeviceHelper.getDeviceId();
 
-    // Verificar si es primera vez ANTES de activar
     final doc = await _firestore
         .collection('users')
         .doc(carreraPath)
@@ -92,6 +136,7 @@ static Future<bool> activarSesionEstudiante({
         ? (doc.data()?['primeraVez'] ?? true) == true
         : true;
 
+    // Registrar sesión en el estudiante
     await _firestore
         .collection('users')
         .doc(carreraPath)
@@ -101,15 +146,30 @@ static Future<bool> activarSesionEstudiante({
       'sessionActive': true,
       'sessionToken': token,
       'lastLogin': FieldValue.serverTimestamp(),
-      'primeraVez': false, // Ya no es primera vez
+      'primeraVez': false,
+      'deviceId': currentDeviceId,
     });
 
-    // Guardar token y flag de primera vez localmente
+    // ✅ NUEVO: Registrar dispositivo en blocked_devices
+    // (bloqueado: false mientras la sesión está activa,
+    //  se pone true al cerrar sesión sin logout correcto)
+    await _firestore
+        .collection('blocked_devices')
+        .doc(currentDeviceId)
+        .set({
+      'deviceId': currentDeviceId,
+      'studentId': studentId,
+      'carreraPath': carreraPath,
+      'bloqueado': false,        // se activa al cerrar sesión sin logout
+      'registeredAt': FieldValue.serverTimestamp(),
+      'lastLogin': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keySessionToken, token);
     await prefs.setBool('es_primera_vez_advertencia', esPrimeraVez);
 
-    print('✅ Sesión estudiante activada. Primera vez: $esPrimeraVez');
+    print('✅ Sesión activada y dispositivo registrado. DeviceId: $currentDeviceId');
     return true;
   } catch (e) {
     print('❌ Error activando sesión estudiante: $e');
@@ -124,6 +184,19 @@ static Future<bool> debemostrarAdvertenciaPrimeraVez() async {
   await prefs.remove('es_primera_vez_advertencia');
   return valor;
 }
+static Future<bool> isDeviceBloqueado() async {
+  try {
+    final deviceId = await DeviceHelper.getDeviceId();
+    final doc = await _firestore
+        .collection('blocked_devices')
+        .doc(deviceId)
+        .get();
+    return doc.exists && (doc.data()?['bloqueado'] == true);
+  } catch (e) {
+    print('❌ Error verificando dispositivo: $e');
+    return false;
+  }
+}
 static Future<void> cerrarSesionEstudiante() async {
   try {
     final userIdPath = await getCurrentUserId();
@@ -132,18 +205,31 @@ static Future<void> cerrarSesionEstudiante() async {
     final parts = userIdPath.split('/');
     final carreraPath = parts[0];
     final studentId = parts[1];
+    final currentDeviceId = await DeviceHelper.getDeviceId();
 
+    // Marcar sesión como bloqueada en el estudiante
     await _firestore
         .collection('users')
         .doc(carreraPath)
         .collection('students')
         .doc(studentId)
         .update({
-      'sessionActive': true,
+      'sessionActive': true,   // true = bloqueado, no puede re-entrar
       'sessionToken': null,
     });
 
-    print('✅ Sesión estudiante cerrada en Firestore');
+    // ✅ NUEVO: Bloquear el dispositivo globalmente
+    await _firestore
+        .collection('blocked_devices')
+        .doc(currentDeviceId)
+        .set({
+      'bloqueado': true,
+      'blockedAt': FieldValue.serverTimestamp(),
+      'studentId': studentId,
+      'carreraPath': carreraPath,
+    }, SetOptions(merge: true));
+
+    print('✅ Sesión cerrada y dispositivo bloqueado: $currentDeviceId');
   } catch (e) {
     print('❌ Error cerrando sesión estudiante en Firestore: $e');
   }
@@ -495,10 +581,14 @@ static Future<void> cerrarSesionEstudiante() async {
             userId: '$carreraPath/$studentId',
           );
 
-          _userCache[studentId] = studentData;
-          _cacheTimestamp = DateTime.now();
+          // ✅ FIX: agregar campos necesarios para el stream
+studentData['id'] = studentId;
+studentData['carreraPath'] = carreraPath;
 
-          return true;
+_userCache[studentId] = studentData;
+_cacheTimestamp = DateTime.now();
+
+return true;
         } else {
           print('❌ Contraseña incorrecta');
           return false;
@@ -552,12 +642,18 @@ static Future<void> cerrarSesionEstudiante() async {
               );
 
               await _createStudentIndex(
-                username: username.trim().toLowerCase(),
-                carreraPath: carreraName,
-                studentId: studentDoc.id,
-              );
+  username: username.trim().toLowerCase(),
+  carreraPath: carreraName,
+  studentId: studentDoc.id,
+);
 
-              return true;
+// ✅ FIX: guardar en caché con campos necesarios para el stream
+studentData['id'] = studentDoc.id;
+studentData['carreraPath'] = carreraName;
+_userCache[studentDoc.id] = studentData;
+_cacheTimestamp = DateTime.now();
+
+return true;
             }
           }
         } catch (e) {
@@ -1459,7 +1555,12 @@ static Future<void> cerrarSesionEstudiante() async {
     await prefs.remove(_keyUserId);
     await prefs.remove(_keySessionToken); // ✅ Limpiar token de sesión
     await prefs.setBool(_keyIsLoggedIn, false);
-
+// Dentro de logout(), junto a los otros prefs.remove(...)
+await prefs.remove(_keyAsistenteFilial);
+await prefs.remove(_keyAsistenteFilialNombre);
+await prefs.remove(_keyAsistenteFacultad);
+await prefs.remove(_keyAsistenteCarreraId);
+await prefs.remove(_keyAsistenteCarreraNombre);
     await prefs.remove(_keyAdminCarreraFilial);
     await prefs.remove(_keyAdminCarreraFilialNombre);
     await prefs.remove(_keyAdminCarreraFacultad);

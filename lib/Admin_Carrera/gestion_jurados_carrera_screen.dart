@@ -5,6 +5,7 @@ import '/prefs_helper.dart';
 /// Gestión de Jurados para Admin de Carrera.
 /// Carga filial/facultad/carrera automáticamente desde la sesión.
 /// Permite ver, crear y editar jurados de su carrera.
+/// Cada jurado es exclusivo para un evento específico.
 class GestionJuradosCarreraScreen extends StatefulWidget {
   const GestionJuradosCarreraScreen({super.key});
 
@@ -79,6 +80,8 @@ class _GestionJuradosCarreraScreenState
           'usuario': d['usuario'] ?? '',
           'password': d['password'] ?? '',
           'categorias': categorias,
+          'eventoId': d['eventoId'] ?? '',
+          'eventoNombre': d['eventoNombre'] ?? '',
         };
       }).toList();
 
@@ -91,36 +94,52 @@ class _GestionJuradosCarreraScreenState
     }
   }
 
-  // ── Cargar categorías disponibles desde eventos de la carrera ─────────────
-  Future<List<String>> _cargarCategorias() async {
-    if (_filialId == null || _facultad == null || _carreraNombre == null) {
-      return [];
-    }
+  // ── Cargar categorías de un evento específico ─────────────────────────────
+  Future<List<String>> _cargarCategoriasPorEvento(String eventoId) async {
     try {
-      final eventsSnap = await _firestore
+      final proySnap = await _firestore
           .collection('events')
-          .where('filialId', isEqualTo: _filialId)
-          .where('facultad', isEqualTo: _facultad)
-          .where('carreraNombre', isEqualTo: _carreraNombre)
+          .doc(eventoId)
+          .collection('proyectos')
           .get();
 
       final Set<String> cats = {};
-      for (final eventDoc in eventsSnap.docs) {
-        final proySnap = await _firestore
-            .collection('events')
-            .doc(eventDoc.id)
-            .collection('proyectos')
-            .get();
-        for (final p in proySnap.docs) {
-          final clasificacion = p.data()['Clasificación'] as String?;
-          if (clasificacion != null && clasificacion.isNotEmpty) {
-            cats.add(clasificacion);
-          }
+      for (final p in proySnap.docs) {
+        final clasificacion = p.data()['Clasificación'] as String?;
+        if (clasificacion != null && clasificacion.isNotEmpty) {
+          cats.add(clasificacion);
         }
       }
       return cats.toList()..sort();
     } catch (e) {
       debugPrint('Error cargando categorías: $e');
+      return [];
+    }
+  }
+
+  // ── Cargar eventos disponibles de la carrera ──────────────────────────────
+  Future<List<Map<String, dynamic>>> _cargarEventos() async {
+    if (_filialId == null || _facultad == null) return [];
+    try {
+      final snap = await _firestore
+          .collection('events')
+          .where('filialId', isEqualTo: _filialId)
+          .where('facultad', isEqualTo: _facultad)
+          .get();
+
+      // Filtrar en cliente por carreraId O carreraNombre
+      final docs = snap.docs.where((doc) {
+        final data = doc.data();
+        return data['carreraId'] == _carreraId ||
+            data['carreraNombre'] == _carreraNombre;
+      }).toList();
+
+      return docs.map((doc) => {
+        'id': doc.id,
+        'name': doc.data()['name'] ?? 'Sin nombre',
+      }).toList();
+    } catch (e) {
+      debugPrint('Error cargando eventos: $e');
       return [];
     }
   }
@@ -131,8 +150,9 @@ class _GestionJuradosCarreraScreenState
     required String usuario,
     required String password,
     required List<String> categorias,
+    required String eventoId,
+    required String eventoNombre,
   }) async {
-    // Verificar usuario duplicado
     final existing = await _firestore
         .collection('users')
         .where('usuario', isEqualTo: usuario.trim())
@@ -147,9 +167,13 @@ class _GestionJuradosCarreraScreenState
       'usuario': usuario.trim(),
       'password': password,
       'filial': _filialId,
+      'filialNombre': _filialNombre,
       'facultad': _facultad,
       'carrera': _carreraNombre,
+      'carreraId': _carreraId,
       'categorias': categorias,
+      'eventoId': eventoId,
+      'eventoNombre': eventoNombre,
       'userType': 'jurado',
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -165,12 +189,16 @@ class _GestionJuradosCarreraScreenState
     required String usuario,
     required String password,
     required List<String> categorias,
+    required String eventoId,
+    required String eventoNombre,
   }) async {
     await _firestore.collection('users').doc(id).update({
       'name': nombre.trim(),
       'usuario': usuario.trim(),
       'password': password,
       'categorias': categorias,
+      'eventoId': eventoId,
+      'eventoNombre': eventoNombre,
     });
     _showSnackBar('Jurado actualizado exitosamente');
     await _cargarJurados();
@@ -231,8 +259,9 @@ class _GestionJuradosCarreraScreenState
   // ── Mostrar diálogo de crear/editar ───────────────────────────────────────
   void _mostrarDialogoJurado({Map<String, dynamic>? jurado}) async {
     final isEditing = jurado != null;
-    final categorias = await _cargarCategorias();
 
+    // Cargar eventos primero
+    final eventos = await _cargarEventos();
     if (!mounted) return;
 
     final nombreCtrl = TextEditingController(text: jurado?['nombre'] ?? '');
@@ -240,8 +269,23 @@ class _GestionJuradosCarreraScreenState
     final passwordCtrl = TextEditingController(text: jurado?['password'] ?? '');
     List<String> categoriasSeleccionadas =
         List<String>.from(jurado?['categorias'] ?? []);
+
+    // Al editar, pre-seleccionar el evento actual del jurado
+    String? eventoSeleccionado =
+        isEditing && (jurado!['eventoId'] as String).isNotEmpty
+            ? jurado['eventoId'] as String
+            : null;
+    List<String> categorias = [];
     bool obscurePass = true;
     bool isLoading = false;
+    bool isLoadingCategorias = false;
+
+    // Si editamos, cargar categorías del evento actual
+    if (eventoSeleccionado != null) {
+      categorias = await _cargarCategoriasPorEvento(eventoSeleccionado);
+    }
+
+    if (!mounted) return;
 
     await showDialog(
       context: context,
@@ -358,91 +402,165 @@ class _GestionJuradosCarreraScreenState
                 ),
                 const SizedBox(height: 18),
 
-                // ── Categorías ──────────────────────────────────────────
+                // ── Selector de Evento ───────────────────────────────────
                 Container(
                   decoration: BoxDecoration(
                     border: Border.all(color: const Color(0xFFE2E8F0)),
                     borderRadius: BorderRadius.circular(12),
                     color: const Color(0xFFF8FAFC),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.category,
-                                color: Color(0xFF1E3A5F), size: 18),
-                            const SizedBox(width: 8),
-                            const Expanded(
-                              child: Text('Categorías',
-                                  style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF1E3A5F))),
-                            ),
-                            if (categoriasSeleccionadas.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1E3A5F),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  '${categoriasSeleccionadas.length}',
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      const Divider(height: 1),
-                      if (categorias.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Text(
-                            'No hay categorías disponibles en los eventos de esta carrera.',
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 4),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: eventoSeleccionado,
+                      hint: Row(
+                        children: [
+                          const Icon(Icons.event,
+                              color: Color(0xFF1E3A5F), size: 18),
+                          const SizedBox(width: 10),
+                          Text(
+                            eventos.isEmpty
+                                ? 'No hay eventos disponibles'
+                                : 'Seleccionar Evento',
                             style: TextStyle(
-                                fontSize: 12, color: Colors.grey[600]),
+                                fontSize: 14, color: Colors.grey[600]),
                           ),
-                        )
-                      else
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 180),
-                          child: ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: categorias.length,
-                            itemBuilder: (_, i) {
-                              final cat = categorias[i];
-                              final sel =
-                                  categoriasSeleccionadas.contains(cat);
-                              return CheckboxListTile(
-                                dense: true,
-                                title: Text(cat,
-                                    style: const TextStyle(fontSize: 13)),
-                                value: sel,
-                                activeColor: const Color(0xFF1E3A5F),
-                                controlAffinity:
-                                    ListTileControlAffinity.leading,
-                                onChanged: (v) => setDialogState(() {
-                                  if (v == true) {
-                                    categoriasSeleccionadas.add(cat);
-                                  } else {
-                                    categoriasSeleccionadas.remove(cat);
-                                  }
-                                }),
-                              );
+                        ],
+                      ),
+                      items: eventos
+                          .map((e) => DropdownMenuItem<String>(
+                                value: e['id'] as String,
+                                child: Text(e['name'] as String,
+                                    style:
+                                        const TextStyle(fontSize: 14)),
+                              ))
+                          .toList(),
+                      onChanged: eventos.isEmpty
+                          ? null
+                          : (value) async {
+                              setDialogState(() {
+                                eventoSeleccionado = value;
+                                categorias = [];
+                                // Al cambiar evento, limpiar categorías
+                                // seleccionadas solo si no estamos editando
+                                // el mismo evento
+                                if (!isEditing ||
+                                    value != jurado?['eventoId']) {
+                                  categoriasSeleccionadas = [];
+                                }
+                                isLoadingCategorias = true;
+                              });
+                              final cats =
+                                  await _cargarCategoriasPorEvento(value!);
+                              setDialogState(() {
+                                categorias = cats;
+                                isLoadingCategorias = false;
+                              });
                             },
-                          ),
-                        ),
-                    ],
+                    ),
                   ),
                 ),
+                const SizedBox(height: 18),
+
+                // ── Categorías (solo si hay evento seleccionado) ──────────
+                if (eventoSeleccionado != null)
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      borderRadius: BorderRadius.circular(12),
+                      color: const Color(0xFFF8FAFC),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding:
+                              const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.category,
+                                  color: Color(0xFF1E3A5F), size: 18),
+                              const SizedBox(width: 8),
+                              const Expanded(
+                                child: Text('Categorías',
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF1E3A5F))),
+                              ),
+                              if (categoriasSeleccionadas.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1E3A5F),
+                                    borderRadius:
+                                        BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    '${categoriasSeleccionadas.length}',
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        if (isLoadingCategorias)
+                          const Padding(
+                            padding: EdgeInsets.all(16),
+                            child:
+                                Center(child: CircularProgressIndicator()),
+                          )
+                        else if (categorias.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(
+                              'No hay categorías en este evento.',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.grey[600]),
+                            ),
+                          )
+                        else
+                          ConstrainedBox(
+                            constraints:
+                                const BoxConstraints(maxHeight: 180),
+                            child: ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: categorias.length,
+                              itemBuilder: (_, i) {
+                                final cat = categorias[i];
+                                final sel =
+                                    categoriasSeleccionadas.contains(cat);
+                                return CheckboxListTile(
+                                  dense: true,
+                                  title: Text(cat,
+                                      style: const TextStyle(
+                                          fontSize: 13)),
+                                  value: sel,
+                                  activeColor: const Color(0xFF1E3A5F),
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                  onChanged: (v) =>
+                                      setDialogState(() {
+                                    if (v == true) {
+                                      categoriasSeleccionadas.add(cat);
+                                    } else {
+                                      categoriasSeleccionadas.remove(cat);
+                                    }
+                                  }),
+                                );
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
 
                 // Chips de categorías seleccionadas
                 if (categoriasSeleccionadas.isNotEmpty) ...[
@@ -454,14 +572,15 @@ class _GestionJuradosCarreraScreenState
                         .map((cat) => Chip(
                               label: Text(cat,
                                   style: const TextStyle(
-                                      fontSize: 11, color: Colors.white)),
+                                      fontSize: 11,
+                                      color: Colors.white)),
                               backgroundColor: const Color(0xFF1E3A5F),
                               deleteIcon: const Icon(Icons.close,
                                   size: 14, color: Colors.white),
-                              onDeleted: () => setDialogState(
-                                  () => categoriasSeleccionadas.remove(cat)),
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 4),
+                              onDeleted: () => setDialogState(() =>
+                                  categoriasSeleccionadas.remove(cat)),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4),
                               materialTapTargetSize:
                                   MaterialTapTargetSize.shrinkWrap,
                             ))
@@ -477,10 +596,12 @@ class _GestionJuradosCarreraScreenState
                       child: OutlinedButton(
                         onPressed: () => Navigator.pop(ctx),
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12)),
-                          side: const BorderSide(color: Color(0xFFE2E8F0)),
+                          side: const BorderSide(
+                              color: Color(0xFFE2E8F0)),
                         ),
                         child: const Text('Cancelar',
                             style: TextStyle(color: Colors.grey)),
@@ -505,12 +626,22 @@ class _GestionJuradosCarreraScreenState
                                       isWarning: true);
                                   return;
                                 }
+                                if (eventoSeleccionado == null) {
+                                  _showSnackBar('Selecciona un evento',
+                                      isWarning: true);
+                                  return;
+                                }
                                 if (categoriasSeleccionadas.isEmpty) {
                                   _showSnackBar(
                                       'Selecciona al menos una categoría',
                                       isWarning: true);
                                   return;
                                 }
+
+                                final eventoNombre = eventos.firstWhere(
+                                  (e) => e['id'] == eventoSeleccionado,
+                                  orElse: () => {'name': ''},
+                                )['name'] as String;
 
                                 setDialogState(() => isLoading = true);
                                 try {
@@ -521,6 +652,8 @@ class _GestionJuradosCarreraScreenState
                                       usuario: usuario,
                                       password: password,
                                       categorias: categoriasSeleccionadas,
+                                      eventoId: eventoSeleccionado!,
+                                      eventoNombre: eventoNombre,
                                     );
                                   } else {
                                     await _crearJurado(
@@ -528,19 +661,24 @@ class _GestionJuradosCarreraScreenState
                                       usuario: usuario,
                                       password: password,
                                       categorias: categoriasSeleccionadas,
+                                      eventoId: eventoSeleccionado!,
+                                      eventoNombre: eventoNombre,
                                     );
                                   }
                                   if (mounted) Navigator.pop(ctx);
                                 } catch (e) {
-                                  _showSnackBar('Error: $e', isError: true);
+                                  _showSnackBar('Error: $e',
+                                      isError: true);
                                 } finally {
-                                  setDialogState(() => isLoading = false);
+                                  setDialogState(
+                                      () => isLoading = false);
                                 }
                               },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF1E3A5F),
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12)),
                           elevation: 2,
@@ -589,8 +727,8 @@ class _GestionJuradosCarreraScreenState
         ]),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -671,8 +809,7 @@ class _GestionJuradosCarreraScreenState
               color: Colors.white.withOpacity(0.15),
               borderRadius: BorderRadius.circular(10),
             ),
-            child:
-                const Icon(Icons.school, color: Colors.white, size: 22),
+            child: const Icon(Icons.school, color: Colors.white, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -710,7 +847,8 @@ class _GestionJuradosCarreraScreenState
             ),
             child: Text(
               '${_jurados.length} jurado(s)',
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
+              style:
+                  const TextStyle(color: Colors.white70, fontSize: 11),
             ),
           ),
         ],
@@ -721,6 +859,7 @@ class _GestionJuradosCarreraScreenState
   Widget _buildJuradoCard(Map<String, dynamic> jurado) {
     final categorias = jurado['categorias'] as List<String>;
     final nombre = jurado['nombre'] as String;
+    final eventoNombre = jurado['eventoNombre'] as String;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -764,6 +903,23 @@ class _GestionJuradosCarreraScreenState
                         style: TextStyle(
                             fontSize: 12, color: Colors.grey[600])),
                   ]),
+                  // ── Evento al que pertenece ──────────────────────────
+                  if (eventoNombre.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Row(children: [
+                      Icon(Icons.event,
+                          size: 13, color: Colors.blue[400]),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          eventoNombre,
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.blue[400]),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ]),
+                  ],
                   if (categorias.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Wrap(
@@ -776,7 +932,8 @@ class _GestionJuradosCarreraScreenState
                                 decoration: BoxDecoration(
                                   color: const Color(0xFF1E3A5F)
                                       .withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius:
+                                      BorderRadius.circular(8),
                                   border: Border.all(
                                       color: const Color(0xFF1E3A5F)
                                           .withOpacity(0.2)),
@@ -811,8 +968,7 @@ class _GestionJuradosCarreraScreenState
                 IconButton(
                   icon: const Icon(Icons.delete_outline,
                       color: Colors.red, size: 22),
-                  onPressed: () =>
-                      _eliminarJurado(jurado['id'], nombre),
+                  onPressed: () => _eliminarJurado(jurado['id'], nombre),
                   tooltip: 'Eliminar',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -863,7 +1019,8 @@ class _GestionJuradosCarreraScreenState
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        border:
+            OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFFE2E8F0)),

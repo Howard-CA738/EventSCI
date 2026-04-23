@@ -259,17 +259,18 @@ class CertificadoBuilder {
                   ),
                 ),
                 // Fecha
-                pw.Positioned(
-                  left: 0, right: W * 0.12, top: H * 0.630,
-                  child: pw.Align(
-                    alignment: pw.Alignment.centerRight,
-                    child: pw.Text(
-                      datos.fecha,
-                      style: pw.TextStyle(
-                          font: ttfItalic, fontSize: 9, color: colorGrisTexto),
-                    ),
-                  ),
-                ),
+                // Fecha
+pw.Positioned(
+  left: 0, right: W * 0.12, top: H * 0.630,
+  child: pw.Align(
+    alignment: pw.Alignment.centerRight,
+    child: pw.Text(
+      '${datos.campus}, ${datos.fecha}',
+      style: pw.TextStyle(
+          font: ttfItalic, fontSize: 9, color: colorGrisTexto),
+    ),
+  ),
+),
               ],
             ),
           ),

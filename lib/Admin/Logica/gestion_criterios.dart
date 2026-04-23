@@ -422,50 +422,71 @@ class RubricasService {
 
   // Eliminar evaluaciones cuando se remueven jurados
   Future<void> eliminarEvaluacionesDeJurados({
-    required String rubricaId,
-    required List<String> juradosIds,
-  }) async {
-    try {
-      print('🗑️ Eliminando evaluaciones de jurados removidos...');
+  required String rubricaId,
+  required List<String> juradosIds,
+}) async {
+  try {
+    print('🗑️ Eliminando evaluaciones de jurados removidos...');
 
-      final eventosSnapshot = await _firestore.collection('events').get();
-      int evaluacionesEliminadas = 0;
+    // 1. Traer todos los eventos en paralelo con sus proyectos
+    final eventosSnapshot = await _firestore.collection('events').get();
 
-      for (var eventoDoc in eventosSnapshot.docs) {
-        final proyectosSnapshot = await _firestore
-            .collection('events')
-            .doc(eventoDoc.id)
-            .collection('proyectos')
-            .get();
+    // 2. Obtener todos los proyectos de todos los eventos en paralelo
+    final proyectosSnapshotList = await Future.wait(
+      eventosSnapshot.docs.map((eventoDoc) => _firestore
+          .collection('events')
+          .doc(eventoDoc.id)
+          .collection('proyectos')
+          .get()),
+    );
 
-        for (var proyectoDoc in proyectosSnapshot.docs) {
-          for (var juradoId in juradosIds) {
-            final evaluacionDoc = await _firestore
-                .collection('events')
-                .doc(eventoDoc.id)
-                .collection('proyectos')
-                .doc(proyectoDoc.id)
-                .collection('evaluaciones')
-                .doc(juradoId)
-                .get();
+    // 3. Construir todas las rutas de evaluación a verificar
+    final List<DocumentReference> refsAVerificar = [];
 
-            if (evaluacionDoc.exists) {
-              final data = evaluacionDoc.data();
-              if (data != null && data['rubricaId'] == rubricaId) {
-                await evaluacionDoc.reference.delete();
-                evaluacionesEliminadas++;
-              }
-            }
-          }
+    for (int i = 0; i < eventosSnapshot.docs.length; i++) {
+      final eventoId = eventosSnapshot.docs[i].id;
+      final proyectos = proyectosSnapshotList[i].docs;
+
+      for (var proyectoDoc in proyectos) {
+        for (var juradoId in juradosIds) {
+          refsAVerificar.add(_firestore
+              .collection('events')
+              .doc(eventoId)
+              .collection('proyectos')
+              .doc(proyectoDoc.id)
+              .collection('evaluaciones')
+              .doc(juradoId));
         }
       }
+    }
 
-      print('✅ $evaluacionesEliminadas evaluaciones eliminadas');
-    } catch (e) {
-      print('❌ Error al eliminar evaluaciones: $e');
-      rethrow;
+    // 4. Leer todas las evaluaciones en paralelo
+    final evaluacionesDocs = await Future.wait(
+      refsAVerificar.map((ref) => ref.get()),
+    );
+
+    // 5. Eliminar solo las que corresponden a esta rúbrica, en lotes
+    final WriteBatch batch = _firestore.batch();
+    int eliminadas = 0;
+
+    for (var doc in evaluacionesDocs) {
+  if (doc.exists) {
+    final data = doc.data() as Map<String, dynamic>?;
+    if (data != null && data['rubricaId'] == rubricaId) {
+      batch.delete(doc.reference);
+      eliminadas++;
     }
   }
+}
+
+    if (eliminadas > 0) await batch.commit();
+
+    print('✅ $eliminadas evaluaciones eliminadas');
+  } catch (e) {
+    print('❌ Error al eliminar evaluaciones: $e');
+    rethrow;
+  }
+}
 
   // ✅ Filtrar rúbricas en memoria
   List<Rubrica> filtrarRubricas(

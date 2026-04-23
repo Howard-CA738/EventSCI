@@ -1,9 +1,5 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:printing/printing.dart';
-import '/prefs_helper.dart';
-import '/admin_Carrera/certificado_builder.dart';
+import '/usuarios/logica/ver_certificados.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTES DE COLOR — evita crear objetos Color en cada build()
@@ -25,148 +21,24 @@ class VerCertificadosScreen extends StatefulWidget {
 }
 
 class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
-  bool _isLoading = true;
-  List<_CertificadoItem> _certificados = [];
-  String? _error;
-
-  String _nombreEstudiante = '';
-
-  // flags para evitar doble tap en Ver / Descargar
-  final Set<String> _procesando = {};
+  late final VerCertificadosController _controller;
 
   @override
   void initState() {
     super.initState();
-    _cargarCertificados();
+    _controller = VerCertificadosController()..addListener(_onUpdate);
+    _controller.cargarCertificados();
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // CARGA
-  // ─────────────────────────────────────────────────────────────────────────
-  Future<void> _cargarCertificados() async {
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _error     = null;
-    });
-
-    try {
-      final userData = await PrefsHelper.getCurrentUserData();
-      if (userData == null) {
-        _setError('No se pudo obtener los datos del usuario.');
-        return;
-      }
-
-      _nombreEstudiante = userData['name']?.toString() ?? '';
-
-      final ids = await _resolverIds(userData);
-      if (ids == null) {
-        _setError('No se encontró la información académica del estudiante.');
-        return;
-      }
-
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(ids.$1)
-          .collection('students')
-          .doc(ids.$2)
-          .collection('certificados')
-          .orderBy('creadoEn', descending: true)
-          .get();
-
-      final lista = snap.docs.map((doc) {
-        final d = doc.data();
-        return _CertificadoItem(
-          id:       doc.id,
-          datos:    DatosCertificado.fromMap(d),
-          creadoEn: (d['creadoEn'] as Timestamp?)?.toDate(),
-        );
-      }).toList();
-
-      if (mounted) {
-        setState(() {
-          _certificados = lista;
-          _isLoading    = false;
-        });
-      }
-    } catch (e) {
-      _setError('Error al cargar certificados: $e');
-    }
+  @override
+  void dispose() {
+    _controller.removeListener(_onUpdate);
+    _controller.dispose();
+    super.dispose();
   }
 
-  /// Resuelve (carreraPath, studentId) desde los datos del usuario.
-  /// Retorna null si no se pueden determinar ambos valores.
-  Future<(String, String)?> _resolverIds(Map<String, dynamic> userData) async {
-    String carreraPath = userData['carreraPath']?.toString() ?? '';
-    String studentId   = userData['id']?.toString()          ?? '';
-
-    if (carreraPath.isEmpty || studentId.isEmpty) {
-      final filial  = userData['filial']?.toString().trim()  ?? '';
-      final carrera = userData['carrera']?.toString().trim() ?? '';
-      if (filial.isNotEmpty && carrera.isNotEmpty) {
-        carreraPath = '${filial}_$carrera';
-      }
-      studentId = userData['uid']?.toString() ??
-          userData['docId']?.toString() ?? '';
-    }
-
-    if (carreraPath.isEmpty || studentId.isEmpty) return null;
-    return (carreraPath, studentId);
-  }
-
-  void _setError(String msg) {
-    if (mounted) {
-      setState(() {
-        _error     = msg;
-        _isLoading = false;
-      });
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // GENERACIÓN DE PDF (on-demand, sin guardar en Firestore)
-  // ─────────────────────────────────────────────────────────────────────────
-  Future<Uint8List?> _generarPdf(_CertificadoItem cert) async {
-    try {
-      final builder        = CertificadoBuilder(cert.datos);
-      final estudianteTemp = Estudiante(
-        id:     '',
-        nombre: _nombreEstudiante,
-        dni:    '',
-        codigo: '',
-      );
-      return await builder.buildPdf([estudianteTemp]);
-    } catch (e) {
-      _snack('Error al generar el certificado: $e');
-      return null;
-    }
-  }
-
-  Future<void> _abrirCertificado(_CertificadoItem cert) async {
-    if (_procesando.contains(cert.id)) return;
-    _procesando.add(cert.id);
-    _snack('Generando certificado...');
-
-    final bytes = await _generarPdf(cert);
-    _procesando.remove(cert.id);
-
-    if (bytes == null || !mounted) return;
-    await Printing.layoutPdf(onLayout: (_) async => bytes);
-  }
-
-  Future<void> _descargarCertificado(_CertificadoItem cert) async {
-    if (_procesando.contains(cert.id)) return;
-    _procesando.add(cert.id);
-    _snack('Preparando descarga...');
-
-    final bytes = await _generarPdf(cert);
-    _procesando.remove(cert.id);
-
-    if (bytes == null || !mounted) return;
-    final nombre =
-        'certificado_${cert.datos.rol.toLowerCase()}_'
-        '${cert.datos.evento.replaceAll(' ', '_').toLowerCase()}.pdf';
-    await Printing.sharePdf(bytes: bytes, filename: nombre);
+  void _onUpdate() {
+    if (mounted) setState(() {});
   }
 
   void _snack(String msg) {
@@ -180,7 +52,7 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // BUILD
+  // BUILD PRINCIPAL
   // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -209,14 +81,17 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
   }
 
   Widget _buildBodyContent() {
-    if (_isLoading) {
+    if (_controller.isLoading) {
       return const Center(
           child: CircularProgressIndicator(color: _kPrimario));
     }
-    if (_error != null) return _buildError();
+    if (_controller.error != null) return _buildError();
     return _buildBody();
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // HEADER
+  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -255,7 +130,7 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
           IconButton(
             icon: const Icon(Icons.refresh_rounded,
                 color: Colors.white, size: 24),
-            onPressed: _cargarCertificados,
+            onPressed: _controller.cargarCertificados,
             tooltip: 'Actualizar',
           ),
           IconButton(
@@ -267,6 +142,9 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // ESTADOS DE LA PANTALLA
+  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildError() {
     return Center(
       child: Padding(
@@ -276,12 +154,12 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
           children: [
             Icon(Icons.error_outline, size: 56, color: Colors.red.shade300),
             const SizedBox(height: 16),
-            Text(_error!,
+            Text(_controller.error!,
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 14, color: _kTextoGris)),
             const SizedBox(height: 20),
             ElevatedButton.icon(
-              onPressed: _cargarCertificados,
+              onPressed: _controller.cargarCertificados,
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Reintentar'),
               style: ElevatedButton.styleFrom(
@@ -298,15 +176,14 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
   }
 
   Widget _buildBody() {
-    if (_certificados.isEmpty) return _buildVacio();
+    if (_controller.certificados.isEmpty) return _buildVacio();
 
     return RefreshIndicator(
-      onRefresh: _cargarCertificados,
+      onRefresh: _controller.cargarCertificados,
       color: _kPrimario,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        // +2 para el resumen (índice 0) y el spacer final (índice N+1)
-        itemCount: _certificados.length + 2,
+        itemCount: _controller.certificados.length + 2,
         itemBuilder: (ctx, i) {
           if (i == 0) {
             return Padding(
@@ -314,12 +191,12 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
               child: _buildResumen(),
             );
           }
-          if (i == _certificados.length + 1) {
+          if (i == _controller.certificados.length + 1) {
             return const SizedBox(height: 8);
           }
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: _buildCertificadoCard(_certificados[i - 1]),
+            child: _buildCertificadoCard(_controller.certificados[i - 1]),
           );
         },
       ),
@@ -357,7 +234,7 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
             ),
             const SizedBox(height: 24),
             OutlinedButton.icon(
-              onPressed: _cargarCertificados,
+              onPressed: _controller.cargarCertificados,
               icon: const Icon(Icons.refresh_rounded, color: _kPrimario),
               label: const Text('Actualizar',
                   style: TextStyle(color: _kPrimario)),
@@ -375,12 +252,11 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // RESUMEN
+  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildResumen() {
-    // Cálculo de roles solo cuando se construye el resumen
-    final roles = <String, int>{};
-    for (final c in _certificados) {
-      roles[c.datos.rol] = (roles[c.datos.rol] ?? 0) + 1;
-    }
+    final roles = _controller.contarPorRol();
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -396,9 +272,9 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${_certificados.length} certificado'
-                  '${_certificados.length != 1 ? 's' : ''} recibido'
-                  '${_certificados.length != 1 ? 's' : ''}',
+                  '${_controller.certificados.length} certificado'
+                  '${_controller.certificados.length != 1 ? 's' : ''} recibido'
+                  '${_controller.certificados.length != 1 ? 's' : ''}',
                   style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -422,9 +298,12 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
     );
   }
 
-  Widget _buildCertificadoCard(_CertificadoItem cert) {
-    final rolColor = _colorPorRol(cert.datos.rol);
-    final rolIcon  = _iconPorRol(cert.datos.rol);
+  // ─────────────────────────────────────────────────────────────────────────
+  // TARJETA DE CERTIFICADO
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _buildCertificadoCard(CertificadoItem cert) {
+    final rolColor = _controller.colorPorRol(cert.datos.rol);
+    final rolIcon  = _controller.iconPorRol(cert.datos.rol);
 
     return Card(
       key: ValueKey(cert.id),
@@ -451,7 +330,7 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
   }
 
   Widget _buildCardEncabezado(
-      _CertificadoItem cert, Color rolColor, IconData rolIcon) {
+      CertificadoItem cert, Color rolColor, IconData rolIcon) {
     return Row(
       children: [
         Container(
@@ -501,7 +380,7 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
     );
   }
 
-  Widget _buildCardDetalles(_CertificadoItem cert) {
+  Widget _buildCardDetalles(CertificadoItem cert) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -520,7 +399,7 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
           const SizedBox(height: 4),
           _detalle(
             Icons.access_time_outlined,
-            'Recibido el ${_formatFecha(cert.creadoEn!)}',
+            'Recibido el ${_controller.formatFecha(cert.creadoEn!)}',
             fontSize: 11,
             color: _kTextoGrisClaro,
           ),
@@ -529,12 +408,13 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
     );
   }
 
-  Widget _buildCardBotones(_CertificadoItem cert) {
+  Widget _buildCardBotones(CertificadoItem cert) {
     return Row(
       children: [
         Expanded(
           child: OutlinedButton.icon(
-            onPressed: () => _abrirCertificado(cert),
+            onPressed: () =>
+                _controller.abrirCertificado(cert, onSnack: _snack),
             icon: const Icon(Icons.visibility_outlined, size: 18),
             label: const Text('Ver', style: TextStyle(fontSize: 13)),
             style: OutlinedButton.styleFrom(
@@ -549,7 +429,8 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
         const SizedBox(width: 10),
         Expanded(
           child: ElevatedButton.icon(
-            onPressed: () => _descargarCertificado(cert),
+            onPressed: () =>
+                _controller.descargarCertificado(cert, onSnack: _snack),
             icon: const Icon(Icons.download_rounded, size: 18),
             label: const Text('Descargar', style: TextStyle(fontSize: 13)),
             style: ElevatedButton.styleFrom(
@@ -580,46 +461,4 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
       ],
     );
   }
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  Color _colorPorRol(String rol) {
-    switch (rol) {
-      case 'PONENTE':     return const Color(0xFF7C3AED);
-      case 'JURADO':      return const Color(0xFF0F6E56);
-      case 'ORGANIZADOR': return const Color(0xFFB45309);
-      default:            return _kPrimario;
-    }
-  }
-
-  IconData _iconPorRol(String rol) {
-    switch (rol) {
-      case 'PONENTE':     return Icons.mic_rounded;
-      case 'JURADO':      return Icons.gavel_rounded;
-      case 'ORGANIZADOR': return Icons.manage_accounts_rounded;
-      default:            return Icons.workspace_premium;
-    }
-  }
-
-  String _formatFecha(DateTime dt) {
-    const meses = [
-      '', 'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-      'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
-    ];
-    return '${dt.day} ${meses[dt.month]} ${dt.year}';
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MODELO LOCAL
-// ─────────────────────────────────────────────────────────────────────────────
-class _CertificadoItem {
-  final String id;
-  final DatosCertificado datos;
-  final DateTime? creadoEn;
-
-  const _CertificadoItem({
-    required this.id,
-    required this.datos,
-    this.creadoEn,
-  });
 }

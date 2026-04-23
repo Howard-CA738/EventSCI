@@ -17,7 +17,6 @@ class _GestionRubricasCarreraScreenState
     extends State<GestionRubricasCarreraScreen> {
   final RubricasService _service = RubricasService();
 
-  // ── Datos de sesión ───────────────────────────────────────────────────────
   String? _filialId;
   String? _filialNombre;
   String? _facultad;
@@ -58,18 +57,15 @@ class _GestionRubricasCarreraScreenState
     setState(() => _isLoadingRubricas = true);
     try {
       final todas = await _service.obtenerRubricas();
-      // Filtrar solo las rúbricas de esta filial/facultad/carrera
+
       final filtradas = todas.where((r) {
         if (r.filial != _filialId) return false;
         if (r.facultad.trim().toLowerCase() !=
             (_facultad ?? '').trim().toLowerCase()) return false;
         if (_carreraNombre != null && _carreraNombre!.isNotEmpty) {
-          if (r.carrera != null && r.carrera!.isNotEmpty) {
-            return r.carrera!.trim().toLowerCase() ==
-                _carreraNombre!.trim().toLowerCase();
-          }
-          // Si la rúbrica no tiene carrera específica, también aplica
-          return true;
+          if (r.carrera == null || r.carrera!.trim().isEmpty) return false;
+          return r.carrera!.trim().toLowerCase() ==
+              _carreraNombre!.trim().toLowerCase();
         }
         return true;
       }).toList();
@@ -128,8 +124,6 @@ class _GestionRubricasCarreraScreenState
     ).then((_) => _cargarRubricas());
   }
 
-  // ─── BUILD ────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -160,21 +154,19 @@ class _GestionRubricasCarreraScreenState
               child: CircularProgressIndicator(color: Color(0xFF1E3A5F)))
           : Column(
               children: [
-                // Tarjeta de contexto
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                   child: _buildContextCard(),
                 ),
                 const SizedBox(height: 16),
-
-                // Lista de rúbricas
                 Expanded(
                   child: _isLoadingRubricas
                       ? const Center(child: CircularProgressIndicator())
                       : _rubricas.isEmpty
                           ? _buildEmptyState()
                           : ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 80),
+                              padding:
+                                  const EdgeInsets.fromLTRB(20, 0, 20, 80),
                               itemCount: _rubricas.length,
                               itemBuilder: (context, index) =>
                                   _buildRubricaCard(_rubricas[index]),
@@ -214,8 +206,8 @@ class _GestionRubricasCarreraScreenState
                         fontSize: 15)),
                 const SizedBox(height: 3),
                 Text(_facultad ?? '—',
-                    style:
-                        const TextStyle(color: Colors.white70, fontSize: 12)),
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 12)),
                 const SizedBox(height: 2),
                 Row(
                   children: [
@@ -240,7 +232,8 @@ class _GestionRubricasCarreraScreenState
             ),
             child: Text(
               '${_rubricas.length} rúbrica(s)',
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
+              style:
+                  const TextStyle(color: Colors.white70, fontSize: 11),
             ),
           ),
         ],
@@ -252,8 +245,7 @@ class _GestionRubricasCarreraScreenState
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
       elevation: 3,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: () async {
           await Navigator.push(
@@ -279,8 +271,7 @@ class _GestionRubricasCarreraScreenState
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color:
-                          const Color(0xFF1E3A5F).withOpacity(0.1),
+                      color: const Color(0xFF1E3A5F).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.assignment,
@@ -315,8 +306,8 @@ class _GestionRubricasCarreraScreenState
                     ),
                   ),
                   IconButton(
-                    icon:
-                        const Icon(Icons.delete_outline, color: Colors.red),
+                    icon: const Icon(Icons.delete_outline,
+                        color: Colors.red),
                     onPressed: () => _eliminarRubrica(rubrica.id),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -375,8 +366,7 @@ class _GestionRubricasCarreraScreenState
 
   Widget _infoChip(IconData icon, String label, Color color) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
@@ -398,7 +388,7 @@ class _GestionRubricasCarreraScreenState
 }
 
 // ============================================================================
-// CREAR RÚBRICA (versión Admin Carrera — sin selección de ubicación)
+// CREAR RÚBRICA (versión Admin Carrera)
 // ============================================================================
 
 class CrearRubricaCarreraScreen extends StatefulWidget {
@@ -425,8 +415,7 @@ class _CrearRubricaCarreraScreenState
   final _formKey = GlobalKey<FormState>();
   final _nombreController = TextEditingController();
   final _descripcionController = TextEditingController();
-  final _puntajeMaximoController =
-      TextEditingController(text: '20');
+  final _puntajeMaximoController = TextEditingController(text: '20');
   final RubricasService _service = RubricasService();
 
   List<SeccionRubrica> _secciones = [];
@@ -440,6 +429,9 @@ class _CrearRubricaCarreraScreenState
     _cargarJurados();
   }
 
+  /// Carga jurados filtrados por filial + facultad + carrera + eventoId.
+  /// Al asignar una rúbrica solo deben aparecer jurados del mismo evento
+  /// para evitar mezclas entre eventos.
   Future<void> _cargarJurados() async {
     final jurados = await _service.obtenerJurados(
       filial: widget.filial,
@@ -478,8 +470,7 @@ class _CrearRubricaCarreraScreenState
       secciones: _secciones,
       juradosAsignados: _juradosSeleccionados,
       fechaCreacion: DateTime.now(),
-      puntajeMaximo:
-          double.tryParse(_puntajeMaximoController.text) ?? 20,
+      puntajeMaximo: double.tryParse(_puntajeMaximoController.text) ?? 20,
       filial: widget.filial,
       facultad: widget.facultad,
       carrera: widget.carrera,
@@ -517,7 +508,6 @@ class _CrearRubricaCarreraScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Tarjeta de ubicación (no editable)
               _buildUbicacionCard(),
               const SizedBox(height: 20),
               _buildInfoBasicaCard(),
@@ -600,8 +590,8 @@ class _CrearRubricaCarreraScreenState
   Widget _buildInfoBasicaCard() {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -646,8 +636,8 @@ class _CrearRubricaCarreraScreenState
   Widget _buildSeccionesCard() {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -697,8 +687,8 @@ class _CrearRubricaCarreraScreenState
   Widget _buildJuradosCard() {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -714,8 +704,8 @@ class _CrearRubricaCarreraScreenState
                           color: Color(0xFF1E3A5F))),
                 ),
                 Text('${_juradosSeleccionados.length} seleccionados',
-                    style: TextStyle(
-                        fontSize: 12, color: Colors.grey[600])),
+                    style:
+                        TextStyle(fontSize: 12, color: Colors.grey[600])),
                 IconButton(
                   icon: const Icon(Icons.refresh, size: 18),
                   onPressed: _cargarJurados,
@@ -755,9 +745,7 @@ class _CrearRubricaCarreraScreenState
                     _juradosSeleccionados.contains(jurado['id']);
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
-                  color: isSelected
-                      ? Colors.green.shade50
-                      : Colors.white,
+                  color: isSelected ? Colors.green.shade50 : Colors.white,
                   child: CheckboxListTile(
                     title: Text(jurado['nombre'],
                         style: TextStyle(
@@ -765,8 +753,25 @@ class _CrearRubricaCarreraScreenState
                                 ? FontWeight.bold
                                 : FontWeight.normal,
                             fontSize: 14)),
-                    subtitle: Text(jurado['carrera'] ?? '',
-                        style: const TextStyle(fontSize: 12)),
+                    subtitle: jurado['eventoNombre'] != null &&
+                            (jurado['eventoNombre'] as String).isNotEmpty
+                        ? Row(
+                            children: [
+                              Icon(Icons.event,
+                                  size: 11, color: Colors.blue[400]),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  jurado['eventoNombre'] as String,
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.blue[600]),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          )
+                        : null,
                     secondary: CircleAvatar(
                       backgroundColor:
                           isSelected ? Colors.green : Colors.grey,
@@ -897,8 +902,8 @@ class _EditarRubricaCarreraScreenState
       TextEditingController(text: widget.rubrica.nombre);
   late final _descripcionController =
       TextEditingController(text: widget.rubrica.descripcion);
-  late final _puntajeMaximoController = TextEditingController(
-      text: widget.rubrica.puntajeMaximo.toString());
+  late final _puntajeMaximoController =
+      TextEditingController(text: widget.rubrica.puntajeMaximo.toString());
   final RubricasService _service = RubricasService();
 
   late List<SeccionRubrica> _secciones;
@@ -909,13 +914,13 @@ class _EditarRubricaCarreraScreenState
   @override
   void initState() {
     super.initState();
-    _secciones =
-        widget.rubrica.secciones.map((s) => s.copyWith()).toList();
-    _juradosSeleccionados =
-        List.from(widget.rubrica.juradosAsignados);
+    _secciones = widget.rubrica.secciones.map((s) => s.copyWith()).toList();
+    _juradosSeleccionados = List.from(widget.rubrica.juradosAsignados);
     _cargarJurados();
   }
 
+  /// Carga jurados filtrados por filial + facultad + carrera.
+  /// Internamente obtenerJurados ya filtra por eventoId si se provee.
   Future<void> _cargarJurados() async {
     final jurados = await _service.obtenerJurados(
       filial: widget.rubrica.filial,
@@ -926,56 +931,84 @@ class _EditarRubricaCarreraScreenState
   }
 
   Future<void> _actualizarRubrica() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (_secciones.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Agrega al menos una sección'),
-          backgroundColor: Colors.orange));
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    final rubricaActualizada = Rubrica(
-      id: widget.rubrica.id,
-      nombre: _nombreController.text.trim(),
-      descripcion: _descripcionController.text.trim(),
-      secciones: _secciones,
-      juradosAsignados: _juradosSeleccionados,
-      fechaCreacion: widget.rubrica.fechaCreacion,
-      puntajeMaximo:
-          double.tryParse(_puntajeMaximoController.text) ?? 20,
-      filial: widget.rubrica.filial,
-      facultad: widget.rubrica.facultad,
-      carrera: widget.rubrica.carrera,
-    );
-
-    final juradosRemovidos = widget.rubrica.juradosAsignados
-        .where((id) => !_juradosSeleccionados.contains(id))
-        .toList();
-
-    if (juradosRemovidos.isNotEmpty) {
-      await _service.eliminarEvaluacionesDeJurados(
-        rubricaId: widget.rubrica.id,
-        juradosIds: juradosRemovidos,
-      );
-    }
-
-    final ok = await _service.actualizarRubrica(rubricaActualizada);
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(ok
-          ? juradosRemovidos.isNotEmpty
-              ? 'Rúbrica actualizada y ${juradosRemovidos.length} evaluación(es) eliminada(s)'
-              : 'Rúbrica actualizada exitosamente'
-          : 'Error al actualizar'),
-      backgroundColor: ok ? Colors.green : Colors.red,
-    ));
-
-    if (ok) Navigator.pop(context);
+  if (!_formKey.currentState!.validate()) return;
+  if (_secciones.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Agrega al menos una sección'),
+        backgroundColor: Colors.orange));
+    return;
   }
+
+  setState(() => _isLoading = true);
+
+  // Feedback inmediato al usuario
+  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+    content: Row(
+      children: [
+        SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(
+              color: Colors.white, strokeWidth: 2),
+        ),
+        SizedBox(width: 12),
+        Text('Actualizando rúbrica...'),
+      ],
+    ),
+    duration: Duration(seconds: 30),
+    backgroundColor: Color(0xFF1E3A5F),
+  ));
+
+  final rubricaActualizada = Rubrica(
+    id: widget.rubrica.id,
+    nombre: _nombreController.text.trim(),
+    descripcion: _descripcionController.text.trim(),
+    secciones: _secciones,
+    juradosAsignados: _juradosSeleccionados,
+    fechaCreacion: widget.rubrica.fechaCreacion,
+    puntajeMaximo: double.tryParse(_puntajeMaximoController.text) ?? 20,
+    filial: widget.rubrica.filial,
+    facultad: widget.rubrica.facultad,
+    carrera: widget.rubrica.carrera,
+  );
+
+  final juradosRemovidos = widget.rubrica.juradosAsignados
+      .where((id) => !_juradosSeleccionados.contains(id))
+      .toList();
+
+  // Ejecutar eliminación y actualización en paralelo
+  final resultados = await Future.wait([
+    juradosRemovidos.isNotEmpty
+        ? _service
+            .eliminarEvaluacionesDeJurados(
+              rubricaId: widget.rubrica.id,
+              juradosIds: juradosRemovidos,
+            )
+            .then((_) => true)
+            .catchError((_) => false)
+        : Future.value(true),
+    _service.actualizarRubrica(rubricaActualizada),
+  ]);
+
+  if (!mounted) return;
+  setState(() => _isLoading = false);
+
+  // Cerrar el snackbar de "Actualizando..."
+  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+  final ok = resultados[1] as bool;
+
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    content: Text(ok
+        ? juradosRemovidos.isNotEmpty
+            ? 'Rúbrica actualizada y ${juradosRemovidos.length} evaluación(es) limpiada(s)'
+            : 'Rúbrica actualizada exitosamente'
+        : 'Error al actualizar'),
+    backgroundColor: ok ? Colors.green : Colors.red,
+  ));
+
+  if (ok) Navigator.pop(context);
+}
 
   @override
   Widget build(BuildContext context) {
@@ -996,11 +1029,8 @@ class _EditarRubricaCarreraScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Ubicación (solo lectura)
               _buildUbicacionCard(),
               const SizedBox(height: 20),
-
-              // Info básica
               Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(
@@ -1047,8 +1077,6 @@ class _EditarRubricaCarreraScreenState
                 ),
               ),
               const SizedBox(height: 20),
-
-              // Secciones
               Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(
@@ -1109,8 +1137,6 @@ class _EditarRubricaCarreraScreenState
                 ),
               ),
               const SizedBox(height: 20),
-
-              // Jurados
               Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(
@@ -1127,8 +1153,8 @@ class _EditarRubricaCarreraScreenState
                               color: Color(0xFF1E3A5F))),
                       const SizedBox(height: 12),
                       ..._juradosDisponibles.map((jurado) {
-                        final isSelected = _juradosSeleccionados
-                            .contains(jurado['id']);
+                        final isSelected =
+                            _juradosSeleccionados.contains(jurado['id']);
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           color: isSelected
@@ -1141,18 +1167,32 @@ class _EditarRubricaCarreraScreenState
                                         ? FontWeight.bold
                                         : FontWeight.normal,
                                     fontSize: 14)),
-                            subtitle: Text(
-                                jurado['carrera'] ?? '',
-                                style:
-                                    const TextStyle(fontSize: 12)),
-                            secondary: CircleAvatar(
-                              backgroundColor: isSelected
-                                  ? Colors.green
-                                  : Colors.grey,
-                              child: Text(
-                                jurado['nombre']
-                                        .toString()
+                            subtitle: jurado['eventoNombre'] != null &&
+                                    (jurado['eventoNombre'] as String)
                                         .isNotEmpty
+                                ? Row(
+                                    children: [
+                                      Icon(Icons.event,
+                                          size: 11,
+                                          color: Colors.blue[400]),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          jurado['eventoNombre'] as String,
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.blue[600]),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : null,
+                            secondary: CircleAvatar(
+                              backgroundColor:
+                                  isSelected ? Colors.green : Colors.grey,
+                              child: Text(
+                                jurado['nombre'].toString().isNotEmpty
                                     ? jurado['nombre']
                                         .toString()
                                         .substring(0, 1)
@@ -1183,8 +1223,6 @@ class _EditarRubricaCarreraScreenState
                 ),
               ),
               const SizedBox(height: 24),
-
-              // Botón guardar
               SizedBox(
                 height: 52,
                 child: ElevatedButton(
@@ -1297,7 +1335,7 @@ class _EditarRubricaCarreraScreenState
 }
 
 // ============================================================================
-// WIDGETS INTERNOS: _SeccionWidget y _CriterioWidget (reutilizados)
+// WIDGETS INTERNOS
 // ============================================================================
 
 class _SeccionWidget extends StatefulWidget {
@@ -1345,7 +1383,8 @@ class _SeccionWidgetState extends State<_SeccionWidget> {
         trailing: SizedBox(
           width: 36,
           child: IconButton(
-            icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+            icon:
+                const Icon(Icons.delete, color: Colors.red, size: 18),
             onPressed: widget.onEliminar,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -1377,8 +1416,7 @@ class _SeccionWidgetState extends State<_SeccionWidget> {
                 keyboardType: const TextInputType.numberWithOptions(
                     decimal: true),
                 onChanged: (v) {
-                  widget.seccion.pesoTotal =
-                      double.tryParse(v) ?? 10;
+                  widget.seccion.pesoTotal = double.tryParse(v) ?? 10;
                   widget.onActualizar();
                 },
               ),
@@ -1461,9 +1499,8 @@ class _CriterioWidget extends StatelessWidget {
                         border: OutlineInputBorder(),
                         isDense: true,
                         contentPadding: EdgeInsets.all(12)),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(
-                            decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true),
                     onChanged: (v) {
                       criterio.peso = double.tryParse(v) ?? 0;
                       onActualizar();

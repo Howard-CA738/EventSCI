@@ -45,6 +45,7 @@ class _AsignarProyectosCarreraScreenState
   bool _isLoadingJurados = false;
   bool _isLoadingProyectos = false;
   bool _isAsignando = false;
+  bool _modoEdicion = false;
 
   @override
   void initState() {
@@ -52,7 +53,7 @@ class _AsignarProyectosCarreraScreenState
     _loadSessionData();
   }
 
-  // ── Carga sesión igual que CrearEventosCarreraScreen ────────────────────
+  // ── Carga sesión ─────────────────────────────────────────────────────────
   Future<void> _loadSessionData() async {
     setState(() => _isLoadingSession = true);
     try {
@@ -111,7 +112,8 @@ class _AsignarProyectosCarreraScreenState
 
   Future<void> _onEventoChanged(String? eventoId) async {
     if (eventoId == null) return;
-    final eventoData = _eventosDisponibles.firstWhere((e) => e['id'] == eventoId);
+    final eventoData =
+        _eventosDisponibles.firstWhere((e) => e['id'] == eventoId);
 
     setState(() {
       _eventoSeleccionado = eventoId;
@@ -124,6 +126,7 @@ class _AsignarProyectosCarreraScreenState
       _proyectosDisponibles.clear();
       _proyectosPorCategoria.clear();
       _juradosDisponibles = [];
+      _modoEdicion = false;
     });
 
     await _cargarJuradosParaEvento();
@@ -168,6 +171,7 @@ class _AsignarProyectosCarreraScreenState
       _proyectosSeleccionados.clear();
       _proyectosDisponibles.clear();
       _proyectosPorCategoria.clear();
+      _modoEdicion = false;
     });
     await _cargarRubricasDelJurado(juradoId);
   }
@@ -175,8 +179,9 @@ class _AsignarProyectosCarreraScreenState
   Future<void> _cargarRubricasDelJurado(String juradoId) async {
     try {
       final todasRubricas = await _rubricasService.obtenerRubricas();
-      final rubricasJurado =
-          todasRubricas.where((r) => r.juradosAsignados.contains(juradoId)).toList();
+      final rubricasJurado = todasRubricas
+          .where((r) => r.juradosAsignados.contains(juradoId))
+          .toList();
 
       if (rubricasJurado.isEmpty) {
         _showSnackBar('Este jurado no tiene rúbricas asignadas.',
@@ -186,15 +191,16 @@ class _AsignarProyectosCarreraScreenState
 
       final eventoFilial = _eventoData!['filialId'];
       final eventoFacultad = _eventoData!['facultad'];
-      final eventoCarrera = _eventoData!['carreraNombre'];
+      final eventoCarrera = _eventoData!['carreraNombre'] as String;
 
       final rubricasCompatibles = rubricasJurado.where((r) {
         if (r.filial != eventoFilial) return false;
         if (r.facultad.trim().toLowerCase() !=
             eventoFacultad.trim().toLowerCase()) return false;
-        if (r.carrera != null && r.carrera!.isNotEmpty) {
-          return eventoCarrera.trim().toLowerCase() ==
-              r.carrera!.trim().toLowerCase();
+        if (eventoCarrera.isNotEmpty) {
+          if (r.carrera == null || r.carrera!.trim().isEmpty) return false;
+          return r.carrera!.trim().toLowerCase() ==
+              eventoCarrera.trim().toLowerCase();
         }
         return true;
       }).toList();
@@ -230,100 +236,109 @@ class _AsignarProyectosCarreraScreenState
       _proyectosSeleccionados.clear();
       _proyectosDisponibles.clear();
       _proyectosPorCategoria.clear();
+      _modoEdicion = false;
     });
     await _cargarProyectosConRubrica(rubrica);
   }
 
   Future<void> _cargarProyectosConRubrica(Rubrica rubrica) async {
-    if (_eventoSeleccionado == null || _juradoSeleccionado == null) return;
-    setState(() => _isLoadingProyectos = true);
+  if (_eventoSeleccionado == null || _juradoSeleccionado == null) return;
+  setState(() => _isLoadingProyectos = true);
 
-    try {
-      final juradoDoc =
-          await _firestore.collection('users').doc(_juradoSeleccionado).get();
-      List<String> categoriasJurado = [];
-      if (juradoDoc.exists) {
-        final d = juradoDoc.data();
-        if (d != null && d.containsKey('categorias')) {
-          categoriasJurado = List<String>.from(d['categorias'] ?? []);
-        }
-      }
-
-      if (categoriasJurado.isEmpty) {
-        _showSnackBar('Este jurado no tiene categorías asignadas',
-            isError: false, isWarning: true);
-        if (mounted) setState(() => _isLoadingProyectos = false);
-        return;
-      }
-
-      final proyectosSnap = await _firestore
+  try {
+    // ✅ Las 3 consultas se lanzan AL MISMO TIEMPO
+    final resultados = await Future.wait([
+      _firestore.collection('users').doc(_juradoSeleccionado).get(),
+      _firestore
           .collection('events')
           .doc(_eventoSeleccionado)
           .collection('proyectos')
-          .get();
-
-      final evaluacionesSnap = await _firestore
+          .get(),
+      _firestore
           .collectionGroup('evaluaciones')
           .where('juradoId', isEqualTo: _juradoSeleccionado)
           .where('rubricaId', isEqualTo: rubrica.id)
-          .get();
+          .get(),
+    ]);
 
-      final proyectosAsignados = <String>{};
-      for (var doc in evaluacionesSnap.docs) {
-        final parts = doc.reference.path.split('/');
-        if (parts.length >= 4) proyectosAsignados.add(parts[3]);
+    final juradoDoc = resultados[0] as DocumentSnapshot;
+    final proyectosSnap = resultados[1] as QuerySnapshot;
+    final evaluacionesSnap = resultados[2] as QuerySnapshot;
+
+    // Categorías del jurado
+    List<String> categoriasJurado = [];
+    if (juradoDoc.exists) {
+      final d = juradoDoc.data() as Map<String, dynamic>?;
+      if (d != null && d.containsKey('categorias')) {
+        categoriasJurado = List<String>.from(d['categorias'] ?? []);
       }
-
-      final Map<String, Map<String, dynamic>> proyectosMap = {};
-      for (var doc in proyectosSnap.docs) {
-        final d = doc.data();
-        final codigo = d['Código'] ?? '';
-        final clasificacion = d['Clasificación'] ?? 'Sin categoría';
-        if (codigo.isEmpty || !categoriasJurado.contains(clasificacion)) continue;
-
-        if (!proyectosMap.containsKey(codigo)) {
-          proyectosMap[codigo] = {
-            'id': doc.id,
-            'eventId': _eventoSeleccionado,
-            'codigo': codigo,
-            'titulo': d['Título'] ?? '',
-            'integrantes': d['Integrantes'] ?? '',
-            'sala': d['Sala'] ?? '',
-            'clasificacion': clasificacion,
-            'yaAsignado': proyectosAsignados.contains(doc.id),
-          };
-        }
-      }
-
-      final proyectosList = proyectosMap.values.toList()
-        ..sort((a, b) =>
-            (a['codigo'] as String).compareTo(b['codigo'] as String));
-
-      final Map<String, List<Map<String, dynamic>>> grupos = {};
-      for (final p in proyectosList) {
-        final cat = p['clasificacion'] as String;
-        grupos.putIfAbsent(cat, () => []).add(p);
-      }
-
-      if (mounted) {
-        _proyectosSeleccionados.clear();
-        for (var p in proyectosList) {
-          if (p['yaAsignado'] == true) {
-            _proyectosSeleccionados.add(p['codigo'] as String);
-          }
-        }
-        setState(() {
-          _proyectosDisponibles = proyectosList;
-          _proyectosPorCategoria = grupos;
-          _isLoadingProyectos = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error cargando proyectos: $e');
-      if (mounted) setState(() => _isLoadingProyectos = false);
-      _showSnackBar('Error al cargar proyectos: $e', isError: true);
     }
+
+    if (categoriasJurado.isEmpty) {
+      _showSnackBar('Este jurado no tiene categorías asignadas',
+          isError: false, isWarning: true);
+      if (mounted) setState(() => _isLoadingProyectos = false);
+      return;
+    }
+
+    // Proyectos ya asignados
+    final proyectosAsignados = <String>{};
+    for (var doc in evaluacionesSnap.docs) {
+      final parts = doc.reference.path.split('/');
+      if (parts.length >= 4) proyectosAsignados.add(parts[3]);
+    }
+
+    // Construir mapa de proyectos
+    final Map<String, Map<String, dynamic>> proyectosMap = {};
+    for (var doc in proyectosSnap.docs) {
+      final d = doc.data() as Map<String, dynamic>;
+      final codigo = d['Código'] ?? '';
+      final clasificacion = d['Clasificación'] ?? 'Sin categoría';
+      if (codigo.isEmpty || !categoriasJurado.contains(clasificacion)) continue;
+
+      if (!proyectosMap.containsKey(codigo)) {
+        proyectosMap[codigo] = {
+          'id': doc.id,
+          'eventId': _eventoSeleccionado,
+          'codigo': codigo,
+          'titulo': d['Título'] ?? '',
+          'integrantes': d['Integrantes'] ?? '',
+          'sala': d['Sala'] ?? '',
+          'clasificacion': clasificacion,
+          'yaAsignado': proyectosAsignados.contains(doc.id),
+        };
+      }
+    }
+
+    final proyectosList = proyectosMap.values.toList()
+      ..sort((a, b) =>
+          (a['codigo'] as String).compareTo(b['codigo'] as String));
+
+    final Map<String, List<Map<String, dynamic>>> grupos = {};
+    for (final p in proyectosList) {
+      final cat = p['clasificacion'] as String;
+      grupos.putIfAbsent(cat, () => []).add(p);
+    }
+
+    if (mounted) {
+      _proyectosSeleccionados.clear();
+      for (var p in proyectosList) {
+        if (p['yaAsignado'] == true) {
+          _proyectosSeleccionados.add(p['codigo'] as String);
+        }
+      }
+      setState(() {
+        _proyectosDisponibles = proyectosList;
+        _proyectosPorCategoria = grupos;
+        _isLoadingProyectos = false;
+      });
+    }
+  } catch (e) {
+    debugPrint('Error cargando proyectos: $e');
+    if (mounted) setState(() => _isLoadingProyectos = false);
+    _showSnackBar('Error al cargar proyectos: $e', isError: true);
   }
+}
 
   Future<void> _asignarProyectos() async {
     if (_proyectosSeleccionados.isEmpty) {
@@ -344,14 +359,17 @@ class _AsignarProyectosCarreraScreenState
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Confirmar Asignación'),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(_modoEdicion ? 'Confirmar cambios' : 'Confirmar Asignación'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '¿Asignar ${_proyectosSeleccionados.length} proyecto(s) a ${_juradoData!['nombre']}?',
+              _modoEdicion
+                  ? '¿Guardar los cambios de proyectos para ${_juradoData!['nombre']}?'
+                  : '¿Asignar ${_proyectosSeleccionados.length} proyecto(s) a ${_juradoData!['nombre']}?',
             ),
             const SizedBox(height: 8),
             Container(
@@ -362,7 +380,8 @@ class _AsignarProyectosCarreraScreenState
               ),
               child: Row(
                 children: [
-                  Icon(Icons.assignment, color: Colors.blue.shade700, size: 18),
+                  Icon(Icons.assignment,
+                      color: Colors.blue.shade700, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -388,12 +407,14 @@ class _AsignarProyectosCarreraScreenState
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.delete_outline, color: Colors.red[700], size: 18),
+                    Icon(Icons.delete_outline,
+                        color: Colors.red[700], size: 18),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         '$proyectosAEliminar asignación(es) se eliminarán',
-                        style: TextStyle(fontSize: 12, color: Colors.red[900]),
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.red[900]),
                       ),
                     ),
                   ],
@@ -410,10 +431,13 @@ class _AsignarProyectosCarreraScreenState
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1E3A5F),
+              backgroundColor:
+                  _modoEdicion ? Colors.green[700] : const Color(0xFF1E3A5F),
             ),
-            child: const Text('Asignar',
-                style: TextStyle(color: Colors.white)),
+            child: Text(
+              _modoEdicion ? 'Guardar' : 'Asignar',
+              style: const TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -475,6 +499,7 @@ class _AsignarProyectosCarreraScreenState
         if (actualizados > 0) partes.add('$actualizados actualizado(s)');
         if (eliminados > 0) partes.add('$eliminados eliminado(s)');
         _showSnackBar(partes.isEmpty ? 'Sin cambios' : partes.join(' + '));
+        setState(() => _modoEdicion = false);
         await _cargarProyectosConRubrica(_rubricaSeleccionada!);
       }
     } catch (e) {
@@ -508,7 +533,8 @@ class _AsignarProyectosCarreraScreenState
         ),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -550,7 +576,6 @@ class _AsignarProyectosCarreraScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Tarjeta de contexto de sesión
                   _buildContextCard(),
                   const SizedBox(height: 20),
 
@@ -615,8 +640,8 @@ class _AsignarProyectosCarreraScreenState
                 ),
                 const SizedBox(height: 3),
                 Text(_facultad ?? '—',
-                    style:
-                        const TextStyle(color: Colors.white70, fontSize: 12)),
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 12)),
                 const SizedBox(height: 2),
                 Row(
                   children: [
@@ -640,7 +665,8 @@ class _AsignarProyectosCarreraScreenState
               border: Border.all(color: Colors.white30),
             ),
             child: const Text('Tu carrera',
-                style: TextStyle(color: Colors.white70, fontSize: 11)),
+                style:
+                    TextStyle(color: Colors.white70, fontSize: 11)),
           ),
         ],
       ),
@@ -711,7 +737,8 @@ class _AsignarProyectosCarreraScreenState
               decoration: BoxDecoration(
                 color: Colors.green.shade50,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.green.shade200, width: 2),
+                border:
+                    Border.all(color: Colors.green.shade200, width: 2),
               ),
               child: Row(
                 children: [
@@ -807,22 +834,27 @@ class _AsignarProyectosCarreraScreenState
                   itemBuilder: (context, index) {
                     final categoria =
                         _proyectosPorCategoria.keys.elementAt(index);
-                    final proyectos = _proyectosPorCategoria[categoria]!;
-                    return _buildCategoryCard(categoria, proyectos, index);
+                    final proyectos =
+                        _proyectosPorCategoria[categoria]!;
+                    return _buildCategoryCard(
+                        categoria, proyectos, index);
                   },
                 ),
     );
   }
 
   Widget _buildCategoryCard(
-      String categoria, List<Map<String, dynamic>> proyectos, int index) {
+      String categoria,
+      List<Map<String, dynamic>> proyectos,
+      int index) {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-            color: _getColorForCategory(index).withOpacity(0.3), width: 2),
+            color: _getColorForCategory(index).withOpacity(0.3),
+            width: 2),
       ),
       child: Theme(
         data:
@@ -853,7 +885,8 @@ class _AsignarProyectosCarreraScreenState
                   fontSize: 15,
                   color: Color(0xFF2C3E50))),
           subtitle: Text('${proyectos.length} proyecto(s)',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+              style:
+                  TextStyle(fontSize: 12, color: Colors.grey[600])),
           children: proyectos.map(_buildProyectoItem).toList(),
         ),
       ),
@@ -865,24 +898,37 @@ class _AsignarProyectosCarreraScreenState
     final yaAsignado = proyecto['yaAsignado'] as bool;
     final isSelected = _proyectosSeleccionados.contains(codigo);
 
+    // En modo lectura (no edición y ya hay asignados), los checkboxes
+    // solo son interactuables si no hay asignaciones previas o si estamos
+    // en modo edición.
+    final tieneAsignados =
+        _proyectosDisponibles.any((p) => p['yaAsignado'] == true);
+    final interactivo = _modoEdicion || !tieneAsignados;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8, left: 8, right: 8),
       color: yaAsignado
-          ? Colors.amber.shade50
+          ? (_modoEdicion
+              ? (isSelected
+                  ? Colors.green.shade50
+                  : Colors.red.shade50)
+              : Colors.amber.shade50)
           : isSelected
               ? Colors.blue.shade50
               : const Color(0xFFF8F9FA),
       child: CheckboxListTile(
         value: isSelected,
-        onChanged: (val) {
-          setState(() {
-            if (val == true) {
-              _proyectosSeleccionados.add(codigo);
-            } else {
-              _proyectosSeleccionados.remove(codigo);
-            }
-          });
-        },
+        onChanged: interactivo
+            ? (val) {
+                setState(() {
+                  if (val == true) {
+                    _proyectosSeleccionados.add(codigo);
+                  } else {
+                    _proyectosSeleccionados.remove(codigo);
+                  }
+                });
+              }
+            : null, // deshabilitado fuera de modo edición
         title: Row(
           children: [
             Expanded(
@@ -892,13 +938,17 @@ class _AsignarProyectosCarreraScreenState
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                     color: yaAsignado
-                        ? Colors.amber[900]
+                        ? (_modoEdicion
+                            ? (isSelected
+                                ? Colors.green[900]
+                                : Colors.red[900])
+                            : Colors.amber[900])
                         : const Color(0xFF2C3E50)),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (yaAsignado)
+            if (yaAsignado && !_modoEdicion)
               Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 6, vertical: 3),
@@ -912,6 +962,24 @@ class _AsignarProyectosCarreraScreenState
                         color: Colors.white,
                         fontWeight: FontWeight.bold)),
               ),
+            if (yaAsignado && _modoEdicion)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Colors.green
+                      : Colors.red.shade400,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  isSelected ? 'Mantener' : 'Quitar',
+                  style: const TextStyle(
+                      fontSize: 9,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold),
+                ),
+              ),
           ],
         ),
         subtitle: Padding(
@@ -921,7 +989,8 @@ class _AsignarProyectosCarreraScreenState
               Icon(Icons.qr_code, size: 11, color: Colors.grey[600]),
               const SizedBox(width: 4),
               Text(codigo,
-                  style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.grey[700])),
             ],
           ),
         ),
@@ -932,35 +1001,140 @@ class _AsignarProyectosCarreraScreenState
   }
 
   Widget _buildBotonAsignar() {
-    return SizedBox(
-      height: 52,
-      child: ElevatedButton.icon(
-        onPressed: _isAsignando || _proyectosSeleccionados.isEmpty
-            ? null
-            : _asignarProyectos,
-        icon: _isAsignando
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white))
-            : const Icon(Icons.check_circle),
-        label: Text(
-          _isAsignando
-              ? 'Asignando...'
-              : 'Asignar ${_proyectosSeleccionados.length} Proyecto(s)',
-          style: const TextStyle(
-              fontSize: 15, fontWeight: FontWeight.bold),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF1E3A5F),
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: Colors.grey[300],
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14)),
-          elevation: _proyectosSeleccionados.isNotEmpty ? 4 : 0,
-        ),
-      ),
+    final tieneAsignados =
+        _proyectosDisponibles.any((p) => p['yaAsignado'] == true);
+
+    return Column(
+      children: [
+        // ── Botón Editar: solo cuando hay asignados y NO estamos en edición ──
+        if (tieneAsignados && !_modoEdicion)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: SizedBox(
+              height: 52,
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  setState(() => _modoEdicion = true);
+                  _showSnackBar(
+                    'Modo edición activo. Modifica los proyectos y guarda.',
+                    isWarning: true,
+                  );
+                },
+                icon: const Icon(Icons.edit, color: Color(0xFF1E3A5F)),
+                label: const Text(
+                  'Editar proyectos asignados',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3A5F),
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(
+                      color: Color(0xFF1E3A5F), width: 2),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ),
+          ),
+
+        // ── Banner modo edición activo ────────────────────────────────────
+        if (_modoEdicion)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border:
+                  Border.all(color: Colors.amber.shade300, width: 1.5),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.edit_note,
+                    color: Colors.amber[800], size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Modo edición: marca o desmarca proyectos y guarda los cambios.',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.amber[900],
+                        fontWeight: FontWeight.w500),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    // Cancelar: restaura selección original
+                    setState(() {
+                      _modoEdicion = false;
+                      _proyectosSeleccionados.clear();
+                      for (var p in _proyectosDisponibles) {
+                        if (p['yaAsignado'] == true) {
+                          _proyectosSeleccionados
+                              .add(p['codigo'] as String);
+                        }
+                      }
+                    });
+                  },
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text('Cancelar',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.red[700],
+                          fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+
+        // ── Botón Guardar/Asignar ─────────────────────────────────────────
+        if (_modoEdicion || !tieneAsignados)
+          SizedBox(
+            height: 52,
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isAsignando || _proyectosSeleccionados.isEmpty
+                  ? null
+                  : () async {
+                      await _asignarProyectos();
+                    },
+              icon: _isAsignando
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : Icon(_modoEdicion ? Icons.save : Icons.check_circle),
+              label: Text(
+                _isAsignando
+                    ? 'Guardando...'
+                    : _modoEdicion
+                        ? 'Guardar cambios'
+                        : 'Asignar ${_proyectosSeleccionados.length} Proyecto(s)',
+                style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _modoEdicion
+                    ? Colors.green[700]
+                    : const Color(0xFF1E3A5F),
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey[300],
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                elevation: _proyectosSeleccionados.isNotEmpty ? 4 : 0,
+              ),
+            ),
+          ),
+      ],
     );
   }
 

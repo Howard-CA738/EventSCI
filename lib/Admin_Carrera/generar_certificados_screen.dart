@@ -31,8 +31,7 @@ String _fechaActual(String ciudad) {
     '', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
   ];
-  final ciudad_ = ciudad.trim().isEmpty ? 'Juliaca' : ciudad.trim();
-  return '$ciudad_, ${now.day} de ${meses[now.month]} de ${now.year}';
+  return '${now.day} de ${meses[now.month]} de ${now.year}';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -177,7 +176,88 @@ class _GenerarCertificadosScreenState
     }
     if (mounted) setState(() => _isLoading = false);
   }
+Future<void> _eliminarCertificados() async {
+  final seleccionados = _estudiantes.where((e) => e.seleccionado).toList();
+  if (seleccionados.isEmpty) {
+    _snack('Selecciona al menos un estudiante');
+    return;
+  }
 
+  final confirmar = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Row(
+        children: [
+          Icon(Icons.delete_forever, color: Colors.red, size: 26),
+          SizedBox(width: 10),
+          Text('Eliminar certificados',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red)),
+        ],
+      ),
+      content: Text(
+        'Se eliminarán TODOS los certificados enviados de '
+        '${seleccionados.length} estudiante(s). Esta acción no se puede deshacer.',
+        style: const TextStyle(fontSize: 14, color: _kTextoGris),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancelar',
+              style: TextStyle(color: _kTextoGris)),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+          ),
+          child: const Text('Eliminar'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmar != true) return;
+
+  setState(() => _enviando = true);
+
+  try {
+    final docKey = '${_filial}_$_carrera';
+    int eliminados = 0;
+
+    for (final est in seleccionados) {
+      if (_cancelarEnvio) break;
+
+      final colRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(docKey)
+          .collection('students')
+          .doc(est.id)
+          .collection('certificados');
+
+      final snap = await colRef.get();
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in snap.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+      eliminados++;
+    }
+
+    if (mounted) _snack('🗑️ Certificados eliminados de $eliminados estudiante(s)');
+  } catch (e) {
+    if (mounted) _snack('Error al eliminar: $e');
+  }
+
+  if (mounted) setState(() => _enviando = false);
+}
   Future<void> _cargarEstudiantes() async {
     try {
       final docKey = '${_filial}_$_carrera';
@@ -413,13 +493,14 @@ class _GenerarCertificadosScreenState
         final batch = FirebaseFirestore.instance.batch();
 
         for (final est in lote) {
-          final ref = FirebaseFirestore.instance
-              .collection('users')
-              .doc(docKey)
-              .collection('students')
-              .doc(est.id)
-              .collection('certificados')
-              .doc();
+          // DESPUÉS
+final ref = FirebaseFirestore.instance
+    .collection('users')
+    .doc(docKey)
+    .collection('students')
+    .doc(est.id)
+    .collection('certificados')
+    .doc(datos['rol']); // ← ID fijo por rol: "ASISTENTE", "PONENTE", etc.
 
           batch.set(ref, {
             ...datos,
@@ -438,11 +519,12 @@ class _GenerarCertificadosScreenState
 
       if (!mounted) return;
 
-      if (errores == 0) {
-        _snack('✅ ${seleccionados.length} certificado(s) enviados correctamente');
-      } else {
-        _snack('⚠️ $_enviados enviados, $errores con error');
-      }
+      // DESPUÉS
+if (errores == 0) {
+  _snack('✅ ${seleccionados.length} certificado(s) enviados/actualizados correctamente');
+} else {
+  _snack('⚠️ $_enviados enviados/actualizados, $errores con error');
+}
     } catch (e) {
       if (mounted) _snack('Error al enviar certificados: $e');
     }
@@ -1139,7 +1221,35 @@ class _GenerarCertificadosScreenState
                   ),
           ),
         ),
+const SizedBox(height: 12),
 
+SizedBox(
+  width: double.infinity,
+  height: 56,
+  child: OutlinedButton(
+    onPressed: (ocupado || count == 0) ? null : _eliminarCertificados,
+    style: OutlinedButton.styleFrom(
+      foregroundColor: Colors.red,
+      disabledForegroundColor: Colors.red.shade200,
+      side: BorderSide(
+        color: count == 0 ? Colors.red.shade200 : Colors.red,
+        width: 2,
+      ),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16)),
+    ),
+    child: const Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.delete_forever, size: 20),
+        SizedBox(width: 10),
+        Text('Eliminar certificados enviados',
+            style: TextStyle(
+                fontSize: 14, fontWeight: FontWeight.bold)),
+      ],
+    ),
+  ),
+),
         if (count > 0) ...[
           const SizedBox(height: 8),
           Text(

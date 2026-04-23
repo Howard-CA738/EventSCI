@@ -39,45 +39,75 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    try {
-      final adminData = await PrefsHelper.getAdminCarreraData();
-      if (adminData == null) return;
-
-      final filial = adminData['filial'] ?? '';
-      final carrera = adminData['carrera'] ?? '';
-      _carreraPath = '${filial}_$carrera';
-
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(_carreraPath)
-          .collection('students')
-          .orderBy('nombre')
-          .get();
-
-      final lista = snap.docs.map((doc) {
-        final data = doc.data();
-        return {
-          'docId': doc.id,
-          'nombre': data['nombre'] ?? data['name'] ?? data['usuario'] ?? 'Sin nombre',
-          'usuario': data['usuario'] ?? data['username'] ?? '',
-          'sessionActive': data['sessionActive'] ?? false,
-          'sessionToken': data['sessionToken'] ?? '',
-          'lastLogin': data['lastLogin'],
-          'primeraVez': data['primeraVez'] ?? true,
-        };
-      }).toList();
-
-      setState(() {
-        _estudiantes = lista;
-        _aplicarFiltro();
-      });
-      _animController.forward();
-    } catch (e) {
-      debugPrint('Error cargando sesiones: $e');
+  setState(() => _isLoading = true);
+  try {
+    final adminData = await PrefsHelper.getAdminCarreraData();
+    if (adminData == null) {
+      debugPrint('❌ adminData es NULL');
+      setState(() => _isLoading = false);
+      return;
     }
-    setState(() => _isLoading = false);
+
+    // ✅ Usar filialNombre (ej: "Campus Juliaca", "Campus Lima")
+    // que es exactamente lo que se guarda en Firestore al crear el admin
+    final filialNombre = adminData['filialNombre'] ?? adminData['filial'] ?? '';
+    final carrera = adminData['carrera'] ?? '';
+
+    debugPrint('filialNombre: "$filialNombre"');
+    debugPrint('carrera: "$carrera"');
+
+    // Buscar el documento en users que coincida con filialNombre y carrera
+    final usersSnap = await FirebaseFirestore.instance
+        .collection('users')
+        .where('filial', isEqualTo: filialNombre)
+        .where('carrera', isEqualTo: carrera)
+        .limit(1)
+        .get();
+
+    if (usersSnap.docs.isEmpty) {
+      debugPrint('❌ No se encontró ningún documento en users para filial: $filialNombre, carrera: $carrera');
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    _carreraPath = usersSnap.docs.first.id;
+    debugPrint('✅ carreraPath encontrado: $_carreraPath');
+
+    final snap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(_carreraPath)
+        .collection('students')
+        .get();
+
+    debugPrint('📦 Documentos encontrados: ${snap.docs.length}');
+
+    final lista = snap.docs.map((doc) {
+  final data = doc.data();
+  return {
+    'docId': doc.id,
+    'nombre': data['name'] ?? data['nombre'] ?? data['usuario'] ?? 'Sin nombre',
+    'usuario': data['username'] ?? data['usuario'] ?? '',
+    'sessionActive': data['sessionActive'] ?? false,
+    'sessionToken': data['sessionToken'] ?? '',
+    'lastLogin': data['lastLogin'],
+    'primeraVez': data['primeraVez'] ?? true,
+    'deviceId': data['deviceId'] ?? '',  // ✅ NUEVO
+  };
+}).toList();
+
+    lista.sort((a, b) => a['nombre'].toString().compareTo(b['nombre'].toString()));
+
+    setState(() {
+      _estudiantes = lista;
+      _aplicarFiltro();
+    });
+    _animController.forward();
+
+  } catch (e) {
+    debugPrint('❌ Error cargando sesiones: $e');
   }
+  setState(() => _isLoading = false);
+}
 
   // ✅ CORREGIDO: lógica limpia sin casos duplicados
   void _aplicarFiltro() {
@@ -101,43 +131,55 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
     });
   }
 
-  /// Resetea la sesión del estudiante → puede volver a ingresar UNA VEZ más
   Future<void> _resetearSesion(Map<String, dynamic> estudiante) async {
-    final confirm = await _showConfirmDialog(
-      titulo: '¿Dar nueva oportunidad?',
-      mensaje:
-          'Se reseteará la sesión de ${estudiante['nombre']}.\n\nPodrá ingresar UNA VEZ más y recibirá nuevamente la advertencia de no cerrar sesión.',
-      botonConfirmar: 'Sí, resetear',
-      colorBoton: const Color(0xFF0EA5E9),
-      icono: Icons.refresh_rounded,
-    );
+  final confirm = await _showConfirmDialog(
+    titulo: '¿Dar nueva oportunidad?',
+    mensaje:
+        'Se reseteará la sesión de ${estudiante['nombre']}.\n\n'
+        'Podrá ingresar UNA VEZ más desde cualquier dispositivo.',
+    botonConfirmar: 'Sí, resetear',
+    colorBoton: const Color(0xFF0EA5E9),
+    icono: Icons.refresh_rounded,
+  );
 
-    if (confirm != true) return;
+  if (confirm != true) return;
 
-    try {
+  try {
+    // Resetear sesión del estudiante
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(_carreraPath)
+        .collection('students')
+        .doc(estudiante['docId'])
+        .update({
+      'sessionActive': false,
+      'sessionToken': null,
+      'primeraVez': true,
+      'lastLogin': null,
+      'deviceId': null,
+      'sessionResetAt': FieldValue.serverTimestamp(),
+    });
+
+    // ✅ NUEVO: Desbloquear el dispositivo vinculado
+    final deviceId = estudiante['deviceId'] as String?;
+    if (deviceId != null && deviceId.isNotEmpty) {
       await FirebaseFirestore.instance
-          .collection('users')
-          .doc(_carreraPath)
-          .collection('students')
-          .doc(estudiante['docId'])
-          .update({
-        'sessionActive': false,
-        'sessionToken': null,
-        'primeraVez': true,
-        'lastLogin': null,
-        'sessionResetAt': FieldValue.serverTimestamp(),
-      });
-
-      if (mounted) {
-        _showSnack(
-            '✅ Sesión reseteada. ${estudiante['nombre']} puede ingresar de nuevo.',
-            Colors.green);
-        await _loadData();
-      }
-    } catch (e) {
-      _showSnack('Error al resetear: $e', Colors.red);
+          .collection('blocked_devices')
+          .doc(deviceId)
+          .delete(); // Eliminar completamente el registro
     }
+
+    if (mounted) {
+      _showSnack(
+        '✅ Sesión reseteada. ${estudiante['nombre']} puede ingresar de nuevo.',
+        Colors.green,
+      );
+      await _loadData();
+    }
+  } catch (e) {
+    _showSnack('Error al resetear: $e', Colors.red);
   }
+}
 
   /// Bloquea manualmente al estudiante
   Future<void> _bloquearSesion(Map<String, dynamic> estudiante) async {

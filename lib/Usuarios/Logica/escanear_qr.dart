@@ -24,7 +24,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
   bool _hasScanned = false;
   bool _isFlashOn = false;
 
-  // ── ZOOM ─────────────────────────────────────────────────────────
   double _currentZoom = 0.0;
 
   DateTime? _ultimoEscaneo;
@@ -38,8 +37,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
   late Animation<double> _scanLineAnimation;
   late Animation<double> _pulseAnimation;
 
-  // ── Info académica del estudiante para mostrar en UI ─────────────
-  String? _studentSede;
+  String? _studentFilial;
   String? _studentFacultad;
   String? _studentCarrera;
 
@@ -98,15 +96,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         _currentUsername = userData?['username'];
         _cachedUserData = userData;
 
-        // ── Extraer datos académicos para UI y validación ──────────
         if (userData != null) {
-          final sede = userData['sede']?.toString() ?? '';
-          final filial = userData['filial']?.toString() ?? '';
-          _studentSede = sede.isNotEmpty
-              ? sede
-              : filial.isNotEmpty
-              ? filial
-              : null;
+          _studentFilial = userData['filial']?.toString();
           _studentFacultad = userData['facultad']?.toString();
           _studentCarrera = userData['carrera']?.toString();
         }
@@ -117,35 +108,18 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // ✅ HELPERS DE NORMALIZACIÓN
+  // HELPERS DE NORMALIZACIÓN
   // ═══════════════════════════════════════════════════════════════
 
-  /// Normaliza un string: minúsculas, sin tildes, sin espacios extremos.
   String _normalizar(String? valor) {
     if (valor == null) return '';
     const Map<String, String> tildes = {
-      'á': 'a',
-      'à': 'a',
-      'ä': 'a',
-      'â': 'a',
-      'é': 'e',
-      'è': 'e',
-      'ë': 'e',
-      'ê': 'e',
-      'í': 'i',
-      'ì': 'i',
-      'ï': 'i',
-      'î': 'i',
-      'ó': 'o',
-      'ò': 'o',
-      'ö': 'o',
-      'ô': 'o',
-      'ú': 'u',
-      'ù': 'u',
-      'ü': 'u',
-      'û': 'u',
-      'ñ': 'n',
-      'ç': 'c',
+      'á': 'a', 'à': 'a', 'ä': 'a', 'â': 'a',
+      'é': 'e', 'è': 'e', 'ë': 'e', 'ê': 'e',
+      'í': 'i', 'ì': 'i', 'ï': 'i', 'î': 'i',
+      'ó': 'o', 'ò': 'o', 'ö': 'o', 'ô': 'o',
+      'ú': 'u', 'ù': 'u', 'ü': 'u', 'û': 'u',
+      'ñ': 'n', 'ç': 'c',
     };
     String result = valor.trim().toLowerCase();
     tildes.forEach((tilde, reemplazo) {
@@ -154,16 +128,10 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
     return result;
   }
 
-  /// Quita prefijos comunes de carrera antes de comparar.
   String _normalizarCarrera(String? valor) {
     return _normalizar(valor).replaceAll(RegExp(r'^ep\s*'), '');
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ VALIDACIÓN DE FILIAL / SEDE
-  // ═══════════════════════════════════════════════════════════════
-
-  /// Retorna true si el evento es para TODA la UPeU (sin restricción de sede).
   bool _esEventoUniversitario(Map<String, dynamic> qrInfo) {
     final f = _normalizar(qrInfo['facultad']);
     final c = _normalizar(qrInfo['carrera']);
@@ -172,23 +140,20 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         c == 'general';
   }
 
-  /// Retorna true si el evento es para TODA una sede (sin restricción de carrera).
   bool _esEventoDeSede(Map<String, dynamic> qrInfo) {
     final c = _normalizar(qrInfo['carrera']);
     return c == 'general';
   }
 
-  /// Compara la sede del QR con la sede del estudiante.
-  /// Si el QR no trae sede, se omite la validación de sede.
-  bool _sedeCoincide(Map<String, dynamic> qrInfo) {
-    final qrSede = _normalizar(qrInfo['sede']);
-    if (qrSede.isEmpty) return true; // QRs sin sede = sin restricción de sede
-    final studentSede = _normalizar(_studentSede);
-    return studentSede.isEmpty || studentSede == qrSede;
+  bool _filialCoincide(Map<String, dynamic> qrInfo) {
+    final qrFilial = _normalizar(qrInfo['filialNombre']);
+    if (qrFilial.isEmpty) return true;
+    final studentFilial = _normalizar(_studentFilial);
+    return studentFilial.isEmpty || studentFilial == qrFilial;
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // ✅ PROCESAR QR
+  // PROCESAR QR — ENTRADA PRINCIPAL
   // ═══════════════════════════════════════════════════════════════
   Future<void> _procesarQR(String qrData) async {
     if (_isProcessing || _hasScanned) return;
@@ -235,7 +200,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         return;
       }
 
-      // ── Validar campos obligatorios ──────────────────────────────
+      // ── Validar qrId ─────────────────────────────────────────────
       final qrId = qrInfo['qrId'];
       if (qrId == null || qrId.toString().isEmpty) {
         _showResult(
@@ -245,27 +210,20 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         return;
       }
 
-      const requiredFields = [
-        'eventId',
-        'eventName',
-        'facultad',
-        'carrera',
-        'categoria',
-      ];
-      for (final field in requiredFields) {
-        if (qrInfo[field] == null || qrInfo[field].toString().trim().isEmpty) {
-          _showResult(
-            success: false,
-            message: 'QR incompleto: Falta el campo "$field"',
-          );
-          return;
-        }
+      // ── Verificar estado del QR en Firestore ─────────────────────
+      // (esto se hace ANTES de bifurcar, aplica a ambos tipos)
+      final eventId = qrInfo['eventId']?.toString();
+      if (eventId == null || eventId.isEmpty) {
+        _showResult(
+          success: false,
+          message: 'QR incompleto: Falta el campo "eventId"',
+        );
+        return;
       }
 
-      // ── Verificar estado del QR en Firestore ─────────────────────
       final qrDoc = await _firestore
           .collection('events')
-          .doc(qrInfo['eventId'])
+          .doc(eventId)
           .collection('qr_codes')
           .doc(qrId)
           .get();
@@ -306,35 +264,65 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
       }
 
       // ══════════════════════════════════════════════════════════════
-      // ✅ VALIDACIÓN DE FILIAL / SEDE
+      // BIFURCACIÓN POR TIPO DE QR
+      // Lee 'type' desde Firestore (fuente confiable) y del payload
       // ══════════════════════════════════════════════════════════════
+      final qrType =
+          (qrDocData['type'] ?? qrInfo['type'] ?? '').toString();
+
+      if (qrType == 'asistencia_personal') {
+        await _procesarQRAsistenciaPersonal(qrInfo, qrDocData);
+        return;
+      }
+
+      // ── Flujo normal: asistencia por proyecto/categoría ──────────
+      const requiredFields = [
+        'eventId',
+        'eventName',
+        'facultad',
+        'carrera',
+        'categoria',
+      ];
+      for (final field in requiredFields) {
+        if (qrInfo[field] == null ||
+            qrInfo[field].toString().trim().isEmpty) {
+          _showResult(
+            success: false,
+            message: 'QR incompleto: Falta el campo "$field"',
+          );
+          return;
+        }
+      }
+
+      // ── Validación de filial / facultad / carrera ────────────────
       final esUniversitario = _esEventoUniversitario(qrInfo);
 
       if (!esUniversitario) {
-        // ── Validar sede ──────────────────────────────────────────
-        if (!_sedeCoincide(qrInfo)) {
-          final qrSede = qrInfo['sede']?.toString() ?? 'Sin sede';
+        if (!_filialCoincide(qrInfo)) {
+          final qrFilial =
+              qrInfo['filialNombre']?.toString() ?? 'Sin filial';
           _showResult(
             success: false,
             message:
-                '🏛️ Este evento es de otra filial/sede.\n\n'
+                '🏛️ Este evento es de otra filial.\n\n'
                 '📌 EVENTO:\n'
-                'Sede: "$qrSede"\n\n'
-                '👤 TU SEDE:\n'
-                '"${_studentSede ?? 'No registrada'}"',
+                'Filial: "$qrFilial"\n\n'
+                '👤 TU FILIAL:\n'
+                '"${_studentFilial ?? 'No registrada'}"',
           );
           return;
         }
 
-        // ── Validar facultad y carrera ────────────────────────────
         final userFacultad = _normalizar(_cachedUserData!['facultad']);
-        final userCarrera = _normalizarCarrera(_cachedUserData!['carrera']);
+        final userCarrera =
+            _normalizarCarrera(_cachedUserData!['carrera']);
         final eventFacultad = _normalizar(qrInfo['facultad']);
         final eventCarrera = _normalizarCarrera(qrInfo['carrera']);
         final esDeSede = _esEventoDeSede(qrInfo);
 
         if (!esDeSede) {
-          if (userFacultad != eventFacultad || userCarrera != eventCarrera) {
+          if (userFacultad != eventFacultad ||
+              userCarrera != eventCarrera) {
             _showResult(
               success: false,
               message:
@@ -352,14 +340,17 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
       }
 
       // ── Extraer datos del proyecto ───────────────────────────────
-      final codigoProyecto = qrInfo['codigoProyecto']?.toString().trim();
-      final tituloProyecto = qrInfo['tituloProyecto']?.toString().trim();
+      final codigoProyecto =
+          qrInfo['codigoProyecto']?.toString().trim();
+      final tituloProyecto =
+          qrInfo['tituloProyecto']?.toString().trim();
       final grupo = qrInfo['grupo']?.toString().trim();
 
       final parts = _currentUserId!.split('/');
       final studentId = parts[1];
 
-      final scanId = '${qrInfo['eventId']}_${studentId}_$codigoProyecto';
+      final scanId =
+          '${qrInfo['eventId']}_${studentId}_$codigoProyecto';
 
       // ── Verificar duplicado ──────────────────────────────────────
       final existingDoc = await _firestore
@@ -401,7 +392,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
           : tituloProyecto!;
       final grupoFinal = _esBlancoONulo(grupo) ? null : grupo;
 
-      // ── Guardar asistencia ───────────────────────────────────────
+      // ── Guardar asistencia de proyecto ───────────────────────────
       _escaneosDeSesion++;
       final debeActualizarResumen =
           (_escaneosDeSesion % _intervaloActualizacionResumen == 0) ||
@@ -442,8 +433,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
           'studentCodigo': _cachedUserData!['codigoUniversitario'],
           'facultad': _cachedUserData!['facultad'],
           'carrera': _cachedUserData!['carrera'],
-          // ✅ incluir sede/filial en el resumen de asistencia
-          'sede': _studentSede ?? '',
+          'filial': _studentFilial ?? '',
           'ciclo': _cachedUserData!['ciclo'],
           'grupo': _cachedUserData!['grupo'],
           'eventId': qrInfo['eventId'],
@@ -461,11 +451,184 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         eventName: qrInfo['eventName'],
         categoria: qrInfo['categoria'],
         codigoProyecto: codigoFinal,
-        sede: qrInfo['sede']?.toString(),
+        filial: qrInfo['filialNombre']?.toString(),
       );
     } catch (e) {
       debugPrint('Error procesando asistencia: $e');
-      _showResult(success: false, message: 'Error al procesar asistencia: $e');
+      _showResult(
+          success: false,
+          message: 'Error al procesar asistencia: $e');
+    } finally {
+      setState(() => _isProcessing = false);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // PROCESAR QR — ASISTENCIA PERSONAL (apertura, clausura, etc.)
+  // ═══════════════════════════════════════════════════════════════
+  Future<void> _procesarQRAsistenciaPersonal(
+    Map<String, dynamic> qrInfo,
+    Map<String, dynamic> qrDocData,
+  ) async {
+    try {
+      // ── Validar campos mínimos ───────────────────────────────────
+      for (final field in [
+        'eventId',
+        'eventName',
+        'facultad',
+        'carrera',
+        'asistenciaId',
+        'qrId',
+      ]) {
+        if (qrInfo[field] == null ||
+            qrInfo[field].toString().trim().isEmpty) {
+          _showResult(
+            success: false,
+            message:
+                'QR de asistencia personal incompleto: falta "$field"',
+          );
+          return;
+        }
+      }
+
+      // ── Validar filial ───────────────────────────────────────────
+      if (!_filialCoincide(qrInfo)) {
+        final qrFilial =
+            qrInfo['filialNombre']?.toString() ?? 'Sin filial';
+        _showResult(
+          success: false,
+          message:
+              '🏛️ Este evento es de otra filial.\n\n'
+              '📌 EVENTO:\n'
+              'Filial: "$qrFilial"\n\n'
+              '👤 TU FILIAL:\n'
+              '"${_studentFilial ?? 'No registrada'}"',
+        );
+        return;
+      }
+
+      // ── Validar facultad + carrera ───────────────────────────────
+      final userFacultad = _normalizar(_cachedUserData!['facultad']);
+      final userCarrera =
+          _normalizarCarrera(_cachedUserData!['carrera']);
+      final eventFacultad = _normalizar(qrInfo['facultad']);
+      final eventCarrera = _normalizarCarrera(qrInfo['carrera']);
+
+      if (userFacultad != eventFacultad ||
+          userCarrera != eventCarrera) {
+        _showResult(
+          success: false,
+          message:
+              '🚫 Este evento no corresponde a tu facultad/carrera.\n\n'
+              '📌 EVENTO:\n'
+              'Facultad: "${qrInfo['facultad']}"\n'
+              'Carrera: "${qrInfo['carrera']}"\n\n'
+              '👤 TU PERFIL:\n'
+              'Facultad: "${_cachedUserData!['facultad']}"\n'
+              'Carrera: "${_cachedUserData!['carrera']}"',
+        );
+        return;
+      }
+
+      // ── IDs ──────────────────────────────────────────────────────
+      final eventId = qrInfo['eventId'] as String;
+      final asistenciaId = qrInfo['asistenciaId'] as String;
+      final qrId = qrInfo['qrId'] as String;
+      final parts = _currentUserId!.split('/');
+      final studentId =
+          parts.length > 1 ? parts[1] : _currentUserId!;
+
+      // ── Verificar duplicado ──────────────────────────────────────
+      // Un estudiante solo puede registrarse una vez por asistencia personal
+      final existingDoc = await _firestore
+          .collection('events')
+          .doc(eventId)
+          .collection('asistencias_personales')
+          .doc(asistenciaId)
+          .collection('registros')
+          .doc(studentId)
+          .get();
+
+      if (existingDoc.exists) {
+        final existingData = existingDoc.data()!;
+        final registeredDate =
+            (existingData['timestamp'] as Timestamp?)
+                ?.toDate()
+                .toString()
+                .substring(0, 16) ??
+            'Fecha desconocida';
+        _showResult(
+          success: false,
+          message:
+              '⚠️ Ya registraste esta asistencia anteriormente\n\n'
+              '📋 ${qrInfo['nombre'] ?? 'Asistencia personal'}\n'
+              '📅 Registrado: $registeredDate',
+        );
+        return;
+      }
+
+      // ── Guardar en Firestore ─────────────────────────────────────
+      final batch = _firestore.batch();
+
+      // Registro individual del estudiante
+      final registroRef = _firestore
+          .collection('events')
+          .doc(eventId)
+          .collection('asistencias_personales')
+          .doc(asistenciaId)
+          .collection('registros')
+          .doc(studentId);
+
+      batch.set(registroRef, {
+        'studentId': studentId,
+        'studentName': _currentUserName,
+        'studentUsername': _cachedUserData!['username'],
+        'studentDNI': _cachedUserData!['dni'],
+        'studentCodigo': _cachedUserData!['codigoUniversitario'],
+        'facultad': _cachedUserData!['facultad'],
+        'carrera': _cachedUserData!['carrera'],
+        'filial': _studentFilial ?? '',
+        'ciclo': _cachedUserData!['ciclo'],
+        'grupo': _cachedUserData!['grupo'],
+        'eventId': eventId,
+        'eventName': qrInfo['eventName'],
+        'asistenciaId': asistenciaId,
+        'asistenciaNombre': qrInfo['nombre'] ?? '',
+        'asistenciaTipo': qrInfo['tipo'] ?? 'Asistencia Personal',
+        'qrId': qrId,
+        'type': 'asistencia_personal',
+        'timestamp': FieldValue.serverTimestamp(),
+        'registrationMethod': 'qr_scan',
+      });
+
+      // Actualiza contador del documento padre
+      final resumenRef = _firestore
+          .collection('events')
+          .doc(eventId)
+          .collection('asistencias_personales')
+          .doc(asistenciaId);
+
+      batch.set(resumenRef, {
+        'totalRegistros': FieldValue.increment(1),
+        'lastScan': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      await batch.commit();
+
+      _showResult(
+        success: true,
+        message: '¡Asistencia personal registrada!',
+        eventName: qrInfo['eventName'],
+        categoria: qrInfo['tipo'] ?? qrInfo['nombre'] ?? 'Asistencia Personal',
+        filial: qrInfo['filialNombre']?.toString(),
+        esPersonal: true,
+      );
+    } catch (e) {
+      debugPrint('Error en asistencia personal: $e');
+      _showResult(
+        success: false,
+        message: 'Error al procesar asistencia personal: $e',
+      );
     } finally {
       setState(() => _isProcessing = false);
     }
@@ -483,7 +646,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // ✅ DIÁLOGO DE RESULTADO
+  // DIÁLOGO DE RESULTADO
   // ═══════════════════════════════════════════════════════════════
   void _showResult({
     required bool success,
@@ -491,7 +654,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
     String? eventName,
     String? categoria,
     String? codigoProyecto,
-    String? sede,
+    String? filial,
+    bool esPersonal = false,
   }) {
     showDialog(
       context: context,
@@ -499,8 +663,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
       builder: (BuildContext context) {
         return Dialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+              borderRadius: BorderRadius.circular(20)),
           elevation: 5,
           child: Container(
             constraints: BoxConstraints(
@@ -522,7 +685,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // ── Icono animado ──────────────────────────────
                   TweenAnimationBuilder<double>(
                     duration: const Duration(milliseconds: 600),
                     tween: Tween<double>(begin: 0, end: 1),
@@ -537,7 +699,9 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: (success ? Colors.green : Colors.red)
+                                color: (success
+                                        ? Colors.green
+                                        : Colors.red)
                                     .withValues(alpha: 0.3),
                                 blurRadius: 20,
                                 spreadRadius: 5,
@@ -569,15 +733,12 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                     child: Text(
                       message,
                       style: const TextStyle(
-                        fontSize: 15,
-                        color: Color(0xFF64748B),
-                      ),
+                          fontSize: 15, color: Color(0xFF64748B)),
                       textAlign: TextAlign.center,
                       softWrap: true,
                     ),
                   ),
 
-                  // ── Detalle del evento (solo en éxito) ─────────
                   if (success && eventName != null) ...[
                     const SizedBox(height: 20),
                     Container(
@@ -585,7 +746,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.green.shade200),
+                        border:
+                            Border.all(color: Colors.green.shade200),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.grey.shade200,
@@ -597,20 +759,18 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Nombre del evento
                           Row(
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
                                   color: Colors.green.shade50,
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius:
+                                      BorderRadius.circular(8),
                                 ),
-                                child: Icon(
-                                  Icons.event_available,
-                                  color: Colors.green.shade600,
-                                  size: 20,
-                                ),
+                                child: Icon(Icons.event_available,
+                                    color: Colors.green.shade600,
+                                    size: 20),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -628,28 +788,66 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                             ],
                           ),
 
-                          // Sede del evento (si existe)
-                          if (sede != null && sede.isNotEmpty) ...[
+                          // Badge de tipo personal
+                          if (esPersonal) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.deepPurple.shade600,
+                                borderRadius:
+                                    BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                      Icons.how_to_reg_rounded,
+                                      color: Colors.white,
+                                      size: 14),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    'ASISTENCIA PERSONAL',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
+                          if (filial != null &&
+                              filial.isNotEmpty) ...[
                             const SizedBox(height: 10),
                             _buildResultRow(
                               icon: Icons.location_city,
                               iconColor: Colors.blue.shade600,
-                              label: 'Sede: $sede',
+                              label: 'Filial: $filial',
                             ),
                           ],
 
-                          // Categoría
                           if (categoria != null) ...[
                             const SizedBox(height: 10),
                             _buildResultRow(
-                              icon: Icons.category,
-                              iconColor: Colors.blue.shade600,
-                              label: 'Categoría: $categoria',
+                              icon: esPersonal
+                                  ? Icons.how_to_reg_rounded
+                                  : Icons.category,
+                              iconColor: esPersonal
+                                  ? Colors.deepPurple.shade600
+                                  : Colors.blue.shade600,
+                              label: esPersonal
+                                  ? 'Tipo: $categoria'
+                                  : 'Categoría: $categoria',
                             ),
                           ],
 
-                          // Código proyecto
-                          if (codigoProyecto != null &&
+                          if (!esPersonal &&
+                              codigoProyecto != null &&
                               codigoProyecto != 'Sin código') ...[
                             const SizedBox(height: 10),
                             _buildResultRow(
@@ -660,19 +858,17 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                             ),
                           ],
 
-                          // Info del estudiante
                           const SizedBox(height: 10),
                           Row(
                             children: [
-                              Icon(
-                                Icons.person,
-                                color: Colors.grey.shade600,
-                                size: 16,
-                              ),
+                              Icon(Icons.person,
+                                  color: Colors.grey.shade600,
+                                  size: 16),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       _currentUserName ?? '',
@@ -692,10 +888,9 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                       ),
-                                    // ✅ Mostrar sede del estudiante en el resultado
-                                    if (_studentSede != null)
+                                    if (_studentFilial != null)
                                       Text(
-                                        '🏛️ $_studentSede',
+                                        '🏛️ $_studentFilial',
                                         style: TextStyle(
                                           fontSize: 11,
                                           color: Colors.blue.shade700,
@@ -714,8 +909,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                   ],
 
                   const SizedBox(height: 24),
-
-                  // ── Botones ────────────────────────────────────
                   Row(
                     children: [
                       if (!success)
@@ -726,8 +919,10 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                               Navigator.of(context).pop();
                             },
                             style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              side: const BorderSide(color: Color(0xFF64748B)),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 14),
+                              side: const BorderSide(
+                                  color: Color(0xFF64748B)),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -749,7 +944,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                             if (success) {
                               Navigator.of(context).pushReplacement(
                                 MaterialPageRoute(
-                                  builder: (_) => const AsistenciasScreen(),
+                                  builder: (_) =>
+                                      const AsistenciasScreen(),
                                 ),
                               );
                             } else {
@@ -760,7 +956,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                             backgroundColor: success
                                 ? Colors.green
                                 : const Color(0xFF1E3A5F),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 14),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -802,8 +999,11 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
             label,
             style: TextStyle(
               fontSize: 13,
-              fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
-              color: bold ? const Color(0xFF1E3A5F) : const Color(0xFF64748B),
+              fontWeight:
+                  bold ? FontWeight.w600 : FontWeight.normal,
+              color: bold
+                  ? const Color(0xFF1E3A5F)
+                  : const Color(0xFF64748B),
             ),
             overflow: TextOverflow.ellipsis,
             maxLines: 2,
@@ -833,7 +1033,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         backgroundColor: isError ? Colors.red : Colors.green,
         duration: const Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -845,11 +1046,11 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
       body: SafeArea(
         child: _currentUserId == null
             ? const Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              )
+                child:
+                    CircularProgressIndicator(color: Colors.white))
             : Column(
                 children: [
-                  // ── Header ───────────────────────────────────────
+                  // ── Header ──────────────────────────────────────
                   Padding(
                     padding: const EdgeInsets.all(20.0),
                     child: Row(
@@ -860,12 +1061,10 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: IconButton(
-                            icon: const Icon(
-                              Icons.arrow_back_ios_new,
-                              color: Colors.white,
-                              size: 22,
-                            ),
-                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.arrow_back_ios_new,
+                                color: Colors.white, size: 22),
+                            onPressed: () =>
+                                Navigator.of(context).pop(),
                             tooltip: 'Regresar',
                           ),
                         ),
@@ -877,11 +1076,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(
-                            Icons.qr_code_scanner,
-                            color: Color(0xFF1E3A5F),
-                            size: 28,
-                          ),
+                          child: const Icon(Icons.qr_code_scanner,
+                              color: Color(0xFF1E3A5F), size: 28),
                         ),
                         const SizedBox(width: 16),
                         const Expanded(
@@ -901,8 +1097,10 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                               scale: _pulseAnimation.value,
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(12),
+                                  color: Colors.white
+                                      .withValues(alpha: 0.2),
+                                  borderRadius:
+                                      BorderRadius.circular(12),
                                 ),
                                 child: IconButton(
                                   icon: Icon(
@@ -935,16 +1133,18 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                       ),
                       child: Column(
                         children: [
-                          // ── Tarjeta de estudiante con sede ────────
+                          // ── Tarjeta del estudiante ────────────────
                           Container(
-                            margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                            margin: const EdgeInsets.fromLTRB(
+                                20, 20, 20, 0),
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.05),
+                                  color: Colors.black
+                                      .withValues(alpha: 0.05),
                                   blurRadius: 10,
                                   offset: const Offset(0, 4),
                                 ),
@@ -964,11 +1164,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                     ),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(
-                                    Icons.person,
-                                    color: Colors.white,
-                                    size: 28,
-                                  ),
+                                  child: const Icon(Icons.person,
+                                      color: Colors.white, size: 28),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
@@ -977,7 +1174,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        _currentUserName ?? 'Cargando...',
+                                        _currentUserName ??
+                                            'Cargando...',
                                         style: const TextStyle(
                                           fontSize: 15,
                                           fontWeight: FontWeight.bold,
@@ -993,25 +1191,26 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                             color: Color(0xFF64748B),
                                           ),
                                         ),
-                                      // ✅ Chips de sede + carrera
-                                      if (_studentSede != null ||
+                                      if (_studentFilial != null ||
                                           _studentCarrera != null)
                                         const SizedBox(height: 6),
                                       Wrap(
                                         spacing: 6,
                                         runSpacing: 4,
                                         children: [
-                                          if (_studentSede != null)
+                                          if (_studentFilial != null)
                                             _buildMiniChip(
                                               icon: Icons.location_city,
-                                              label: _studentSede!,
-                                              color: const Color(0xFF1565C0),
+                                              label: _studentFilial!,
+                                              color: const Color(
+                                                  0xFF1565C0),
                                             ),
                                           if (_studentCarrera != null)
                                             _buildMiniChip(
                                               icon: Icons.menu_book,
                                               label: _studentCarrera!,
-                                              color: const Color(0xFF00897B),
+                                              color: const Color(
+                                                  0xFF00897B),
                                             ),
                                         ],
                                       ),
@@ -1031,7 +1230,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                 borderRadius: BorderRadius.circular(20),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.3),
+                                    color: Colors.black
+                                        .withValues(alpha: 0.3),
                                     blurRadius: 15,
                                     offset: const Offset(0, 5),
                                   ),
@@ -1048,10 +1248,12 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                       onDetect: (capture) {
                                         for (final barcode
                                             in capture.barcodes) {
-                                          if (barcode.rawValue != null &&
+                                          if (barcode.rawValue !=
+                                                  null &&
                                               !_hasScanned &&
                                               !_isProcessing) {
-                                            _procesarQR(barcode.rawValue!);
+                                            _procesarQR(
+                                                barcode.rawValue!);
                                             break;
                                           }
                                         }
@@ -1059,37 +1261,34 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                     ),
                                   ),
 
-                                  // Indicador de zoom
                                   if (_currentZoom > 0.0)
                                     Positioned(
                                       top: 16,
                                       right: 16,
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
-                                        ),
+                                        padding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 8),
                                         decoration: BoxDecoration(
                                           color: Colors.black
                                               .withValues(alpha: 0.6),
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(20),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            const Icon(
-                                              Icons.zoom_in,
-                                              color: Colors.white,
-                                              size: 18,
-                                            ),
+                                            const Icon(Icons.zoom_in,
+                                                color: Colors.white,
+                                                size: 18),
                                             const SizedBox(width: 6),
                                             Text(
                                               '${(_currentZoom * 100).toInt()}%',
                                               style: const TextStyle(
                                                 color: Colors.white,
-                                                fontWeight: FontWeight.bold,
+                                                fontWeight:
+                                                    FontWeight.bold,
                                                 fontSize: 14,
                                               ),
                                             ),
@@ -1105,14 +1304,17 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                       height: 250,
                                       child: Stack(
                                         children: [
-                                          // Esquinas del marco
                                           ...List.generate(4, (index) {
                                             return Positioned(
                                               top: index < 2 ? 0 : null,
-                                              bottom: index >= 2 ? 0 : null,
-                                              left: index % 2 == 0 ? 0 : null,
-                                              right:
-                                                  index % 2 == 1 ? 0 : null,
+                                              bottom:
+                                                  index >= 2 ? 0 : null,
+                                              left: index % 2 == 0
+                                                  ? 0
+                                                  : null,
+                                              right: index % 2 == 1
+                                                  ? 0
+                                                  : null,
                                               child: Container(
                                                 width: 40,
                                                 height: 40,
@@ -1120,41 +1322,40 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                                   border: Border(
                                                     top: index < 2
                                                         ? const BorderSide(
-                                                            color: Colors.white,
-                                                            width: 4,
-                                                          )
+                                                            color: Colors
+                                                                .white,
+                                                            width: 4)
                                                         : BorderSide.none,
                                                     bottom: index >= 2
                                                         ? const BorderSide(
-                                                            color: Colors.white,
-                                                            width: 4,
-                                                          )
+                                                            color: Colors
+                                                                .white,
+                                                            width: 4)
                                                         : BorderSide.none,
                                                     left: index % 2 == 0
                                                         ? const BorderSide(
-                                                            color: Colors.white,
-                                                            width: 4,
-                                                          )
+                                                            color: Colors
+                                                                .white,
+                                                            width: 4)
                                                         : BorderSide.none,
                                                     right: index % 2 == 1
                                                         ? const BorderSide(
-                                                            color: Colors.white,
-                                                            width: 4,
-                                                          )
+                                                            color: Colors
+                                                                .white,
+                                                            width: 4)
                                                         : BorderSide.none,
                                                   ),
                                                 ),
                                               ),
                                             );
                                           }),
-
-                                          // Línea de escaneo
                                           AnimatedBuilder(
                                             animation: _scanLineAnimation,
                                             builder: (context, child) {
                                               return Positioned(
                                                 top: 250 *
-                                                    _scanLineAnimation.value,
+                                                    _scanLineAnimation
+                                                        .value,
                                                 left: 0,
                                                 right: 0,
                                                 child: Container(
@@ -1164,7 +1365,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                                         LinearGradient(
                                                       colors: [
                                                         Colors.transparent,
-                                                        Colors.green.shade400,
+                                                        Colors.green
+                                                            .shade400,
                                                         Colors.transparent,
                                                       ],
                                                     ),
@@ -1174,8 +1376,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                                             .green
                                                             .shade400
                                                             .withValues(
-                                                              alpha: 0.5,
-                                                            ),
+                                                                alpha:
+                                                                    0.5),
                                                         blurRadius: 8,
                                                         spreadRadius: 2,
                                                       ),
@@ -1190,7 +1392,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                     ),
                                   ),
 
-                                  // Overlay de procesando
                                   if (_isProcessing)
                                     Container(
                                       color: Colors.black87,
@@ -1202,7 +1403,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                             SizedBox(
                                               width: 60,
                                               height: 60,
-                                              child: CircularProgressIndicator(
+                                              child:
+                                                  CircularProgressIndicator(
                                                 color: Colors.white,
                                                 strokeWidth: 3,
                                               ),
@@ -1213,7 +1415,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                               style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 16,
-                                                fontWeight: FontWeight.w600,
+                                                fontWeight:
+                                                    FontWeight.w600,
                                               ),
                                             ),
                                           ],
@@ -1225,16 +1428,18 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                             ),
                           ),
 
-                          // ── Pie de instrucciones ──────────────────
+                          // ── Pie ───────────────────────────────────
                           Container(
-                            margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                            margin: const EdgeInsets.fromLTRB(
+                                20, 0, 20, 20),
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.05),
+                                  color: Colors.black
+                                      .withValues(alpha: 0.05),
                                   blurRadius: 10,
                                   offset: const Offset(0, 4),
                                 ),
@@ -1245,16 +1450,14 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: const Color(
-                                      0xFF1E3A5F,
-                                    ).withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(12),
+                                    color: const Color(0xFF1E3A5F)
+                                        .withValues(alpha: 0.1),
+                                    borderRadius:
+                                        BorderRadius.circular(12),
                                   ),
-                                  child: const Icon(
-                                    Icons.qr_code_2,
-                                    color: Color(0xFF1E3A5F),
-                                    size: 32,
-                                  ),
+                                  child: const Icon(Icons.qr_code_2,
+                                      color: Color(0xFF1E3A5F),
+                                      size: 32),
                                 ),
                                 const SizedBox(width: 16),
                                 const Expanded(

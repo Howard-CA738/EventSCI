@@ -13,6 +13,8 @@ import 'gestion_jurados_carrera_screen.dart';
 import 'gestion_pagos_screen.dart'; 
 import 'generar_certificados_screen.dart';
 import 'gestion_sesiones_screen.dart';
+import 'reportes_admin_carrera_screen.dart';
+import 'gestion_roles_screen.dart';
 
 
 class AdminCarreraScreen extends StatefulWidget {
@@ -116,11 +118,6 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
                               ),
-                            ),
-                            Text(
-                              _adminName,
-                              style: const TextStyle(
-                                  fontSize: 14, color: Colors.white70),
                             ),
                           ],
                         ),
@@ -283,7 +280,17 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                                 ),
                               ),
                             ),
-
+if (_tienePermiso('reportes'))
+  _buildMenuCard(
+    imagePath: 'assets/icons/reporte.png',
+    title: 'Reportes',
+    subtitle: 'Ver estadísticas y reportes',
+    onTap: () => Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const ReportesAdminCarreraScreen(), // ← nuevo
+      ),
+    ),
+  ),
                           // ── Gestión de Rúbricas ────────────────────────
                           if (_tienePermiso('proyectos'))
                             _buildMenuCard(
@@ -297,7 +304,16 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                                 ),
                               ),
                             ),
-
+_buildMenuCard(
+  imagePath: 'assets/icons/roles.png', // Usa cualquier ícono disponible
+  title: 'Gestión de\nRoles',
+  subtitle: 'Asignar roles a estudiantes',
+  onTap: () => Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => const GestionRolesScreen(),
+    ),
+  ),
+),
                           // ── Ver Evaluaciones ───────────────────────────
                           if (_tienePermiso('evaluaciones'))
                             _buildMenuCard(
@@ -381,32 +397,6 @@ _buildMenuCard(
                         ],
                       ),
                       const SizedBox(height: 24),
-
-                      // Nota informativa
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: Colors.blue.withOpacity(0.3)),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.info_outline,
-                                color: Colors.blue[700], size: 22),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                'Solo puedes gestionar datos de $_carrera. '
-                                'Todos los filtros se aplican automáticamente.',
-                                style: TextStyle(
-                                    color: Colors.blue[700], fontSize: 13),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),

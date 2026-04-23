@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
 import '/login.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'perfil.dart';
+import '/usuarios/interfaz/perfil_screen.dart';
 import 'escanear_qr.dart';
 import 'asistencias.dart';
+import '/usuarios/interfaz/ver_certificados_screen.dart';
+import 'asistente_qr.dart';
 
 class EstudianteScreen extends StatefulWidget {
   const EstudianteScreen({super.key});
@@ -18,7 +20,7 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
   String? _studentFilial;
   String? _studentCarrera;
   String? _studentFacultad;
-
+Stream<DocumentSnapshot>? _studentStream;
   // Contador para el diálogo de advertencia
   int _segundos = 5;
 
@@ -508,61 +510,181 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
       ],
     );
   }
+Stream<DocumentSnapshot> _buildStudentStream() {
+  // Reutiliza el stream si ya existe
+  if (_studentStream != null) return _studentStream!;
 
+  _studentStream = PrefsHelper.getCurrentUserData(forceRefresh: false)
+      .asStream()
+      .asyncExpand((userData) {
+    if (userData == null) return const Stream.empty();
+
+    final carreraPath = userData['carreraPath']?.toString() ?? '';
+    final docId = userData['docId']?.toString() ??
+                  userData['id']?.toString() ?? '';
+
+    if (carreraPath.isEmpty || docId.isEmpty) return const Stream.empty();
+
+    // ✅ Stream en tiempo real al documento del estudiante
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(carreraPath)
+        .collection('students')
+        .doc(docId)
+        .snapshots();
+  });
+
+  return _studentStream!;
+}
   Widget _buildContentArea() {
-    return Expanded(
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFFE8EDF2),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(30),
-            topRight: Radius.circular(30),
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: GridView.count(
-            crossAxisCount: 2,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 0.80,
-            children: [
-              _buildMenuCard(
-                imagePath: 'assets/icons/perfil.png',
-                title: 'Mi Perfil',
-                subtitle: 'Ver información personal',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (context) => const PerfilScreen()),
-                ),
-              ),
-              _buildMenuCard(
-                imagePath: 'assets/icons/escaner.png',
-                title: 'Escanear QR',
-                subtitle: 'Registrar asistencia',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (context) => const EscanearQRScreen()),
-                ),
-              ),
-              _buildMenuCard(
-                imagePath: 'assets/icons/mis-asistencias.png',
-                title: 'Mis Asistencias',
-                subtitle: 'Ver historial de asistencias',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (context) => AsistenciasScreen()),
-                ),
-              ),
-            ],
-          ),
+  return Expanded(
+    child: Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFE8EDF2),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(30),
+          topRight: Radius.circular(30),
         ),
       ),
-    );
-  }
+      child: StreamBuilder<DocumentSnapshot>(
+        stream: _buildStudentStream(), // ✅ Escucha en tiempo real
+        builder: (context, snapshot) {
+          bool esAsisteQR = false;
+
+          if (snapshot.hasData && snapshot.data!.exists) {
+            final data = snapshot.data!.data() as Map<String, dynamic>?;
+            esAsisteQR = data?['esAsisteQR'] == true;
+          }
+
+          return Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: GridView.count(
+              crossAxisCount: 2,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: 0.80,
+              children: [
+                _buildMenuCard(
+                  imagePath: 'assets/icons/perfil.png',
+                  title: 'Mi Perfil',
+                  subtitle: 'Ver información personal',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const PerfilScreen()),
+                  ),
+                ),
+                _buildMenuCard(
+                  imagePath: 'assets/icons/escaner.png',
+                  title: 'Escanear QR',
+                  subtitle: 'Registrar asistencia',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const EscanearQRScreen()),
+                  ),
+                ),
+                _buildMenuCard(
+                  imagePath: 'assets/icons/mis-asistencias.png',
+                  title: 'Mis Asistencias',
+                  subtitle: 'Ver historial de asistencias',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => AsistenciasScreen()),
+                  ),
+                ),
+                _buildMenuCard(
+                  imagePath: 'assets/icons/certificados.png',
+                  title: 'Mis Certificados',
+                  subtitle: 'Ver y descargar certificados',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const VerCertificadosScreen()),
+                  ),
+                ),
+
+                // ✅ Aparece automáticamente cuando el admin asigna el rol
+                if (esAsisteQR)
+                  _buildMenuCardDestacada(
+                    imagePath: 'assets/icons/escaner.png',
+                    title: 'Generar QR\nAsistencia',
+                    subtitle: 'Crear QR para eventos',
+                    onTap: () => Navigator.of(context).push(
+  MaterialPageRoute(builder: (_) => const AsistenteQRScreen()),
+),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    ),
+  );
+}
 
   // ── Widgets de apoyo ──────────────────────────────────────────────────────
-
+Widget _buildMenuCardDestacada({
+  required String imagePath,
+  required String title,
+  required String subtitle,
+  required VoidCallback onTap,
+}) {
+  return Card(
+    elevation: 3,
+    shadowColor: const Color(0xFF0D7377).withOpacity(0.4),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    color: const Color(0xFF0D7377),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 65,
+              height: 65,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              padding: const EdgeInsets.all(13),
+              child: Image.asset(
+                imagePath,
+                fit: BoxFit.contain,
+                color: Colors.white,
+                errorBuilder: (_, __, ___) => const Icon(
+                  Icons.qr_code_scanner,
+                  size: 32,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+                height: 1.2,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 10,
+                color: Colors.white70,
+                height: 1.2,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
   Widget _buildInfoChip({
     required IconData icon,
     required String label,

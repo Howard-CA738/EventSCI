@@ -407,11 +407,18 @@ class _CrearEventosCarreraScreenState
 
         // Filtrar solo los eventos de esta carrera
         final allDocs = snapshot.data?.docs ?? [];
-        final events = allDocs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          return data['carreraId'] == _carreraId ||
-              data['carreraNombre'] == _carreraNombre;
-        }).toList();
+        // Filtrar solo los eventos de esta carrera EN ESTA filial y facultad
+final events = allDocs.where((doc) {
+  final data = doc.data() as Map<String, dynamic>;
+  
+  // Debe coincidir filial + facultad + carrera
+  final mismaFilial = data['filialId'] == _filialId;
+  final mismaFacultad = data['facultad'] == _facultad;
+  final mismaCarrera = data['carreraId'] == _carreraId || 
+                       data['carreraNombre'] == _carreraNombre;
+  
+  return mismaFilial && mismaFacultad && mismaCarrera;
+}).toList();
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
