@@ -43,6 +43,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   int _tabSeleccionado = 0;
   // ── Meta de sellos ─────────────────────────────────────────────
   int? _metaSellos;
+  int _loadGeneration = 0;
 
   late AnimationController _animationController;
   late AnimationController _tabController;
@@ -110,30 +111,35 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   // CARGA DE ASISTENCIAS DE PROYECTOS
   // ═══════════════════════════════════════════════════════════════
   Future<void> _cargarMisAsistencias() async {
-    if (_currentUserId == null) return;
+  if (_currentUserId == null) return;
 
-    setState(() {
-      _isLoadingAsistencias = true;
-      _eventosConAsistencias.clear();
-      _eventoSeleccionadoId = null;
-      _eventoSeleccionadoNombre = null;
-      _asistenciasDelEvento.clear();
-      _asistenciasPersonalesDelEvento.clear();
-      _metaSellos = null;
-      _tabSeleccionado = 0;
-    });
+  _loadGeneration++; // incrementa ANTES del await
+  final myGen = _loadGeneration;
 
-    try {
-      final parts = _currentUserId!.split('/');
-      if (parts.length != 2) throw Exception('ID de usuario inválido');
-      final studentId = parts[1];
-      await _cargarAsistenciasDirecto(studentId);
-    } catch (e) {
-      _showSnackBar('Error al cargar asistencias: $e', isError: true);
-    } finally {
-      setState(() => _isLoadingAsistencias = false);
-    }
+  setState(() {
+    _isLoadingAsistencias = true;
+    _eventosConAsistencias.clear();
+    _eventoSeleccionadoId = null;
+    _eventoSeleccionadoNombre = null;
+    _asistenciasDelEvento.clear();
+    _asistenciasPersonalesDelEvento.clear();
+    _metaSellos = null;
+    _tabSeleccionado = 0;
+  });
+
+  try {
+    final parts = _currentUserId!.split('/');
+    if (parts.length != 2) throw Exception('ID de usuario inválido');
+    final studentId = parts[1];
+    await _cargarAsistenciasDirecto(studentId);
+  } catch (e) {
+    if (myGen != _loadGeneration) return; // llegó tarde, ignorar
+    _showSnackBar('Error al cargar asistencias: $e', isError: true);
+  } finally {
+    if (myGen != _loadGeneration) return; // llegó tarde, ignorar
+    setState(() => _isLoadingAsistencias = false);
   }
+}
 
   Future<void> _cargarAsistenciasDirecto(String studentId) async {
     try {
@@ -305,13 +311,21 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   }
 
   void _sortEventos() {
-    _eventosConAsistencias.sort((a, b) {
-      final dateA = (a['eventDate'] as Timestamp?)?.toDate();
-      final dateB = (b['eventDate'] as Timestamp?)?.toDate();
-      if (dateA == null || dateB == null) return 0;
-      return dateB.compareTo(dateA);
-    });
+  final unique = <String, Map<String, dynamic>>{};
+  for (final e in _eventosConAsistencias) {
+    unique[e['eventId'] as String] = e;
   }
+  _eventosConAsistencias
+    ..clear()
+    ..addAll(unique.values);
+
+  _eventosConAsistencias.sort((a, b) {
+    final dateA = (a['eventDate'] as Timestamp?)?.toDate();
+    final dateB = (b['eventDate'] as Timestamp?)?.toDate();
+    if (dateA == null || dateB == null) return 0;
+    return dateB.compareTo(dateA);
+  });
+}
 
   // ═══════════════════════════════════════════════════════════════
   // SELECCIONAR EVENTO — carga proyectos Y asistencias personales

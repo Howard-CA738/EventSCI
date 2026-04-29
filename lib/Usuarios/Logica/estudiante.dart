@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '/prefs_helper.dart';
 import '/login.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -20,8 +21,7 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
   String? _studentFilial;
   String? _studentCarrera;
   String? _studentFacultad;
-Stream<DocumentSnapshot>? _studentStream;
-  // Contador para el diálogo de advertencia
+  Stream<DocumentSnapshot>? _studentStream;
   int _segundos = 5;
 
   @override
@@ -88,7 +88,6 @@ Stream<DocumentSnapshot>? _studentStream;
     });
   }
 
-  /// Revisa el flag guardado por PrefsHelper y muestra el diálogo si corresponde.
   Future<void> _verificarYMostrarAdvertencia() async {
     final mostrar = await PrefsHelper.debemostrarAdvertenciaPrimeraVez();
     if (mostrar && mounted) {
@@ -96,173 +95,190 @@ Stream<DocumentSnapshot>? _studentStream;
     }
   }
 
-  /// Inicia la cuenta regresiva para el botón del diálogo.
-  void _iniciarCuentaRegresiva(StateSetter setStateDialog) {
-    Future.delayed(const Duration(seconds: 1), () {
-      if (!mounted) return;
-      setStateDialog(() {
-        if (_segundos > 0) _segundos--;
-      });
-      if (_segundos > 0) {
-        _iniciarCuentaRegresiva(setStateDialog);
-      }
-    });
-  }
-
-  /// Diálogo de advertencia: sesión única, no cerrar sesión.
   void _showAdvertenciaSesionUnica() {
     _segundos = 5;
+    Timer? timer;
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
-            _iniciarCuentaRegresiva(setStateDialog);
+            timer ??= Timer.periodic(const Duration(seconds: 1), (t) {
+              if (_segundos <= 0) {
+                t.cancel();
+                return;
+              }
+              setStateDialog(() => _segundos--);
+            });
+
             return Dialog(
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24)),
-              child: Padding(
-                padding: const EdgeInsets.all(28.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildWarningIcon(),
-                    const SizedBox(height: 20),
-                    const Text(
-                      '⚠️ Atención importante',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E3A5F),
-                      ),
-                      textAlign: TextAlign.center,
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1E3A5F),
                     ),
-                    const SizedBox(height: 16),
-                    _buildAlertaBloque(),
-                    const SizedBox(height: 12),
-                    _buildRecomendacionBloque(),
-                    const SizedBox(height: 22),
-                    _buildBotonEntendido(context),
-                  ],
-                ),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.15),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.shield_outlined,
+                            size: 34,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Aviso de Sesión',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Contenido
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        // Alerta roja
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Colors.red.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(7),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade100,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(Icons.lock_outline_rounded,
+                                    color: Colors.red.shade700, size: 18),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Sesión única',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.red.shade800,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Solo puedes ingresar una vez. Si cierras sesión, contacta a tu administrador.',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.red.shade700,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        // Recomendación azul
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Colors.blue.shade100),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.tips_and_updates_outlined,
+                                  color: Colors.blue.shade600, size: 20),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Mantén la app abierta y no presiones "Cerrar Sesión".',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.blue.shade800,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Botón
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _segundos <= 0
+                                ? () {
+                                    timer?.cancel();
+                                    Navigator.of(context).pop();
+                                  }
+                                : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1E3A5F),
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: Colors.grey.shade300,
+                              disabledForegroundColor: Colors.grey.shade600,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: Text(
+                              _segundos > 0
+                                  ? 'Entendido ($_segundos)'
+                                  : 'Entendido',
+                              style: const TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             );
           },
         );
       },
-    );
-  }
-
-  Widget _buildWarningIcon() {
-    return Container(
-      width: 80,
-      height: 80,
-      decoration: BoxDecoration(
-        color: Colors.amber.shade50,
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.amber.shade300, width: 2),
-      ),
-      child: Icon(Icons.warning_amber_rounded,
-          size: 42, color: Colors.amber.shade700),
-    );
-  }
-
-  Widget _buildAlertaBloque() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.shade200),
-      ),
-      child: Column(
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.lock_clock_outlined,
-                  color: Colors.red.shade600, size: 22),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Text(
-                  'Solo puedes iniciar sesión UNA VEZ.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF7F1D1D),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Si cierras sesión o cambias de dispositivo, '
-            'NO podrás volver a ingresar hasta que el '
-            'administrador de tu carrera restablezca tu acceso.',
-            style: TextStyle(
-              fontSize: 13,
-              color: Color(0xFF991B1B),
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecomendacionBloque() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.blue.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.shade100),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.tips_and_updates_outlined,
-              color: Colors.blue.shade600, size: 20),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text(
-              'Mantén la app abierta y no presiones '
-              '"Cerrar Sesión".',
-              style: TextStyle(
-                fontSize: 12,
-                color: Color(0xFF1E3A5F),
-                height: 1.4,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBotonEntendido(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: _segundos <= 0
-            ? () => Navigator.of(context).pop()
-            : null,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF1A5490),
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: Colors.grey.shade400,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-        ),
-        child: Text(
-          _segundos > 0 ? 'Entendido ($_segundos)' : 'Entendido',
-          style: const TextStyle(
-              fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-      ),
-    );
+    ).then((_) => timer?.cancel());
   }
 
   // ── Logout ────────────────────────────────────────────────────────────────
@@ -273,8 +289,8 @@ Stream<DocumentSnapshot>? _studentStream;
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
           title: const Row(
             children: [
               Icon(Icons.logout, color: Color(0xFF1E3A5F), size: 28),
@@ -319,12 +335,13 @@ Stream<DocumentSnapshot>? _studentStream;
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 12),
               ),
               child: const Text(
                 'Cerrar Sesión',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                style:
+                    TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -510,181 +527,119 @@ Stream<DocumentSnapshot>? _studentStream;
       ],
     );
   }
-Stream<DocumentSnapshot> _buildStudentStream() {
-  // Reutiliza el stream si ya existe
-  if (_studentStream != null) return _studentStream!;
 
-  _studentStream = PrefsHelper.getCurrentUserData(forceRefresh: false)
-      .asStream()
-      .asyncExpand((userData) {
-    if (userData == null) return const Stream.empty();
+  Stream<DocumentSnapshot> _buildStudentStream() {
+    if (_studentStream != null) return _studentStream!;
 
-    final carreraPath = userData['carreraPath']?.toString() ?? '';
-    final docId = userData['docId']?.toString() ??
-                  userData['id']?.toString() ?? '';
+    _studentStream = PrefsHelper.getCurrentUserData(forceRefresh: false)
+        .asStream()
+        .asyncExpand((userData) {
+      if (userData == null) return const Stream.empty();
 
-    if (carreraPath.isEmpty || docId.isEmpty) return const Stream.empty();
+      final carreraPath = userData['carreraPath']?.toString() ?? '';
+      final docId = userData['docId']?.toString() ??
+                    userData['id']?.toString() ?? '';
 
-    // ✅ Stream en tiempo real al documento del estudiante
-    return FirebaseFirestore.instance
-        .collection('users')
-        .doc(carreraPath)
-        .collection('students')
-        .doc(docId)
-        .snapshots();
-  });
+      if (carreraPath.isEmpty || docId.isEmpty) return const Stream.empty();
 
-  return _studentStream!;
-}
+      return FirebaseFirestore.instance
+          .collection('users')
+          .doc(carreraPath)
+          .collection('students')
+          .doc(docId)
+          .snapshots();
+    });
+
+    return _studentStream!;
+  }
+
   Widget _buildContentArea() {
-  return Expanded(
-    child: Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFE8EDF2),
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(30),
-          topRight: Radius.circular(30),
+    return Expanded(
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFFE8EDF2),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(30),
+            topRight: Radius.circular(30),
+          ),
         ),
-      ),
-      child: StreamBuilder<DocumentSnapshot>(
-        stream: _buildStudentStream(), // ✅ Escucha en tiempo real
-        builder: (context, snapshot) {
-          bool esAsisteQR = false;
+        child: StreamBuilder<DocumentSnapshot>(
+          stream: _buildStudentStream(),
+          builder: (context, snapshot) {
+            bool esAsisteQR = false;
 
-          if (snapshot.hasData && snapshot.data!.exists) {
-            final data = snapshot.data!.data() as Map<String, dynamic>?;
-            esAsisteQR = data?['esAsisteQR'] == true;
-          }
+            if (snapshot.hasData && snapshot.data!.exists) {
+              final data =
+                  snapshot.data!.data() as Map<String, dynamic>?;
+              esAsisteQR = data?['esAsisteQR'] == true;
+            }
 
-          return Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: GridView.count(
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: 0.80,
-              children: [
-                _buildMenuCard(
-                  imagePath: 'assets/icons/perfil.png',
-                  title: 'Mi Perfil',
-                  subtitle: 'Ver información personal',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => const PerfilScreen()),
-                  ),
-                ),
-                _buildMenuCard(
-                  imagePath: 'assets/icons/escaner.png',
-                  title: 'Escanear QR',
-                  subtitle: 'Registrar asistencia',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => const EscanearQRScreen()),
-                  ),
-                ),
-                _buildMenuCard(
-                  imagePath: 'assets/icons/mis-asistencias.png',
-                  title: 'Mis Asistencias',
-                  subtitle: 'Ver historial de asistencias',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => AsistenciasScreen()),
-                  ),
-                ),
-                _buildMenuCard(
-                  imagePath: 'assets/icons/certificados.png',
-                  title: 'Mis Certificados',
-                  subtitle: 'Ver y descargar certificados',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const VerCertificadosScreen()),
-                  ),
-                ),
-
-                // ✅ Aparece automáticamente cuando el admin asigna el rol
-                if (esAsisteQR)
-                  _buildMenuCardDestacada(
-                    imagePath: 'assets/icons/escaner.png',
-                    title: 'Generar QR\nAsistencia',
-                    subtitle: 'Crear QR para eventos',
+            return Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: GridView.count(
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 0.80,
+                children: [
+                  _buildMenuCard(
+                    imagePath: 'assets/icons/perfil.png',
+                    title: 'Mi Perfil',
+                    subtitle: 'Ver información personal',
                     onTap: () => Navigator.of(context).push(
-  MaterialPageRoute(builder: (_) => const AsistenteQRScreen()),
-),
+                      MaterialPageRoute(
+                          builder: (context) => const PerfilScreen()),
+                    ),
                   ),
-              ],
-            ),
-          );
-        },
-      ),
-    ),
-  );
-}
-
-  // ── Widgets de apoyo ──────────────────────────────────────────────────────
-Widget _buildMenuCardDestacada({
-  required String imagePath,
-  required String title,
-  required String subtitle,
-  required VoidCallback onTap,
-}) {
-  return Card(
-    elevation: 3,
-    shadowColor: const Color(0xFF0D7377).withOpacity(0.4),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-    color: const Color(0xFF0D7377),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 65,
-              height: 65,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                shape: BoxShape.circle,
+                  _buildMenuCard(
+                    imagePath: 'assets/icons/escaner.png',
+                    title: 'Escanear QR',
+                    subtitle: 'Registrar asistencia',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (context) =>
+                              const EscanearQRScreen()),
+                    ),
+                  ),
+                  _buildMenuCard(
+                    imagePath: 'assets/icons/mis-asistencias.png',
+                    title: 'Mis Asistencias',
+                    subtitle: 'Ver historial de asistencias',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (context) => AsistenciasScreen()),
+                    ),
+                  ),
+                  _buildMenuCard(
+                    imagePath: 'assets/icons/certificados.png',
+                    title: 'Mis Certificados',
+                    subtitle: 'Ver y descargar certificados',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              const VerCertificadosScreen()),
+                    ),
+                  ),
+                  if (esAsisteQR)
+                    _buildMenuCardDestacada(
+                      imagePath: 'assets/icons/escaner.png',
+                      title: 'Generar QR\nAsistencia',
+                      subtitle: 'Crear QR para eventos',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) =>
+                                const AsistenteQRScreen()),
+                      ),
+                    ),
+                ],
               ),
-              padding: const EdgeInsets.all(13),
-              child: Image.asset(
-                imagePath,
-                fit: BoxFit.contain,
-                color: Colors.white,
-                errorBuilder: (_, __, ___) => const Icon(
-                  Icons.qr_code_scanner,
-                  size: 32,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-                height: 1.2,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: const TextStyle(
-                fontSize: 10,
-                color: Colors.white70,
-                height: 1.2,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-            ),
-          ],
+            );
+          },
         ),
       ),
-    ),
-  );
-}
+    );
+  }
+
   Widget _buildInfoChip({
     required IconData icon,
     required String label,
@@ -728,13 +683,15 @@ Widget _buildMenuCardDestacada({
     return Card(
       elevation: 2,
       shadowColor: Colors.black26,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       color: Colors.white,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
@@ -774,6 +731,77 @@ Widget _buildMenuCardDestacada({
                 style: const TextStyle(
                   fontSize: 10,
                   color: Color(0xFF64748B),
+                  height: 1.2,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuCardDestacada({
+    required String imagePath,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      elevation: 3,
+      shadowColor: const Color(0xFF0D7377).withOpacity(0.4),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      color: const Color(0xFF0D7377),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 65,
+                height: 65,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                padding: const EdgeInsets.all(13),
+                child: Image.asset(
+                  imagePath,
+                  fit: BoxFit.contain,
+                  color: Colors.white,
+                  errorBuilder: (_, __, ___) => const Icon(
+                    Icons.qr_code_scanner,
+                    size: 32,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  height: 1.2,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Colors.white70,
                   height: 1.2,
                 ),
                 textAlign: TextAlign.center,

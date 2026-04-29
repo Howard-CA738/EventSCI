@@ -29,9 +29,12 @@ dependencies:
   pdf: ^3.10.8
   printing: ^5.12.0
   share_plus: ^10.0.2
+  archive: ^3.6.1
   fake_cloud_firestore: ^3.0.3
   firebase_auth_mocks: ^0.14.1
   mocktail: ^1.0.4
+  uuid: ^4.0.0
+  docx_template: ^0.4.0 
 
 dev_dependencies:
   flutter_test:
@@ -47,6 +50,7 @@ flutter:
     - assets/images/
     - assets/certificado.jpg
     - assets/fonts/
+    - assets/plantilla_informe.docx
 
   fonts:
     - family: Montserrat

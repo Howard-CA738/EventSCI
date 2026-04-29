@@ -1,21 +1,25 @@
-// device_helper.dart
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 class DeviceHelper {
+  static const String _keyDeviceId = 'app_unique_device_id';
+
   static Future<String> getDeviceId() async {
-    final deviceInfo = DeviceInfoPlugin();
-    try {
-      if (Platform.isAndroid) {
-        final info = await deviceInfo.androidInfo;
-        return info.id; // Android ID único
-      } else if (Platform.isIOS) {
-        final info = await deviceInfo.iosInfo;
-        return info.identifierForVendor ?? 'unknown_ios';
-      }
-    } catch (e) {
-      print('Error obteniendo deviceId: $e');
+    final prefs = await SharedPreferences.getInstance();
+
+    // Si ya tiene UUID guardado, siempre usar ese
+    final savedId = prefs.getString(_keyDeviceId);
+    if (savedId != null && savedId.isNotEmpty) {
+      return savedId;
     }
-    return 'unknown_device';
+
+    // Primera vez → generar UUID completamente único
+    final newId = const Uuid().v4();
+    await prefs.setString(_keyDeviceId, newId);
+
+    print('✅ Nuevo UUID de dispositivo generado: $newId');
+    return newId;
   }
 }

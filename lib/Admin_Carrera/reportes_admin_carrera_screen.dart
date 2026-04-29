@@ -3,6 +3,7 @@ import '/prefs_helper.dart';
 import 'ver_ganadores.dart';
 import 'ventanas_asistencia.dart';
 import 'evaluaciones_carrera.dart'; // ← nueva pantalla de evaluaciones
+import 'informe_evento_carrera.dart';
 
 class ReportesAdminCarreraScreen extends StatefulWidget {
   const ReportesAdminCarreraScreen({super.key});
@@ -233,7 +234,16 @@ class _ReportesAdminCarreraScreenState
                               ),
 
                               const SizedBox(height: 12),
-
+_buildReportOption(
+  title: 'Informe Final',
+  subtitle: 'Genera el informe completo del evento',
+  icon: Icons.description_rounded,
+  color: const Color(0xFF009688),
+  onTap: () => Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => const InformeEventoCarreraScreen()),
+  ),
+),
                               // Ganadores
                               _buildAnimatedCard(
                                 delay: 400,

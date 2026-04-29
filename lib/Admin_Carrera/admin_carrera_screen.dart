@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
 import '/login.dart';
-import '/admin/logica/registro_estudiantes.dart';
+import 'registro_estudiantes_carrera.dart';
 import '/admin/logica/reportes.dart';
 import '/admin/logica/evaluaciones.dart';
 import 'editar_admin_carrera.dart';
@@ -233,8 +233,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                               subtitle: 'Crear cuentas de estudiantes',
                               onTap: () => Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) =>
-                                      const RegistroEstudiantesScreen(),
+                                  builder: (_) => const RegistroEstudiantesCarreraScreen(),
                                 ),
                               ),
                             ),
@@ -359,19 +358,7 @@ _buildMenuCard(
                                   builder: (_) => const GenerarCertificadosScreen(),
                                 ),
                               ),
-                            ),
-                          // ── Reportes ───────────────────────────────────
-                          if (_tienePermiso('reportes'))
-                            _buildMenuCard(
-                              imagePath: 'assets/icons/reporte.png',
-                              title: 'Reportes',
-                              subtitle: 'Ver estadísticas y reportes',
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const ReportesScreen(),
-                                ),
-                              ),
-                            ),
+                            ),                       
 _buildMenuCard(
   imagePath: 'assets/icons/pagos.png',  // o usa el icono de abajo
   title: 'Gestión de\nPagos',

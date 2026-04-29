@@ -18,7 +18,6 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
   final TextEditingController _searchController = TextEditingController();
   late AnimationController _animController;
 
-  // Filtro activo: 'todos', 'sin_sesion', 'bloqueado'
   String _filtroEstado = 'todos';
 
   @override
@@ -39,154 +38,157 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
   }
 
   Future<void> _loadData() async {
-  setState(() => _isLoading = true);
-  try {
-    final adminData = await PrefsHelper.getAdminCarreraData();
-    if (adminData == null) {
-      debugPrint('❌ adminData es NULL');
-      setState(() => _isLoading = false);
-      return;
+    setState(() => _isLoading = true);
+    try {
+      final adminData = await PrefsHelper.getAdminCarreraData();
+      if (adminData == null) {
+        debugPrint('❌ adminData es NULL');
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final filialNombre =
+          adminData['filialNombre'] ?? adminData['filial'] ?? '';
+      final carrera = adminData['carrera'] ?? '';
+
+      final usersSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .where('filial', isEqualTo: filialNombre)
+          .where('carrera', isEqualTo: carrera)
+          .limit(1)
+          .get();
+
+      if (usersSnap.docs.isEmpty) {
+        debugPrint('❌ No se encontró documento en users');
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      _carreraPath = usersSnap.docs.first.id;
+
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_carreraPath)
+          .collection('students')
+          .get();
+
+      final lista = snap.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'docId': doc.id,
+          'nombre': data['name'] ??
+              data['nombre'] ??
+              data['usuario'] ??
+              'Sin nombre',
+          'usuario': data['username'] ?? data['usuario'] ?? '',
+          'sessionActive': data['sessionActive'] ?? false,
+          'sessionToken': data['sessionToken'] ?? '',
+          'lastLogin': data['lastLogin'],
+          'primeraVez': data['primeraVez'] ?? true,
+          'deviceId': data['deviceId'] ?? '',
+          // ✅ NUEVO: campos para el nuevo sistema de bloqueo
+          'bloqueadoPermanente': data['bloqueadoPermanente'] ?? false,
+          'bloqueadoEn': data['bloqueadoEn'],
+        };
+      }).toList();
+
+      lista.sort((a, b) =>
+          a['nombre'].toString().compareTo(b['nombre'].toString()));
+
+      setState(() {
+        _estudiantes = lista;
+        _aplicarFiltro();
+      });
+      _animController.forward();
+    } catch (e) {
+      debugPrint('❌ Error cargando sesiones: $e');
     }
-
-    // ✅ Usar filialNombre (ej: "Campus Juliaca", "Campus Lima")
-    // que es exactamente lo que se guarda en Firestore al crear el admin
-    final filialNombre = adminData['filialNombre'] ?? adminData['filial'] ?? '';
-    final carrera = adminData['carrera'] ?? '';
-
-    debugPrint('filialNombre: "$filialNombre"');
-    debugPrint('carrera: "$carrera"');
-
-    // Buscar el documento en users que coincida con filialNombre y carrera
-    final usersSnap = await FirebaseFirestore.instance
-        .collection('users')
-        .where('filial', isEqualTo: filialNombre)
-        .where('carrera', isEqualTo: carrera)
-        .limit(1)
-        .get();
-
-    if (usersSnap.docs.isEmpty) {
-      debugPrint('❌ No se encontró ningún documento en users para filial: $filialNombre, carrera: $carrera');
-      setState(() => _isLoading = false);
-      return;
-    }
-
-    _carreraPath = usersSnap.docs.first.id;
-    debugPrint('✅ carreraPath encontrado: $_carreraPath');
-
-    final snap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(_carreraPath)
-        .collection('students')
-        .get();
-
-    debugPrint('📦 Documentos encontrados: ${snap.docs.length}');
-
-    final lista = snap.docs.map((doc) {
-  final data = doc.data();
-  return {
-    'docId': doc.id,
-    'nombre': data['name'] ?? data['nombre'] ?? data['usuario'] ?? 'Sin nombre',
-    'usuario': data['username'] ?? data['usuario'] ?? '',
-    'sessionActive': data['sessionActive'] ?? false,
-    'sessionToken': data['sessionToken'] ?? '',
-    'lastLogin': data['lastLogin'],
-    'primeraVez': data['primeraVez'] ?? true,
-    'deviceId': data['deviceId'] ?? '',  // ✅ NUEVO
-  };
-}).toList();
-
-    lista.sort((a, b) => a['nombre'].toString().compareTo(b['nombre'].toString()));
-
-    setState(() {
-      _estudiantes = lista;
-      _aplicarFiltro();
-    });
-    _animController.forward();
-
-  } catch (e) {
-    debugPrint('❌ Error cargando sesiones: $e');
+    setState(() => _isLoading = false);
   }
-  setState(() => _isLoading = false);
-}
 
-  // ✅ CORREGIDO: lógica limpia sin casos duplicados
   void _aplicarFiltro() {
     final query = _searchController.text.toLowerCase();
     setState(() {
       _filtrados = _estudiantes.where((e) {
         final matchSearch =
             e['nombre'].toString().toLowerCase().contains(query) ||
-            e['usuario'].toString().toLowerCase().contains(query);
+                e['usuario'].toString().toLowerCase().contains(query);
 
         bool matchEstado = true;
         if (_filtroEstado == 'bloqueado') {
-          matchEstado = e['sessionActive'] == true; // sessionActive:true → bloqueado
+          // ✅ Bloqueado = bloqueadoPermanente O sessionActive:true
+          matchEstado = e['bloqueadoPermanente'] == true ||
+              e['sessionActive'] == true;
         } else if (_filtroEstado == 'sin_sesion') {
-          matchEstado = e['sessionActive'] != true; // libre o reseteado
+          matchEstado = e['bloqueadoPermanente'] != true &&
+              e['sessionActive'] != true;
         }
-        // 'todos' → matchEstado queda true
 
         return matchSearch && matchEstado;
       }).toList();
     });
   }
 
+  // ✅ ACTUALIZADO: resetear también limpia bloqueadoPermanente y deviceId
   Future<void> _resetearSesion(Map<String, dynamic> estudiante) async {
-  final confirm = await _showConfirmDialog(
-    titulo: '¿Dar nueva oportunidad?',
-    mensaje:
-        'Se reseteará la sesión de ${estudiante['nombre']}.\n\n'
-        'Podrá ingresar UNA VEZ más desde cualquier dispositivo.',
-    botonConfirmar: 'Sí, resetear',
-    colorBoton: const Color(0xFF0EA5E9),
-    icono: Icons.refresh_rounded,
-  );
+    final confirm = await _showConfirmDialog(
+      titulo: '¿Dar nueva oportunidad?',
+      mensaje:
+          'Se reseteará la sesión de ${estudiante['nombre']}.\n\n'
+          'Podrá ingresar UNA VEZ más desde cualquier dispositivo.',
+      botonConfirmar: 'Sí, resetear',
+      colorBoton: const Color(0xFF0EA5E9),
+      icono: Icons.refresh_rounded,
+    );
 
-  if (confirm != true) return;
+    if (confirm != true) return;
 
-  try {
-    // Resetear sesión del estudiante
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(_carreraPath)
-        .collection('students')
-        .doc(estudiante['docId'])
-        .update({
-      'sessionActive': false,
-      'sessionToken': null,
-      'primeraVez': true,
-      'lastLogin': null,
-      'deviceId': null,
-      'sessionResetAt': FieldValue.serverTimestamp(),
-    });
-
-    // ✅ NUEVO: Desbloquear el dispositivo vinculado
-    final deviceId = estudiante['deviceId'] as String?;
-    if (deviceId != null && deviceId.isNotEmpty) {
+    try {
       await FirebaseFirestore.instance
-          .collection('blocked_devices')
-          .doc(deviceId)
-          .delete(); // Eliminar completamente el registro
-    }
+          .collection('users')
+          .doc(_carreraPath)
+          .collection('students')
+          .doc(estudiante['docId'])
+          .update({
+        'sessionActive': false,
+        'sessionToken': null,
+        'primeraVez': true,
+        'lastLogin': null,
+        // ✅ Limpiar bloqueo permanente y dispositivo vinculado
+        'bloqueadoPermanente': false,
+        'deviceId': null,
+        'bloqueadoEn': null,
+        'sessionResetAt': FieldValue.serverTimestamp(),
+      });
 
-    if (mounted) {
-      _showSnack(
-        '✅ Sesión reseteada. ${estudiante['nombre']} puede ingresar de nuevo.',
-        Colors.green,
-      );
-      await _loadData();
+      // ✅ Limpiar también en blocked_devices si existía
+      final deviceId = estudiante['deviceId'] as String?;
+      if (deviceId != null && deviceId.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('blocked_devices')
+            .doc(deviceId)
+            .delete();
+      }
+
+      if (mounted) {
+        _showSnack(
+          '✅ Sesión reseteada. ${estudiante['nombre']} puede ingresar de nuevo.',
+          Colors.green,
+        );
+        await _loadData();
+      }
+    } catch (e) {
+      _showSnack('Error al resetear: $e', Colors.red);
     }
-  } catch (e) {
-    _showSnack('Error al resetear: $e', Colors.red);
   }
-}
 
-  /// Bloquea manualmente al estudiante
+  // ✅ ACTUALIZADO: bloquear también pone bloqueadoPermanente:true
   Future<void> _bloquearSesion(Map<String, dynamic> estudiante) async {
     final confirm = await _showConfirmDialog(
       titulo: '¿Bloquear acceso?',
       mensaje:
-          'Se bloqueará el acceso de ${estudiante['nombre']}.\n\nNo podrá iniciar sesión hasta que lo resetees manualmente.',
+          'Se bloqueará el acceso de ${estudiante['nombre']}.\n\n'
+          'No podrá iniciar sesión hasta que lo resetees manualmente.',
       botonConfirmar: 'Sí, bloquear',
       colorBoton: Colors.red,
       icono: Icons.block_rounded,
@@ -201,9 +203,11 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
           .collection('students')
           .doc(estudiante['docId'])
           .update({
-        'sessionActive': true,
-        'primeraVez': false,
-        'sessionToken': 'BLOQUEADO_POR_ADMIN',
+        'sessionActive': false,
+        'sessionToken': null,
+        // ✅ Bloqueo permanente por admin
+        'bloqueadoPermanente': true,
+        'bloqueadoEn': FieldValue.serverTimestamp(),
       });
 
       if (mounted) {
@@ -227,7 +231,8 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
       context: context,
       barrierDismissible: false,
       builder: (_) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -251,7 +256,9 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
               const SizedBox(height: 12),
               Text(mensaje,
                   style: const TextStyle(
-                      fontSize: 13, color: Color(0xFF64748B), height: 1.5),
+                      fontSize: 13,
+                      color: Color(0xFF64748B),
+                      height: 1.5),
                   textAlign: TextAlign.center),
               const SizedBox(height: 24),
               Row(
@@ -262,7 +269,8 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                       style: OutlinedButton.styleFrom(
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
                       ),
                       child: const Text('Cancelar',
                           style: TextStyle(color: Color(0xFF64748B))),
@@ -277,11 +285,12 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
                       ),
                       child: Text(botonConfirmar,
-                          style:
-                              const TextStyle(fontWeight: FontWeight.w600)),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600)),
                     ),
                   ),
                 ],
@@ -305,19 +314,24 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
     );
   }
 
-  // ✅ CORREGIDO: lógica de estado clara y sin contradicciones
+  // ✅ ACTUALIZADO: considera bloqueadoPermanente
   _EstadoSesion _getEstado(Map<String, dynamic> e) {
+    final bloqueadoPermanente = e['bloqueadoPermanente'] == true;
     final active = e['sessionActive'] == true;
-    final primeraVez = e['primeraVez'] != false; // true o null = nunca ingresó
+    final primeraVez = e['primeraVez'] != false;
 
-    if (active) return _EstadoSesion.bloqueado;               // sessionActive:true → bloqueado
-    if (!active && primeraVez) return _EstadoSesion.sinSesion; // nunca entró o reseteado listo
-    return _EstadoSesion.reseteado;                            // reseteado, esperando ingreso
+    // Bloqueado permanentemente (cerró sesión o admin bloqueó)
+    if (bloqueadoPermanente) return _EstadoSesion.bloqueado;
+    // Sesión activa en otro dispositivo
+    if (active) return _EstadoSesion.bloqueado;
+    // Nunca ingresó o fue reseteado y aún no entra
+    if (primeraVez) return _EstadoSesion.sinSesion;
+    // Reseteado, esperando ingreso
+    return _EstadoSesion.reseteado;
   }
 
   @override
   Widget build(BuildContext context) {
-    // Contadores para el resumen
     final totalSinSesion = _estudiantes
         .where((e) => _getEstado(e) == _EstadoSesion.sinSesion)
         .length;
@@ -348,16 +362,16 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF1E3A5F)))
+              child:
+                  CircularProgressIndicator(color: Color(0xFF1E3A5F)))
           : Column(
               children: [
-                // ── Header ──────────────────────────────────────────────
+                // ── Header ──────────────────────────────────────────
                 Container(
                   color: const Color(0xFF1E3A5F),
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
                   child: Column(
                     children: [
-                      // Buscador
                       Container(
                         decoration: BoxDecoration(
                           color: Colors.white,
@@ -380,11 +394,10 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                       ),
                       const SizedBox(height: 14),
 
-                      // Resumen de estadísticas
                       Row(
                         children: [
-                          _buildStatChip('${_estudiantes.length}', 'Total',
-                              Colors.white70),
+                          _buildStatChip('${_estudiantes.length}',
+                              'Total', Colors.white70),
                           const SizedBox(width: 8),
                           _buildStatChip('$totalSinSesion', 'Sin sesión',
                               Colors.green.shade300),
@@ -398,7 +411,6 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                       ),
                       const SizedBox(height: 14),
 
-                      // Filtros rápidos
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -415,7 +427,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                   ),
                 ),
 
-                // ── Lista ────────────────────────────────────────────────
+                // ── Lista ────────────────────────────────────────────
                 Expanded(
                   child: _filtrados.isEmpty
                       ? _buildEmptyState()
@@ -451,8 +463,8 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                     fontWeight: FontWeight.bold,
                     fontSize: 18)),
             Text(label,
-                style:
-                    const TextStyle(color: Colors.white60, fontSize: 10)),
+                style: const TextStyle(
+                    color: Colors.white60, fontSize: 10)),
           ],
         ),
       ),
@@ -483,7 +495,8 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? const Color(0xFF1E3A5F) : Colors.white,
+            color:
+                selected ? const Color(0xFF1E3A5F) : Colors.white,
             fontWeight: FontWeight.w600,
             fontSize: 13,
           ),
@@ -495,6 +508,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
   Widget _buildEstudianteCard(Map<String, dynamic> e, int index) {
     final estado = _getEstado(e);
     final lastLogin = e['lastLogin'] as Timestamp?;
+    final bloqueadoEn = e['bloqueadoEn'] as Timestamp?;
 
     Color estadoColor;
     String estadoLabel;
@@ -544,7 +558,8 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                 border: Border.all(
                     color: estadoColor.withOpacity(0.4), width: 1.5),
               ),
-              child: Icon(Icons.person, color: estadoColor, size: 24),
+              child:
+                  Icon(Icons.person, color: estadoColor, size: 24),
             ),
             const SizedBox(width: 12),
 
@@ -573,8 +588,18 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                     const SizedBox(height: 2),
                     Text(
                       'Último ingreso: ${_formatDate(lastLogin.toDate())}',
-                      style:
-                          TextStyle(fontSize: 11, color: Colors.grey[400]),
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey[400]),
+                    ),
+                  ],
+                  // ✅ NUEVO: mostrar cuándo fue bloqueado
+                  if (bloqueadoEn != null &&
+                      estado == _EstadoSesion.bloqueado) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Bloqueado: ${_formatDate(bloqueadoEn.toDate())}',
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.red[300]),
                     ),
                   ],
                 ],
@@ -591,13 +616,14 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                   decoration: BoxDecoration(
                     color: estadoColor.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(20),
-                    border:
-                        Border.all(color: estadoColor.withOpacity(0.3)),
+                    border: Border.all(
+                        color: estadoColor.withOpacity(0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(estadoIcon, size: 12, color: estadoColor),
+                      Icon(estadoIcon,
+                          size: 12, color: estadoColor),
                       const SizedBox(width: 4),
                       Text(estadoLabel,
                           style: TextStyle(
@@ -609,18 +635,15 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                 ),
                 const SizedBox(height: 8),
 
-                // Botones de acción
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Resetear siempre disponible
                     _buildActionBtn(
                       icon: Icons.refresh_rounded,
                       color: const Color(0xFF0EA5E9),
                       tooltip: 'Dar nueva oportunidad',
                       onTap: () => _resetearSesion(e),
                     ),
-                    // Bloquear solo si NO está ya bloqueado
                     if (estado != _EstadoSesion.bloqueado) ...[
                       const SizedBox(width: 6),
                       _buildActionBtn(
@@ -679,7 +702,8 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                   fontWeight: FontWeight.w500)),
           const SizedBox(height: 6),
           Text('Ajusta los filtros o la búsqueda',
-              style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+              style:
+                  TextStyle(color: Colors.grey[400], fontSize: 13)),
         ],
       ),
     );

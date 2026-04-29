@@ -1,24 +1,23 @@
 import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
-import '/admin/logica/filiales_service.dart';
-import 'estudiantes_registrados.dart';
-import 'datos_excel.dart';
+import 'estudiantes_registrados_carrera.dart';
+import '/admin/logica/datos_excel.dart';
 
-/// Pantalla de registro de estudiantes para el ADMIN GENERAL.
-/// Permite seleccionar filial, facultad y carrera libremente.
-class RegistroEstudiantesScreen extends StatefulWidget {
-  const RegistroEstudiantesScreen({super.key});
+/// Pantalla de registro de estudiantes exclusiva para el Admin de Carrera.
+/// No consulta Firebase para cargar filiales — usa directamente los datos
+/// del admin ya almacenados en PrefsHelper, por lo que carga de forma instantánea.
+class RegistroEstudiantesCarreraScreen extends StatefulWidget {
+  const RegistroEstudiantesCarreraScreen({super.key});
 
   @override
-  State<RegistroEstudiantesScreen> createState() =>
-      _RegistroEstudiantesScreenState();
+  State<RegistroEstudiantesCarreraScreen> createState() =>
+      _RegistroEstudiantesCarreraScreenState();
 }
 
-class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
+class _RegistroEstudiantesCarreraScreenState
+    extends State<RegistroEstudiantesCarreraScreen>
     with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-
-  // Controladores de texto
   final _nombresController = TextEditingController();
   final _apellidosController = TextEditingController();
   final _codigoEstudianteController = TextEditingController();
@@ -27,139 +26,105 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
   final _celularController = TextEditingController();
   final _usernameController = TextEditingController();
 
-  // Animaciones
-  late AnimationController _headerAnimController;
-  late AnimationController _formAnimController;
-  late Animation<double> _headerFade;
-  late Animation<Offset> _headerSlide;
-  late Animation<double> _formFade;
+  late AnimationController _headerAnimationController;
+  late AnimationController _formAnimationController;
+  late Animation<double> _headerFadeAnimation;
+  late Animation<Offset> _headerSlideAnimation;
+  late Animation<double> _formFadeAnimation;
 
-  // Estado
+  // ── Datos del admin (ya disponibles sin llamadas a Firebase) ──────────────
+  String _adminCarreraFilial = '';
+  String _adminCarreraFilialNombre = '';
+  String _adminCarreraFacultad = '';
+  String _adminCarreraCarrera = '';
+
   bool _isLoading = false;
-  bool _isLoadingFiliales = true;
+  bool _isLoadingAdminData = true; // Solo carga los prefs locales (muy rápido)
 
-  // Dropdowns académicos
   String? _selectedModoContrato;
   String? _selectedModalidadEstudio;
-  String? _selectedFilial;
-  String? _selectedFacultad;
-  String? _selectedCarrera;
-  String? _selectedCarreraId;
   String? _selectedCiclo;
   String? _selectedGrupo;
   String? _selectedPago;
 
   final List<String> _modosContrato = ['Regular', 'Convenio', 'Especial'];
-  final List<String> _modalidadesEstudio = ['Presencial', 'Semipresencial', 'Virtual'];
+  final List<String> _modalidadesEstudio = [
+    'Presencial',
+    'Semipresencial',
+    'Virtual',
+  ];
   final List<String> _ciclos = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
   final List<String> _grupos = ['Único', '1', '2', '3', '4'];
   final List<Map<String, dynamic>> _opcionesPago = [
-    {'valor': 'Si',       'label': 'Pagado',   'icon': Icons.check_circle, 'color': Color(0xFF16A34A)},
-    {'valor': 'Pendiente','label': 'Pendiente','icon': Icons.schedule,     'color': Color(0xFFD97706)},
+    {'valor': 'Si', 'label': 'Pagado', 'icon': Icons.check_circle, 'color': Color(0xFF16A34A)},
+    {'valor': 'Pendiente', 'label': 'Pendiente', 'icon': Icons.schedule, 'color': Color(0xFFD97706)},
   ];
 
-  // Estructura de filiales
-  final FilialesService _filialesService = FilialesService();
-  Map<String, dynamic> _estructuraFiliales = {};
-  List<String> _filiales = [];
-  List<String> _facultadesDisponibles = [];
-  List<Map<String, dynamic>> _carrerasDisponibles = [];
-
-  // ── Lifecycle ────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
 
-    _headerAnimController = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 800));
-    _formAnimController = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1000));
+    _headerAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _formAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
 
-    _headerFade = Tween<double>(begin: 0, end: 1).animate(
-        CurvedAnimation(parent: _headerAnimController, curve: Curves.easeOut));
-    _headerSlide =
+    _headerFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _headerAnimationController,
+        curve: Curves.easeOut,
+      ),
+    );
+    _headerSlideAnimation =
         Tween<Offset>(begin: const Offset(0, -0.5), end: Offset.zero).animate(
-            CurvedAnimation(
-                parent: _headerAnimController, curve: Curves.easeOutCubic));
-    _formFade = Tween<double>(begin: 0, end: 1).animate(
-        CurvedAnimation(parent: _formAnimController, curve: Curves.easeIn));
+          CurvedAnimation(
+            parent: _headerAnimationController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
+    _formFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _formAnimationController, curve: Curves.easeIn),
+    );
 
-    _headerAnimController.forward();
-    Future.delayed(const Duration(milliseconds: 300),
-        () => _formAnimController.forward());
+    _headerAnimationController.forward();
+    Future.delayed(const Duration(milliseconds: 300), () {
+      _formAnimationController.forward();
+    });
 
     _nombresController.addListener(_generateUsernameSuggestion);
     _apellidosController.addListener(_generateUsernameSuggestion);
     _correoController.addListener(_extractUsernameFromEmail);
 
-    _loadFiliales();
+    // Carga solo desde SharedPreferences — sin Firebase, sin demora
+    _loadAdminCarreraData();
   }
 
-  @override
-  void dispose() {
-    _headerAnimController.dispose();
-    _formAnimController.dispose();
-    _nombresController.dispose();
-    _apellidosController.dispose();
-    _codigoEstudianteController.dispose();
-    _documentoController.dispose();
-    _correoController.dispose();
-    _celularController.dispose();
-    _usernameController.dispose();
-    super.dispose();
-  }
-
-  // ── Filiales ─────────────────────────────────────────────────────
-  Future<void> _loadFiliales() async {
-    setState(() => _isLoadingFiliales = true);
+  // ═══════════════════════════════════════════════════════════════
+  // Carga los datos del admin desde prefs locales (sin red)
+  // ═══════════════════════════════════════════════════════════════
+  Future<void> _loadAdminCarreraData() async {
     try {
-      await _filialesService.inicializarSiEsNecesario();
-      _estructuraFiliales = await _filialesService.getEstructuraCompleta();
-      setState(() => _filiales = _estructuraFiliales.keys.toList());
+      final adminData = await PrefsHelper.getAdminCarreraData();
+      if (adminData != null) {
+        setState(() {
+          _adminCarreraFilial = adminData['filial'] ?? '';
+          _adminCarreraFilialNombre = adminData['filialNombre'] ?? adminData['filial'] ?? '';
+          _adminCarreraFacultad = adminData['facultad'] ?? '';
+          _adminCarreraCarrera = adminData['carrera'] ?? '';
+        });
+      }
     } catch (e) {
-      _showMessage('Error cargando filiales: $e');
+      debugPrint('Error cargando datos admin carrera: $e');
     }
-    setState(() => _isLoadingFiliales = false);
+    setState(() => _isLoadingAdminData = false);
   }
 
-  void _onFilialChanged(String? filial) {
-    setState(() {
-      _selectedFilial = filial;
-      _selectedFacultad = null;
-      _selectedCarrera = null;
-      _selectedCarreraId = null;
-      _facultadesDisponibles = [];
-      _carrerasDisponibles = [];
+  // ── Username helpers ──────────────────────────────────────────────────────
 
-      if (filial != null && _estructuraFiliales.containsKey(filial)) {
-        final facultades =
-            _estructuraFiliales[filial]['facultades'] as Map<String, dynamic>?;
-        if (facultades != null) _facultadesDisponibles = facultades.keys.toList();
-      }
-    });
-  }
-
-  void _onFacultadChanged(String? facultad) {
-    setState(() {
-      _selectedFacultad = facultad;
-      _selectedCarrera = null;
-      _selectedCarreraId = null;
-      _carrerasDisponibles = [];
-
-      if (_selectedFilial != null &&
-          facultad != null &&
-          _estructuraFiliales.containsKey(_selectedFilial)) {
-        final facultades = _estructuraFiliales[_selectedFilial!]['facultades']
-            as Map<String, dynamic>?;
-        if (facultades != null && facultades.containsKey(facultad)) {
-          _carrerasDisponibles = List<Map<String, dynamic>>.from(
-              facultades[facultad]['carreras'] ?? []);
-        }
-      }
-    });
-  }
-
-  // ── Username helpers ─────────────────────────────────────────────
   void _extractUsernameFromEmail() {
     final correo = _correoController.text.trim();
     if (correo.contains('@upeu.edu.pe') && _usernameController.text.isEmpty) {
@@ -170,19 +135,21 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
 
   void _generateUsernameSuggestion() {
     if (_usernameController.text.isEmpty) {
-      final suggestion = _buildUsername(
-          _nombresController.text.trim(), _apellidosController.text.trim());
+      final suggestion = _generateUsernameFromNamesAndSurnames(
+        _nombresController.text.trim(),
+        _apellidosController.text.trim(),
+      );
       if (suggestion.isNotEmpty) _usernameController.text = suggestion;
     }
   }
 
-  String _buildUsername(String nombres, String apellidos) {
+  String _generateUsernameFromNamesAndSurnames(String nombres, String apellidos) {
     if (nombres.isEmpty && apellidos.isEmpty) return '';
     final n = nombres.toLowerCase().split(' ').where((s) => s.isNotEmpty).toList();
     final a = apellidos.toLowerCase().split(' ').where((s) => s.isNotEmpty).toList();
-    String u = n.isNotEmpty ? n[0] : '';
-    if (a.isNotEmpty) u += u.isNotEmpty ? '.${a[0]}' : a[0];
-    return _cleanUsername(u);
+    String username = n.isNotEmpty ? n[0] : '';
+    if (a.isNotEmpty) username += username.isNotEmpty ? '.${a[0]}' : a[0];
+    return _cleanUsername(username);
   }
 
   String _cleanUsername(String input) {
@@ -194,27 +161,31 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
       'ú': 'u', 'ù': 'u', 'ü': 'u', 'û': 'u',
       'ñ': 'n', 'ç': 'c',
     };
-    String c = input.toLowerCase();
-    accents.forEach((k, v) => c = c.replaceAll(k, v));
-    return c.replaceAll(RegExp(r'[^a-z0-9.]'), '');
+    String cleaned = input.toLowerCase();
+    accents.forEach((k, v) => cleaned = cleaned.replaceAll(k, v));
+    return cleaned.replaceAll(RegExp(r'[^a-z0-9.]'), '');
   }
 
-  // ── Crear estudiante ─────────────────────────────────────────────
+  @override
+  void dispose() {
+    _headerAnimationController.dispose();
+    _formAnimationController.dispose();
+    _nombresController.dispose();
+    _apellidosController.dispose();
+    _codigoEstudianteController.dispose();
+    _documentoController.dispose();
+    _correoController.dispose();
+    _celularController.dispose();
+    _usernameController.dispose();
+    super.dispose();
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // Crear estudiante — usa los datos fijos del admin sin consultas adicionales
+  // ═══════════════════════════════════════════════════════════════
   Future<void> _createStudent() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_selectedFilial == null) {
-      _showMessage('Por favor selecciona una filial');
-      return;
-    }
-    if (_selectedFacultad == null) {
-      _showMessage('Por favor selecciona una facultad');
-      return;
-    }
-    if (_selectedCarrera == null) {
-      _showMessage('Por favor selecciona una carrera');
-      return;
-    }
     if (_selectedPago == null) {
       _showMessage('Por favor selecciona el estado de pago');
       return;
@@ -223,20 +194,25 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     final fullName =
         '${_nombresController.text.trim()} ${_apellidosController.text.trim()}';
     final username = _usernameController.text.trim().toLowerCase();
-    // Nombre legible de la filial (Ej: "Lima")
-    final filialNombre = _filialesService.getNombreFilial(_selectedFilial!);
 
     setState(() => _isLoading = true);
+
     try {
+      debugPrint('🔍 Creando estudiante (admin carrera):');
+      debugPrint('   Filial: $_adminCarreraFilial ($_adminCarreraFilialNombre)');
+      debugPrint('   Facultad: $_adminCarreraFacultad');
+      debugPrint('   Carrera: $_adminCarreraCarrera');
+      debugPrint('   Username: $username');
+
       final success = await PrefsHelper.createStudentAccountWithUsername(
         email: _correoController.text.trim(),
         name: fullName,
         username: username,
         codigoUniversitario: _codigoEstudianteController.text.trim(),
         dni: _documentoController.text.trim(),
-        facultad: _selectedFacultad!,
-        carrera: _selectedCarrera!,
-        filial: filialNombre,               // ← nombre legible, igual que Excel
+        facultad: _adminCarreraFacultad,
+        carrera: _adminCarreraCarrera,
+        filial: _adminCarreraFilialNombre, 
         modoContrato: _selectedModoContrato,
         modalidadEstudio: _selectedModalidadEstudio,
         ciclo: _selectedCiclo,
@@ -249,11 +225,13 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
         _showMessage('✅ Estudiante $fullName creado exitosamente');
         _clearForm();
       } else {
-        _showMessage('❌ Error: ya existe un usuario con esos datos');
+        _showMessage('Error: ya existe un usuario con esos datos');
       }
     } catch (e) {
-      _showMessage('❌ Error creando estudiante: $e');
+      debugPrint('❌ Error creando estudiante: $e');
+      _showMessage('Error creando estudiante: $e');
     }
+
     setState(() => _isLoading = false);
   }
 
@@ -268,29 +246,26 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     setState(() {
       _selectedModoContrato = null;
       _selectedModalidadEstudio = null;
-      _selectedFilial = null;
-      _selectedFacultad = null;
-      _selectedCarrera = null;
-      _selectedCarreraId = null;
       _selectedCiclo = null;
       _selectedGrupo = null;
       _selectedPago = null;
-      _facultadesDisponibles = [];
-      _carrerasDisponibles = [];
     });
   }
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message),
-      backgroundColor: const Color(0xFF1E3A5F),
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFF1E3A5F),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
-  // ── Widgets reutilizables ────────────────────────────────────────
+  // ── Widgets reutilizables ─────────────────────────────────────────────────
+
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -309,21 +284,24 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
         hintText: hintText,
         prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade300)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
         enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade300)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
         focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF1E3A5F), width: 2)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF1E3A5F), width: 2),
+        ),
         errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.red)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.red),
+        ),
         filled: true,
         fillColor: Colors.white,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
       validator: validator,
     );
@@ -335,7 +313,6 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     required T? value,
     required List<DropdownMenuItem<T>> items,
     required void Function(T?) onChanged,
-    String? Function(T?)? validator,
   }) {
     return DropdownButtonFormField<T>(
       value: value,
@@ -344,22 +321,23 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade300)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
         enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade300)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
         focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF1E3A5F), width: 2)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF1E3A5F), width: 2),
+        ),
         filled: true,
         fillColor: Colors.white,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
       items: items,
       onChanged: onChanged,
-      validator: validator,
       dropdownColor: Colors.white,
       menuMaxHeight: 300,
       icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF1E3A5F)),
@@ -377,7 +355,7 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       color: Colors.white,
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -392,11 +370,14 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                   child: Icon(icon, color: const Color(0xFF1E3A5F), size: 24),
                 ),
                 const SizedBox(width: 12),
-                Text(title,
-                    style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E3A5F))),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3A5F),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 20),
@@ -448,71 +429,9 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     );
   }
 
-  Widget _buildPagoSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.payment, color: const Color(0xFF1E3A5F), size: 20),
-            const SizedBox(width: 8),
-            const Text('Estado de pago *',
-                style: TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF1E3A5F),
-                    fontWeight: FontWeight.w500)),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: _opcionesPago.map((opcion) {
-            final isSelected = _selectedPago == opcion['valor'];
-            final color = opcion['color'] as Color;
-            return Expanded(
-              child: GestureDetector(
-                onTap: () =>
-                    setState(() => _selectedPago = opcion['valor'] as String),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  margin: EdgeInsets.only(
-                      right: opcion == _opcionesPago.first ? 10 : 0),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: isSelected ? color.withOpacity(0.12) : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isSelected ? color : Colors.grey.shade300,
-                      width: isSelected ? 2 : 1,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(opcion['icon'] as IconData,
-                          color: isSelected ? color : Colors.grey.shade400,
-                          size: 20),
-                      const SizedBox(width: 8),
-                      Text(opcion['label'] as String,
-                          style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: isSelected
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                              color: isSelected
-                                  ? color
-                                  : Colors.grey.shade500)),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
-  // ── BUILD ────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // BUILD
+  // ═══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -520,62 +439,79 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ──────────────────────────────────────────────
+            // ── Header animado ──────────────────────────────────────────
             SlideTransition(
-              position: _headerSlide,
+              position: _headerSlideAnimation,
               child: FadeTransition(
-                opacity: _headerFade,
+                opacity: _headerFadeAnimation,
                 child: Padding(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(20.0),
                   child: Row(
                     children: [
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Image.asset(
-                          'assets/logo.png',
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => const Icon(
+                      Hero(
+                        tag: 'logo',
+                        child: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Image.asset(
+                            'assets/logo.png',
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(
                               Icons.person_add,
                               color: Color(0xFF1E3A5F),
-                              size: 30),
+                              size: 30,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 16),
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Registro de Estudiantes',
-                                style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white)),
-                            Text('Crear nuevas cuentas',
-                                style: TextStyle(
-                                    fontSize: 13, color: Colors.white70)),
+                            const Text(
+                              'Registro de Estudiantes',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              _adminCarreraCarrera.isNotEmpty
+                                  ? _adminCarreraCarrera
+                                  : 'Cargando...',
+                              style: const TextStyle(
+                                  fontSize: 13, color: Colors.white70),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ],
                         ),
                       ),
                       IconButton(
                         icon: const Icon(Icons.file_upload,
                             color: Colors.white, size: 26),
-                        onPressed: () => Navigator.push(context,
-                            MaterialPageRoute(
-                                builder: (_) => const DatosExcelScreen())),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const DatosExcelScreen()),
+                        ),
                         tooltip: 'Importar Excel',
                       ),
                       IconButton(
                         icon: const Icon(Icons.list,
                             color: Colors.white, size: 26),
-                        onPressed: () => Navigator.push(context,
-                            MaterialPageRoute(
-                                builder: (_) =>
-                                    const EstudiantesRegistradosScreen())),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  const EstudiantesRegistradosCarreraScreen()),
+                        ),
                         tooltip: 'Ver registrados',
                       ),
                     ],
@@ -584,10 +520,10 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
               ),
             ),
 
-            // ── Body ────────────────────────────────────────────────
+            // ── Área de contenido ───────────────────────────────────────
             Expanded(
               child: FadeTransition(
-                opacity: _formFade,
+                opacity: _formFadeAnimation,
                 child: Container(
                   decoration: const BoxDecoration(
                     color: Color(0xFFE8EDF2),
@@ -596,7 +532,7 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                       topRight: Radius.circular(30),
                     ),
                   ),
-                  child: _isLoading || _isLoadingFiliales
+                  child: _isLoading || _isLoadingAdminData
                       ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -605,9 +541,9 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                   color: Color(0xFF1E3A5F)),
                               const SizedBox(height: 16),
                               Text(
-                                _isLoadingFiliales
-                                    ? 'Cargando filiales...'
-                                    : 'Creando estudiante...',
+                                _isLoading
+                                    ? 'Creando estudiante...'
+                                    : 'Cargando...',
                                 style: const TextStyle(
                                     color: Color(0xFF1E3A5F), fontSize: 16),
                               ),
@@ -615,13 +551,68 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                           ),
                         )
                       : SingleChildScrollView(
-                          padding: const EdgeInsets.all(20),
+                          padding: const EdgeInsets.all(20.0),
                           child: Form(
                             key: _formKey,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // ── Información personal ─────────────
+                                // ── Banner de carrera (siempre visible) ──
+                                Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(colors: [
+                                      Colors.blue.shade50,
+                                      Colors.blue.shade100,
+                                    ]),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                        color: Colors.blue.shade300,
+                                        width: 1.5),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.shade700,
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                        child: const Icon(Icons.school,
+                                            color: Colors.white, size: 20),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Registrando para: $_adminCarreraCarrera',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.blue.shade900,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '$_adminCarreraFacultad · $_adminCarreraFilialNombre',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.blue.shade700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+
+                                // ── Información personal ──────────────────
                                 _buildSectionCard(
                                   title: 'Información Personal',
                                   icon: Icons.person,
@@ -630,20 +621,20 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                       controller: _nombresController,
                                       label: 'Nombres',
                                       icon: Icons.person,
-                                      validator: (v) =>
-                                          (v == null || v.trim().isEmpty)
-                                              ? 'Los nombres son requeridos'
-                                              : null,
+                                      validator: (v) => (v == null ||
+                                              v.trim().isEmpty)
+                                          ? 'Los nombres son requeridos'
+                                          : null,
                                     ),
                                     const SizedBox(height: 16),
                                     _buildTextField(
                                       controller: _apellidosController,
                                       label: 'Apellidos',
                                       icon: Icons.person_outline,
-                                      validator: (v) =>
-                                          (v == null || v.trim().isEmpty)
-                                              ? 'Los apellidos son requeridos'
-                                              : null,
+                                      validator: (v) => (v == null ||
+                                              v.trim().isEmpty)
+                                          ? 'Los apellidos son requeridos'
+                                          : null,
                                     ),
                                     const SizedBox(height: 16),
                                     _buildTextField(
@@ -657,8 +648,9 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                           _usernameController.value =
                                               TextEditingValue(
                                             text: cleaned,
-                                            selection: TextSelection.collapsed(
-                                                offset: cleaned.length),
+                                            selection:
+                                                TextSelection.collapsed(
+                                                    offset: cleaned.length),
                                           );
                                         }
                                       },
@@ -691,7 +683,7 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                 ),
                                 const SizedBox(height: 20),
 
-                                // ── Información de contacto ──────────
+                                // ── Información de contacto ───────────────
                                 _buildSectionCard(
                                   title: 'Información de Contacto',
                                   icon: Icons.contact_phone,
@@ -731,7 +723,7 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                 ),
                                 const SizedBox(height: 20),
 
-                                // ── Información académica ────────────
+                                // ── Información académica ─────────────────
                                 _buildSectionCard(
                                   title: 'Información Académica',
                                   icon: Icons.school,
@@ -741,6 +733,7 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                       label: 'Código estudiante',
                                       icon: Icons.badge,
                                       hintText: 'Ej: 202320800',
+                                      validator: (_) => null,
                                     ),
                                     const SizedBox(height: 16),
                                     _buildDropdown<String>(
@@ -768,82 +761,30 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                     ),
                                     const SizedBox(height: 16),
 
-                                    // ── Filial ───────────────────────
-                                    _buildDropdown<String>(
-                                      label: 'Filial (Sede)',
+                                    // Filial, facultad y carrera — solo lectura
+                                    _buildReadOnlyField(
+                                      label: 'Sede',
+                                      value: _adminCarreraFilialNombre,
                                       icon: Icons.location_city,
-                                      value: _selectedFilial,
-                                      items: _filiales.map((filial) {
-                                        final nombre =
-                                            _filialesService.getNombreFilial(filial);
-                                        final ubicacion =
-                                            _filialesService.getUbicacionFilial(filial);
-                                        return DropdownMenuItem<String>(
-                                          value: filial,
-                                          child: Text('$nombre - $ubicacion',
-                                              overflow: TextOverflow.ellipsis),
-                                        );
-                                      }).toList(),
-                                      onChanged: _onFilialChanged,
-                                      validator: (v) =>
-                                          v == null ? 'Selecciona una filial' : null,
                                     ),
-
-                                    // ── Facultad ─────────────────────
-                                    if (_selectedFilial != null) ...[
-                                      const SizedBox(height: 16),
-                                      _buildDropdown<String>(
-                                        label: 'Facultad',
-                                        icon: Icons.account_balance,
-                                        value: _selectedFacultad,
-                                        items: _facultadesDisponibles
-                                            .map((f) => DropdownMenuItem<String>(
-                                                value: f,
-                                                child: Text(f,
-                                                    overflow:
-                                                        TextOverflow.ellipsis)))
-                                            .toList(),
-                                        onChanged: _onFacultadChanged,
-                                        validator: (v) =>
-                                            v == null ? 'Selecciona una facultad' : null,
-                                      ),
-                                    ],
-
-                                    // ── Carrera ──────────────────────
-                                    if (_selectedFacultad != null) ...[
-                                      const SizedBox(height: 16),
-                                      _buildDropdown<String>(
-                                        label: 'Carrera',
-                                        icon: Icons.menu_book,
-                                        value: _selectedCarrera,
-                                        items: _carrerasDisponibles
-                                            .map((c) => DropdownMenuItem<String>(
-                                                  value: c['nombre'],
-                                                  child: Text(c['nombre'],
-                                                      overflow:
-                                                          TextOverflow.ellipsis),
-                                                ))
-                                            .toList(),
-                                        onChanged: (v) => setState(() {
-                                          _selectedCarrera = v;
-                                          // guardar id si lo necesitas
-                                          final found = _carrerasDisponibles
-                                              .firstWhere(
-                                                  (c) => c['nombre'] == v,
-                                                  orElse: () => {});
-                                          _selectedCarreraId = found['id'];
-                                        }),
-                                        validator: (v) =>
-                                            v == null ? 'Selecciona una carrera' : null,
-                                      ),
-                                    ],
-
                                     const SizedBox(height: 16),
-                                    // ── Estado de pago ───────────────
+                                    _buildReadOnlyField(
+                                      label: 'Facultad',
+                                      value: _adminCarreraFacultad,
+                                      icon: Icons.account_balance,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    _buildReadOnlyField(
+                                      label: 'Carrera',
+                                      value: _adminCarreraCarrera,
+                                      icon: Icons.menu_book,
+                                    ),
+                                    const SizedBox(height: 16),
+
+                                    // ── Estado de pago ────────────────────
                                     _buildPagoSelector(),
                                     const SizedBox(height: 16),
 
-                                    // ── Ciclo y Grupo ────────────────
                                     Row(
                                       children: [
                                         Expanded(
@@ -881,7 +822,7 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                 ),
                                 const SizedBox(height: 24),
 
-                                // ── Botones ──────────────────────────
+                                // ── Botones ───────────────────────────────
                                 _buildActionButton(
                                   label: 'Crear Estudiante',
                                   icon: Icons.person_add,
@@ -893,10 +834,11 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                   label: 'Importar desde Excel',
                                   icon: Icons.file_upload,
                                   onPressed: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                          builder: (_) =>
-                                              const DatosExcelScreen())),
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) =>
+                                            const DatosExcelScreen()),
+                                  ),
                                   isPrimary: false,
                                 ),
                                 const SizedBox(height: 12),
@@ -904,10 +846,11 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                   label: 'Ver Estudiantes Registrados',
                                   icon: Icons.list,
                                   onPressed: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                          builder: (_) =>
-                                              const EstudiantesRegistradosScreen())),
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) =>
+                                            const EstudiantesRegistradosCarreraScreen()),
+                                  ),
                                   isPrimary: false,
                                 ),
                               ],
@@ -920,6 +863,104 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
           ],
         ),
       ),
+    );
+  }
+
+  /// Selector visual de estado de pago con dos botones tipo chip.
+  Widget _buildPagoSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.payment, color: const Color(0xFF1E3A5F), size: 20),
+            const SizedBox(width: 8),
+            const Text(
+              'Estado de pago *',
+              style: TextStyle(
+                fontSize: 14,
+                color: Color(0xFF1E3A5F),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: _opcionesPago.map((opcion) {
+            final isSelected = _selectedPago == opcion['valor'];
+            final color = opcion['color'] as Color;
+            return Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _selectedPago = opcion['valor'] as String),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  margin: EdgeInsets.only(
+                    right: opcion == _opcionesPago.first ? 10 : 0,
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: isSelected ? color.withOpacity(0.12) : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSelected ? color : Colors.grey.shade300,
+                      width: isSelected ? 2 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        opcion['icon'] as IconData,
+                        color: isSelected ? color : Colors.grey.shade400,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        opcion['label'] as String,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                          color: isSelected ? color : Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  /// Campo de solo lectura con estilo igual al resto del formulario.
+  Widget _buildReadOnlyField({
+    required String label,
+    required String value,
+    required IconData icon,
+  }) {
+    return TextFormField(
+      initialValue: value,
+      readOnly: true,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade200),
+        ),
+        filled: true,
+        fillColor: Colors.grey.shade100,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
+      style: TextStyle(color: Colors.grey.shade600),
     );
   }
 }

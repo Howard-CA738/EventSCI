@@ -32,11 +32,13 @@ class _LoginScreenState extends State<LoginScreen> {
   ];
 
   @override
-  void initState() {
-    super.initState();
-    _startBackgroundRotation();
+void initState() {
+  super.initState();
+  _startBackgroundRotation();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
     _precacheImages();
-  }
+  });
+}
 
   Future<void> _precacheImages() async {
     try {
@@ -48,16 +50,12 @@ class _LoginScreenState extends State<LoginScreen> {
         await precacheImage(AssetImage(bg), context);
       }
       if (mounted) {
-        setState(() {
-          _imageLoaded = true;
-        });
+        setState(() => _imageLoaded = true);
       }
     } catch (e) {
       print('Error precaching images: $e');
       if (mounted) {
-        setState(() {
-          _imageLoaded = true;
-        });
+        setState(() => _imageLoaded = true);
       }
     }
   }
@@ -90,355 +88,581 @@ class _LoginScreenState extends State<LoginScreen> {
 
   setState(() => _isLoading = true);
 
+  try {
+    await _ejecutarLogin().timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        throw TimeoutException('timeout');
+      },
+    );
+  } on TimeoutException {
+    if (mounted) _showSinInternetDialog();
+  } catch (e) {
+    final msg = e.toString().toLowerCase();
+    if (msg.contains('unavailable') ||
+        msg.contains('network') ||
+        msg.contains('unreachable') ||
+        msg.contains('failed-precondition')) {
+      if (mounted) _showSinInternetDialog();
+    } else {
+      if (mounted) _showMessage('Error al iniciar sesión: $e');
+    }
+  }
+
+  if (mounted) setState(() => _isLoading = false);
+}
+Future<void> _ejecutarLogin() async {
   bool success = false;
   String? loggedInUserType;
 
-  try {
-    final username = _userController.text.trim();
-    final password = _passwordController.text;
+  final username = _userController.text.trim();
+  final password = _passwordController.text;
 
-    // ✅ 1. INTENTAR LOGIN COMO ADMIN O ASISTENTE
-    if (username == PrefsHelper.adminEmail ||
-        username == PrefsHelper.asistenteEmail) {
-      success = await PrefsHelper.loginAdmin(username, password);
-      if (success) {
-        loggedInUserType = await PrefsHelper.getUserType();
-      }
+  if (username == PrefsHelper.adminEmail ||
+      username == PrefsHelper.asistenteEmail) {
+    success = await PrefsHelper.loginAdmin(username, password);
+    if (success) loggedInUserType = await PrefsHelper.getUserType();
+
+  } else if (username.contains('.')) {
+    // Estudiantes primero (12,000) — van directo al índice
+    success = await PrefsHelper.loginStudent(username, password);
+    if (success) {
+      loggedInUserType = await PrefsHelper.getUserType();
+    } else {
+      // Caso borde: jurado con punto en usuario
+      success = await PrefsHelper.loginJurado(username, password);
+      if (success) loggedInUserType = await PrefsHelper.getUserType();
     }
-    // ✅ 2. INTENTAR LOGIN COMO ADMIN DE CARRERA
-    else {
-      final adminCarreraService = AdminCarreraService();
-      final adminCarreraData = await adminCarreraService.loginAdminCarrera(
-        usuario: username,
-        password: password,
-      );
 
-      if (adminCarreraData != null) {
-        await PrefsHelper.saveAdminCarreraData(
-          userId: adminCarreraData['id'],
-          userName: adminCarreraData['usuario'] ?? 'Admin',
-          filial: adminCarreraData['filial'],
-          filialNombre: adminCarreraData['filialNombre'],
-          facultad: adminCarreraData['facultad'],
-          carrera: adminCarreraData['carrera'],
-          carreraId: adminCarreraData['carreraId'],
-          permisos: adminCarreraData['permisos'],
+    if (!success) {
+      if (mounted) _showMessage('Usuario o contraseña incorrectos');
+      return;
+    }
+
+  } else {
+    // Sin punto: adminCarrera o jurado
+    final adminCarreraService = AdminCarreraService();
+    final adminCarreraData = await adminCarreraService.loginAdminCarrera(
+      usuario: username,
+      password: password,
+    );
+
+    if (adminCarreraData != null) {
+      await PrefsHelper.saveAdminCarreraData(
+        userId: adminCarreraData['id'],
+        userName: adminCarreraData['usuario'] ?? 'Admin',
+        filial: adminCarreraData['filial'],
+        filialNombre: adminCarreraData['filialNombre'],
+        facultad: adminCarreraData['facultad'],
+        carrera: adminCarreraData['carrera'],
+        carreraId: adminCarreraData['carreraId'],
+        permisos: adminCarreraData['permisos'],
+      );
+      success = true;
+      loggedInUserType = PrefsHelper.userTypeAdminCarrera;
+    } else {
+      success = await PrefsHelper.loginJurado(username, password);
+      if (success) loggedInUserType = await PrefsHelper.getUserType();
+    }
+
+    if (!success) {
+      if (mounted) _showMessage('Usuario o contraseña incorrectos');
+      return;
+    }
+  }
+
+  if (success && loggedInUserType != null) {
+    if (loggedInUserType == PrefsHelper.userTypeAdmin) {
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const AdminScreen()),
+        );
+      }
+    } else if (loggedInUserType == PrefsHelper.userTypeAsistente) {
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const AsistentesScreen()),
+        );
+      }
+    } else if (loggedInUserType == PrefsHelper.userTypeAdminCarrera) {
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const AdminCarreraScreen()),
+        );
+      }
+    } else if (loggedInUserType == PrefsHelper.userTypeJurado) {
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const JuradosScreen()),
+        );
+      }
+    } else if (loggedInUserType == PrefsHelper.userTypeStudent) {
+      final userData = await PrefsHelper.getCurrentUserData();
+
+      final pago = (userData?['pago'] ?? '').toString().toLowerCase();
+      if (pago != 'si') {
+        await PrefsHelper.logout();
+        if (mounted) {
+          setState(() => _isLoading = false);
+          _showBlockedDialog();
+        }
+        return;
+      }
+
+      final userIdPath = await PrefsHelper.getCurrentUserId();
+      if (userIdPath != null && userIdPath.contains('/')) {
+        final parts = userIdPath.split('/');
+        final carreraPath = parts[0];
+        final studentId = parts[1];
+
+        final estadoSesion = await PrefsHelper.verificarSesionEstudiante(
+          carreraPath: carreraPath,
+          studentId: studentId,
         );
 
-        success = true;
-        loggedInUserType = PrefsHelper.userTypeAdminCarrera;
-      }
-      // ✅ 3. INTENTAR LOGIN COMO JURADO
-      else {
-        success = await PrefsHelper.loginJurado(username, password);
-        if (success) {
-          loggedInUserType = await PrefsHelper.getUserType();
-        }
-        // ✅ 4. INTENTAR LOGIN COMO ESTUDIANTE
-        // ⚠️ Solo aquí se verifica el bloqueo de dispositivo
-        else {
-          // ── Verificar dispositivo ANTES de validar credenciales ──────
-          final deviceBloqueado = await PrefsHelper.isDeviceBloqueado();
-          if (deviceBloqueado) {
-            if (mounted) {
-              setState(() => _isLoading = false);
-              _showDispositivoBloqueadoDialog();
-            }
-            return;
-          }
-
-          success = await PrefsHelper.loginStudent(username, password);
-          if (success) {
-            loggedInUserType = await PrefsHelper.getUserType();
-          }
-        }
-      }
-    }
-
-    // ✅ 5. REDIRIGIR SEGÚN EL TIPO DE USUARIO
-    if (success && loggedInUserType != null) {
-      if (loggedInUserType == PrefsHelper.userTypeAdmin) {
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const AdminScreen()),
-          );
-        }
-      } else if (loggedInUserType == PrefsHelper.userTypeAsistente) {
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const AsistentesScreen()),
-          );
-        }
-      } else if (loggedInUserType == PrefsHelper.userTypeAdminCarrera) {
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => const AdminCarreraScreen(),
-            ),
-          );
-        }
-      } else if (loggedInUserType == PrefsHelper.userTypeJurado) {
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const JuradosScreen()),
-          );
-        }
-      } else if (loggedInUserType == PrefsHelper.userTypeStudent) {
-        final userData = await PrefsHelper.getCurrentUserData();
-
-        // ── 1. Verificar pago ──────────────────────────────────────────
-        final pago = (userData?['pago'] ?? '').toString().toLowerCase();
-        final isPagado = pago == 'si';
-
-        if (!isPagado) {
+        if (estadoSesion == 'dispositivo_bloqueado') {
           await PrefsHelper.logout();
           if (mounted) {
             setState(() => _isLoading = false);
-            _showBlockedDialog();
+            _showDispositivoBloqueadoDialog();
           }
           return;
         }
 
-        // ── 2. Verificar sesión única ──────────────────────────────────
-        final userIdPath = await PrefsHelper.getCurrentUserId();
-        if (userIdPath != null && userIdPath.contains('/')) {
-          final parts = userIdPath.split('/');
-          final carreraPath = parts[0];
-          final studentId = parts[1];
-
-          final estadoSesion = await PrefsHelper.verificarSesionEstudiante(
-            carreraPath: carreraPath,
-            studentId: studentId,
-          );
-
-          if (estadoSesion == 'dispositivo_bloqueado') {
-            await PrefsHelper.logout();
-            if (mounted) {
-              setState(() => _isLoading = false);
-              _showDispositivoBloqueadoDialog();
-            }
-            return;
+        if (estadoSesion == 'bloqueado') {
+          await PrefsHelper.logout();
+          if (mounted) {
+            setState(() => _isLoading = false);
+            _showSesionBloqueadaDialog();
           }
-
-          if (estadoSesion == 'bloqueado') {
-            await PrefsHelper.logout();
-            if (mounted) {
-              setState(() => _isLoading = false);
-              _showSesionBloqueadaDialog();
-            }
-            return;
-          }
-
-          // ── 3. Activar sesión ────────────────────────────────────────
-          await PrefsHelper.activarSesionEstudiante(
-            carreraPath: carreraPath,
-            studentId: studentId,
-          );
+          return;
         }
 
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => const EstudianteScreen(),
-            ),
-          );
+        if (estadoSesion == 'celular_bloqueado') {
+          await PrefsHelper.logout();
+          if (mounted) {
+            setState(() => _isLoading = false);
+            _showCelularBloqueadoDialog();
+          }
+          return;
         }
+
+        await PrefsHelper.activarSesionEstudiante(
+          carreraPath: carreraPath,
+          studentId: studentId,
+        );
       }
-    } else {
-      _showMessage('Usuario o contraseña incorrectos');
-    }
-  } catch (e) {
-    _showMessage('Error al iniciar sesión: $e');
-  }
 
-  if (mounted) {
-    setState(() => _isLoading = false);
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const EstudianteScreen()),
+        );
+      }
+    }
+  } else {
+    if (mounted) _showMessage('Usuario o contraseña incorrectos');
   }
 }
-void _showSesionBloqueadaDialog() {
+  // ──────────────────────────────────────────────────────────────
+  // DIÁLOGOS
+  // ──────────────────────────────────────────────────────────────
+void _showSinInternetDialog() {
   showDialog(
     context: context,
     barrierDismissible: false,
     builder: (context) => Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.all(28.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.orange.shade200, width: 2),
-              ),
-              child: Icon(
-                Icons.devices_outlined,
-                size: 40,
-                color: Colors.orange.shade700,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Sesión ya iniciada',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1E3A5F),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline,
-                      color: Colors.orange.shade700, size: 22),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Ya iniciaste sesión anteriormente y no la cerraste '
-                      'correctamente. Solo se permite una sesión activa.',
-                      style: TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF78350F),
-                          height: 1.4),
-                    ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(28.0),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.orange.shade200, width: 2),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'Comunícate con el administrador de tu carrera '
-              'para que restablezca tu acceso.',
-              style: TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF64748B),
-                  height: 1.4),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 22),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A5490),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: Icon(
+                    Icons.wifi_off_rounded,
+                    size: 40,
+                    color: Colors.orange.shade700,
+                  ),
                 ),
-                child: const Text(
-                  'Entendido',
+                const SizedBox(height: 20),
+                const Text(
+                  'Sin conexión a internet',
                   style: TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600),
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3A5F),
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-              ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          color: Colors.orange.shade700, size: 22),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'No tienes internet o está fallando tu conexión. '
+                          'Verifica tu red e intenta de nuevo.',
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF78350F),
+                              height: 1.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1A5490),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text(
+                      'Entendido',
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     ),
   );
 }
-void _showDispositivoBloqueadoDialog() {
+  void _showSesionBloqueadaDialog() {
   showDialog(
     context: context,
     barrierDismissible: false,
     builder: (context) => Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.all(28.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.red.shade200, width: 2),
-              ),
-              child: Icon(Icons.phonelink_lock_rounded,
-                  size: 40, color: Colors.red.shade700),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Dispositivo no autorizado',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1E3A5F),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline,
-                      color: Colors.red.shade700, size: 22),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Tu cuenta está bloqueada por cerrar sesión. ',
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(28.0),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.orange.shade200, width: 2),
+                  ),
+                  child: Icon(
+                    Icons.devices_outlined,
+                    size: 40,
+                    color: Colors.orange.shade700,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Sesión ya iniciada',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3A5F),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          color: Colors.orange.shade700, size: 22),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Ya iniciaste sesión anteriormente y no la cerraste '
+                          'correctamente. Solo se permite una sesión activa.',
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF78350F),
+                              height: 1.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Comunícate con el administrador de tu carrera '
+                  'para que restablezca tu acceso.',
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF64748B),
+                      height: 1.4),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1A5490),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text(
+                      'Entendido',
                       style: TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF7F1D1D),
-                          height: 1.4),
+                          fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'Comunícate con el '
-              'administrador de tu carrera para restablecer tu acceso.',
-              style: TextStyle(
-                  fontSize: 13, color: Color(0xFF64748B), height: 1.4),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 22),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A5490),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                child: const Text('Entendido',
-                    style: TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600)),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     ),
   );
 }
+
+  void _showDispositivoBloqueadoDialog() {
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(28.0),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.red.shade200, width: 2),
+                  ),
+                  child: Icon(
+                    Icons.phonelink_lock_rounded,
+                    size: 40,
+                    color: Colors.red.shade700,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Acceso Bloqueado',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3A5F),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          color: Colors.red.shade700, size: 22),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Tu cuenta ha sido bloqueada. '
+                          'No puedes volver a iniciar sesión.',
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF7F1D1D),
+                              height: 1.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Comunícate con el administrador de tu carrera '
+                  'para restablecer tu acceso.',
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF64748B),
+                      height: 1.4),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1A5490),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text(
+                      'Entendido',
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+  void _showCelularBloqueadoDialog() {
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(28.0),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.red.shade200, width: 2),
+                  ),
+                  child: Icon(
+                    Icons.phone_locked_rounded,
+                    size: 40,
+                    color: Colors.red.shade700,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Celular no autorizado',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3A5F),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          color: Colors.red.shade700, size: 22),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Este celular ya está registrado con otra cuenta. '
+                          'No puedes iniciar sesión con una cuenta diferente '
+                          'desde este dispositivo.',
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF7F1D1D),
+                              height: 1.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1A5490),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text(
+                      'Entendido',
+                      style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -447,114 +671,118 @@ void _showDispositivoBloqueadoDialog() {
       ),
     );
   }
-void _showBlockedDialog() {
+
+  void _showBlockedDialog() {
   showDialog(
     context: context,
     barrierDismissible: false,
     builder: (context) => Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.all(28.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Icono de bloqueo animado
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.red.shade200, width: 2),
-              ),
-              child: Icon(
-                Icons.lock_outline_rounded,
-                size: 40,
-                color: Colors.red.shade600,
-              ),
-            ),
-            const SizedBox(height: 20),
- 
-            const Text(
-              'Acceso Restringido',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1E3A5F),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
- 
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.amber.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline,
-                      color: Colors.amber.shade700, size: 22),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Tu pago se encuentra PENDIENTE. '
-                      'No puedes acceder hasta que tu pago sea confirmado.',
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(28.0),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.red.shade200, width: 2),
+                  ),
+                  child: Icon(
+                    Icons.lock_outline_rounded,
+                    size: 40,
+                    color: Colors.red.shade600,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Acceso Restringido',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3A5F),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          color: Colors.amber.shade700, size: 22),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Tu pago se encuentra PENDIENTE. '
+                          'No puedes acceder hasta que tu pago sea confirmado.',
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF78350F),
+                              height: 1.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Comunícate con la administración de tu carrera '
+                  'para verificar tu estado de pago.',
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF64748B),
+                      height: 1.4),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1A5490),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text(
+                      'Entendido',
                       style: TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF78350F),
-                          height: 1.4),
+                          fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
- 
-            const Text(
-              'Comunícate con la administración de tu carrera '
-              'para verificar tu estado de pago.',
-              style: TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF64748B),
-                  height: 1.4),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 22),
- 
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A5490),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                child: const Text(
-                  'Entendido',
-                  style: TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     ),
   );
 }
+
   @override
   Widget build(BuildContext context) {
     if (!_imageLoaded) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+          body: Center(child: CircularProgressIndicator()));
     }
 
-    // ✅ Detectar orientación
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -591,13 +819,9 @@ void _showBlockedDialog() {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // ✅ Logo adaptativo según orientación
                     Image.asset(
                       'assets/images/logo.png',
-                      height: isLandscape
-                          ? screenHeight *
-                                0.25 // 25% de la altura en horizontal
-                          : 180,
+                      height: isLandscape ? screenHeight * 0.25 : 180,
                       errorBuilder: (context, error, stackTrace) {
                         return Icon(
                           Icons.school,
@@ -609,7 +833,6 @@ void _showBlockedDialog() {
 
                     SizedBox(height: isLandscape ? 20 : 40),
 
-                    // ✅ Card de login con ancho máximo en horizontal
                     ConstrainedBox(
                       constraints: BoxConstraints(
                         maxWidth: isLandscape ? 500 : double.infinity,
@@ -636,25 +859,21 @@ void _showBlockedDialog() {
                                 color: Colors.grey[50],
                                 borderRadius: BorderRadius.circular(15),
                                 border: Border.all(
-                                  color: Colors.grey[300]!,
-                                  width: 1,
-                                ),
+                                    color: Colors.grey[300]!, width: 1),
                               ),
                               child: TextField(
                                 controller: _userController,
                                 keyboardType: TextInputType.text,
                                 style: const TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.black87,
-                                ),
+                                    fontSize: 16, color: Colors.black87),
                                 decoration: InputDecoration(
                                   hintText: 'Usuario',
-                                  hintStyle: TextStyle(color: Colors.grey[400]),
+                                  hintStyle:
+                                      TextStyle(color: Colors.grey[400]),
                                   prefixIcon: const Icon(
-                                    Icons.person_outline,
-                                    color: Color(0xFF1A5490),
-                                    size: 24,
-                                  ),
+                                      Icons.person_outline,
+                                      color: Color(0xFF1A5490),
+                                      size: 24),
                                   border: InputBorder.none,
                                   contentPadding: EdgeInsets.symmetric(
                                     horizontal: 20,
@@ -671,25 +890,19 @@ void _showBlockedDialog() {
                                 color: Colors.grey[50],
                                 borderRadius: BorderRadius.circular(15),
                                 border: Border.all(
-                                  color: Colors.grey[300]!,
-                                  width: 1,
-                                ),
+                                    color: Colors.grey[300]!, width: 1),
                               ),
                               child: TextField(
                                 controller: _passwordController,
                                 obscureText: _obscurePassword,
                                 style: const TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.black87,
-                                ),
+                                    fontSize: 16, color: Colors.black87),
                                 decoration: InputDecoration(
                                   hintText: 'Contraseña',
-                                  hintStyle: TextStyle(color: Colors.grey[400]),
-                                  prefixIcon: const Icon(
-                                    Icons.lock_outline,
-                                    color: Color(0xFF1A5490),
-                                    size: 24,
-                                  ),
+                                  hintStyle:
+                                      TextStyle(color: Colors.grey[400]),
+                                  prefixIcon: const Icon(Icons.lock_outline,
+                                      color: Color(0xFF1A5490), size: 24),
                                   suffixIcon: IconButton(
                                     icon: Icon(
                                       _obscurePassword
@@ -714,7 +927,7 @@ void _showBlockedDialog() {
                             ),
                             SizedBox(height: isLandscape ? 20 : 30),
 
-                            // Botón de login
+                            // Botón login
                             SizedBox(
                               width: double.infinity,
                               height: isLandscape ? 50 : 55,
@@ -725,8 +938,8 @@ void _showBlockedDialog() {
                                   foregroundColor: Colors.white,
                                   elevation: 0,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
+                                      borderRadius:
+                                          BorderRadius.circular(15)),
                                   disabledBackgroundColor: Colors.grey[400],
                                 ),
                                 child: _isLoading

@@ -65,30 +65,44 @@ static Future<String> verificarSesionEstudiante({
         .doc(carreraPath)
         .collection('students')
         .doc(studentId)
-        .get();
+        .get(const GetOptions(source: Source.server));
 
     if (!doc.exists) return 'error';
 
     final data = doc.data()!;
-    final sessionActive = data['sessionActive'] ?? false;
-    final registeredDeviceId = data['deviceId'] as String?;
-
-    // Si ya tiene sesión activa → bloqueado (sin importar dispositivo)
-    if (sessionActive == true) return 'bloqueado';
-
-    // Obtener deviceId del celular actual
     final currentDeviceId = await DeviceHelper.getDeviceId();
+    final bloqueadoPermanente = data['bloqueadoPermanente'] ?? false;
+    final sessionActive = data['sessionActive'] ?? false;
 
-    // Si ya tiene un dispositivo registrado y es diferente al actual → bloqueado
-    if (registeredDeviceId != null &&
-        registeredDeviceId.isNotEmpty &&
-        registeredDeviceId != currentDeviceId) {
+    // ✅ 1. Estudiante bloqueado permanentemente
+    // No puede entrar desde NINGÚN celular
+    if (bloqueadoPermanente == true) {
       return 'dispositivo_bloqueado';
+    }
+
+    // ✅ 2. Este celular ya está vinculado a OTRA cuenta
+    // El amigo no puede entrar desde el celular de A
+    final cuentasEnEsteDispositivo = await _firestore
+        .collection('users')
+        .doc(carreraPath)
+        .collection('students')
+        .where('deviceId', isEqualTo: currentDeviceId)
+        .limit(1)
+        .get();
+
+    if (cuentasEnEsteDispositivo.docs.isNotEmpty &&
+        cuentasEnEsteDispositivo.docs.first.id != studentId) {
+      return 'celular_bloqueado';
+    }
+
+    // ✅ 3. Sesión activa en otro dispositivo
+    if (sessionActive == true) {
+      return 'bloqueado';
     }
 
     return 'libre';
   } catch (e) {
-    print('❌ Error verificando sesión estudiante: $e');
+    print('❌ Error verificando sesión: $e');
     return 'error';
   }
 }
@@ -99,7 +113,7 @@ static Future<void> saveAsistenteQRData({
   required String carreraId,
   required String carreraNombre,
 }) async {
-  final prefs = await SharedPreferences.getInstance();
+  final prefs = await _getPrefs();
   await prefs.setString(_keyAsistenteFilial, filialId);
   await prefs.setString(_keyAsistenteFilialNombre, filialNombre);
   await prefs.setString(_keyAsistenteFacultad, facultad);
@@ -108,7 +122,7 @@ static Future<void> saveAsistenteQRData({
   print('✅ Datos de asistente QR guardados');
 }
 static Future<Map<String, String?>> getAsistenteQRData() async {
-  final prefs = await SharedPreferences.getInstance();
+  final prefs = await _getPrefs();
   return {
     'filialId':       prefs.getString(_keyAsistenteFilial),
     'filialNombre':   prefs.getString(_keyAsistenteFilialNombre),
@@ -136,7 +150,6 @@ static Future<bool> activarSesionEstudiante({
         ? (doc.data()?['primeraVez'] ?? true) == true
         : true;
 
-    // Registrar sesión en el estudiante
     await _firestore
         .collection('users')
         .doc(carreraPath)
@@ -147,29 +160,15 @@ static Future<bool> activarSesionEstudiante({
       'sessionToken': token,
       'lastLogin': FieldValue.serverTimestamp(),
       'primeraVez': false,
+      // ✅ deviceId vinculado permanentemente
       'deviceId': currentDeviceId,
     });
 
-    // ✅ NUEVO: Registrar dispositivo en blocked_devices
-    // (bloqueado: false mientras la sesión está activa,
-    //  se pone true al cerrar sesión sin logout correcto)
-    await _firestore
-        .collection('blocked_devices')
-        .doc(currentDeviceId)
-        .set({
-      'deviceId': currentDeviceId,
-      'studentId': studentId,
-      'carreraPath': carreraPath,
-      'bloqueado': false,        // se activa al cerrar sesión sin logout
-      'registeredAt': FieldValue.serverTimestamp(),
-      'lastLogin': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     await prefs.setString(_keySessionToken, token);
     await prefs.setBool('es_primera_vez_advertencia', esPrimeraVez);
 
-    print('✅ Sesión activada y dispositivo registrado. DeviceId: $currentDeviceId');
+    print('✅ Sesión activada. Dispositivo vinculado: $currentDeviceId');
     return true;
   } catch (e) {
     print('❌ Error activando sesión estudiante: $e');
@@ -178,25 +177,13 @@ static Future<bool> activarSesionEstudiante({
 }
 /// Se consume una sola vez (se borra tras leerlo).
 static Future<bool> debemostrarAdvertenciaPrimeraVez() async {
-  final prefs = await SharedPreferences.getInstance();
+  final prefs = await _getPrefs();
   final valor = prefs.getBool('es_primera_vez_advertencia') ?? false;
   // Limpiar para no volver a mostrarlo
   await prefs.remove('es_primera_vez_advertencia');
   return valor;
 }
-static Future<bool> isDeviceBloqueado() async {
-  try {
-    final deviceId = await DeviceHelper.getDeviceId();
-    final doc = await _firestore
-        .collection('blocked_devices')
-        .doc(deviceId)
-        .get();
-    return doc.exists && (doc.data()?['bloqueado'] == true);
-  } catch (e) {
-    print('❌ Error verificando dispositivo: $e');
-    return false;
-  }
-}
+
 static Future<void> cerrarSesionEstudiante() async {
   try {
     final userIdPath = await getCurrentUserId();
@@ -207,31 +194,24 @@ static Future<void> cerrarSesionEstudiante() async {
     final studentId = parts[1];
     final currentDeviceId = await DeviceHelper.getDeviceId();
 
-    // Marcar sesión como bloqueada en el estudiante
     await _firestore
         .collection('users')
         .doc(carreraPath)
         .collection('students')
         .doc(studentId)
         .update({
-      'sessionActive': true,   // true = bloqueado, no puede re-entrar
+      'sessionActive': false,
       'sessionToken': null,
+      // ✅ Bloqueado permanentemente, solo admin puede resetear
+      'bloqueadoPermanente': true,
+      // ✅ deviceId se mantiene para bloquear el celular también
+      'deviceId': currentDeviceId,
+      'bloqueadoEn': FieldValue.serverTimestamp(),
     });
 
-    // ✅ NUEVO: Bloquear el dispositivo globalmente
-    await _firestore
-        .collection('blocked_devices')
-        .doc(currentDeviceId)
-        .set({
-      'bloqueado': true,
-      'blockedAt': FieldValue.serverTimestamp(),
-      'studentId': studentId,
-      'carreraPath': carreraPath,
-    }, SetOptions(merge: true));
-
-    print('✅ Sesión cerrada y dispositivo bloqueado: $currentDeviceId');
+    print('✅ Estudiante bloqueado permanentemente');
   } catch (e) {
-    print('❌ Error cerrando sesión estudiante en Firestore: $e');
+    print('❌ Error cerrando sesión: $e');
   }
 }
   // ✅ NUEVO: Verificar si la sesión del admin sigue siendo válida
@@ -244,7 +224,7 @@ static Future<void> cerrarSesionEstudiante() async {
         return true;
       }
 
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _getPrefs();
       final localToken = prefs.getString(_keySessionToken);
       final userId = await getCurrentUserId();
 
@@ -282,7 +262,7 @@ static Future<void> cerrarSesionEstudiante() async {
     required String carreraId,
     required List<String> permisos,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     await prefs.setString(_keyUserType, userTypeAdminCarrera);
     await prefs.setString(_keyUserName, userName);
     await prefs.setString(_keyUserId, userId);
@@ -297,32 +277,32 @@ static Future<void> cerrarSesionEstudiante() async {
   }
 
   static Future<String?> getAdminCarreraFilial() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     return prefs.getString(_keyAdminCarreraFilial);
   }
 
   static Future<String?> getAdminCarreraFilialNombre() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     return prefs.getString(_keyAdminCarreraFilialNombre);
   }
 
   static Future<String?> getAdminCarreraFacultad() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     return prefs.getString(_keyAdminCarreraFacultad);
   }
 
   static Future<String?> getAdminCarreraCarrera() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     return prefs.getString(_keyAdminCarreraCarrera);
   }
 
   static Future<String?> getAdminCarreraCarreraId() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     return prefs.getString(_keyAdminCarreraCarreraId);
   }
 
   static Future<List<String>> getAdminCarreraPermisos() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     final permisosString = prefs.getString(_keyAdminCarreraPermisos);
     if (permisosString == null || permisosString.isEmpty) return [];
     return permisosString.split(',');
@@ -359,7 +339,7 @@ static Future<void> cerrarSesionEstudiante() async {
     required String userName,
     required String userId,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     await prefs.setString(_keyUserType, userType);
     await prefs.setString(_keyUserName, userName);
     await prefs.setString(_keyUserId, userId);
@@ -367,22 +347,22 @@ static Future<void> cerrarSesionEstudiante() async {
   }
 
   static Future<bool> isLoggedIn() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     return prefs.getBool(_keyIsLoggedIn) ?? false;
   }
 
   static Future<String?> getCurrentUserId() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     return prefs.getString(_keyUserId);
   }
 
   static Future<String?> getUserType() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     return prefs.getString(_keyUserType);
   }
 
   static Future<String?> getUserName() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     return prefs.getString(_keyUserName);
   }
 
@@ -421,7 +401,7 @@ static Future<void> cerrarSesionEstudiante() async {
             userId: adminId,
           );
           // ✅ Guardar token de sesión
-          final prefs = await SharedPreferences.getInstance();
+          final prefs = await _getPrefs();
           await prefs.setString(_keySessionToken, password);
           return true;
         } else {
@@ -440,7 +420,7 @@ static Future<void> cerrarSesionEstudiante() async {
               userId: adminId,
             );
             // ✅ Guardar token de sesión con la contraseña actual
-            final prefs = await SharedPreferences.getInstance();
+            final prefs = await _getPrefs();
             await prefs.setString(_keySessionToken, firestorePassword);
             return true;
           } else {
@@ -482,7 +462,7 @@ static Future<void> cerrarSesionEstudiante() async {
             userId: asistenteId,
           );
           // ✅ Guardar token de sesión
-          final prefs = await SharedPreferences.getInstance();
+          final prefs = await _getPrefs();
           await prefs.setString(_keySessionToken, password);
           return true;
         } else {
@@ -501,7 +481,7 @@ static Future<void> cerrarSesionEstudiante() async {
               userId: asistenteId,
             );
             // ✅ Guardar token de sesión con la contraseña actual
-            final prefs = await SharedPreferences.getInstance();
+            final prefs = await _getPrefs();
             await prefs.setString(_keySessionToken, firestorePassword);
             return true;
           } else {
@@ -534,75 +514,70 @@ static Future<void> cerrarSesionEstudiante() async {
   }
 
   static Future<bool> loginStudent(String username, String password) async {
-    try {
-      print('🔐 Intentando login de estudiante...');
-      print('   Usuario: $username');
+  try {
+    print('🔐 Intentando login de estudiante...');
 
-      final indexQuery = await _firestore
-          .collection('student_index')
-          .where('username', isEqualTo: username.trim().toLowerCase())
-          .limit(1)
-          .get();
+    final indexDoc = await _firestore
+        .collection('student_index')
+        .doc(username.trim().toLowerCase())
+        .get();
 
-      if (indexQuery.docs.isNotEmpty) {
-        final indexData = indexQuery.docs.first.data();
-        final carreraPath = indexData['carreraPath'];
-        final studentId = indexData['studentId'];
-
-        print('✅ Usuario encontrado en índice');
-
-        final studentDoc = await _firestore
-            .collection('users')
-            .doc(carreraPath)
-            .collection('students')
-            .doc(studentId)
-            .get();
-
-        if (!studentDoc.exists) {
-          print('⚠️ Índice corrupto detectado, limpiando...');
-          await _firestore
-              .collection('student_index')
-              .doc(username.trim().toLowerCase())
-              .delete();
-
-          print('🔄 Reintentando búsqueda manual...');
-          return await _loginStudentFallback(username, password);
-        }
-
-        final studentData = studentDoc.data()!;
-        final storedPassword = studentData['dni'] ?? studentData['documento'];
-
-        if (storedPassword == password) {
-          print('✅ Contraseña correcta');
-
-          await saveUserData(
-            userType: userTypeStudent,
-            userName: studentData['name'] ?? 'Estudiante',
-            userId: '$carreraPath/$studentId',
-          );
-
-          // ✅ FIX: agregar campos necesarios para el stream
-studentData['id'] = studentId;
-studentData['carreraPath'] = carreraPath;
-
-_userCache[studentId] = studentData;
-_cacheTimestamp = DateTime.now();
-
-return true;
-        } else {
-          print('❌ Contraseña incorrecta');
-          return false;
-        }
-      }
-
-      print('⚠️ Usuario no encontrado en índice, buscando manualmente...');
-      return await _loginStudentFallback(username, password);
-    } catch (e) {
-      print('❌ Error en login estudiante: $e');
+    if (!indexDoc.exists) {
+      print('❌ Usuario no encontrado en índice');
       return false;
     }
-  }
 
+    final indexData = indexDoc.data()!;
+    final carreraPath = indexData['carreraPath'];
+    final studentId = indexData['studentId'];
+
+    final studentDoc = await _firestore
+        .collection('users')
+        .doc(carreraPath)
+        .collection('students')
+        .doc(studentId)
+        .get();
+
+    if (!studentDoc.exists) {
+      print('⚠️ Índice corrupto, limpiando...');
+      await _firestore
+          .collection('student_index')
+          .doc(username.trim().toLowerCase())
+          .delete();
+      return false;
+    }
+
+    final studentData = studentDoc.data()!;
+    final storedPassword = studentData['dni'] ?? studentData['documento'];
+
+    if (storedPassword != password) {
+      print('❌ Contraseña incorrecta');
+      return false;
+    }
+
+    await saveUserData(
+      userType: userTypeStudent,
+      userName: studentData['name'] ?? 'Estudiante',
+      userId: '$carreraPath/$studentId',
+    );
+
+    studentData['id'] = studentId;
+    studentData['carreraPath'] = carreraPath;
+    _userCache[studentId] = studentData;
+    _cacheTimestamp = DateTime.now();
+
+    print('✅ Login exitoso');
+    return true;
+  } catch (e) {
+    print('❌ Error en login estudiante: $e');
+    return false;
+  }
+}
+static SharedPreferences? _prefs;
+static Future<SharedPreferences> _getPrefs() async {
+  _prefs ??= await SharedPreferences.getInstance();
+  return _prefs!;
+}
   static Future<bool> _loginStudentFallback(
     String username,
     String password,
@@ -688,142 +663,158 @@ return true;
   }
 
   static Future<bool> createStudentAccountWithUsername({
-    required String email,
-    required String name,
-    required String username,
-    required String codigoUniversitario,
-    required String dni,
-    required String facultad,
-    required String carrera,
-    String? modoContrato,
-    String? modalidadEstudio,
-    String? sede,
-    String? ciclo,
-    String? grupo,
-    String? correoInstitucional,
-    String? celular,
-  }) async {
-    try {
-      print('🔍 Creando estudiante en: $carrera');
-
-      final indexExists = await _firestore
-          .collection('student_index')
-          .doc(username.toLowerCase().trim())
-          .get();
-
-      if (indexExists.exists) {
-        print('❌ Username ya existe en índice');
-        return false;
-      }
-
-      final studentsRef = _firestore
-          .collection('users')
-          .doc(carrera)
-          .collection('students');
-
-      final existingUsername = await studentsRef
-          .where('username', isEqualTo: username.trim().toLowerCase())
+  required String email,
+  required String name,
+  required String username,
+  required String codigoUniversitario,
+  required String dni,
+  required String facultad,
+  required String carrera,
+  required String filial,        // ← NUEVO parámetro requerido
+  String? modoContrato,
+  String? modalidadEstudio,
+  String? sede,                  // se mantiene por compatibilidad pero ya no se usa como path
+  String? ciclo,
+  String? grupo,
+  String? correoInstitucional,
+  String? celular,
+  String? pago,
+}) async {
+  try {
+    // ── Path unificado igual que Excel: "filialNombre_carrera" ──
+    final carreraPath = '${filial}_$carrera';
+    print('🔍 Creando estudiante en path: $carreraPath');
+ 
+    // ── Verificar duplicado en índice global ────────────────────
+    final indexExists = await _firestore
+        .collection('student_index')
+        .doc(username.toLowerCase().trim())
+        .get();
+ 
+    if (indexExists.exists) {
+      print('❌ Username ya existe en índice');
+      return false;
+    }
+ 
+    // ── Referencia a la subcolección con path correcto ──────────
+    final studentsRef = _firestore
+        .collection('users')
+        .doc(carreraPath)
+        .collection('students');
+ 
+    // ── Verificar duplicados en Firestore ───────────────────────
+    final existingUsername = await studentsRef
+        .where('username', isEqualTo: username.trim().toLowerCase())
+        .limit(1)
+        .get();
+ 
+    if (existingUsername.docs.isNotEmpty) {
+      print('❌ Username ya existe en esta carrera');
+      return false;
+    }
+ 
+    if (email.trim().isNotEmpty) {
+      final existingEmail = await studentsRef
+          .where('email', isEqualTo: email.trim())
           .limit(1)
           .get();
-
-      if (existingUsername.docs.isNotEmpty) {
-        print('❌ Username ya existe en esta carrera');
+ 
+      if (existingEmail.docs.isNotEmpty) {
+        print('❌ Email ya existe en esta carrera');
         return false;
       }
-
-      if (email.trim().isNotEmpty) {
-        final existingEmail = await studentsRef
-            .where('email', isEqualTo: email.trim())
-            .limit(1)
-            .get();
-
-        if (existingEmail.docs.isNotEmpty) {
-          print('❌ Email ya existe en esta carrera');
-          return false;
-        }
+    }
+ 
+    if (codigoUniversitario.trim().isNotEmpty) {
+      final existingCode = await studentsRef
+          .where('codigoUniversitario',
+              isEqualTo: codigoUniversitario.trim())
+          .limit(1)
+          .get();
+ 
+      if (existingCode.docs.isNotEmpty) {
+        print('❌ Código universitario ya existe en esta carrera');
+        return false;
       }
-
-      if (codigoUniversitario.trim().isNotEmpty) {
-        final existingCode = await studentsRef
-            .where('codigoUniversitario', isEqualTo: codigoUniversitario.trim())
-            .limit(1)
-            .get();
-
-        if (existingCode.docs.isNotEmpty) {
-          print('❌ Código universitario ya existe en esta carrera');
-          return false;
-        }
-      }
-
+    }
+ 
+    if (dni.trim().isNotEmpty) {
       final existingDni = await studentsRef
           .where('dni', isEqualTo: dni.trim())
           .limit(1)
           .get();
-
+ 
       if (existingDni.docs.isNotEmpty) {
         print('❌ DNI ya existe en esta carrera');
         return false;
       }
-
-      final carreraRef = _firestore.collection('users').doc(carrera);
-
-      final studentData = {
-        'email': email.trim(),
-        'name': name.trim(),
-        'username': username.toLowerCase().trim(),
-        'codigoUniversitario': codigoUniversitario.trim(),
-        'dni': dni.trim(),
-        'documento': dni.trim(),
-        'facultad': facultad,
-        'carrera': carrera,
-        'userType': userTypeStudent,
-        'createdAt': FieldValue.serverTimestamp(),
-      };
-
-      if (modoContrato != null && modoContrato.isNotEmpty) {
-        studentData['modoContrato'] = modoContrato;
-      }
-      if (modalidadEstudio != null && modalidadEstudio.isNotEmpty) {
-        studentData['modalidadEstudio'] = modalidadEstudio;
-      }
-      if (sede != null && sede.isNotEmpty) {
-        studentData['sede'] = sede;
-      }
-      if (ciclo != null && ciclo.isNotEmpty) {
-        studentData['ciclo'] = ciclo;
-      }
-      if (grupo != null && grupo.isNotEmpty) {
-        studentData['grupo'] = grupo;
-      }
-      if (correoInstitucional != null && correoInstitucional.isNotEmpty) {
-        studentData['correoInstitucional'] = correoInstitucional.trim();
-      }
-      if (celular != null && celular.isNotEmpty) {
-        studentData['celular'] = celular.trim();
-      }
-
-      final studentDoc = await studentsRef.add(studentData);
-
-      await _createStudentIndex(
-        username: username.toLowerCase().trim(),
-        carreraPath: carrera,
-        studentId: studentDoc.id,
-      );
-
-      await carreraRef.set({
-        'name': carrera,
-        'lastUpdated': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      print('✅ Estudiante creado: ${studentDoc.id}');
-
-      clearStudentsCache();
-      return true;
-    } catch (e) {
-      print('❌ Error creando estudiante: $e');
-      return false;
     }
+ 
+    // ── Datos del estudiante (filial unificado, sin sede duplicado) ─
+    final studentData = <String, dynamic>{
+      'email': email.trim(),
+      'name': name.trim(),
+      'username': username.toLowerCase().trim(),
+      'codigoUniversitario': codigoUniversitario.trim(),
+      'dni': dni.trim(),
+      'documento': dni.trim(),
+      'filial': filial,          // ← campo unificado igual que Excel
+      'facultad': facultad,
+      'carrera': carrera,
+      'userType': userTypeStudent,
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+ 
+    if (modoContrato != null && modoContrato.isNotEmpty) {
+      studentData['modoContrato'] = modoContrato;
+    }
+    if (modalidadEstudio != null && modalidadEstudio.isNotEmpty) {
+      studentData['modalidadEstudio'] = modalidadEstudio;
+    }
+    if (ciclo != null && ciclo.isNotEmpty) {
+      studentData['ciclo'] = ciclo;
+    }
+    if (grupo != null && grupo.isNotEmpty) {
+      studentData['grupo'] = grupo;
+    }
+    if (correoInstitucional != null && correoInstitucional.isNotEmpty) {
+      studentData['correoInstitucional'] = correoInstitucional.trim();
+    }
+    if (celular != null && celular.isNotEmpty) {
+      studentData['celular'] = celular.trim();
+    }
+    if (pago != null && pago.isNotEmpty) {
+      studentData['pago'] = pago;
+    }
+ 
+    // ── Guardar estudiante ──────────────────────────────────────
+    final studentDoc = await studentsRef.add(studentData);
+ 
+    // ── Índice global para login rápido ─────────────────────────
+    await _createStudentIndex(
+      username: username.toLowerCase().trim(),
+      carreraPath: carreraPath,   // ← path unificado
+      studentId: studentDoc.id,
+    );
+ 
+    // ── Documento padre con metadata completa ───────────────────
+    await _firestore.collection('users').doc(carreraPath).set({
+      'name': carreraPath,
+      'filial': filial,
+      'facultad': facultad,
+      'carrera': carrera,
+      'lastUpdated': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+ 
+    print('✅ Estudiante creado en "$carreraPath": ${studentDoc.id}');
+ 
+    clearStudentsCache();
+    return true;
+  } catch (e) {
+    print('❌ Error creando estudiante: $e');
+    return false;
   }
+}
 
   static Future<Map<String, dynamic>?> getCurrentUserData({
     bool forceRefresh = false,
@@ -1086,6 +1077,7 @@ return true;
     String? grupo,
     String? correoInstitucional,
     String? celular,
+    String? pago,
   }) async {
     try {
       final updateData = <String, dynamic>{
@@ -1549,31 +1541,30 @@ return true;
   }
 
   static Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyUserType);
-    await prefs.remove(_keyUserName);
-    await prefs.remove(_keyUserId);
-    await prefs.remove(_keySessionToken); // ✅ Limpiar token de sesión
-    await prefs.setBool(_keyIsLoggedIn, false);
-// Dentro de logout(), junto a los otros prefs.remove(...)
-await prefs.remove(_keyAsistenteFilial);
-await prefs.remove(_keyAsistenteFilialNombre);
-await prefs.remove(_keyAsistenteFacultad);
-await prefs.remove(_keyAsistenteCarreraId);
-await prefs.remove(_keyAsistenteCarreraNombre);
-    await prefs.remove(_keyAdminCarreraFilial);
-    await prefs.remove(_keyAdminCarreraFilialNombre);
-    await prefs.remove(_keyAdminCarreraFacultad);
-    await prefs.remove(_keyAdminCarreraCarrera);
-    await prefs.remove(_keyAdminCarreraCarreraId);
-    await prefs.remove(_keyAdminCarreraPermisos);
+  final prefs = await _getPrefs();
+  await prefs.remove(_keyUserType);
+  await prefs.remove(_keyUserName);
+  await prefs.remove(_keyUserId);
+  await prefs.remove(_keySessionToken);
+  await prefs.setBool(_keyIsLoggedIn, false);
+  await prefs.remove(_keyAsistenteFilial);
+  await prefs.remove(_keyAsistenteFilialNombre);
+  await prefs.remove(_keyAsistenteFacultad);
+  await prefs.remove(_keyAsistenteCarreraId);
+  await prefs.remove(_keyAsistenteCarreraNombre);
+  await prefs.remove(_keyAdminCarreraFilial);
+  await prefs.remove(_keyAdminCarreraFilialNombre);
+  await prefs.remove(_keyAdminCarreraFacultad);
+  await prefs.remove(_keyAdminCarreraCarrera);
+  await prefs.remove(_keyAdminCarreraCarreraId);
+  await prefs.remove(_keyAdminCarreraPermisos);
 
-    clearStudentsCache();
-    _userCache.clear();
-    _cacheTimestamp = null;
+  clearStudentsCache();
+  _userCache.clear();
+  _cacheTimestamp = null;
+  _prefs = null; // limpiar singleton
 
-    FilialesService.clearCache();
-
-    print('✅ Sesión cerrada y caché limpiado');
-  }
+  FilialesService.clearCache();
+  print('✅ Sesión cerrada y caché limpiado');
+}
 }
