@@ -45,5 +45,29 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+	<!-- Cámara (mobile_scanner / QR) -->
+	<key>NSCameraUsageDescription</key>
+	<string>Se necesita la cámara para escanear códigos QR de los eventos</string>
+
+	<!-- Galería / Fotos -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Se necesita acceso a fotos para seleccionar imágenes</string>
+
+	<!-- Guardar en galería -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Se necesita permiso para guardar imágenes en tu galería</string>
+
+	<!-- Archivos / Documentos (file_picker) -->
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Se necesita acceso a documentos para seleccionar y exportar archivos</string>
+
+	<!-- Red (Firebase / http) -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+
 </dict>
 </plist>
