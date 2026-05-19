@@ -1,4 +1,4 @@
-package com.upeu.eventos 
+package com.eventsci.eventos
 
 import io.flutter.embedding.android.FlutterActivity
 

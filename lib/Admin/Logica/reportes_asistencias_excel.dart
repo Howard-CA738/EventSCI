@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:excel/excel.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
@@ -18,7 +19,7 @@ class ReportesAsistenciasExcelService {
     String? carrera,
   }) async {
     try {
-      print('📊 Iniciando generación de reporte de asistencias Excel...');
+      debugPrint('📊 Iniciando generación de reporte de asistencias Excel...');
 
       final excel = Excel.createExcel();
 
@@ -52,7 +53,7 @@ class ReportesAsistenciasExcelService {
 
       return true;
     } catch (e) {
-      print('❌ Error al generar Excel: $e');
+      debugPrint('❌ Error al generar Excel: $e');
       return false;
     }
   }
@@ -61,7 +62,7 @@ class ReportesAsistenciasExcelService {
   List<Map<String, dynamic>> _analizarAsistenciasSospechosas(
     List<Map<String, dynamic>> estudiantes,
   ) {
-    print('🔍 Analizando asistencias sospechosas...');
+    debugPrint('🔍 Analizando asistencias sospechosas...');
 
     for (var estudiante in estudiantes) {
       final scans = estudiante['scans'] as List<dynamic>;
@@ -122,7 +123,7 @@ class ReportesAsistenciasExcelService {
             scans[index]['esSospechoso'] = true;
           }
 
-          print(
+          debugPrint(
             '   📍 Grupo detectado: ${grupoActual.length} scans entre ${DateFormat('HH:mm').format((scans[grupoActual.first]['timestamp'] as Timestamp).toDate())} - ${DateFormat('HH:mm').format((scans[grupoActual.last]['timestamp'] as Timestamp).toDate())}',
           );
         }
@@ -138,7 +139,7 @@ class ReportesAsistenciasExcelService {
           gruposSospechosos.length >= _minimoGruposSospechosos;
 
       if (gruposSospechosos.isNotEmpty) {
-        print(
+        debugPrint(
           '⚠️ ${estudiante['nombre']}: ${gruposSospechosos.length} grupos sospechosos (${estudiante['totalAsistenciasSospechosas']} asistencias marcadas)',
         );
       }
@@ -1044,14 +1045,14 @@ class ReportesAsistenciasExcelService {
       if (fileBytes != null) {
         final file = File(filePath);
         await file.writeAsBytes(fileBytes);
-        print('✅ Archivo guardado exitosamente en: $filePath');
-        print('📁 Ubicación: ${directory.path}');
-        print('📄 Nombre: $fileName');
+        debugPrint('✅ Archivo guardado exitosamente en: $filePath');
+        debugPrint('📁 Ubicación: ${directory.path}');
+        debugPrint('📄 Nombre: $fileName');
       } else {
         throw Exception('Error al generar el archivo Excel');
       }
     } catch (e) {
-      print('❌ Error al guardar archivo: $e');
+      debugPrint('❌ Error al guardar archivo: $e');
       rethrow;
     }
   }

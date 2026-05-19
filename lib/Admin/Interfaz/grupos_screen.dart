@@ -17,6 +17,7 @@ class _GruposScreenState extends State<GruposScreen>
   bool _isLoading = false;
   bool _isLoadingProjects = false;
   List<Map<String, dynamic>> _estudiantesImportados = [];
+  Map<String, String> _nombresCache = {}; // código → nombre
   Map<String, List<Map<String, dynamic>>> _estudiantesPorCategoria = {};
   List<Map<String, dynamic>> _proyectosExistentes = [];
 
@@ -34,21 +35,17 @@ class _GruposScreenState extends State<GruposScreen>
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
-
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
     );
-
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.3),
       end: Offset.zero,
-    ).animate(
-        CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
+    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
 
     _fadeController.forward();
     _slideController.forward();
@@ -60,6 +57,26 @@ class _GruposScreenState extends State<GruposScreen>
     _slideController.dispose();
     super.dispose();
   }
+
+  // ── Helper: convertir Integrantes a List<String> sin importar el origen ──
+  List<String> _toIntegrantesList(dynamic raw) {
+    if (raw == null) return [];
+    if (raw is List) return raw.map((e) => e.toString()).toList();
+    if (raw is String && raw.isNotEmpty) {
+      return raw.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    }
+    return [];
+  }
+String _resolverNombre(String codigoONombre) {
+  return _nombresCache[codigoONombre] ?? codigoONombre;
+}
+
+// Helper: lista de integrantes resuelta a nombres
+List<String> _integrantesResueltos(dynamic raw) {
+  return _toIntegrantesList(raw)
+      .map((c) => _resolverNombre(c))
+      .toList();
+}
 
   @override
   Widget build(BuildContext context) {
@@ -135,7 +152,33 @@ class _GruposScreenState extends State<GruposScreen>
       ),
     );
   }
+Future<void> _resolverNombresDeProyectos(
+  List<Map<String, dynamic>> proyectos,
+) async {
+  // Recolectar todos los códigos únicos de todos los proyectos
+  final Set<String> todosLosCodigos = {};
+  for (final p in proyectos) {
+    final lista = _toIntegrantesList(p['Integrantes']);
+    // Heurística: si parece código numérico largo, es un código; si no, es nombre
+    for (final item in lista) {
+      if (RegExp(r'^\d{6,}$').hasMatch(item)) {
+        todosLosCodigos.add(item);
+      }
+    }
+  }
 
+  if (todosLosCodigos.isEmpty) return;
+
+  final nombres = await _gruposService.resolverNombresPorCodigos(
+    todosLosCodigos.toList(),
+    filialId: widget.eventData['filialId'],
+    carreraId: widget.eventData['carreraId'],
+  );
+  if (!mounted) return;
+  setState(() {
+    _nombresCache.addAll(nombres);
+  });
+}
   void _navegarAAgregarProyecto() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -165,7 +208,7 @@ class _GruposScreenState extends State<GruposScreen>
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF4CAF50).withOpacity(0.3),
+                  color: const Color(0xFF4CAF50).withValues(alpha: 0.3),
                   blurRadius: 15,
                   offset: const Offset(0, 8),
                 ),
@@ -185,14 +228,11 @@ class _GruposScreenState extends State<GruposScreen>
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(
-                              Icons.upload_file,
-                              color: Colors.white,
-                              size: 28,
-                            ),
+                            child: const Icon(Icons.upload_file,
+                                color: Colors.white, size: 28),
                           ),
                           const SizedBox(width: 16),
                           const Expanded(
@@ -215,7 +255,7 @@ class _GruposScreenState extends State<GruposScreen>
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
+                              color: Colors.black.withValues(alpha: 0.1),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),
@@ -227,8 +267,7 @@ class _GruposScreenState extends State<GruposScreen>
                             borderRadius: BorderRadius.circular(12),
                             onTap: _isLoading ? null : _importarExcel,
                             child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 16),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
@@ -238,17 +277,13 @@ class _GruposScreenState extends State<GruposScreen>
                                       height: 20,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                          Color(0xFF4CAF50),
-                                        ),
+                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                            Color(0xFF4CAF50)),
                                       ),
                                     )
                                   else
-                                    const Icon(
-                                      Icons.cloud_upload,
-                                      color: Color(0xFF4CAF50),
-                                    ),
+                                    const Icon(Icons.cloud_upload,
+                                        color: Color(0xFF4CAF50)),
                                   const SizedBox(width: 12),
                                   Text(
                                     _isLoading
@@ -290,7 +325,7 @@ class _GruposScreenState extends State<GruposScreen>
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
+                  color: Colors.black.withValues(alpha: 0.08),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -311,11 +346,8 @@ class _GruposScreenState extends State<GruposScreen>
                           ),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(
-                          Icons.folder_open,
-                          color: Colors.white,
-                          size: 24,
-                        ),
+                        child: const Icon(Icons.folder_open,
+                            color: Colors.white, size: 24),
                       ),
                       const SizedBox(width: 12),
                       const Expanded(
@@ -330,11 +362,9 @@ class _GruposScreenState extends State<GruposScreen>
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
+                            horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFF9800).withOpacity(0.1),
+                          color: const Color(0xFFFF9800).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -374,7 +404,7 @@ class _GruposScreenState extends State<GruposScreen>
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
+                    color: Colors.black.withValues(alpha: 0.08),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
@@ -395,11 +425,8 @@ class _GruposScreenState extends State<GruposScreen>
                             ),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(
-                            Icons.assignment_turned_in,
-                            color: Colors.white,
-                            size: 24,
-                          ),
+                          child: const Icon(Icons.assignment_turned_in,
+                              color: Colors.white, size: 24),
                         ),
                         const SizedBox(width: 12),
                         const Expanded(
@@ -414,11 +441,9 @@ class _GruposScreenState extends State<GruposScreen>
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
+                              horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF2196F3).withOpacity(0.1),
+                            color: const Color(0xFF2196F3).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -445,8 +470,7 @@ class _GruposScreenState extends State<GruposScreen>
   }
 
   Widget _buildCategoriesList(
-    Map<String, List<Map<String, dynamic>>> categorias,
-  ) {
+      Map<String, List<Map<String, dynamic>>> categorias) {
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -478,12 +502,12 @@ class _GruposScreenState extends State<GruposScreen>
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: _getColorForCategory(index).withOpacity(0.3),
+                  color: _getColorForCategory(index).withValues(alpha: 0.3),
                   width: 2,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: _getColorForCategory(index).withOpacity(0.1),
+                    color: _getColorForCategory(index).withValues(alpha: 0.1),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -493,10 +517,8 @@ class _GruposScreenState extends State<GruposScreen>
                 data: Theme.of(context)
                     .copyWith(dividerColor: Colors.transparent),
                 child: ExpansionTile(
-                  tilePadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
+                  tilePadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   title: Text(
                     categoria,
                     style: const TextStyle(
@@ -520,7 +542,7 @@ class _GruposScreenState extends State<GruposScreen>
                       gradient: LinearGradient(
                         colors: [
                           _getColorForCategory(index),
-                          _getColorForCategory(index).withOpacity(0.7),
+                          _getColorForCategory(index).withValues(alpha: 0.7),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(12),
@@ -548,6 +570,9 @@ class _GruposScreenState extends State<GruposScreen>
   }
 
   Widget _buildProjectItem(Map<String, dynamic> item) {
+    final integrantesList = _integrantesResueltos(item['Integrantes']);
+    final totalIntegrantes = item['totalIntegrantes'] ?? integrantesList.length;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -564,11 +589,7 @@ class _GruposScreenState extends State<GruposScreen>
             color: Colors.white,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Icon(
-            Icons.assignment,
-            size: 20,
-            color: Color(0xFF2C5F7C),
-          ),
+          child: const Icon(Icons.assignment, size: 20, color: Color(0xFF2C5F7C)),
         ),
         title: Text(
           item['Código'] ?? 'Sin código',
@@ -586,7 +607,7 @@ class _GruposScreenState extends State<GruposScreen>
                 overflow: TextOverflow.ellipsis,
               ),
             ],
-            if (item['Integrantes'] != null) ...[
+            if (integrantesList.isNotEmpty) ...[
               const SizedBox(height: 4),
               Row(
                 children: [
@@ -594,9 +615,10 @@ class _GruposScreenState extends State<GruposScreen>
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      item['Integrantes'],
-                      style:
-                          TextStyle(fontSize: 11, color: Colors.grey[600]),
+                      '$totalIntegrantes integrante${totalIntegrantes != 1 ? 's' : ''}: '
+                      '${integrantesList.take(3).join(', ')}'
+                      '${integrantesList.length > 3 ? '...' : ''}',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -635,9 +657,7 @@ class _GruposScreenState extends State<GruposScreen>
                       .copyWith(dividerColor: Colors.transparent),
                   child: ExpansionTile(
                     tilePadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
+                        horizontal: 16, vertical: 8),
                     title: Text(
                       categoria,
                       style: const TextStyle(
@@ -661,7 +681,7 @@ class _GruposScreenState extends State<GruposScreen>
                         gradient: LinearGradient(
                           colors: [
                             _getColorForCategory(index),
-                            _getColorForCategory(index).withOpacity(0.7),
+                            _getColorForCategory(index).withValues(alpha: 0.7),
                           ],
                         ),
                         borderRadius: BorderRadius.circular(12),
@@ -691,6 +711,10 @@ class _GruposScreenState extends State<GruposScreen>
   }
 
   Widget _buildExistingProjectItem(Map<String, dynamic> proyecto) {
+    final integrantesList = _toIntegrantesList(proyecto['Integrantes']);
+    final totalIntegrantes =
+        proyecto['totalIntegrantes'] ?? integrantesList.length;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -708,11 +732,7 @@ class _GruposScreenState extends State<GruposScreen>
             color: Colors.white,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Icon(
-            Icons.assignment,
-            size: 20,
-            color: Color(0xFF2C5F7C),
-          ),
+          child: const Icon(Icons.assignment, size: 20, color: Color(0xFF2C5F7C)),
         ),
         title: Text(
           proyecto['Código'] ?? 'Sin código',
@@ -730,7 +750,7 @@ class _GruposScreenState extends State<GruposScreen>
                 overflow: TextOverflow.ellipsis,
               ),
             ],
-            if (proyecto['Integrantes'] != null) ...[
+            if (integrantesList.isNotEmpty) ...[
               const SizedBox(height: 4),
               Row(
                 children: [
@@ -738,9 +758,11 @@ class _GruposScreenState extends State<GruposScreen>
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      proyecto['Integrantes'],
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.grey[600]),
+                      '$totalIntegrantes integrante${totalIntegrantes != 1 ? 's' : ''}: '
+                      '${integrantesList.take(3).join(', ')}'
+                      '${integrantesList.length > 3 ? '...' : ''}',
+                      style:
+                          TextStyle(fontSize: 11, color: Colors.grey[600]),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -752,40 +774,35 @@ class _GruposScreenState extends State<GruposScreen>
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(Icons.access_time,
-                      size: 11, color: Colors.grey[500]),
+                  Icon(Icons.access_time, size: 11, color: Colors.grey[500]),
                   const SizedBox(width: 4),
                   Text(
                     _gruposService.formatDate(proyecto['importedAt']),
-                    style:
-                        TextStyle(fontSize: 10, color: Colors.grey[500]),
+                    style: TextStyle(fontSize: 10, color: Colors.grey[500]),
                   ),
                 ],
               ),
             ],
           ],
         ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-          color: Colors.grey,
-        ),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
       ),
     );
   }
 
   void _navegarADetallesProyecto(Map<String, dynamic> proyecto) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => DetalleProyectoScreen(
-          proyecto: proyecto,
-          eventData: widget.eventData,
-          gruposService: _gruposService,
-          onProyectoActualizado: _cargarProyectosExistentes,
-        ),
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (context) => DetalleProyectoScreen(
+        proyecto: proyecto,
+        eventData: widget.eventData,
+        gruposService: _gruposService,
+        onProyectoActualizado: _cargarProyectosExistentes,
+        nombresCache: _nombresCache, // NUEVO
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildLoadingIndicator() {
     return Center(
@@ -796,7 +813,7 @@ class _GruposScreenState extends State<GruposScreen>
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.08),
+              color: Colors.black.withValues(alpha: 0.08),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -806,8 +823,7 @@ class _GruposScreenState extends State<GruposScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             const CircularProgressIndicator(
-              valueColor:
-                  AlwaysStoppedAnimation<Color>(Color(0xFF2C5F7C)),
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2C5F7C)),
             ),
             const SizedBox(height: 20),
             Text(
@@ -838,7 +854,7 @@ class _GruposScreenState extends State<GruposScreen>
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
+                  color: Colors.black.withValues(alpha: 0.08),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -850,13 +866,13 @@ class _GruposScreenState extends State<GruposScreen>
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2C5F7C).withOpacity(0.1),
+                    color: const Color(0xFF2C5F7C).withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     Icons.cloud_upload_outlined,
                     size: 60,
-                    color: const Color(0xFF2C5F7C).withOpacity(0.6),
+                    color: const Color(0xFF2C5F7C).withValues(alpha: 0.6),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -888,14 +904,13 @@ class _GruposScreenState extends State<GruposScreen>
       builder: (BuildContext context) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+              borderRadius: BorderRadius.circular(20)),
           title: Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF44336).withOpacity(0.1),
+                  color: const Color(0xFFF44336).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(Icons.delete_sweep,
@@ -903,13 +918,15 @@ class _GruposScreenState extends State<GruposScreen>
               ),
               const SizedBox(width: 12),
               const Expanded(
-                child:
-                    Text('Eliminar Todos', style: TextStyle(fontSize: 18)),
+                child: Text('Eliminar Todos',
+                    style: TextStyle(fontSize: 18)),
               ),
             ],
           ),
           content: Text(
-            '¿Estás seguro de que deseas eliminar TODOS los ${_proyectosExistentes.length} proyectos del evento?\n\nEsta acción no se puede deshacer.',
+            '¿Estás seguro de que deseas eliminar TODOS los '
+            '${_proyectosExistentes.length} proyectos del evento?\n\n'
+            'Esta acción no se puede deshacer.',
             style: const TextStyle(fontSize: 15),
           ),
           actions: [
@@ -940,13 +957,9 @@ class _GruposScreenState extends State<GruposScreen>
   Future<void> _eliminarTodosLosProyectos() async {
     setState(() => _isLoadingProjects = true);
     try {
-      await _gruposService.eliminarTodosLosProyectos(
-          widget.eventData['id']);
+      await _gruposService.eliminarTodosLosProyectos(widget.eventData['id']);
       await _cargarProyectosExistentes();
-      _mostrarMensaje(
-        'Todos los proyectos han sido eliminados exitosamente',
-        Colors.orange,
-      );
+      _mostrarMensaje('Todos los proyectos han sido eliminados', Colors.orange);
     } catch (e) {
       _mostrarError('Error al eliminar los proyectos');
     } finally {
@@ -955,24 +968,24 @@ class _GruposScreenState extends State<GruposScreen>
   }
 
   Future<void> _cargarProyectosExistentes() async {
-    setState(() => _isLoadingProjects = true);
-    try {
-      final proyectos = await _gruposService.cargarProyectosExistentes(
-        widget.eventData['id'],
-      );
-      setState(() {
-        _proyectosExistentes = proyectos;
-        _isLoadingProjects = false;
-      });
-    } catch (e) {
-      setState(() => _isLoadingProjects = false);
-    }
+  setState(() => _isLoadingProjects = true);
+  try {
+    final proyectos = await _gruposService
+        .cargarProyectosExistentes(widget.eventData['id']);
+    setState(() {
+      _proyectosExistentes = proyectos;
+      _isLoadingProjects = false;
+    });
+    // NUEVO: resolver nombres de integrantes
+    await _resolverNombresDeProyectos(proyectos);
+  } catch (e) {
+    setState(() => _isLoadingProjects = false);
   }
+}
 
   Future<void> _importarExcel() async {
     try {
       setState(() => _isLoading = true);
-
       final proyectos = await _gruposService.importarExcel();
 
       if (proyectos != null && proyectos.isNotEmpty) {
@@ -986,8 +999,8 @@ class _GruposScreenState extends State<GruposScreen>
         _mostrarMensajeExito();
       } else if (proyectos != null && proyectos.isEmpty) {
         _mostrarError(
-          'No se encontraron datos válidos en el archivo Excel. '
-          'Verifica que tenga las columnas: CÓDIGO, TÍTULO DE INVESTIGACIÓN/PROYECTO, INTEGRANTES, CLASIFICACIÓN',
+          'No se encontraron datos válidos. Verifica que el archivo tenga '
+          'las columnas: CÓDIGO, TÍTULO DE INVESTIGACIÓN/PROYECTO, INTEGRANTES, CLASIFICACIÓN',
         );
       }
     } catch (e) {
@@ -999,14 +1012,11 @@ class _GruposScreenState extends State<GruposScreen>
 
   Future<void> _guardarProyectosEnEvento() async {
     if (_estudiantesImportados.isEmpty) return;
-
     try {
-      // [FIX] Se pasa eventData para que cada proyecto guarde
-      // filialId, facultad, carreraId y carreraNombre.
       await _gruposService.guardarProyectosEnEvento(
         widget.eventData['id'],
         _estudiantesImportados,
-        eventData: widget.eventData, // ← nuevo
+        eventData: widget.eventData,
       );
       setState(() {
         _estudiantesImportados.clear();
@@ -1019,93 +1029,77 @@ class _GruposScreenState extends State<GruposScreen>
 
   Color _getColorForCategory(int index) {
     const colors = [
-      Color(0xFF2196F3),
-      Color(0xFF4CAF50),
-      Color(0xFFFF9800),
-      Color(0xFF9C27B0),
-      Color(0xFFF44336),
-      Color(0xFF009688),
-      Color(0xFFFFEB3B),
-      Color(0xFF3F51B5),
+      Color(0xFF2196F3), Color(0xFF4CAF50), Color(0xFFFF9800),
+      Color(0xFF9C27B0), Color(0xFFF44336), Color(0xFF009688),
+      Color(0xFFFFEB3B), Color(0xFF3F51B5),
     ];
     return colors[index % colors.length];
   }
 
   void _mostrarMensajeExito() {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Se importaron ${_estudiantesImportados.length} proyectos '
-                'exitosamente al evento "${widget.eventData['name']}"',
-                style: const TextStyle(fontSize: 15),
-              ),
-            ),
-          ],
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [
+        const Icon(Icons.check_circle, color: Colors.white),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            'Se importaron ${_estudiantesImportados.length} proyectos '
+            'al evento "${widget.eventData['name']}"',
+            style: const TextStyle(fontSize: 15),
+          ),
         ),
-        backgroundColor: const Color(0xFF4CAF50),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 3),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+      ]),
+      backgroundColor: const Color(0xFF4CAF50),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      duration: const Duration(seconds: 3),
+      margin: const EdgeInsets.all(16),
+    ));
   }
 
   void _mostrarMensaje(String mensaje, Color color) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.info_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(
-                child: Text(mensaje, style: const TextStyle(fontSize: 15))),
-          ],
-        ),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 3),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [
+        const Icon(Icons.info_outline, color: Colors.white),
+        const SizedBox(width: 12),
+        Expanded(child: Text(mensaje, style: const TextStyle(fontSize: 15))),
+      ]),
+      backgroundColor: color,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      duration: const Duration(seconds: 3),
+      margin: const EdgeInsets.all(16),
+    ));
   }
 
   void _mostrarError(String mensaje) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(
-                child: Text(mensaje, style: const TextStyle(fontSize: 15))),
-          ],
-        ),
-        backgroundColor: const Color(0xFFF44336),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 4),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [
+        const Icon(Icons.error_outline, color: Colors.white),
+        const SizedBox(width: 12),
+        Expanded(child: Text(mensaje, style: const TextStyle(fontSize: 15))),
+      ]),
+      backgroundColor: const Color(0xFFF44336),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      duration: const Duration(seconds: 4),
+      margin: const EdgeInsets.all(16),
+    ));
   }
 }
 
-// ── Detalle del Proyecto (sin cambios) ───────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// Detalle del Proyecto
+// ══════════════════════════════════════════════════════════════════════════════
 class DetalleProyectoScreen extends StatelessWidget {
   final Map<String, dynamic> proyecto;
   final Map<String, dynamic> eventData;
   final GruposService gruposService;
   final VoidCallback onProyectoActualizado;
+  final Map<String, String> nombresCache; // NUEVO
 
   const DetalleProyectoScreen({
     super.key,
@@ -1113,17 +1107,36 @@ class DetalleProyectoScreen extends StatelessWidget {
     required this.eventData,
     required this.gruposService,
     required this.onProyectoActualizado,
+    this.nombresCache = const {}, // NUEVO con default vacío
   });
+
+  // Resolver nombre desde cache o devolver el código si no está
+  String _resolverNombre(String codigoONombre) =>
+      nombresCache[codigoONombre] ?? codigoONombre;
+
+  // ── Helper: normalizar integrantes ────────────────────────────────────────
+  List<String> _toIntegrantesList(dynamic raw) {
+    if (raw == null) return [];
+    if (raw is List) return raw.map((e) => e.toString()).toList();
+    if (raw is String && raw.isNotEmpty) {
+      return raw.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    }
+    return [];
+  }
 
   @override
   Widget build(BuildContext context) {
+    final integrantesList = _toIntegrantesList(proyecto['Integrantes'])
+    .map((c) => _resolverNombre(c))
+    .toList();
+    final totalIntegrantes =
+        proyecto['totalIntegrantes'] ?? integrantesList.length;
+
     return Scaffold(
       backgroundColor: const Color(0xFF2C5F7C),
       appBar: AppBar(
-        title: const Text(
-          'Detalles del Proyecto',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
+        title: const Text('Detalles del Proyecto',
+            style: TextStyle(fontWeight: FontWeight.w600)),
         backgroundColor: const Color(0xFF2C5F7C),
         foregroundColor: Colors.white,
         elevation: 0,
@@ -1133,15 +1146,13 @@ class DetalleProyectoScreen extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () => _editarProyecto(context),
-            tooltip: 'Editar',
-          ),
+              icon: const Icon(Icons.edit),
+              onPressed: () => _editarProyecto(context),
+              tooltip: 'Editar'),
           IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: () => _eliminarProyecto(context),
-            tooltip: 'Eliminar',
-          ),
+              icon: const Icon(Icons.delete),
+              onPressed: () => _eliminarProyecto(context),
+              tooltip: 'Eliminar'),
         ],
       ),
       body: Container(
@@ -1173,12 +1184,8 @@ class DetalleProyectoScreen extends StatelessWidget {
                 color: const Color(0xFF4CAF50),
               ),
               const SizedBox(height: 16),
-              _buildDetailCard(
-                icon: Icons.people,
-                label: 'Integrantes',
-                value: proyecto['Integrantes'] ?? 'Sin integrantes',
-                color: const Color(0xFFFF9800),
-              ),
+              // ── Integrantes como lista de chips ──────────────────────────
+              _buildIntegrantesCard(integrantesList, totalIntegrantes),
               const SizedBox(height: 16),
               _buildDetailCard(
                 icon: Icons.category,
@@ -1214,6 +1221,84 @@ class DetalleProyectoScreen extends StatelessWidget {
     );
   }
 
+  // ── Card de integrantes con chips ─────────────────────────────────────────
+  Widget _buildIntegrantesCard(List<String> integrantes, int total) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF9800).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.people, color: Color(0xFFFF9800), size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Integrantes ($total)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[600],
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (integrantes.isEmpty)
+                  Text('Sin integrantes registrados',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[500]))
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: integrantes.map((codigo) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2C5F7C).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: const Color(0xFF2C5F7C).withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Text(
+                          codigo,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF2C5F7C),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeaderCard() {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -1226,7 +1311,7 @@ class DetalleProyectoScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2C5F7C).withOpacity(0.3),
+            color: const Color(0xFF2C5F7C).withValues(alpha: 0.3),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),
@@ -1237,25 +1322,21 @@ class DetalleProyectoScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Icon(Icons.assignment,
-                color: Colors.white, size: 40),
+            child: const Icon(Icons.assignment, color: Colors.white, size: 40),
           ),
           const SizedBox(width: 20),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Proyecto',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+                const Text('Proyecto',
+                    style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500)),
                 const SizedBox(height: 4),
                 Text(
                   proyecto['Código'] ?? 'Sin código',
@@ -1286,7 +1367,7 @@ class DetalleProyectoScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1298,7 +1379,7 @@ class DetalleProyectoScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 24),
@@ -1308,25 +1389,21 @@ class DetalleProyectoScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[600],
-                    letterSpacing: 0.5,
-                  ),
-                ),
+                Text(label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[600],
+                      letterSpacing: 0.5,
+                    )),
                 const SizedBox(height: 8),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF2C3E50),
-                    height: 1.4,
-                  ),
-                ),
+                Text(value,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF2C3E50),
+                      height: 1.4,
+                    )),
               ],
             ),
           ),
@@ -1343,10 +1420,8 @@ class DetalleProyectoScreen extends StatelessWidget {
           child: ElevatedButton.icon(
             onPressed: () => _actualizarScansExistentes(context),
             icon: const Icon(Icons.sync, size: 20),
-            label: const Text(
-              'Actualizar Asistencias Registradas',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
+            label: const Text('Actualizar Asistencias Registradas',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFFF9800),
               foregroundColor: Colors.white,
@@ -1364,7 +1439,7 @@ class DetalleProyectoScreen extends StatelessWidget {
               child: ElevatedButton.icon(
                 onPressed: () => _editarProyecto(context),
                 icon: const Icon(Icons.edit, size: 20),
-                label: const Text('Editar Proyecto',
+                label: const Text('Editar',
                     style: TextStyle(
                         fontSize: 16, fontWeight: FontWeight.w600)),
                 style: ElevatedButton.styleFrom(
@@ -1405,33 +1480,28 @@ class DetalleProyectoScreen extends StatelessWidget {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF9800).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.sync, color: Color(0xFFFF9800)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF9800).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
             ),
-            const SizedBox(width: 12),
-            const Expanded(child: Text('Actualizar Asistencias')),
-          ],
-        ),
+            child: const Icon(Icons.sync, color: Color(0xFFFF9800)),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(child: Text('Actualizar Asistencias')),
+        ]),
         content: Text(
-          '¿Deseas actualizar todas las asistencias registradas del proyecto '
-          '"${proyecto['Código']}" con la nueva clasificación '
-          '"${proyecto['Clasificación']}"?\n\n'
-          'Esto afectará todos los registros de asistencia existentes.',
+          '¿Deseas actualizar todas las asistencias del proyecto '
+          '"${proyecto['Código']}" con la clasificación '
+          '"${proyecto['Clasificación']}"?',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
-          ),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
@@ -1453,20 +1523,14 @@ class DetalleProyectoScreen extends StatelessWidget {
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16)),
-          content: Column(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          content: const Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 20),
-              const Text('Actualizando asistencias...',
-                  style: TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              Text('Esto puede tomar unos momentos',
-                  style:
-                      TextStyle(fontSize: 13, color: Colors.grey[600])),
+              CircularProgressIndicator(),
+              SizedBox(height: 20),
+              Text('Actualizando asistencias...',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             ],
           ),
         ),
@@ -1483,24 +1547,26 @@ class DetalleProyectoScreen extends StatelessWidget {
         Navigator.of(context).pop();
         onProyectoActualizado();
         _mostrarMensaje(context,
-            'Todas las asistencias fueron actualizadas exitosamente',
-            Colors.green);
+            'Asistencias actualizadas exitosamente', Colors.green);
       }
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context).pop();
-        _mostrarError(context, 'Error al actualizar las asistencias: $e');
+        _mostrarError(context, 'Error al actualizar asistencias: $e');
       }
     }
   }
 
   void _editarProyecto(BuildContext context) {
+    final integrantesList = _toIntegrantesList(proyecto['Integrantes']);
+
     final codigoCtrl =
         TextEditingController(text: proyecto['Código'] ?? '');
     final tituloCtrl =
         TextEditingController(text: proyecto['Título'] ?? '');
+    // Editar integrantes como texto separado por comas
     final integrantesCtrl =
-        TextEditingController(text: proyecto['Integrantes'] ?? '');
+        TextEditingController(text: integrantesList.join(', '));
     final clasificacionCtrl =
         TextEditingController(text: proyecto['Clasificación'] ?? '');
     final salaCtrl =
@@ -1509,34 +1575,33 @@ class DetalleProyectoScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2196F3).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.edit, color: Color(0xFF2196F3)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2196F3).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
             ),
-            const SizedBox(width: 12),
-            const Text('Editar Proyecto'),
-          ],
-        ),
+            child: const Icon(Icons.edit, color: Color(0xFF2196F3)),
+          ),
+          const SizedBox(width: 12),
+          const Text('Editar Proyecto'),
+        ]),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildTextField(codigoCtrl, 'Código', Icons.qr_code),
               const SizedBox(height: 16),
-              _buildTextField(tituloCtrl, 'Título', Icons.title,
-                  maxLines: 2),
+              _buildTextField(tituloCtrl, 'Título', Icons.title, maxLines: 2),
               const SizedBox(height: 16),
               _buildTextField(
-                  integrantesCtrl, 'Integrantes', Icons.people,
-                  maxLines: 2),
+                integrantesCtrl,
+                'Códigos de integrantes (separados por coma)',
+                Icons.people,
+                maxLines: 3,
+              ),
               const SizedBox(height: 16),
               _buildTextField(
                   clasificacionCtrl, 'Clasificación', Icons.category),
@@ -1548,18 +1613,17 @@ class DetalleProyectoScreen extends StatelessWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar',
-                style: TextStyle(color: Colors.grey)),
-          ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar',
+                  style: TextStyle(color: Colors.grey))),
           ElevatedButton(
             onPressed: () async {
               await _actualizarProyecto(context, {
-                'Código': codigoCtrl.text.trim(),
-                'Título': tituloCtrl.text.trim(),
-                'Integrantes': integrantesCtrl.text.trim(),
-                'Clasificación': clasificacionCtrl.text.trim(),
-                'Sala': salaCtrl.text.trim(),
+                'Código'        : codigoCtrl.text.trim(),
+                'Título'        : tituloCtrl.text.trim(),
+                'Integrantes'   : integrantesCtrl.text.trim(),
+                'Clasificación' : clasificacionCtrl.text.trim(),
+                'Sala'          : salaCtrl.text.trim(),
               });
               Navigator.pop(ctx);
               Navigator.pop(context);
@@ -1627,11 +1691,9 @@ class DetalleProyectoScreen extends StatelessWidget {
                     style: TextStyle(
                         fontSize: 16, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
-                Text(
-                  'También se actualizarán las asistencias registradas',
-                  style: TextStyle(
-                      fontSize: 13, color: Colors.grey[600]),
-                ),
+                Text('También se actualizarán las asistencias registradas',
+                    style:
+                        TextStyle(fontSize: 13, color: Colors.grey[600])),
               ],
             ),
           ),
@@ -1665,31 +1727,27 @@ class DetalleProyectoScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF44336).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.delete_forever,
-                  color: Color(0xFFF44336)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF44336).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
             ),
-            const SizedBox(width: 12),
-            const Text('Eliminar'),
-          ],
-        ),
+            child: const Icon(Icons.delete_forever, color: Color(0xFFF44336)),
+          ),
+          const SizedBox(width: 12),
+          const Text('Eliminar'),
+        ]),
         content: Text(
-          '¿Estás seguro de que deseas eliminar el proyecto "${proyecto['Código']}"?\n\nEsta acción no se puede deshacer.',
+          '¿Estás seguro de eliminar el proyecto "${proyecto['Código']}"?\n\n'
+          'Esta acción no se puede deshacer.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar')),
           ElevatedButton(
             onPressed: () async {
               await _eliminarProyectoConfirmado(context);
@@ -1714,26 +1772,22 @@ class DetalleProyectoScreen extends StatelessWidget {
       await gruposService.eliminarProyectoIndividual(
           eventData['id'], proyecto['docId']);
       onProyectoActualizado();
-      _mostrarMensaje(
-          context, 'Proyecto eliminado exitosamente', Colors.orange);
+      _mostrarMensaje(context, 'Proyecto eliminado exitosamente', Colors.orange);
     } catch (e) {
       _mostrarError(context, 'Error al eliminar el proyecto');
     }
   }
 
-  void _mostrarMensaje(
-      BuildContext context, String mensaje, Color color) {
+  void _mostrarMensaje(BuildContext context, String mensaje, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Row(children: [
         const Icon(Icons.info_outline, color: Colors.white),
         const SizedBox(width: 12),
-        Expanded(
-            child: Text(mensaje, style: const TextStyle(fontSize: 15))),
+        Expanded(child: Text(mensaje, style: const TextStyle(fontSize: 15))),
       ]),
       backgroundColor: color,
       behavior: SnackBarBehavior.floating,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       duration: const Duration(seconds: 3),
       margin: const EdgeInsets.all(16),
     ));
@@ -1744,13 +1798,11 @@ class DetalleProyectoScreen extends StatelessWidget {
       content: Row(children: [
         const Icon(Icons.error_outline, color: Colors.white),
         const SizedBox(width: 12),
-        Expanded(
-            child: Text(mensaje, style: const TextStyle(fontSize: 15))),
+        Expanded(child: Text(mensaje, style: const TextStyle(fontSize: 15))),
       ]),
       backgroundColor: const Color(0xFFF44336),
       behavior: SnackBarBehavior.floating,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       duration: const Duration(seconds: 4),
       margin: const EdgeInsets.all(16),
     ));

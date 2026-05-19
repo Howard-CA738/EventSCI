@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Eventos</string>
+	<string>EventSCI</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>eventos</string>
+	<string>EventSCI</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -28,12 +28,16 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+
+	<!-- Orientaciones iPhone -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+
+	<!-- Orientaciones iPad -->
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -41,33 +45,31 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 
-	<!-- Cámara (mobile_scanner / QR) -->
+	<!-- Cámara: mobile_scanner para escaneo QR -->
 	<key>NSCameraUsageDescription</key>
-	<string>Se necesita la cámara para escanear códigos QR de los eventos</string>
+	<string>EventSCI usa la cámara para escanear códigos QR y registrar la asistencia a eventos.</string>
 
-	<!-- Galería / Fotos -->
+	<!-- Fotos: solo si file_picker permite seleccionar imágenes -->
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Se necesita acceso a fotos para seleccionar imágenes</string>
-
-	<!-- Guardar en galería -->
+	<string>EventSCI puede acceder a tus fotos para adjuntar imágenes a los eventos.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Se necesita permiso para guardar imágenes en tu galería</string>
+	<string>EventSCI puede guardar certificados e imágenes de eventos en tu galería.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>EventSCI usa la red local para descubrir impresoras y enviar reportes por AirPrint.</string>
 
-	<!-- Archivos / Documentos (file_picker) -->
-	<key>NSDocumentsFolderUsageDescription</key>
-	<string>Se necesita acceso a documentos para seleccionar y exportar archivos</string>
-
-	<!-- Red (Firebase / http) -->
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-	</dict>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_ipp._tcp</string>
+		<string>_ipps._tcp</string>
+		<string>_pdl-datastream._tcp</string>
+		<string>_printer._tcp</string>
+	</array>
 
 </dict>
 </plist>

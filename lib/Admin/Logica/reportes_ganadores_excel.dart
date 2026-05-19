@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:excel/excel.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart';
 
 class ReportesGanadoresExcelService {
   Future<bool> generarReporteGanadores({
@@ -11,7 +12,7 @@ class ReportesGanadoresExcelService {
     required int totalEventos,
   }) async {
     try {
-      print('🏆 Iniciando generación de reporte de ganadores Excel...');
+      debugPrint('🏆 Iniciando generación de reporte de ganadores Excel...');
 
       final excel = Excel.createExcel();
 
@@ -37,7 +38,7 @@ class ReportesGanadoresExcelService {
 
       return true;
     } catch (e) {
-      print('❌ Error al generar Excel de ganadores: $e');
+      debugPrint('❌ Error al generar Excel de ganadores: $e');
       return false;
     }
   }
@@ -737,14 +738,14 @@ class ReportesGanadoresExcelService {
       if (fileBytes != null) {
         final file = File(filePath);
         await file.writeAsBytes(fileBytes);
-        print('✅ Reporte de ganadores guardado exitosamente en: $filePath');
-        print('📁 Ubicación: ${directory.path}');
-        print('📄 Nombre: $fileName');
+        debugPrint('✅ Reporte de ganadores guardado exitosamente en: $filePath');
+        debugPrint('📁 Ubicación: ${directory.path}');
+        debugPrint('📄 Nombre: $fileName');
       } else {
         throw Exception('Error al generar el archivo Excel');
       }
     } catch (e) {
-      print('❌ Error al guardar archivo: $e');
+      debugPrint('❌ Error al guardar archivo: $e');
       rethrow;
     }
   }

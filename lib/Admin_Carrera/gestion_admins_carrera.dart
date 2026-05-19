@@ -33,7 +33,7 @@ class _GestionAdminsCarreraScreenState
       _estructuraFiliales = await _filialesService.getEstructuraCompleta();
       _admins = await _adminService.getAdminsCarrera();
     } catch (e) {
-      print('Error cargando datos: $e');
+      debugPrint('Error cargando datos: $e');
       _showMessage('Error al cargar datos', isError: true);
     }
     setState(() => _isLoading = false);
@@ -152,7 +152,7 @@ class _GestionAdminsCarreraScreenState
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha:0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.admin_panel_settings,
@@ -303,7 +303,7 @@ class _GestionAdminsCarreraScreenState
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.1),
+                            color: Colors.red.withValues(alpha:0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Text(
@@ -557,7 +557,7 @@ class __DialogoCrearAdminState extends State<_DialogoCrearAdmin> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                      color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.admin_panel_settings,
@@ -945,7 +945,7 @@ class __DialogoEditarAdminState extends State<_DialogoEditarAdmin> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                      color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.edit,
@@ -976,13 +976,13 @@ class __DialogoEditarAdminState extends State<_DialogoEditarAdmin> {
                             horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
                           color: _activo
-                              ? Colors.green.withOpacity(0.08)
-                              : Colors.red.withOpacity(0.08),
+                              ? Colors.green.withValues(alpha:0.08)
+                              : Colors.red.withValues(alpha:0.08),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: _activo
-                                ? Colors.green.withOpacity(0.3)
-                                : Colors.red.withOpacity(0.3),
+                                ? Colors.green.withValues(alpha:0.3)
+                                : Colors.red.withValues(alpha:0.3),
                           ),
                         ),
                         child: Row(

@@ -146,7 +146,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF4CAF50).withOpacity(0.3),
+                  color: const Color(0xFF4CAF50).withValues(alpha:0.3),
                   blurRadius: 15,
                   offset: const Offset(0, 8),
                 ),
@@ -157,7 +157,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha:0.2),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: const Icon(
@@ -206,7 +206,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha:0.08),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -434,7 +434,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
               },
               child: Chip(
                 label: Text(categoria, style: const TextStyle(fontSize: 11)),
-                backgroundColor: const Color(0xFF2C5F7C).withOpacity(0.1),
+                backgroundColor: const Color(0xFF2C5F7C).withValues(alpha:0.1),
                 labelStyle: const TextStyle(color: Color(0xFF2C5F7C)),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -526,7 +526,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF4CAF50).withOpacity(0.1),
+                color: const Color(0xFF4CAF50).withValues(alpha:0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.check_circle, color: Color(0xFF4CAF50)),

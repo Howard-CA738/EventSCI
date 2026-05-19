@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 
 class AdminCarreraService {
   static final AdminCarreraService _instance = AdminCarreraService._internal();
@@ -37,7 +38,7 @@ class AdminCarreraService {
           .get();
 
       if (existingAdmin.docs.isNotEmpty) {
-        print('❌ Ya existe un admin con ese usuario');
+        debugPrint('❌ Ya existe un admin con ese usuario');
         return false;
       }
 
@@ -54,10 +55,10 @@ class AdminCarreraService {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Admin de carrera creado: $usuario');
+      debugPrint('✅ Admin de carrera creado: $usuario');
       return true;
     } catch (e) {
-      print('❌ Error creando admin de carrera: $e');
+      debugPrint('❌ Error creando admin de carrera: $e');
       return false;
     }
   }
@@ -70,7 +71,7 @@ class AdminCarreraService {
     required String password,
   }) async {
     try {
-      print('🔍 Buscando admin de carrera: $usuario');
+      debugPrint('🔍 Buscando admin de carrera: $usuario');
 
       final adminQuery = await _firestore
           .collection('admins_carrera')
@@ -80,7 +81,7 @@ class AdminCarreraService {
           .get();
 
       if (adminQuery.docs.isEmpty) {
-        print('❌ Admin de carrera no encontrado');
+        debugPrint('❌ Admin de carrera no encontrado');
         return null;
       }
 
@@ -88,7 +89,7 @@ class AdminCarreraService {
       final adminData = adminDoc.data();
 
       if (adminData['password'] != password) {
-        print('❌ Contraseña incorrecta');
+        debugPrint('❌ Contraseña incorrecta');
         return null;
       }
 
@@ -101,10 +102,10 @@ class AdminCarreraService {
             .collection('admins_carrera')
             .doc(adminDoc.id)
             .update({'permisos': _permisosCompletos});
-        print('🔄 Permisos migrados para: ${adminData['usuario']}');
+        debugPrint('🔄 Permisos migrados para: ${adminData['usuario']}');
       }
 
-      print('✅ Login exitoso: ${adminData['usuario']}');
+      debugPrint('✅ Login exitoso: ${adminData['usuario']}');
 
       return {
         'id': adminDoc.id,
@@ -117,7 +118,7 @@ class AdminCarreraService {
         'permisos': _permisosCompletos,
       };
     } catch (e) {
-      print('❌ Error en login de admin carrera: $e');
+      debugPrint('❌ Error en login de admin carrera: $e');
       return null;
     }
   }
@@ -138,7 +139,7 @@ class AdminCarreraService {
         return data;
       }).toList();
     } catch (e) {
-      print('❌ Error obteniendo admins de carrera: $e');
+      debugPrint('❌ Error obteniendo admins de carrera: $e');
       return [];
     }
   }
@@ -159,7 +160,7 @@ class AdminCarreraService {
       data['id'] = adminDoc.id;
       return data;
     } catch (e) {
-      print('❌ Error obteniendo admin: $e');
+      debugPrint('❌ Error obteniendo admin: $e');
       return null;
     }
   }
@@ -193,7 +194,7 @@ class AdminCarreraService {
 
         if (existing.docs.isNotEmpty &&
             existing.docs.first.id != adminId) {
-          print('❌ Ya existe otro admin con ese usuario');
+          debugPrint('❌ Ya existe otro admin con ese usuario');
           return false;
         }
         updateData['usuario'] = usuario.trim().toLowerCase();
@@ -212,10 +213,10 @@ class AdminCarreraService {
           .doc(adminId)
           .update(updateData);
 
-      print('✅ Admin de carrera actualizado');
+      debugPrint('✅ Admin de carrera actualizado');
       return true;
     } catch (e) {
-      print('❌ Error actualizando admin de carrera: $e');
+      debugPrint('❌ Error actualizando admin de carrera: $e');
       return false;
     }
   }
@@ -229,10 +230,10 @@ class AdminCarreraService {
           .collection('admins_carrera')
           .doc(adminId)
           .delete();
-      print('✅ Admin de carrera eliminado');
+      debugPrint('✅ Admin de carrera eliminado');
       return true;
     } catch (e) {
-      print('❌ Error eliminando admin de carrera: $e');
+      debugPrint('❌ Error eliminando admin de carrera: $e');
       return false;
     }
   }
@@ -276,7 +277,7 @@ class AdminCarreraService {
 
       return admins;
     } catch (e) {
-      print('❌ Error buscando admins: $e');
+      debugPrint('❌ Error buscando admins: $e');
       return [];
     }
   }
@@ -299,7 +300,7 @@ class AdminCarreraService {
         return data;
       }).toList();
     } catch (e) {
-      print('❌ Error obteniendo admins por carrera: $e');
+      debugPrint('❌ Error obteniendo admins por carrera: $e');
       return [];
     }
   }

@@ -18,23 +18,20 @@ dependencies:
   shared_preferences: ^2.2.2
   intl: ^0.20.2
   qr_flutter: ^4.1.0
-  mobile_scanner: ^3.5.6
+  mobile_scanner: ^7.2.0
   file_picker: ^8.1.2
   excel: ^4.0.3
-  app_links: ^3.4.3
+  app_links: ^7.0.0
   device_info_plus: ^11.5.0
   path_provider: ^2.1.1
-  open_file: ^3.3.2
+  open_filex: ^4.3.4
   permission_handler: ^11.1.0
   pdf: ^3.10.8
   printing: ^5.12.0
-  share_plus: ^10.0.2
-  archive: ^3.6.1
-  fake_cloud_firestore: ^3.0.3
-  firebase_auth_mocks: ^0.14.1
-  mocktail: ^1.0.4
+  share_plus: ^10.1.4
   uuid: ^4.0.0
-  docx_template: ^0.4.0 
+  archive: ^3.6.1
+  firebase_app_check: ^0.3.2+10
 
 dev_dependencies:
   flutter_test:
@@ -48,18 +45,25 @@ flutter:
   assets:
     - assets/icons/
     - assets/images/
-    - assets/certificado.jpg
+    - assets/firma03.jpeg
+    - assets/firma02.png
+    - assets/firma01.jpeg
     - assets/fonts/
     - assets/plantilla_informe.docx
+    - assets/plantilla_certificado.png
 
   fonts:
     - family: Montserrat
       fonts:
         - asset: assets/fonts/Montserrat-Regular.ttf
         - asset: assets/fonts/Montserrat-Bold.ttf
-        - asset: assets/fonts/Montserrat-Italic.ttf
-        - asset: assets/fonts/Cinzel-Regular.ttf
           weight: 700
+        - asset: assets/fonts/Montserrat-Italic.ttf
+          style: italic
+
+    - family: Cinzel
+      fonts:
+        - asset: assets/fonts/Cinzel-Regular.ttf
     - family: GreatVibes  
       fonts:
         - asset: assets/fonts/GreatVibes-Regular.ttf

@@ -93,7 +93,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
         _isLoadingData = false;
       });
     } catch (e) {
-      print('Error cargando datos iniciales: $e');
+      debugPrint('Error cargando datos iniciales: $e');
       setState(() => _isLoadingData = false);
       _showSnackBar('Error al cargar datos', isError: true);
     }
@@ -110,7 +110,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
         _carreras = [];
       });
     } catch (e) {
-      print('Error cargando facultades: $e');
+      debugPrint('Error cargando facultades: $e');
       _showSnackBar('Error al cargar facultades', isError: true);
     }
   }
@@ -127,7 +127,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
         _selectedCarreraNombre = null;
       });
     } catch (e) {
-      print('Error cargando carreras: $e');
+      debugPrint('Error cargando carreras: $e');
       _showSnackBar('Error al cargar carreras', isError: true);
     }
   }
@@ -308,7 +308,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF1E3A5F).withOpacity(0.15),
+                            color: const Color(0xFF1E3A5F).withValues(alpha: 0.15),
                             spreadRadius: 0,
                             blurRadius: 20,
                             offset: const Offset(0, 8),
@@ -325,7 +325,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
                                 decoration: BoxDecoration(
                                   color: const Color(
                                     0xFF1E3A5F,
-                                  ).withOpacity(0.1),
+                                  ).withValues(alpha:0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: const Icon(
@@ -614,7 +614,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha:0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -655,7 +655,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha:0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -705,7 +705,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1E3A5F).withOpacity(0.5),
+            color: const Color(0xFF1E3A5F).withValues(alpha:0.5),
             spreadRadius: 0,
             blurRadius: 15,
             offset: const Offset(0, 8),
@@ -765,7 +765,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2E7D32).withOpacity(0.5),
+            color: const Color(0xFF2E7D32).withValues(alpha:0.5),
             spreadRadius: 0,
             blurRadius: 15,
             offset: const Offset(0, 8),
@@ -859,7 +859,7 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
         _isLoadingFilters = false;
       });
     } catch (e) {
-      print('Error cargando datos de filtros: $e');
+      debugPrint('Error cargando datos de filtros: $e');
       setState(() => _isLoadingFilters = false);
     }
   }
@@ -874,7 +874,7 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
         _carreras = [];
       });
     } catch (e) {
-      print('Error cargando facultades: $e');
+      debugPrint('Error cargando facultades: $e');
     }
   }
 
@@ -892,7 +892,7 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
         _filtroCarreraId = null;
       });
     } catch (e) {
-      print('Error cargando carreras: $e');
+      debugPrint('Error cargando carreras: $e');
     }
   }
 
@@ -952,7 +952,7 @@ showDialog(
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                  color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.edit, color: Color(0xFF1E3A5F)),
@@ -1180,7 +1180,7 @@ showDialog(
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha:0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(Icons.delete_outline, color: Colors.red),
@@ -1271,7 +1271,7 @@ showDialog(
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                  color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                   blurRadius: 15,
                   offset: const Offset(0, 5),
                 ),
@@ -1284,7 +1284,7 @@ showDialog(
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                        color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(
@@ -1517,7 +1517,7 @@ showDialog(
                         Container(
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.1),
+                            color: Colors.red.withValues(alpha:0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: const Icon(
@@ -1564,7 +1564,7 @@ showDialog(
                         Container(
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
-                            color: Colors.grey.withOpacity(0.1),
+                            color: Colors.grey.withValues(alpha:0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Icon(
@@ -1627,7 +1627,7 @@ showDialog(
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF1E3A5F).withOpacity(0.08),
+                              color: const Color(0xFF1E3A5F).withValues(alpha:0.08),
                               blurRadius: 10,
                               offset: const Offset(0, 4),
                             ),
@@ -1660,7 +1660,7 @@ showDialog(
                                         BoxShadow(
                                           color: const Color(
                                             0xFF1E3A5F,
-                                          ).withOpacity(0.3),
+                                          ).withValues(alpha:0.3),
                                           blurRadius: 8,
                                           offset: const Offset(0, 3),
                                         ),
@@ -1702,10 +1702,10 @@ showDialog(
                                               colors: [
                                                 const Color(
                                                   0xFF43A047,
-                                                ).withOpacity(0.15),
+                                                ).withValues(alpha:0.15),
                                                 const Color(
                                                   0xFF66BB6A,
-                                                ).withOpacity(0.15),
+                                                ).withValues(alpha:0.15),
                                               ],
                                             ),
                                             borderRadius: BorderRadius.circular(
@@ -1714,7 +1714,7 @@ showDialog(
                                             border: Border.all(
                                               color: const Color(
                                                 0xFF43A047,
-                                              ).withOpacity(0.3),
+                                              ).withValues(alpha:0.3),
                                             ),
                                           ),
                                           child: Text(
@@ -1825,7 +1825,7 @@ showDialog(
                                   ),
                                   Container(
                                     decoration: BoxDecoration(
-                                      color: Colors.grey.withOpacity(0.1),
+                                      color: Colors.grey.withValues(alpha:0.1),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: PopupMenuButton<String>(

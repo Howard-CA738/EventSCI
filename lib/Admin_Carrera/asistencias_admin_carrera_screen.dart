@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-// Reutiliza la pantalla de resultados que ya tienes
 import '/admin/logica/asistencias_estudiantes_resultados.dart';
+import 'asistencias_carrera_excel.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:share_plus/share_plus.dart';
 
-/// Pantalla de asistencias para Admin de Carrera.
-/// Recibe filialId, filialNombre, facultad y carrera directamente
-/// desde [ReportesAdminCarreraScreen], por lo que NO muestra filtros
-/// de ubicación — solo el selector de evento ya filtrado.
 class AsistenciasAdminCarreraScreen extends StatefulWidget {
   final String filialId;
   final String filialNombre;
@@ -30,6 +28,8 @@ class _AsistenciasAdminCarreraScreenState
     extends State<AsistenciasAdminCarreraScreen>
     with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final AsistenciasCarreraExcelService _excelService =
+      AsistenciasCarreraExcelService();
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -39,9 +39,13 @@ class _AsistenciasAdminCarreraScreenState
   String? _eventoSeleccionadoId;
   Map<String, dynamic>? _eventoSeleccionadoData;
 
+  // Lista completa de estudiantes del evento (para exportar)
+  List<Map<String, dynamic>> _estudiantesEvento = [];
+
   int _totalAsistencias = 0;
   bool _isLoadingEventos = true;
   bool _isLoadingResumen = false;
+  bool _isGeneratingExcel = false;
 
   @override
   void initState() {
@@ -94,7 +98,6 @@ class _AsistenciasAdminCarreraScreenState
         };
       }).toList();
 
-      // Filtrar: filial + facultad + carrera del admin
       final filtrados = todos.where((e) {
         final filialMatch = e['filialId'] == widget.filialId ||
             e['filialNombre'] == widget.filialNombre ||
@@ -122,16 +125,117 @@ class _AsistenciasAdminCarreraScreenState
     }
   }
 
-  // Carga total de asistencias del evento elegido
+  // ═══════════════════════════════════════════════════════════════
+  // Carga resumen + datos completos del evento elegido
+  // ═══════════════════════════════════════════════════════════════
   Future<void> _cargarResumen(String eventoId) async {
-    setState(() => _isLoadingResumen = true);
+    setState(() {
+      _isLoadingResumen = true;
+      _estudiantesEvento = [];
+    });
+
     try {
       final snap = await _firestore
           .collection('events')
           .doc(eventoId)
           .collection('asistencias')
           .get();
-      if (mounted) setState(() => _totalAsistencias = snap.docs.length);
+
+      // Cargar datos completos de cada estudiante (necesarios para el Excel)
+      final futures = snap.docs.map((estudianteDoc) async {
+        final data = estudianteDoc.data();
+
+        // Obtener scans del estudiante
+        final scansSnap = await _firestore
+            .collection('events')
+            .doc(eventoId)
+            .collection('asistencias')
+            .doc(estudianteDoc.id)
+            .collection('scans')
+            .get();
+
+        // Intentar obtener ciclo y grupo del resumen primero
+        String? ciclo = data['ciclo'];
+        String? grupo = data['grupo'];
+
+        if (ciclo == null || grupo == null) {
+          try {
+            final carreraPath = data['carrera'];
+            final username = data['studentUsername'];
+            if (carreraPath != null && username != null) {
+              final q = await _firestore
+                  .collection('users')
+                  .doc(carreraPath)
+                  .collection('students')
+                  .where('username', isEqualTo: username)
+                  .limit(1)
+                  .get();
+              if (q.docs.isNotEmpty) {
+                final sd = q.docs.first.data();
+                ciclo ??= sd['ciclo'];
+                grupo ??= sd['grupo'];
+              }
+            }
+          } catch (_) {}
+        }
+
+        final scans = scansSnap.docs.map((s) {
+          final sd = s.data();
+          return {
+            'id': s.id,
+            'codigoProyecto': sd['codigoProyecto'] ?? 'Sin código',
+            'tituloProyecto': sd['tituloProyecto'] ?? 'Sin título',
+            'categoria': sd['categoria'] ?? 'Sin categoría',
+            'grupo': sd['grupo'],
+            'timestamp': sd['timestamp'],
+          };
+        }).toList();
+
+        // Ordenar scans por timestamp descendente
+        scans.sort((a, b) {
+          final tA = (a['timestamp'] as dynamic)?.toDate();
+          final tB = (b['timestamp'] as dynamic)?.toDate();
+          if (tA == null || tB == null) return 0;
+          return tB.compareTo(tA);
+        });
+
+        return {
+          'id': estudianteDoc.id,
+          'nombre': data['studentName'] ?? 'Sin nombre',
+          'username': data['studentUsername'] ?? '',
+          'dni': data['studentDNI'] ?? '',
+          'codigo': data['studentCodigo'] ?? '',
+          'facultad': data['facultad'] ?? '',
+          'carrera': data['carrera'] ?? '',
+          'ciclo': ciclo ?? 'N/A',
+          'grupo': grupo ?? 'N/A',
+          'totalScans': scansSnap.docs.length,
+          'lastScan': data['lastScan'],
+          'scans': scans,
+        };
+      }).toList();
+
+      final lista = await Future.wait(futures);
+
+      // Ordenar: ciclo → grupo → nombre
+      lista.sort((a, b) {
+        final cA = _parseCiclo(a['ciclo']);
+        final cB = _parseCiclo(b['ciclo']);
+        if (cA != cB) return cA.compareTo(cB);
+
+        final gA = _parseGrupo(a['grupo']);
+        final gB = _parseGrupo(b['grupo']);
+        if (gA != gB) return gA.compareTo(gB);
+
+        return (a['nombre'] as String).compareTo(b['nombre'] as String);
+      });
+
+      if (mounted) {
+        setState(() {
+          _totalAsistencias = lista.length;
+          _estudiantesEvento = lista;
+        });
+      }
     } catch (e) {
       debugPrint('Error cargando resumen: $e');
     } finally {
@@ -146,6 +250,7 @@ class _AsistenciasAdminCarreraScreenState
       _eventoSeleccionadoId = id;
       _eventoSeleccionadoData = data;
       _totalAsistencias = 0;
+      _estudiantesEvento = [];
     });
     _cargarResumen(id);
   }
@@ -166,6 +271,207 @@ class _AsistenciasAdminCarreraScreenState
     );
   }
 
+  Future<void> _exportarExcel() async {
+  if (_eventoSeleccionadoId == null) return;
+
+  if (_estudiantesEvento.isEmpty) {
+    _showSnackBar('No hay asistencias para exportar', isError: true);
+    return;
+  }
+
+  setState(() => _isGeneratingExcel = true);
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(color: Color(0xFF1E3A5F)),
+          const SizedBox(height: 20),
+          const Text(
+            'Generando reporte Excel...',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '$_totalAsistencias estudiantes · ${_eventoSeleccionadoData!['name']}',
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    ),
+  );
+
+  try {
+    // ✅ Ahora recibe la ruta del archivo
+    final rutaArchivo = await _excelService.generarReporteAsistencias(
+      estudiantes: _estudiantesEvento,
+      eventoNombre: _eventoSeleccionadoData!['name'],
+      filialNombre: widget.filialNombre,
+      facultad: widget.facultad,
+      carrera: widget.carrera,
+    );
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // cerrar loading
+    setState(() => _isGeneratingExcel = false);
+
+    if (rutaArchivo == null) {
+      _showSnackBar('❌ Error al generar el reporte Excel', isError: true);
+      return;
+    }
+
+    // ✅ Mostrar diálogo con dos opciones
+    _mostrarOpcionesArchivo(rutaArchivo);
+
+  } catch (e) {
+    debugPrint('Error al exportar Excel: $e');
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+      setState(() => _isGeneratingExcel = false);
+      _showSnackBar('Error: $e', isError: true);
+    }
+  }
+}
+
+void _mostrarOpcionesArchivo(String rutaArchivo) {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF27AE60).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.check_circle,
+              color: Color(0xFF27AE60),
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Reporte generado',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+      content: const Text(
+        '¿Qué deseas hacer con el archivo Excel?',
+        style: TextStyle(fontSize: 14, color: Colors.black54),
+      ),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      actions: [
+        // Botón Abrir
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final result = await OpenFilex.open(rutaArchivo);
+              // Si no hay app para abrir xlsx, mostrar mensaje amigable
+              if (result.type != ResultType.done && mounted) {
+                _showSnackBar(
+                  'No se encontró una app para abrir archivos Excel. Prueba compartirlo.',
+                  isError: true,
+                );
+              }
+            },
+            icon: const Icon(Icons.open_in_new, size: 20),
+            label: const Text(
+              'Abrir archivo',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1E3A5F),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Botón Compartir
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await Share.shareXFiles(
+                [XFile(rutaArchivo)],
+                subject:
+                    'Reporte de Asistencias – ${_eventoSeleccionadoData!['name']}',
+              );
+            },
+            icon: const Icon(Icons.share, size: 20),
+            label: const Text(
+              'Compartir',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF1E3A5F),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              side: const BorderSide(color: Color(0xFF1E3A5F), width: 1.5),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red[700] : Colors.green[700],
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  int _parseCiclo(String? ciclo) {
+    if (ciclo == null || ciclo.isEmpty || ciclo == 'N/A') return 999;
+    try {
+      final m = RegExp(r'\d+').firstMatch(ciclo);
+      if (m != null) return int.parse(m.group(0)!);
+    } catch (_) {}
+    return 999;
+  }
+
+  int _parseGrupo(String? grupo) {
+    if (grupo == null || grupo.isEmpty || grupo == 'N/A') return 999;
+    final g = grupo.toLowerCase();
+    if (g.contains('único') || g.contains('unico')) return 0;
+    try {
+      final m = RegExp(r'\d+').firstMatch(grupo);
+      if (m != null) return int.parse(m.group(0)!);
+    } catch (_) {}
+    return 999;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // BUILD
+  // ═══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -182,7 +488,6 @@ class _AsistenciasAdminCarreraScreenState
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        // Subtítulo con la ruta del admin
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(26),
           child: Padding(
@@ -237,7 +542,7 @@ class _AsistenciasAdminCarreraScreenState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // ── Tarjeta de contexto (solo lectura) ──────────
+                        // ── Tarjeta de contexto ──────────────────────────
                         _buildContextCard(),
 
                         const SizedBox(height: 20),
@@ -245,12 +550,16 @@ class _AsistenciasAdminCarreraScreenState
                         // ── Selector de evento ───────────────────────────
                         _buildEventoCard(),
 
-                        // ── Resumen ──────────────────────────────────────
+                        // ── Sección post-selección ───────────────────────
                         if (_eventoSeleccionadoId != null) ...[
                           const SizedBox(height: 16),
                           _buildResumenCard(),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 16),
+                          // ── Botón Ver Asistencias ────────────────────
                           _buildBotonVerAsistencias(),
+                          const SizedBox(height: 12),
+                          // ── Botón Exportar Excel ─────────────────────
+                          _buildBotonExportarExcel(),
                         ],
 
                         const SizedBox(height: 24),
@@ -263,173 +572,352 @@ class _AsistenciasAdminCarreraScreenState
     );
   }
 
-  // ── Tarjeta de contexto (filial / facultad / carrera) ──────────
+  // ── Tarjeta de contexto ────────────────────────────────────────
   Widget _buildContextCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E3A5F).withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.school,
-                    color: Color(0xFF1E3A5F), size: 20),
-              ),
-              const SizedBox(width: 10),
-              const Text(
-                'Tu carrera asignada',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E3A5F),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _buildInfoRow(Icons.location_city, widget.filialNombre),
-          const SizedBox(height: 6),
-          _buildInfoRow(Icons.business, widget.facultad),
-          const SizedBox(height: 6),
-          _buildInfoRow(Icons.school, widget.carrera),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(IconData icon, String text) {
-    return Row(
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: const Color(0xFF1E3A5F),
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Row(
       children: [
-        Icon(icon, size: 15, color: Colors.grey[500]),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(text,
-              style: TextStyle(fontSize: 13, color: Colors.grey[700]),
-              overflow: TextOverflow.ellipsis),
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.school, color: Colors.white, size: 22),
         ),
-      ],
-    );
-  }
-
-  // ── Selector de evento ─────────────────────────────────────────
-  Widget _buildEventoCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF4A90E2).withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.event,
-                    color: Color(0xFF4A90E2), size: 20),
-              ),
-              const SizedBox(width: 10),
-              const Text(
-                'Seleccionar Evento',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E3A5F),
+              Text(
+                widget.carrera,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          if (_eventos.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.shade200),
+              const SizedBox(height: 3),
+              Text(
+                widget.facultad,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
-              child: Row(
+              const SizedBox(height: 2),
+              Row(
                 children: [
-                  Icon(Icons.info_outline,
-                      color: Colors.orange[700], size: 18),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'No hay eventos registrados para tu carrera.',
-                      style: TextStyle(fontSize: 13),
-                    ),
+                  const Icon(Icons.location_on,
+                      color: Colors.white54, size: 12),
+                  const SizedBox(width: 4),
+                  Text(
+                    widget.filialNombre,
+                    style: const TextStyle(
+                        color: Colors.white54, fontSize: 11),
                   ),
                 ],
               ),
-            )
-          else
-            DropdownButtonFormField<String>(
-              value: _eventoSeleccionadoId,
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: 'Evento (${_eventos.length} disponible${_eventos.length != 1 ? 's' : ''})',
-                prefixIcon:
-                    const Icon(Icons.event_note, color: Color(0xFF4A90E2)),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                filled: true,
-                fillColor: const Color(0xFFF9FAFB),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF4A90E2),
-                    width: 2,
-                  ),
+            ],
+          ),
+        ),
+        Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white30),
+          ),
+          child: const Text(
+            'Tu carrera',
+            style: TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+  // ── Selector de evento ─────────────────────────────────────────
+  Widget _buildEventoCard() {
+  return Container(
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.06),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Banner informativo ───────────────────────────────────
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.blue.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.blue.withValues(alpha: 0.25)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Selecciona un evento para ver sus asistencias o exportar el reporte Excel.',
+                  style: TextStyle(fontSize: 12, color: Colors.blue[700]),
                 ),
               ),
-              items: _eventos.map((e) {
-                return DropdownMenuItem<String>(
-                  value: e['id'] as String,
-                  child: Text(
-                    e['name'] as String,
-                    style: const TextStyle(fontSize: 14),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                );
-              }).toList(),
-              onChanged: _onEventoChanged,
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // ── Encabezado con contador y recarga ────────────────────
+        Row(
+          children: [
+            const Text(
+              'Eventos de tu carrera',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1E3A5F),
+              ),
             ),
+            const SizedBox(width: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${_eventos.length}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF1E3A5F),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const Spacer(),
+            GestureDetector(
+              onTap: _cargarEventos,
+              child: Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E3A5F).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.refresh,
+                    size: 18, color: Color(0xFF1E3A5F)),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        // ── Lista o estado vacío ─────────────────────────────────
+        if (_isLoadingEventos)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(
+                    Color(0xFF1E3A5F)),
+              ),
+            ),
+          )
+        else if (_eventos.isEmpty)
+          _buildEmptyEventos()
+        else
+          ...List.generate(_eventos.length, (i) {
+            final evento = _eventos[i];
+            return TweenAnimationBuilder<double>(
+              duration: Duration(milliseconds: 280 + i * 50),
+              tween: Tween(begin: 0.0, end: 1.0),
+              curve: Curves.easeOutCubic,
+              builder: (ctx, v, child) => Transform.translate(
+                offset: Offset(0, 16 * (1 - v)),
+                child: Opacity(opacity: v, child: child),
+              ),
+              child: _buildEventoItem(evento),
+            );
+          }),
+      ],
+    ),
+  );
+}
+Widget _buildEmptyEventos() {
+  return Container(
+    padding: const EdgeInsets.all(32),
+    decoration: BoxDecoration(
+      color: Colors.orange.shade50,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: Colors.orange.shade200),
+    ),
+    child: Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: const BoxDecoration(
+            color: Color(0xFFFFF3E0),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.event_busy_rounded,
+              size: 48, color: Color(0xFFFF9800)),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'No hay eventos disponibles',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF1E3A5F),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'No hay eventos registrados para esta carrera.',
+          style: TextStyle(
+              fontSize: 13, color: Colors.grey[500], height: 1.5),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    ),
+  );
+}
+
+// ── NUEVO: card individual de evento ───────────────────────────
+Widget _buildEventoItem(Map<String, dynamic> evento) {
+  final nombre = evento['name'] as String;
+  final isSelected = _eventoSeleccionadoId == evento['id'];
+
+  return GestureDetector(
+    onTap: () => _onEventoChanged(evento['id'] as String),
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? const Color(0xFF1E3A5F).withValues(alpha: 0.06)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isSelected
+              ? const Color(0xFF1E3A5F)
+              : const Color(0xFFE2E8F0),
+          width: isSelected ? 1.5 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
-    );
-  }
-
+      child: Row(
+        children: [
+          // Avatar con inicial
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isSelected
+                    ? [const Color(0xFF1E3A5F), const Color(0xFF2D5F8D)]
+                    : [const Color(0xFF4A90E2), const Color(0xFF357ABD)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Text(
+                nombre.substring(0, 1).toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  nombre,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: isSelected
+                        ? const Color(0xFF1E3A5F)
+                        : const Color(0xFF1E3A5F),
+                  ),
+                ),
+                if (isSelected) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.check_circle,
+                          size: 12, color: Color(0xFF27AE60)),
+                      const SizedBox(width: 4),
+                      Text(
+                        _isLoadingResumen
+                            ? 'Cargando...'
+                            : '$_totalAsistencias estudiantes',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF27AE60),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          // Indicador de selección
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? const Color(0xFF1E3A5F)
+                  : const Color(0xFFF0F4FF),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              isSelected
+                  ? Icons.check_rounded
+                  : Icons.arrow_forward_ios_rounded,
+              color: isSelected ? Colors.white : const Color(0xFF1E3A5F),
+              size: 14,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
   // ── Resumen del evento seleccionado ────────────────────────────
   Widget _buildResumenCard() {
     return Container(
@@ -448,9 +936,7 @@ class _AsistenciasAdminCarreraScreenState
             child: _buildResumenStat(
               icon: Icons.people_alt,
               label: 'Estudiantes registrados',
-              value: _isLoadingResumen
-                  ? '...'
-                  : '$_totalAsistencias',
+              value: _isLoadingResumen ? '...' : '$_totalAsistencias',
               color: Colors.green.shade300,
             ),
           ),
@@ -477,9 +963,9 @@ class _AsistenciasAdminCarreraScreenState
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: Colors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.15)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -514,7 +1000,7 @@ class _AsistenciasAdminCarreraScreenState
     );
   }
 
-  // ── Botón ver asistencias ──────────────────────────────────────
+  // ── Botón Ver Asistencias ──────────────────────────────────────
   Widget _buildBotonVerAsistencias() {
     return SizedBox(
       width: double.infinity,
@@ -529,6 +1015,57 @@ class _AsistenciasAdminCarreraScreenState
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF4A90E2),
           foregroundColor: Colors.white,
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Botón Exportar Excel ───────────────────────────────────────
+  Widget _buildBotonExportarExcel() {
+    final bool puedeExportar =
+        !_isLoadingResumen && !_isGeneratingExcel && _totalAsistencias > 0;
+
+    return SizedBox(
+      width: double.infinity,
+      height: 54,
+      child: ElevatedButton.icon(
+        onPressed: puedeExportar ? _exportarExcel : null,
+        icon: _isGeneratingExcel
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : _isLoadingResumen
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white54,
+                    ),
+                  )
+                : const Icon(Icons.file_download, size: 22),
+        label: Text(
+          _isGeneratingExcel
+              ? 'Generando Excel...'
+              : _isLoadingResumen
+                  ? 'Cargando datos...'
+                  : 'Exportar Reporte Excel',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF27AE60),
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: Colors.grey[300],
+          disabledForegroundColor: Colors.grey[500],
           elevation: 4,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),

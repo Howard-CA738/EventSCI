@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:app_links/app_links.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'firebase_options.dart';
@@ -11,10 +12,24 @@ import '/usuarios/logica/estudiante.dart';
 import '/Asistentes/asistentes.dart';
 import '/Jurados/jurados.dart';
 import '/prefs_helper.dart';
+import '/super_admin_login.dart';
+import 'package:flutter/foundation.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  
+  if (!kIsWeb) {
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: kDebugMode
+          ? AndroidProvider.debug
+          : AndroidProvider.playIntegrity,
+      appleProvider: kDebugMode
+          ? AppleProvider.debug
+          : AppleProvider.deviceCheck,
+    );
+  }
+  
   runApp(const MyApp());
 }
 
@@ -47,11 +62,11 @@ class _MyAppState extends State<MyApp> {
   void _initDeepLinkListener() {
     _linkSubscription = _appLinks.uriLinkStream.listen(
       (Uri uri) {
-        print('Deep link recibido: ${uri.toString()}');
+        debugPrint('Deep link recibido: ${uri.toString()}');
         _handleDeepLink(uri.toString());
       },
       onError: (err) {
-        print('Error en deep link: $err');
+        debugPrint('Error en deep link: $err');
       },
     );
 
@@ -60,13 +75,13 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _handleInitialLink() async {
     try {
-      final Uri? initialUri = await _appLinks.getInitialAppLink();
+      final Uri? initialUri = await _appLinks.getInitialLink();
       if (initialUri != null) {
-        print('Deep link inicial: ${initialUri.toString()}');
+        debugPrint('Deep link inicial: ${initialUri.toString()}');
         _pendingDeepLink = initialUri.toString();
       }
     } catch (e) {
-      print('Error obteniendo deep link inicial: $e');
+      debugPrint('Error obteniendo deep link inicial: $e');
     }
   }
 
@@ -82,21 +97,21 @@ class _MyAppState extends State<MyApp> {
             final String decodedData = Uri.decodeComponent(encodedData);
             final Map<String, dynamic> qrData = jsonDecode(decodedData);
 
-            print('Datos del QR decodificados: $qrData');
+            debugPrint('Datos del QR decodificados: $qrData');
             _navigateToAsistencia(qrData);
           } catch (e) {
-            print('Error decodificando datos del QR: $e');
+            debugPrint('Error decodificando datos del QR: $e');
             _showErrorDialog('Error', 'Código QR inválido o dañado');
           }
         } else {
-          print('No se encontraron datos en el deep link');
+          debugPrint('No se encontraron datos en el deep link');
           _showErrorDialog('Error', 'Enlace inválido');
         }
       } else {
-        print('Deep link no reconocido: $link');
+        debugPrint('Deep link no reconocido: $link');
       }
     } catch (e) {
-      print('Error procesando deep link: $e');
+      debugPrint('Error procesando deep link: $e');
       _showErrorDialog('Error', 'Error al procesar el enlace');
     }
   }
@@ -171,10 +186,9 @@ class _MyAppState extends State<MyApp> {
         '/asistente': (context) => const AsistentesScreen(),
         '/jurado': (context) => const JuradosScreen(),
         '/registro-asistencia': (context) => RegistroAsistenciaScreen(
-          qrData:
-              ModalRoute.of(context)?.settings.arguments
+              qrData: ModalRoute.of(context)?.settings.arguments
                   as Map<String, dynamic>?,
-        ),
+            ),
       },
       home: AuthWrapper(pendingDeepLink: _pendingDeepLink),
     );
@@ -246,19 +260,19 @@ class _AuthWrapperState extends State<AuthWrapper> {
               }
 
               final userType = userTypeSnapshot.data;
-              print('🔍 UserType detectado en AuthWrapper: $userType');
+              debugPrint('🔍 UserType detectado en AuthWrapper: $userType');
 
-              if (userType == PrefsHelper.userTypeAdmin) {
+              // SuperAdmin y Admin van al mismo panel
+              if (userType == PrefsHelper.userTypeAdmin ||
+                  userType == 'superAdmin') {
                 return const AdminScreen();
-              } else if (userType == PrefsHelper.userTypeAsistente) {
-                return const AsistentesScreen();
               } else if (userType == PrefsHelper.userTypeJurado) {
-                print('✅ Navegando a JuradosScreen');
+                debugPrint('✅ Navegando a JuradosScreen');
                 return const JuradosScreen();
               } else if (userType == PrefsHelper.userTypeStudent) {
                 return const EstudianteScreen();
               } else {
-                print('❌ Tipo de usuario desconocido: $userType');
+                debugPrint('❌ Tipo de usuario desconocido: $userType');
                 PrefsHelper.logout();
                 return const LoginScreen();
               }
@@ -266,30 +280,41 @@ class _AuthWrapperState extends State<AuthWrapper> {
           );
         }
 
-        // No hay sesión activa o fue invalidada
         return const LoginScreen();
       },
     );
   }
 
-  // ✅ ACTUALIZADO: Verifica sesión activa Y que la contraseña no haya cambiado
   Future<bool> _checkAuthStatus() async {
     try {
       final isLoggedIn = await PrefsHelper.isLoggedIn();
-      print('🔍 Estado de sesión: $isLoggedIn');
+      debugPrint('🔍 Estado de sesión: $isLoggedIn');
       if (!isLoggedIn) return false;
 
-      // ✅ Verificar si la sesión sigue siendo válida (contraseña no cambió)
+      final userType = await PrefsHelper.getUserType();
+
+      // SuperAdmin: Firebase Auth maneja su sesión
+      if (userType == 'superAdmin') {
+        final activa = await SuperAdminAuthService.sesionActiva();
+        if (!activa) {
+          debugPrint('🔒 Sesión de superAdmin expirada');
+          await PrefsHelper.logout();
+          return false;
+        }
+        return true;
+      }
+
+      // Resto de usuarios: validación original por contraseña
       final isValid = await PrefsHelper.isSessionValid();
       if (!isValid) {
-        print('🔒 Sesión invalidada por cambio de contraseña');
+        debugPrint('🔒 Sesión invalidada por cambio de contraseña');
         await PrefsHelper.logout();
         return false;
       }
 
       return true;
     } catch (e) {
-      print('Error verificando estado de autenticación: $e');
+      debugPrint('Error verificando estado de autenticación: $e');
       return false;
     }
   }

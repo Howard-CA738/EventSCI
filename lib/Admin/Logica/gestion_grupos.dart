@@ -89,7 +89,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
         }
       });
     } catch (e) {
-      print('Error cargando datos iniciales: $e');
+      debugPrint('Error cargando datos iniciales: $e');
       setState(() => _isLoadingData = false);
       _showSnackBar('Error al cargar datos', isError: true);
     }
@@ -106,7 +106,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
         _carreras = [];
       });
     } catch (e) {
-      print('Error cargando facultades: $e');
+      debugPrint('Error cargando facultades: $e');
       _showSnackBar('Error al cargar facultades', isError: true);
     }
   }
@@ -123,7 +123,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
         _selectedCarreraNombre = null;
       });
     } catch (e) {
-      print('Error cargando carreras: $e');
+      debugPrint('Error cargando carreras: $e');
       _showSnackBar('Error al cargar carreras', isError: true);
     }
   }
@@ -220,7 +220,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF1E3A5F).withOpacity(0.3),
+                  color: const Color(0xFF1E3A5F).withValues(alpha:0.3),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -236,7 +236,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha:0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
@@ -331,10 +331,10 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
                       margin: const EdgeInsets.only(top: 16),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
+                        color: Colors.white.withValues(alpha:0.15),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
+                          color: Colors.white.withValues(alpha:0.3),
                         ),
                       ),
                       child: Row(
@@ -350,7 +350,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
                               'Mostrando eventos de $_selectedCarreraNombre',
                               style: TextStyle(
                                 fontSize: 13,
-                                color: Colors.white.withOpacity(0.95),
+                                color: Colors.white.withValues(alpha:0.95),
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -396,7 +396,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha:0.05),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -453,7 +453,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
+              color: Colors.grey.withValues(alpha:0.1),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -622,7 +622,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
                 border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withOpacity(0.08),
+                    color: Colors.grey.withValues(alpha:0.08),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -646,7 +646,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF2196F3).withOpacity(0.3),
+                                color: const Color(0xFF2196F3).withValues(alpha:0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, 4),
                               ),
@@ -803,7 +803,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
+                  color: Colors.grey.withValues(alpha:0.1),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -822,7 +822,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
                     child: Icon(
                       Icons.filter_alt_rounded,
                       size: 60,
-                      color: const Color(0xFF1E3A5F).withOpacity(0.7),
+                      color: const Color(0xFF1E3A5F).withValues(alpha:0.7),
                     ),
                   ),
                   const SizedBox(height: 24),

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 class SeleccionarGanadoresLogic {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -66,7 +67,7 @@ class SeleccionarGanadoresLogic {
 
       return grupos;
     } catch (e) {
-      print('Error detallado al cargar grupos: $e');
+      debugPrint('Error detallado al cargar grupos: $e');
       rethrow;
     }
   }
@@ -87,7 +88,7 @@ class SeleccionarGanadoresLogic {
             'winnerDate': isWinner ? Timestamp.now() : null,
           });
     } catch (e) {
-      print('Error detallado al actualizar ganador: $e');
+      debugPrint('Error detallado al actualizar ganador: $e');
       rethrow;
     }
   }

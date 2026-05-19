@@ -287,7 +287,7 @@
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha:0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.qr_code_scanner, size: 24),
@@ -312,7 +312,7 @@
                   icon: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.15),
+                      color: Colors.white.withValues(alpha:0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(Icons.logout_rounded, size: 20),
@@ -530,7 +530,7 @@
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.15),
+              color: color.withValues(alpha:0.15),
               spreadRadius: 0,
               blurRadius: 20,
               offset: const Offset(0, 4),
@@ -560,7 +560,7 @@
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: color.withOpacity(0.7),
+                          color: color.withValues(alpha:0.7),
                         ),
                       ),
                       Text(
@@ -763,7 +763,7 @@
           border: Border.all(color: const Color(0xFFE0E7ED), width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha:0.05),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -781,7 +781,7 @@
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                      color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(

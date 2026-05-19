@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
 
-/// Pantalla de estudiantes registrados EXCLUSIVA para el Admin de Carrera.
-/// No tiene filtros de facultad/carrera — siempre muestra los estudiantes
-/// de la carrera asignada al admin logueado, cargando desde prefs locales.
 class EstudiantesRegistradosCarreraScreen extends StatefulWidget {
   const EstudiantesRegistradosCarreraScreen({super.key});
 
@@ -156,7 +153,7 @@ class _EstudiantesRegistradosCarreraScreenState
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                  color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.edit, color: Color(0xFF1E3A5F)),
@@ -605,7 +602,7 @@ class _EstudiantesRegistradosCarreraScreenState
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha:0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -639,7 +636,7 @@ class _EstudiantesRegistradosCarreraScreenState
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF1E3A5F).withOpacity(0.3),
+                            color: const Color(0xFF1E3A5F).withValues(alpha:0.3),
                             blurRadius: 8,
                             offset: const Offset(0, 4),
                           ),
@@ -830,7 +827,7 @@ class _EstudiantesRegistradosCarreraScreenState
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E3A5F).withOpacity(0.1),
+            color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, size: 18, color: const Color(0xFF1E3A5F)),
@@ -874,7 +871,7 @@ class _EstudiantesRegistradosCarreraScreenState
             child: Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.search_off,
@@ -944,7 +941,7 @@ class _EstudiantesRegistradosCarreraScreenState
                       ),
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha:0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: IconButton(
@@ -956,7 +953,7 @@ class _EstudiantesRegistradosCarreraScreenState
                       const SizedBox(width: 8),
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha:0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: IconButton(
@@ -972,9 +969,9 @@ class _EstudiantesRegistradosCarreraScreenState
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.12),
+                      color: Colors.white.withValues(alpha:0.12),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withOpacity(0.2)),
+                      border: Border.all(color: Colors.white.withValues(alpha:0.2)),
                     ),
                     child: Row(
                       children: [
@@ -1005,7 +1002,7 @@ class _EstudiantesRegistradosCarreraScreenState
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha:0.2),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -1057,7 +1054,7 @@ class _EstudiantesRegistradosCarreraScreenState
                                   borderRadius: BorderRadius.circular(20),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.05),
+                                      color: Colors.black.withValues(alpha:0.05),
                                       blurRadius: 10,
                                       offset: const Offset(0, 4),
                                     ),
@@ -1107,8 +1104,8 @@ class _EstudiantesRegistradosCarreraScreenState
                                       padding: const EdgeInsets.all(12),
                                       decoration: BoxDecoration(
                                         gradient: LinearGradient(colors: [
-                                          const Color(0xFF1E3A5F).withOpacity(0.1),
-                                          const Color(0xFF1E3A5F).withOpacity(0.05),
+                                          const Color(0xFF1E3A5F).withValues(alpha:0.1),
+                                          const Color(0xFF1E3A5F).withValues(alpha:0.05),
                                         ]),
                                         borderRadius: BorderRadius.circular(12),
                                       ),

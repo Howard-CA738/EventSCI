@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 
 class GruposService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -25,20 +26,21 @@ class GruposService {
         return data;
       }).toList();
     } catch (e) {
-      print('Error al cargar proyectos existentes: $e');
+      debugPrint('Error al cargar proyectos existentes: $e');
       rethrow;
     }
   }
 
   // ── Actualizar categoría de scans por proyecto ────────────────────────────
+  // FIX: batches parciales para no superar el límite de 500 operaciones
   Future<void> actualizarCategoriaDeScansPorProyecto(
     String eventId,
     String codigoProyecto,
     String nuevaCategoria,
   ) async {
     try {
-      print('🔄 Actualizando scans del proyecto: $codigoProyecto');
-      print('📝 Nueva categoría: $nuevaCategoria');
+      debugPrint('🔄 Actualizando scans del proyecto: $codigoProyecto');
+      debugPrint('📝 Nueva categoría: $nuevaCategoria');
 
       final asistenciasSnapshot = await _firestore
           .collection('events')
@@ -47,7 +49,9 @@ class GruposService {
           .get();
 
       int scansActualizados = 0;
-      final batch = _firestore.batch();
+      List<WriteBatch> batches = [];
+      WriteBatch currentBatch = _firestore.batch();
+      int operaciones = 0;
 
       for (final estudianteDoc in asistenciasSnapshot.docs) {
         final scansSnapshot = await _firestore
@@ -60,22 +64,30 @@ class GruposService {
             .get();
 
         for (final scanDoc in scansSnapshot.docs) {
-          batch.update(scanDoc.reference, {
+          if (operaciones == 500) {
+            batches.add(currentBatch);
+            currentBatch = _firestore.batch();
+            operaciones = 0;
+          }
+          currentBatch.update(scanDoc.reference, {
             'categoria': nuevaCategoria,
             'updatedAt': FieldValue.serverTimestamp(),
           });
+          operaciones++;
           scansActualizados++;
         }
       }
 
+      if (operaciones > 0) batches.add(currentBatch);
+      for (final b in batches) await b.commit();
+
       if (scansActualizados > 0) {
-        await batch.commit();
-        print('✅ Se actualizaron $scansActualizados scans');
+        debugPrint('✅ Se actualizaron $scansActualizados scans');
       } else {
-        print('ℹ️ No se encontraron scans para actualizar');
+        debugPrint('ℹ️ No se encontraron scans para actualizar');
       }
     } catch (e) {
-      print('❌ Error al actualizar scans: $e');
+      debugPrint('❌ Error al actualizar scans: $e');
       rethrow;
     }
   }
@@ -99,7 +111,7 @@ class GruposService {
       }
       return null;
     } catch (e) {
-      print('Error al importar archivo: $e');
+      debugPrint('Error al importar archivo: $e');
       rethrow;
     }
   }
@@ -122,26 +134,20 @@ class GruposService {
           headers.add(cell?.value?.toString().trim() ?? '');
         }
 
-        print('Headers encontrados: $headers');
+        debugPrint('Headers encontrados: $headers');
 
         final tipoFormato = detectarFormatoExcel(headers);
-        print('Formato detectado: $tipoFormato');
+        debugPrint('Formato detectado: $tipoFormato');
 
-        String? ultimoSubevento;
-        String? ultimoEvento;
+        if (tipoFormato == 'PROYECTOS') {
+          proyectos = procesarFormatoProyectosConMerge(headers, sheet);
+        } else if (tipoFormato == 'EVENTOS') {
+          String? ultimoSubevento;
+          String? ultimoEvento;
 
-        for (int i = 1; i < sheet.maxRows; i++) {
-          final row = sheet.rows[i];
-          Map<String, dynamic> proyecto = {};
-
-          if (tipoFormato == 'PROYECTOS') {
-            proyecto = procesarFormatoProyectos(headers, row);
-            if (proyecto.containsKey('Código') &&
-                proyecto.containsKey('Clasificación')) {
-              proyectos.add(proyecto);
-            }
-          } else if (tipoFormato == 'EVENTOS') {
-            proyecto = procesarFormatoEventos(
+          for (int i = 1; i < sheet.maxRows; i++) {
+            final row = sheet.rows[i];
+            final proyecto = procesarFormatoEventos(
               headers,
               row,
               i,
@@ -164,9 +170,6 @@ class GruposService {
                 proyecto.containsKey('Clasificación') &&
                 proyecto['Clasificación'].toString().isNotEmpty) {
               proyectos.add(proyecto);
-              print(
-                'Proyecto agregado: ${proyecto['Título']} - ${proyecto['Clasificación']}',
-              );
             }
           }
         }
@@ -174,7 +177,7 @@ class GruposService {
 
       return proyectos;
     } catch (e) {
-      print('Error al procesar el archivo Excel: $e');
+      debugPrint('Error al procesar el archivo Excel: $e');
       rethrow;
     }
   }
@@ -204,25 +207,125 @@ class GruposService {
     return 'PROYECTOS';
   }
 
-  // ── Procesar formato PROYECTOS (original) ─────────────────────────────────
+  // ── Procesar formato PROYECTOS con soporte de celdas combinadas ───────────
+  List<Map<String, dynamic>> procesarFormatoProyectosConMerge(
+    List<String> headers,
+    Sheet sheet,
+  ) {
+    final List<Map<String, dynamic>> proyectos = [];
+
+    final int idxCodigo = _findHeaderIndex(headers, ['CÓDIGO', 'CODIGO']);
+    final int idxTitulo = _findHeaderIndex(headers, [
+      'TÍTULO DE INVESTIGACIÓN/PROYECTO',
+      'TITULO DE INVESTIGACIÓN/PROYECTO',
+      'TÍTULO',
+      'TITULO',
+    ]);
+    final int idxIntegrantes = _findHeaderIndex(headers, ['INTEGRANTES']);
+    final int idxClasificacion =
+        _findHeaderIndex(headers, ['CLASIFICACIÓN', 'CLASIFICACION']);
+    final int idxSala = _findHeaderIndex(headers, ['SALA']);
+
+    debugPrint(
+      '📋 Índices → Código:$idxCodigo Título:$idxTitulo '
+      'Integrantes:$idxIntegrantes Clasificación:$idxClasificacion Sala:$idxSala',
+    );
+
+    Map<String, dynamic>? proyectoActual;
+    List<String> integrantesActuales = [];
+
+    void cerrarProyectoActual() {
+      if (proyectoActual != null) {
+        proyectoActual!['Integrantes'] = List<String>.from(integrantesActuales);
+        proyectoActual!['totalIntegrantes'] = integrantesActuales.length;
+        proyectos.add(Map<String, dynamic>.from(proyectoActual!));
+        debugPrint(
+          '✅ Proyecto cerrado: ${proyectoActual!['Código']} '
+          '— ${integrantesActuales.length} integrante(s): $integrantesActuales',
+        );
+        proyectoActual = null;
+        integrantesActuales = [];
+      }
+    }
+
+    for (int i = 1; i < sheet.maxRows; i++) {
+      final row = sheet.rows[i];
+
+      final String codigo = _cellValue(row, idxCodigo);
+      final String titulo = _cellValue(row, idxTitulo);
+      final String integrante = _cellValue(row, idxIntegrantes);
+      final String clasificacion = _cellValue(row, idxClasificacion);
+      final String sala = _cellValue(row, idxSala);
+
+      final bool esFilaPrincipal = codigo.isNotEmpty || titulo.isNotEmpty;
+
+      if (esFilaPrincipal) {
+        cerrarProyectoActual();
+        proyectoActual = {
+          'Código': codigo,
+          'Título': titulo,
+          'Clasificación': clasificacion,
+          if (sala.isNotEmpty) 'Sala': sala,
+        };
+        if (integrante.isNotEmpty) integrantesActuales.add(integrante);
+        debugPrint('📌 Nuevo proyecto: $codigo — $titulo');
+      } else {
+        if (integrante.isNotEmpty && proyectoActual != null) {
+          integrantesActuales.add(integrante);
+          debugPrint('   ➕ Integrante añadido: $integrante');
+        }
+        if (clasificacion.isNotEmpty &&
+            proyectoActual != null &&
+            (proyectoActual!['Clasificación'] as String).isEmpty) {
+          proyectoActual!['Clasificación'] = clasificacion;
+        }
+      }
+    }
+
+    cerrarProyectoActual();
+
+    return proyectos.where((p) {
+      final tieneIdentificador =
+          (p['Código'] as String).isNotEmpty ||
+          (p['Título'] as String).isNotEmpty;
+      final tieneClasificacion = (p['Clasificación'] as String).isNotEmpty;
+      return tieneIdentificador && tieneClasificacion;
+    }).toList();
+  }
+
+  // ── Helper: encontrar índice de columna por posibles nombres ─────────────
+  int _findHeaderIndex(List<String> headers, List<String> posibleNombres) {
+    for (int i = 0; i < headers.length; i++) {
+      final h = headers[i].toUpperCase().trim();
+      for (final nombre in posibleNombres) {
+        if (h == nombre.toUpperCase().trim()) return i;
+      }
+    }
+    return -1;
+  }
+
+  // ── Helper: leer valor de celda de forma segura ───────────────────────────
+  String _cellValue(List<Data?> row, int index) {
+    if (index < 0 || index >= row.length) return '';
+    return row[index]?.value?.toString().trim() ?? '';
+  }
+
+  // ── Procesar formato PROYECTOS legado ─────────────────────────────────────
   Map<String, dynamic> procesarFormatoProyectos(
     List<String> headers,
     List<Data?> row,
   ) {
     Map<String, dynamic> proyecto = {};
-
     for (int j = 0; j < headers.length && j < row.length; j++) {
       final cellValue = row[j]?.value?.toString().trim();
       if (cellValue != null && cellValue.isNotEmpty) {
-        String normalizedKey = normalizarClaveProyectos(headers[j]);
-        proyecto[normalizedKey] = cellValue;
+        proyecto[normalizarClaveProyectos(headers[j])] = cellValue;
       }
     }
-
     return proyecto;
   }
 
-  // ── Procesar formato EVENTOS (nuevo) ──────────────────────────────────────
+  // ── Procesar formato EVENTOS ──────────────────────────────────────────────
   Map<String, dynamic> procesarFormatoEventos(
     List<String> headers,
     List<Data?> row,
@@ -231,8 +334,8 @@ class GruposService {
     String? ultimoEvento,
   ) {
     Map<String, dynamic> proyecto = {};
-
     Map<String, String> datosRaw = {};
+
     for (int j = 0; j < headers.length && j < row.length; j++) {
       final cellValue = row[j]?.value?.toString().trim();
       if (cellValue != null && cellValue.isNotEmpty) {
@@ -247,23 +350,18 @@ class GruposService {
     String titulo = datosRaw['TÍTULO DE PROGRAMA / PONENCIA'] ?? '';
     if (titulo.isEmpty) return {};
     proyecto['Título'] = titulo;
-
     proyecto['Código'] = 'PON-${rowIndex.toString().padLeft(3, '0')}';
 
     if (datosRaw.containsKey('ENCARGADO')) {
-      proyecto['Integrantes'] = datosRaw['ENCARGADO'];
+      proyecto['Integrantes'] = [datosRaw['ENCARGADO']!];
     }
 
     String? clasificacion;
-
     if (datosRaw.containsKey('SUBEVENTOS') &&
         datosRaw['SUBEVENTOS']!.isNotEmpty) {
       clasificacion = datosRaw['SUBEVENTOS'];
     } else if (ultimoSubevento != null && ultimoSubevento.isNotEmpty) {
       clasificacion = ultimoSubevento;
-      print(
-        'Usando último subevento conocido: $ultimoSubevento para fila $rowIndex',
-      );
     } else if (datosRaw.containsKey('EVENTO') &&
         datosRaw['EVENTO']!.isNotEmpty) {
       clasificacion = datosRaw['EVENTO'];
@@ -274,7 +372,6 @@ class GruposService {
     if (clasificacion != null && clasificacion.isNotEmpty) {
       proyecto['Clasificación'] = clasificacion;
     } else {
-      print('⚠️ Fila $rowIndex sin clasificación: $datosRaw');
       return {};
     }
 
@@ -300,11 +397,9 @@ class GruposService {
     return proyecto;
   }
 
-  // ── Normalizar claves del Excel (formato PROYECTOS) ───────────────────────
+  // ── Normalizar claves del Excel ───────────────────────────────────────────
   String normalizarClaveProyectos(String clave) {
-    final claveNormalizada = clave.toUpperCase().trim();
-
-    switch (claveNormalizada) {
+    switch (clave.toUpperCase().trim()) {
       case 'CÓDIGO':
       case 'CODIGO':
         return 'Código';
@@ -326,54 +421,63 @@ class GruposService {
   }
 
   // ── Guardar proyectos en Firebase ─────────────────────────────────────────
-  // [FIX] Ahora recibe eventData para guardar filialId, facultad y carrera
-  // en cada proyecto, haciendo que sean filtrables de forma segura.
   Future<void> guardarProyectosEnEvento(
     String eventId,
     List<Map<String, dynamic>> proyectos, {
-    Map<String, dynamic>? eventData, // ← nuevo parámetro opcional
+    Map<String, dynamic>? eventData,
   }) async {
     if (proyectos.isEmpty) return;
 
     try {
-      // Extraer campos de ubicación del evento si están disponibles
       final String? filialId = eventData?['filialId'] as String?;
       final String? facultad = eventData?['facultad'] as String?;
       final String? carreraId = eventData?['carreraId'] as String?;
       final String? carreraNombre = eventData?['carreraNombre'] as String?;
 
-      final batch = _firestore.batch();
+      // FIX: lotes de 500 para no superar el límite de Firestore
+      for (int i = 0; i < proyectos.length; i += 500) {
+        final batch = _firestore.batch();
+        final lote = proyectos.skip(i).take(500);
 
-      for (final proyecto in proyectos) {
-        final docRef = _firestore
-            .collection('events')
-            .doc(eventId)
-            .collection('proyectos')
-            .doc();
+        for (final proyecto in lote) {
+          final docRef = _firestore
+              .collection('events')
+              .doc(eventId)
+              .collection('proyectos')
+              .doc();
 
-        batch.set(docRef, {
-          ...proyecto,
-          // ── Campos de ubicación ──────────────────────────────────────
-          // Solo se agregan si el evento los tiene disponibles.
-          // Permiten filtrar proyectos con collectionGroup en el futuro.
-          if (filialId != null) 'filialId': filialId,
-          if (facultad != null) 'facultad': facultad,
-          if (carreraId != null) 'carreraId': carreraId,
-          if (carreraNombre != null) 'carreraNombre': carreraNombre,
-          // ────────────────────────────────────────────────────────────
-          'importedAt': FieldValue.serverTimestamp(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+          final integrantes = proyecto['Integrantes'];
+          final List<String> integrantesList;
+          if (integrantes is List) {
+            integrantesList = integrantes.map((e) => e.toString()).toList();
+          } else if (integrantes is String && integrantes.isNotEmpty) {
+            integrantesList = [integrantes];
+          } else {
+            integrantesList = [];
+          }
+
+          batch.set(docRef, {
+            ...proyecto,
+            'Integrantes': integrantesList,
+            'totalIntegrantes': integrantesList.length,
+            if (filialId != null) 'filialId': filialId,
+            if (facultad != null) 'facultad': facultad,
+            if (carreraId != null) 'carreraId': carreraId,
+            if (carreraNombre != null) 'carreraNombre': carreraNombre,
+            'importedAt': FieldValue.serverTimestamp(),
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
+
+        await batch.commit();
       }
-
-      await batch.commit();
 
       await _firestore.collection('events').doc(eventId).update({
         'lastImportAt': FieldValue.serverTimestamp(),
         'proyectosCount': FieldValue.increment(proyectos.length),
       });
     } catch (e) {
-      print('Error al guardar proyectos: $e');
+      debugPrint('Error al guardar proyectos: $e');
       rethrow;
     }
   }
@@ -394,6 +498,18 @@ class GruposService {
 
       final datosAntiguos = proyectoDoc.data();
 
+      if (nuevosDatos.containsKey('Integrantes') &&
+          nuevosDatos['Integrantes'] is String) {
+        final raw = nuevosDatos['Integrantes'] as String;
+        nuevosDatos['Integrantes'] = raw
+            .split(',')
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+        nuevosDatos['totalIntegrantes'] =
+            (nuevosDatos['Integrantes'] as List).length;
+      }
+
       await _firestore
           .collection('events')
           .doc(eventId)
@@ -404,10 +520,10 @@ class GruposService {
       if (datosAntiguos != null &&
           nuevosDatos.containsKey('Clasificación') &&
           datosAntiguos['Clasificación'] != nuevosDatos['Clasificación']) {
-        final codigoProyecto = nuevosDatos['Código'] ?? datosAntiguos['Código'];
+        final codigoProyecto =
+            nuevosDatos['Código'] ?? datosAntiguos['Código'];
         final nuevaCategoria = nuevosDatos['Clasificación'];
-
-        print('⚠️ La clasificación cambió. Actualizando scans...');
+        debugPrint('⚠️ La clasificación cambió. Actualizando scans...');
         await actualizarCategoriaDeScansPorProyecto(
           eventId,
           codigoProyecto,
@@ -415,9 +531,85 @@ class GruposService {
         );
       }
     } catch (e) {
-      print('Error al actualizar proyecto: $e');
+      debugPrint('Error al actualizar proyecto: $e');
       rethrow;
     }
+  }
+
+  // ── Resolver nombres de estudiantes por sus códigos universitarios ─────────
+  // FIX: lotes correctos y break cuando ya se resolvieron todos
+  Future<Map<String, String>> resolverNombresPorCodigos(
+    List<String> codigos, {
+    String? filialId,
+    String? carreraId,
+  }) async {
+    if (codigos.isEmpty) return {};
+
+    final Map<String, String> resultado = {};
+
+    try {
+      // Primero buscar en el doc de la filial/carrera del evento
+      if (filialId != null && carreraId != null) {
+        final docKey = '${filialId}_$carreraId';
+        for (int i = 0; i < codigos.length; i += 10) {
+          final lote = codigos.skip(i).take(10).toList();
+          final snap = await _firestore
+              .collection('users')
+              .doc(docKey)
+              .collection('students')
+              .where('codigoUniversitario', whereIn: lote)
+              .get();
+          for (final doc in snap.docs) {
+            final codigo =
+                doc.data()['codigoUniversitario']?.toString() ?? '';
+            final nombre = doc.data()['name']?.toString() ?? '';
+            if (codigo.isNotEmpty && nombre.isNotEmpty) {
+              resultado[codigo] = nombre;
+            }
+          }
+        }
+      }
+
+      // FIX: calcular pendientes dinámicamente y hacer break cuando terminen
+      final codigosNoResueltos =
+          codigos.where((c) => !resultado.containsKey(c)).toList();
+
+      if (codigosNoResueltos.isNotEmpty) {
+        final usersSnapshot = await _firestore.collection('users').get();
+        final Set<String> yaResueltos = {};
+
+        for (final userDoc in usersSnapshot.docs) {
+          final pendientes = codigosNoResueltos
+              .where((c) =>
+                  !yaResueltos.contains(c) && !resultado.containsKey(c))
+              .toList();
+          if (pendientes.isEmpty) break;
+
+          for (int i = 0; i < pendientes.length; i += 10) {
+            final lote = pendientes.skip(i).take(10).toList();
+            final snap = await _firestore
+                .collection('users')
+                .doc(userDoc.id)
+                .collection('students')
+                .where('codigoUniversitario', whereIn: lote)
+                .get();
+            for (final doc in snap.docs) {
+              final codigo =
+                  doc.data()['codigoUniversitario']?.toString() ?? '';
+              final nombre = doc.data()['name']?.toString() ?? '';
+              if (codigo.isNotEmpty && nombre.isNotEmpty) {
+                resultado[codigo] = nombre;
+                yaResueltos.add(codigo);
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error al resolver nombres por códigos: $e');
+    }
+
+    return resultado;
   }
 
   // ── Eliminar un proyecto individual ──────────────────────────────────────
@@ -434,34 +626,35 @@ class GruposService {
         'proyectosCount': FieldValue.increment(-1),
       });
     } catch (e) {
-      print('Error al eliminar proyecto: $e');
+      debugPrint('Error al eliminar proyecto: $e');
       rethrow;
     }
   }
 
   // ── Eliminar todos los proyectos ──────────────────────────────────────────
+  // FIX: lotes de 500 para no superar el límite de Firestore
   Future<void> eliminarTodosLosProyectos(String eventId) async {
     try {
-      final batch = _firestore.batch();
-
       final querySnapshot = await _firestore
           .collection('events')
           .doc(eventId)
           .collection('proyectos')
           .get();
 
-      for (final doc in querySnapshot.docs) {
-        batch.delete(doc.reference);
+      final docs = querySnapshot.docs;
+      for (int i = 0; i < docs.length; i += 500) {
+        final batch = _firestore.batch();
+        final lote = docs.skip(i).take(500);
+        for (final doc in lote) batch.delete(doc.reference);
+        await batch.commit();
       }
-
-      await batch.commit();
 
       await _firestore.collection('events').doc(eventId).update({
         'proyectosCount': 0,
         'lastImportAt': FieldValue.delete(),
       });
     } catch (e) {
-      print('Error al eliminar todos los proyectos: $e');
+      debugPrint('Error al eliminar todos los proyectos: $e');
       rethrow;
     }
   }
@@ -471,15 +664,10 @@ class GruposService {
     List<Map<String, dynamic>> proyectos,
   ) {
     final Map<String, List<Map<String, dynamic>>> grupos = {};
-
     for (final proyecto in proyectos) {
       final categoria = proyecto['Clasificación'] ?? 'Sin categoría';
-      if (!grupos.containsKey(categoria)) {
-        grupos[categoria] = [];
-      }
-      grupos[categoria]!.add(proyecto);
+      grupos.putIfAbsent(categoria, () => []).add(proyecto);
     }
-
     return grupos;
   }
 

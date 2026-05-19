@@ -36,7 +36,7 @@ class _CrearFilialesScreenState extends State<CrearFilialesScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      print('❌ Error cargando datos: $e');
+      debugPrint('❌ Error cargando datos: $e');
       setState(() => _isLoading = false);
       _showMessage('Error al cargar datos', isError: true);
     }
@@ -54,7 +54,7 @@ class _CrearFilialesScreenState extends State<CrearFilialesScreen> {
 
       _showMessage('Datos actualizados');
     } catch (e) {
-      print('❌ Error refrescando datos: $e');
+      debugPrint('❌ Error refrescando datos: $e');
       _showMessage('Error al actualizar', isError: true);
     }
   }
@@ -305,7 +305,7 @@ class _CrearFilialesScreenState extends State<CrearFilialesScreen> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha:0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
@@ -414,10 +414,10 @@ class _CrearFilialesScreenState extends State<CrearFilialesScreen> {
                                       vertical: 6,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.green.withOpacity(0.1),
+                                      color: Colors.green.withValues(alpha:0.1),
                                       borderRadius: BorderRadius.circular(20),
                                       border: Border.all(
-                                        color: Colors.green.withOpacity(0.3),
+                                        color: Colors.green.withValues(alpha:0.3),
                                       ),
                                     ),
                                     child: Row(
@@ -523,7 +523,7 @@ class _CrearFilialesScreenState extends State<CrearFilialesScreen> {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
+                      color: Colors.blue.withValues(alpha:0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -542,7 +542,7 @@ class _CrearFilialesScreenState extends State<CrearFilialesScreen> {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                      color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -607,7 +607,7 @@ class _CrearFilialesScreenState extends State<CrearFilialesScreen> {
           leading: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
+              color: Colors.blue.withValues(alpha:0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(Icons.business, color: Colors.blue, size: 20),

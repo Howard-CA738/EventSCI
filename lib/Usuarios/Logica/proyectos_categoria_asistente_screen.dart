@@ -324,7 +324,7 @@ class _ProyectosCategoriaAsistenteScreenState
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
+                  color: Colors.white.withValues(alpha:0.15),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -439,9 +439,9 @@ class _ProyectosCategoriaAsistenteScreenState
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: _primary.withOpacity(0.06),
+        color: _primary.withValues(alpha:0.06),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _primary.withOpacity(0.15)),
+        border: Border.all(color: _primary.withValues(alpha:0.15)),
       ),
       child: Row(
         children: [
@@ -467,7 +467,7 @@ class _ProyectosCategoriaAsistenteScreenState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: _primary.withOpacity(0.10),
+        color: _primary.withValues(alpha:0.10),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -500,7 +500,7 @@ class _ProyectosCategoriaAsistenteScreenState
         border: Border.all(color: const Color(0xFFE0E7ED)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha:0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -536,7 +536,7 @@ class _ProyectosCategoriaAsistenteScreenState
                     ),
                     const Spacer(),
                     Icon(Icons.qr_code_rounded,
-                        color: _primary.withOpacity(0.4), size: 22),
+                        color: _primary.withValues(alpha:0.4), size: 22),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -644,7 +644,7 @@ class _ProyectosCategoriaAsistenteScreenState
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: _primary.withOpacity(0.12),
+                    color: _primary.withValues(alpha:0.12),
                     blurRadius: 20,
                     offset: const Offset(0, 4),
                   ),
@@ -899,7 +899,7 @@ class _ProyectosCategoriaAsistenteScreenState
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 13, color: _primary.withOpacity(0.5)),
+          Icon(icon, size: 13, color: _primary.withValues(alpha:0.5)),
           const SizedBox(width: 6),
           SizedBox(
             width: 82,

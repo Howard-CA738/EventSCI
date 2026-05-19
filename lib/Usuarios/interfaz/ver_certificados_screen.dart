@@ -337,7 +337,11 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: Color.fromRGBO(
-                rolColor.red, rolColor.green, rolColor.blue, 0.12),
+          (rolColor.r * 255).round(),
+          (rolColor.g * 255).round(),
+          (rolColor.b * 255).round(),
+          0.12,
+        ),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(rolIcon, color: rolColor, size: 22),
@@ -369,7 +373,12 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       decoration: BoxDecoration(
-        color: Color.fromRGBO(rolColor.red, rolColor.green, rolColor.blue, 0.12),
+        color: Color.fromRGBO(
+      (rolColor.r * 255).round(),
+      (rolColor.g * 255).round(),
+      (rolColor.b * 255).round(),
+      0.12,
+),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(

@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 
 class ReportesEvaluacionesExcelService {
   Future<Map<String, dynamic>> generarReporteEvaluaciones({
@@ -14,7 +15,7 @@ class ReportesEvaluacionesExcelService {
     String? carrera,
   }) async {
     try {
-      print('📊 Iniciando generación de reporte Excel...');
+      debugPrint('📊 Iniciando generación de reporte Excel...');
 
       // 1. Solicitar permisos primero
       final permisoConcedido = await _solicitarPermisos();
@@ -49,7 +50,7 @@ class ReportesEvaluacionesExcelService {
 
       return resultado;
     } catch (e) {
-      print('❌ Error al generar Excel: $e');
+      debugPrint('❌ Error al generar Excel: $e');
       return {'success': false, 'message': 'Error al generar el archivo: $e'};
     }
   }
@@ -64,7 +65,7 @@ class ReportesEvaluacionesExcelService {
       final androidInfo = await deviceInfo.androidInfo;
       final sdkInt = androidInfo.version.sdkInt;
 
-      print('📱 Android SDK: $sdkInt');
+      debugPrint('📱 Android SDK: $sdkInt');
 
       // Android 13+ (API 33+)
       if (sdkInt >= 33) {
@@ -89,7 +90,7 @@ class ReportesEvaluacionesExcelService {
         }
       }
     } catch (e) {
-      print('❌ Error al verificar permisos: $e');
+      debugPrint('❌ Error al verificar permisos: $e');
       return false;
     }
   }
@@ -133,15 +134,15 @@ class ReportesEvaluacionesExcelService {
           final String publicPath = paths.sublist(0, index).join('/');
           directory = Directory('$publicPath/Documents/ReportesEvaluaciones');
 
-          print('📁 Intentando crear directorio: ${directory.path}');
+          debugPrint('📁 Intentando crear directorio: ${directory.path}');
 
           // Crear carpeta si no existe
           if (!await directory.exists()) {
             try {
               await directory.create(recursive: true);
-              print('✅ Directorio creado exitosamente');
+              debugPrint('✅ Directorio creado exitosamente');
             } catch (e) {
-              print('⚠️ No se pudo crear en Documents, usando Downloads...');
+              debugPrint('⚠️ No se pudo crear en Documents, usando Downloads...');
               directory = Directory('$publicPath/Download');
               if (!await directory.exists()) {
                 await directory.create(recursive: true);
@@ -169,8 +170,8 @@ class ReportesEvaluacionesExcelService {
         final file = File(rutaCompleta);
         await file.writeAsBytes(fileBytes);
 
-        print('✅ Archivo guardado exitosamente');
-        print('📁 Ubicación: $rutaCompleta');
+        debugPrint('✅ Archivo guardado exitosamente');
+        debugPrint('📁 Ubicación: $rutaCompleta');
 
         return {
           'success': true,
@@ -183,7 +184,7 @@ class ReportesEvaluacionesExcelService {
         throw Exception('Error al generar los bytes del archivo');
       }
     } catch (e) {
-      print('❌ Error al guardar archivo: $e');
+      debugPrint('❌ Error al guardar archivo: $e');
       return {'success': false, 'message': 'Error al guardar: $e'};
     }
   }

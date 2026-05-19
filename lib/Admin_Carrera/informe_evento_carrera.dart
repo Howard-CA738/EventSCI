@@ -204,7 +204,7 @@ class _InformeEventoCarreraScreenState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Informe Final',
+                          'Informe Completo',
                           style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -294,7 +294,7 @@ class _InformeEventoCarreraScreenState
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha:0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.description_rounded,
@@ -334,7 +334,7 @@ class _InformeEventoCarreraScreenState
             padding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha:0.15),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.white30),
             ),
@@ -371,7 +371,7 @@ class _InformeEventoCarreraScreenState
                 padding: const EdgeInsets.symmetric(
                     horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                  color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -390,9 +390,9 @@ class _InformeEventoCarreraScreenState
           padding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.teal.withOpacity(0.08),
+            color: Colors.teal.withValues(alpha:0.08),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.teal.withOpacity(0.25)),
+            border: Border.all(color: Colors.teal.withValues(alpha:0.25)),
           ),
           child: Row(
             children: [
@@ -446,8 +446,8 @@ class _InformeEventoCarreraScreenState
           boxShadow: [
             BoxShadow(
               color: isSelected
-                  ? const Color(0xFF1E3A5F).withOpacity(0.25)
-                  : Colors.black.withOpacity(0.05),
+                  ? const Color(0xFF1E3A5F).withValues(alpha:0.25)
+                  : Colors.black.withValues(alpha:0.05),
               blurRadius: isSelected ? 16 : 8,
               offset: const Offset(0, 4),
             ),
@@ -462,8 +462,8 @@ class _InformeEventoCarreraScreenState
                 gradient: LinearGradient(
                   colors: isSelected
                       ? [
-                          Colors.white.withOpacity(0.3),
-                          Colors.white.withOpacity(0.1),
+                          Colors.white.withValues(alpha:0.3),
+                          Colors.white.withValues(alpha:0.1),
                         ]
                       : [
                           const Color(0xFF009688),
@@ -531,7 +531,7 @@ class _InformeEventoCarreraScreenState
                       key: const ValueKey('check'),
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha:0.2),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.check_rounded,
@@ -541,7 +541,7 @@ class _InformeEventoCarreraScreenState
                       key: const ValueKey('arrow'),
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: Colors.teal.withOpacity(0.1),
+                        color: Colors.teal.withValues(alpha:0.1),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
@@ -638,13 +638,13 @@ class _InformeEventoCarreraScreenState
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: esError
-            ? Colors.red.withOpacity(0.1)
-            : const Color(0xFF009688).withOpacity(0.1),
+            ? Colors.red.withValues(alpha:0.1)
+            : const Color(0xFF009688).withValues(alpha:0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: esError
-              ? Colors.red.withOpacity(0.3)
-              : const Color(0xFF009688).withOpacity(0.3),
+              ? Colors.red.withValues(alpha:0.3)
+              : const Color(0xFF009688).withValues(alpha:0.3),
         ),
       ),
       child: Row(

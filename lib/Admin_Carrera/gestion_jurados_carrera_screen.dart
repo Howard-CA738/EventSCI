@@ -2,10 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 
-/// Gestión de Jurados para Admin de Carrera.
-/// Carga filial/facultad/carrera automáticamente desde la sesión.
-/// Permite ver, crear y editar jurados de su carrera.
-/// Cada jurado es exclusivo para un evento específico.
 class GestionJuradosCarreraScreen extends StatefulWidget {
   const GestionJuradosCarreraScreen({super.key});
 
@@ -15,7 +11,8 @@ class GestionJuradosCarreraScreen extends StatefulWidget {
 }
 
 class _GestionJuradosCarreraScreenState
-    extends State<GestionJuradosCarreraScreen> {
+    extends State<GestionJuradosCarreraScreen>
+    with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // ── Datos de sesión ───────────────────────────────────────────────────────
@@ -29,10 +26,36 @@ class _GestionJuradosCarreraScreenState
   bool _isLoadingSession = true;
   bool _isLoadingJurados = false;
 
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
+  static const _categoryColors = [
+    Color(0xFF3B6FD4),
+    Color(0xFF2E9E6E),
+    Color(0xFFD4863B),
+    Color(0xFF8B4DC7),
+    Color(0xFFD4453B),
+    Color(0xFF2B9EA8),
+    Color(0xFF4B63D4),
+    Color(0xFFD44B87),
+  ];
+
   @override
   void initState() {
     super.initState();
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _fadeAnimation =
+        CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
     _loadSessionData();
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSessionData() async {
@@ -85,7 +108,10 @@ class _GestionJuradosCarreraScreenState
         };
       }).toList();
 
-      if (mounted) setState(() => _jurados = list);
+      if (mounted) {
+        setState(() => _jurados = list);
+        _fadeController.forward(from: 0);
+      }
     } catch (e) {
       debugPrint('Error cargando jurados: $e');
       _showSnackBar('Error al cargar jurados', isError: true);
@@ -94,7 +120,6 @@ class _GestionJuradosCarreraScreenState
     }
   }
 
-  // ── Cargar categorías de un evento específico ─────────────────────────────
   Future<List<String>> _cargarCategoriasPorEvento(String eventoId) async {
     try {
       final proySnap = await _firestore
@@ -102,7 +127,6 @@ class _GestionJuradosCarreraScreenState
           .doc(eventoId)
           .collection('proyectos')
           .get();
-
       final Set<String> cats = {};
       for (final p in proySnap.docs) {
         final clasificacion = p.data()['Clasificación'] as String?;
@@ -117,7 +141,6 @@ class _GestionJuradosCarreraScreenState
     }
   }
 
-  // ── Cargar eventos disponibles de la carrera ──────────────────────────────
   Future<List<Map<String, dynamic>>> _cargarEventos() async {
     if (_filialId == null || _facultad == null) return [];
     try {
@@ -126,25 +149,23 @@ class _GestionJuradosCarreraScreenState
           .where('filialId', isEqualTo: _filialId)
           .where('facultad', isEqualTo: _facultad)
           .get();
-
-      // Filtrar en cliente por carreraId O carreraNombre
       final docs = snap.docs.where((doc) {
         final data = doc.data();
         return data['carreraId'] == _carreraId ||
             data['carreraNombre'] == _carreraNombre;
       }).toList();
-
-      return docs.map((doc) => {
-        'id': doc.id,
-        'name': doc.data()['name'] ?? 'Sin nombre',
-      }).toList();
+      return docs
+          .map((doc) => {
+                'id': doc.id,
+                'name': doc.data()['name'] ?? 'Sin nombre',
+              })
+          .toList();
     } catch (e) {
       debugPrint('Error cargando eventos: $e');
       return [];
     }
   }
 
-  // ── Crear jurado ──────────────────────────────────────────────────────────
   Future<void> _crearJurado({
     required String nombre,
     required String usuario,
@@ -161,7 +182,6 @@ class _GestionJuradosCarreraScreenState
       _showSnackBar('El usuario "$usuario" ya está registrado', isError: true);
       return;
     }
-
     await _firestore.collection('users').add({
       'name': nombre.trim(),
       'usuario': usuario.trim(),
@@ -177,12 +197,10 @@ class _GestionJuradosCarreraScreenState
       'userType': 'jurado',
       'createdAt': FieldValue.serverTimestamp(),
     });
-
     _showSnackBar('Jurado creado exitosamente');
     await _cargarJurados();
   }
 
-  // ── Actualizar jurado ─────────────────────────────────────────────────────
   Future<void> _actualizarJurado({
     required String id,
     required String nombre,
@@ -204,48 +222,130 @@ class _GestionJuradosCarreraScreenState
     await _cargarJurados();
   }
 
-  // ── Eliminar jurado ───────────────────────────────────────────────────────
   Future<void> _eliminarJurado(String id, String nombre) async {
     final confirmar = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
               ),
-              child: const Icon(Icons.warning_rounded, color: Colors.red),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text('Confirmar eliminación',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-        content: Text(
-          '¿Eliminar al jurado "$nombre"?\n\nEsta acción no se puede deshacer.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text('Eliminar'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD4453B).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.delete_rounded,
+                        color: Color(0xFFD4453B), size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  const Text(
+                    'Confirmar eliminación',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1E3A5F),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF5F5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFEC5C5)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.person_rounded,
+                        color: Color(0xFFD4453B), size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        nombre,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF9B1C1C),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Esta acción eliminará permanentemente al jurado y no se puede deshacer.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey[600],
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                      ),
+                      child: const Text(
+                        'Cancelar',
+                        style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      icon: const Icon(Icons.delete_rounded, size: 17),
+                      label: const Text('Eliminar',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD4453B),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
 
@@ -256,11 +356,9 @@ class _GestionJuradosCarreraScreenState
     }
   }
 
-  // ── Mostrar diálogo de crear/editar ───────────────────────────────────────
+  // ── Diálogo crear/editar ──────────────────────────────────────────────────
   void _mostrarDialogoJurado({Map<String, dynamic>? jurado}) async {
     final isEditing = jurado != null;
-
-    // Cargar eventos primero
     final eventos = await _cargarEventos();
     if (!mounted) return;
 
@@ -270,7 +368,6 @@ class _GestionJuradosCarreraScreenState
     List<String> categoriasSeleccionadas =
         List<String>.from(jurado?['categorias'] ?? []);
 
-    // Al editar, pre-seleccionar el evento actual del jurado
     String? eventoSeleccionado =
         isEditing && (jurado!['eventoId'] as String).isNotEmpty
             ? jurado['eventoId'] as String
@@ -280,11 +377,9 @@ class _GestionJuradosCarreraScreenState
     bool isLoading = false;
     bool isLoadingCategorias = false;
 
-    // Si editamos, cargar categorías del evento actual
     if (eventoSeleccionado != null) {
       categorias = await _cargarCategoriasPorEvento(eventoSeleccionado);
     }
-
     if (!mounted) return;
 
     await showDialog(
@@ -294,410 +389,361 @@ class _GestionJuradosCarreraScreenState
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           insetPadding:
-              const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Título ──────────────────────────────────────────────
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E3A5F).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        isEditing ? Icons.edit : Icons.person_add,
-                        color: const Color(0xFF1E3A5F),
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        isEditing ? 'Editar Jurado' : 'Nuevo Jurado',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E3A5F),
-                        ),
-                      ),
-                    ),
-                  ],
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 30,
+                  offset: const Offset(0, 10),
                 ),
-                const SizedBox(height: 20),
-
-                // ── Ubicación (solo lectura) ─────────────────────────────
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E3A5F).withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: const Color(0xFF1E3A5F).withOpacity(0.15)),
-                  ),
-                  child: Row(
+              ],
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Header del diálogo ──────────────────────────────
+                  Row(
                     children: [
-                      const Icon(Icons.lock_outline,
-                          color: Color(0xFF1E3A5F), size: 18),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          '$_carreraNombre\n$_facultad • $_filialNombre',
-                          style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF1E3A5F),
-                              height: 1.5),
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E3A5F),
+                          borderRadius: BorderRadius.circular(12),
                         ),
+                        child: Icon(
+                          isEditing
+                              ? Icons.edit_rounded
+                              : Icons.person_add_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isEditing ? 'Editar Jurado' : 'Nuevo Jurado',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1E3A5F),
+                              ),
+                            ),
+                            const Text(
+                              'Completa los datos del jurado',
+                              style: TextStyle(
+                                  fontSize: 11, color: Color(0xFF94A3B8)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        icon: const Icon(Icons.close_rounded,
+                            color: Color(0xFF94A3B8), size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 18),
+                  const SizedBox(height: 18),
 
-                // ── Campos ──────────────────────────────────────────────
-                _buildDialogTextField(
-                  controller: nombreCtrl,
-                  label: 'Nombre completo',
-                  icon: Icons.person,
-                ),
-                const SizedBox(height: 14),
-                _buildDialogTextField(
-                  controller: usuarioCtrl,
-                  label: 'Usuario',
-                  icon: Icons.account_circle,
-                  enabled: !isEditing,
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: passwordCtrl,
-                  obscureText: obscurePass,
-                  decoration: InputDecoration(
-                    labelText: 'Contraseña',
-                    prefixIcon:
-                        const Icon(Icons.lock, color: Color(0xFF1E3A5F)),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                          obscurePass
-                              ? Icons.visibility_off
-                              : Icons.visibility,
-                          color: Colors.grey),
-                      onPressed: () =>
-                          setDialogState(() => obscurePass = !obscurePass),
-                    ),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
-                  ),
-                ),
-                const SizedBox(height: 18),
-
-                // ── Selector de Evento ───────────────────────────────────
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                    borderRadius: BorderRadius.circular(12),
-                    color: const Color(0xFFF8FAFC),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 4),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      value: eventoSeleccionado,
-                      hint: Row(
-                        children: [
-                          const Icon(Icons.event,
-                              color: Color(0xFF1E3A5F), size: 18),
-                          const SizedBox(width: 10),
-                          Text(
-                            eventos.isEmpty
-                                ? 'No hay eventos disponibles'
-                                : 'Seleccionar Evento',
-                            style: TextStyle(
-                                fontSize: 14, color: Colors.grey[600]),
-                          ),
-                        ],
-                      ),
-                      items: eventos
-                          .map((e) => DropdownMenuItem<String>(
-                                value: e['id'] as String,
-                                child: Text(e['name'] as String,
-                                    style:
-                                        const TextStyle(fontSize: 14)),
-                              ))
-                          .toList(),
-                      onChanged: eventos.isEmpty
-                          ? null
-                          : (value) async {
-                              setDialogState(() {
-                                eventoSeleccionado = value;
-                                categorias = [];
-                                // Al cambiar evento, limpiar categorías
-                                // seleccionadas solo si no estamos editando
-                                // el mismo evento
-                                if (!isEditing ||
-                                    value != jurado?['eventoId']) {
-                                  categoriasSeleccionadas = [];
-                                }
-                                isLoadingCategorias = true;
-                              });
-                              final cats =
-                                  await _cargarCategoriasPorEvento(value!);
-                              setDialogState(() {
-                                categorias = cats;
-                                isLoadingCategorias = false;
-                              });
-                            },
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-
-                // ── Categorías (solo si hay evento seleccionado) ──────────
-                if (eventoSeleccionado != null)
+                  // ── Chip de ubicación ────────────────────────────────
                   Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                      borderRadius: BorderRadius.circular(12),
-                      color: const Color(0xFFF8FAFC),
+                      color: const Color(0xFFF0F5FF),
+                      borderRadius: BorderRadius.circular(10),
+                      border:
+                          Border.all(color: const Color(0xFFCBD9F5)),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        Padding(
-                          padding:
-                              const EdgeInsets.fromLTRB(14, 12, 14, 8),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.category,
-                                  color: Color(0xFF1E3A5F), size: 18),
-                              const SizedBox(width: 8),
-                              const Expanded(
-                                child: Text('Categorías',
-                                    style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF1E3A5F))),
-                              ),
-                              if (categoriasSeleccionadas.isNotEmpty)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF1E3A5F),
-                                    borderRadius:
-                                        BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    '${categoriasSeleccionadas.length}',
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                            ],
+                        const Icon(Icons.school_rounded,
+                            color: Color(0xFF3B6FD4), size: 16),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '$_carreraNombre · $_facultad · $_filialNombre',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF1E3A5F),
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const Divider(height: 1),
-                        if (isLoadingCategorias)
-                          const Padding(
-                            padding: EdgeInsets.all(16),
-                            child:
-                                Center(child: CircularProgressIndicator()),
-                          )
-                        else if (categorias.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text(
-                              'No hay categorías en este evento.',
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.grey[600]),
-                            ),
-                          )
-                        else
-                          ConstrainedBox(
-                            constraints:
-                                const BoxConstraints(maxHeight: 180),
-                            child: ListView.builder(
-                              shrinkWrap: true,
-                              itemCount: categorias.length,
-                              itemBuilder: (_, i) {
-                                final cat = categorias[i];
-                                final sel =
-                                    categoriasSeleccionadas.contains(cat);
-                                return CheckboxListTile(
-                                  dense: true,
-                                  title: Text(cat,
-                                      style: const TextStyle(
-                                          fontSize: 13)),
-                                  value: sel,
-                                  activeColor: const Color(0xFF1E3A5F),
-                                  controlAffinity:
-                                      ListTileControlAffinity.leading,
-                                  onChanged: (v) =>
-                                      setDialogState(() {
-                                    if (v == true) {
-                                      categoriasSeleccionadas.add(cat);
-                                    } else {
-                                      categoriasSeleccionadas.remove(cat);
-                                    }
-                                  }),
-                                );
-                              },
-                            ),
-                          ),
                       ],
                     ),
                   ),
+                  const SizedBox(height: 18),
 
-                // Chips de categorías seleccionadas
-                if (categoriasSeleccionadas.isNotEmpty) ...[
+                  // ── Sección: Datos personales ────────────────────────
+                  _buildDialogSectionLabel('Datos personales',
+                      Icons.person_rounded, const Color(0xFFD4863B)),
                   const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: categoriasSeleccionadas
-                        .map((cat) => Chip(
-                              label: Text(cat,
-                                  style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.white)),
-                              backgroundColor: const Color(0xFF1E3A5F),
-                              deleteIcon: const Icon(Icons.close,
-                                  size: 14, color: Colors.white),
+                  _buildDialogTextField(
+                    controller: nombreCtrl,
+                    label: 'Nombre completo',
+                    icon: Icons.person_outline_rounded,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildDialogTextField(
+                    controller: usuarioCtrl,
+                    label: 'Usuario',
+                    icon: Icons.account_circle_outlined,
+                    enabled: !isEditing,
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Campo contraseña con toggle
+                  _buildPasswordField(
+                    controller: passwordCtrl,
+                    obscure: obscurePass,
+                    onToggle: () =>
+                        setDialogState(() => obscurePass = !obscurePass),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // ── Sección: Evento ──────────────────────────────────
+                  _buildDialogSectionLabel('Evento asignado',
+                      Icons.event_rounded, const Color(0xFF3B6FD4)),
+                  const SizedBox(height: 10),
+                  _buildEventoDropdown(
+                    eventos: eventos,
+                    eventoSeleccionado: eventoSeleccionado,
+                    isEditing: isEditing,
+                    jurado: jurado,
+                    onChanged: (value) async {
+                      setDialogState(() {
+                        eventoSeleccionado = value;
+                        categorias = [];
+                        if (!isEditing || value != jurado?['eventoId']) {
+                          categoriasSeleccionadas = [];
+                        }
+                        isLoadingCategorias = true;
+                      });
+                      final cats =
+                          await _cargarCategoriasPorEvento(value!);
+                      setDialogState(() {
+                        categorias = cats;
+                        isLoadingCategorias = false;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 18),
+
+                  // ── Sección: Categorías ──────────────────────────────
+                  if (eventoSeleccionado != null) ...[
+                    _buildDialogSectionLabel('Categorías',
+                        Icons.category_rounded, const Color(0xFF8B4DC7)),
+                    const SizedBox(height: 10),
+                    _buildCategoriasPanel(
+                      categorias: categorias,
+                      seleccionadas: categoriasSeleccionadas,
+                      isLoading: isLoadingCategorias,
+                      onChanged: (cat, selected) =>
+                          setDialogState(() {
+                        if (selected) {
+                          categoriasSeleccionadas.add(cat);
+                        } else {
+                          categoriasSeleccionadas.remove(cat);
+                        }
+                      }),
+                    ),
+
+                    // Chips de seleccionadas
+                    if (categoriasSeleccionadas.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: categoriasSeleccionadas
+                            .asMap()
+                            .entries
+                            .map((e) {
+                          final color = _categoryColors[
+                              e.key % _categoryColors.length];
+                          return AnimatedContainer(
+                            duration:
+                                const Duration(milliseconds: 200),
+                            child: Chip(
+                              label: Text(
+                                e.value,
+                                style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                              backgroundColor: color,
+                              deleteIcon: const Icon(
+                                  Icons.close_rounded,
+                                  size: 14,
+                                  color: Colors.white),
                               onDeleted: () => setDialogState(() =>
-                                  categoriasSeleccionadas.remove(cat)),
+                                  categoriasSeleccionadas
+                                      .remove(e.value)),
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 4),
                               materialTapTargetSize:
                                   MaterialTapTargetSize.shrinkWrap,
-                            ))
-                        .toList(),
+                              side: BorderSide.none,
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    const SizedBox(height: 18),
+                  ],
+
+                  // ── Botones ──────────────────────────────────────────
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          style: TextButton.styleFrom(
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: const BorderSide(
+                                  color: Color(0xFFE2E8F0)),
+                            ),
+                          ),
+                          child: const Text(
+                            'Cancelar',
+                            style: TextStyle(
+                                color: Color(0xFF64748B),
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton.icon(
+                          onPressed: isLoading
+                              ? null
+                              : () async {
+                                  final nombre =
+                                      nombreCtrl.text.trim();
+                                  final usuario =
+                                      usuarioCtrl.text.trim();
+                                  final password = passwordCtrl.text;
+
+                                  if (nombre.isEmpty ||
+                                      usuario.isEmpty ||
+                                      password.isEmpty) {
+                                    _showSnackBar(
+                                        'Completa todos los campos',
+                                        isWarning: true);
+                                    return;
+                                  }
+                                  if (eventoSeleccionado == null) {
+                                    _showSnackBar(
+                                        'Selecciona un evento',
+                                        isWarning: true);
+                                    return;
+                                  }
+                                  if (categoriasSeleccionadas.isEmpty) {
+                                    _showSnackBar(
+                                        'Selecciona al menos una categoría',
+                                        isWarning: true);
+                                    return;
+                                  }
+                                  final eventoNombre =
+                                      eventos.firstWhere(
+                                    (e) =>
+                                        e['id'] == eventoSeleccionado,
+                                    orElse: () => {'name': ''},
+                                  )['name'] as String;
+
+                                  setDialogState(
+                                      () => isLoading = true);
+                                  try {
+                                    if (isEditing) {
+                                      await _actualizarJurado(
+                                        id: jurado!['id'],
+                                        nombre: nombre,
+                                        usuario: usuario,
+                                        password: password,
+                                        categorias:
+                                            categoriasSeleccionadas,
+                                        eventoId: eventoSeleccionado!,
+                                        eventoNombre: eventoNombre,
+                                      );
+                                    } else {
+                                      await _crearJurado(
+                                        nombre: nombre,
+                                        usuario: usuario,
+                                        password: password,
+                                        categorias:
+                                            categoriasSeleccionadas,
+                                        eventoId: eventoSeleccionado!,
+                                        eventoNombre: eventoNombre,
+                                      );
+                                    }
+                                    if (mounted) Navigator.pop(ctx);
+                                  } catch (e) {
+                                    _showSnackBar('Error: $e',
+                                        isError: true);
+                                  } finally {
+                                    setDialogState(
+                                        () => isLoading = false);
+                                  }
+                                },
+                          icon: isLoading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2),
+                                )
+                              : Icon(
+                                  isEditing
+                                      ? Icons.save_rounded
+                                      : Icons.person_add_rounded,
+                                  size: 18),
+                          label: Text(
+                            isLoading
+                                ? 'Guardando...'
+                                : isEditing
+                                    ? 'Guardar cambios'
+                                    : 'Crear Jurado',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1E3A5F),
+                            foregroundColor: Colors.white,
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 14),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
-                const SizedBox(height: 24),
-
-                // ── Botones ─────────────────────────────────────────────
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        style: OutlinedButton.styleFrom(
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          side: const BorderSide(
-                              color: Color(0xFFE2E8F0)),
-                        ),
-                        child: const Text('Cancelar',
-                            style: TextStyle(color: Colors.grey)),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton(
-                        onPressed: isLoading
-                            ? null
-                            : () async {
-                                final nombre = nombreCtrl.text.trim();
-                                final usuario = usuarioCtrl.text.trim();
-                                final password = passwordCtrl.text;
-
-                                if (nombre.isEmpty ||
-                                    usuario.isEmpty ||
-                                    password.isEmpty) {
-                                  _showSnackBar(
-                                      'Completa todos los campos',
-                                      isWarning: true);
-                                  return;
-                                }
-                                if (eventoSeleccionado == null) {
-                                  _showSnackBar('Selecciona un evento',
-                                      isWarning: true);
-                                  return;
-                                }
-                                if (categoriasSeleccionadas.isEmpty) {
-                                  _showSnackBar(
-                                      'Selecciona al menos una categoría',
-                                      isWarning: true);
-                                  return;
-                                }
-
-                                final eventoNombre = eventos.firstWhere(
-                                  (e) => e['id'] == eventoSeleccionado,
-                                  orElse: () => {'name': ''},
-                                )['name'] as String;
-
-                                setDialogState(() => isLoading = true);
-                                try {
-                                  if (isEditing) {
-                                    await _actualizarJurado(
-                                      id: jurado!['id'],
-                                      nombre: nombre,
-                                      usuario: usuario,
-                                      password: password,
-                                      categorias: categoriasSeleccionadas,
-                                      eventoId: eventoSeleccionado!,
-                                      eventoNombre: eventoNombre,
-                                    );
-                                  } else {
-                                    await _crearJurado(
-                                      nombre: nombre,
-                                      usuario: usuario,
-                                      password: password,
-                                      categorias: categoriasSeleccionadas,
-                                      eventoId: eventoSeleccionado!,
-                                      eventoNombre: eventoNombre,
-                                    );
-                                  }
-                                  if (mounted) Navigator.pop(ctx);
-                                } catch (e) {
-                                  _showSnackBar('Error: $e',
-                                      isError: true);
-                                } finally {
-                                  setDialogState(
-                                      () => isLoading = false);
-                                }
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1E3A5F),
-                          foregroundColor: Colors.white,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          elevation: 2,
-                        ),
-                        child: isLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                    color: Colors.white, strokeWidth: 2))
-                            : Text(
-                                isEditing ? 'Guardar' : 'Crear Jurado',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -708,126 +754,192 @@ class _GestionJuradosCarreraScreenState
   void _showSnackBar(String msg,
       {bool isError = false, bool isWarning = false}) {
     final color = isError
-        ? const Color(0xFFE53935)
+        ? const Color(0xFFD4453B)
         : isWarning
-            ? Colors.orange
-            : const Color(0xFF43A047);
+            ? const Color(0xFFD4863B)
+            : const Color(0xFF2E9E6E);
     final icon = isError
-        ? Icons.error_outline
+        ? Icons.error_outline_rounded
         : isWarning
-            ? Icons.warning_amber
-            : Icons.check_circle_outline;
+            ? Icons.warning_amber_rounded
+            : Icons.check_circle_outline_rounded;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(children: [
           Icon(icon, color: Colors.white, size: 18),
           const SizedBox(width: 10),
-          Expanded(child: Text(msg)),
+          Expanded(
+            child: Text(msg,
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w500)),
+          ),
         ]),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 3),
+        elevation: 6,
       ),
     );
   }
 
   // ─── BUILD ────────────────────────────────────────────────────────────────
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFE8EDF2),
-      appBar: AppBar(
-        title: const Text('Gestión de Jurados',
-            style: TextStyle(fontWeight: FontWeight.w600)),
-        backgroundColor: const Color(0xFF1E3A5F),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _cargarJurados,
-            tooltip: 'Actualizar',
-          ),
-        ],
+ @override
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: const Color(0xFFEEF2F7),
+    appBar: AppBar(
+      title: const Text(
+        'Gestión de Jurados',
+        style: TextStyle(
+          fontWeight: FontWeight.w700,
+          fontSize: 17,
+        ),
       ),
-      floatingActionButton: _isLoadingSession
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => _mostrarDialogoJurado(),
-              backgroundColor: const Color(0xFF1E3A5F),
-              icon: const Icon(Icons.person_add),
-              label: const Text('Nuevo Jurado'),
-            ),
-      body: _isLoadingSession
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF1E3A5F)))
-          : Column(
-              children: [
-                // ── Tarjeta de contexto ──────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: _buildContextCard(),
-                ),
-                const SizedBox(height: 12),
+      backgroundColor: const Color(0xFF1E3A5F),
+      foregroundColor: Colors.white,
+      elevation: 0,
+      centerTitle: true,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh_rounded, size: 22),
+          onPressed: _cargarJurados,
+          tooltip: 'Actualizar',
+        ),
+        const SizedBox(width: 4),
+      ],
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(
+          height: 1,
+          color: Colors.white.withValues(alpha: 0.1),
+        ),
+      ),
+    ),
 
-                // ── Lista de jurados ─────────────────────────────────
-                Expanded(
-                  child: _isLoadingJurados
-                      ? const Center(child: CircularProgressIndicator())
-                      : _jurados.isEmpty
-                          ? _buildEmptyState()
-                          : ListView.builder(
-                              padding:
-                                  const EdgeInsets.fromLTRB(20, 4, 20, 80),
+    floatingActionButton: _isLoadingSession
+        ? null
+        : FloatingActionButton.extended(
+            onPressed: () => _mostrarDialogoJurado(),
+            backgroundColor: const Color(0xFF1E3A5F),
+            foregroundColor: Colors.white, // ← texto e icono blancos
+            elevation: 4,
+            icon: const Icon(
+              Icons.person_add_rounded,
+              size: 20,
+            ),
+            label: const Text(
+              'Nuevo Jurado',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
+          ),
+
+    body: _isLoadingSession
+        ? const Center(
+            child: CircularProgressIndicator(
+              color: Color(0xFF1E3A5F),
+              strokeWidth: 2.5,
+            ),
+          )
+        : Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: _buildContextCard(),
+              ),
+
+              const SizedBox(height: 12),
+
+              Expanded(
+                child: _isLoadingJurados
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF1E3A5F),
+                          strokeWidth: 2.5,
+                        ),
+                      )
+                    : _jurados.isEmpty
+                        ? _buildEmptyState()
+                        : FadeTransition(
+                            opacity: _fadeAnimation,
+                            child: ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                4,
+                                16,
+                                100,
+                              ),
                               itemCount: _jurados.length,
                               itemBuilder: (_, i) =>
                                   _buildJuradoCard(_jurados[i]),
                             ),
-                ),
-              ],
-            ),
-    );
-  }
-
+                          ),
+              ),
+            ],
+          ),
+  );
+}
+  // ── Tarjeta de contexto ───────────────────────────────────────────────────
   Widget _buildContextCard() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E3A5F),
-        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E3A5F), Color(0xFF2D5480)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1E3A5F).withValues(alpha: 0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(10),
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.school, color: Colors.white, size: 22),
+            child:
+                const Icon(Icons.school_rounded, color: Colors.white, size: 24),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_carreraNombre ?? '—',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15)),
+                Text(
+                  _carreraNombre ?? '—',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      letterSpacing: 0.2),
+                ),
                 const SizedBox(height: 3),
-                Text(_facultad ?? '—',
-                    style: const TextStyle(
-                        color: Colors.white70, fontSize: 12)),
-                const SizedBox(height: 2),
+                Text(
+                  _facultad ?? '—',
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.75),
+                      fontSize: 12),
+                ),
+                const SizedBox(height: 4),
                 Row(children: [
-                  const Icon(Icons.location_on,
+                  const Icon(Icons.location_on_rounded,
                       color: Colors.white54, size: 12),
                   const SizedBox(width: 4),
                   Text(_filialNombre ?? '—',
@@ -839,16 +951,19 @@ class _GestionJuradosCarreraScreenState
           ),
           Container(
             padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white30),
+              border:
+                  Border.all(color: Colors.white.withValues(alpha: 0.25)),
             ),
             child: Text(
-              '${_jurados.length} jurado(s)',
-              style:
-                  const TextStyle(color: Colors.white70, fontSize: 11),
+              '${_jurados.length} jurado${_jurados.length == 1 ? '' : 's'}',
+              style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500),
             ),
           ),
         ],
@@ -856,59 +971,88 @@ class _GestionJuradosCarreraScreenState
     );
   }
 
+  // ── Tarjeta de jurado ─────────────────────────────────────────────────────
   Widget _buildJuradoCard(Map<String, dynamic> jurado) {
     final categorias = jurado['categorias'] as List<String>;
     final nombre = jurado['nombre'] as String;
+    final usuario = jurado['usuario'] as String;
     final eventoNombre = jurado['eventoNombre'] as String;
+    final inicial =
+        nombre.isNotEmpty ? nombre[0].toUpperCase() : '?';
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE8EDF5)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Avatar
-            CircleAvatar(
-              radius: 26,
-              backgroundColor: const Color(0xFF1E3A5F),
-              child: Text(
-                nombre.isNotEmpty ? nombre[0].toUpperCase() : '?',
-                style: const TextStyle(
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1E3A5F), Color(0xFF2E5A8D)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Center(
+                child: Text(
+                  inicial,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
-                    fontWeight: FontWeight.bold),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 14),
 
-            // Info
+            // Contenido principal
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(nombre,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          color: Color(0xFF1E3A5F))),
-                  const SizedBox(height: 4),
+                  Text(
+                    nombre,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: Color(0xFF1E3A5F),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
                   Row(children: [
-                    Icon(Icons.account_circle,
-                        size: 13, color: Colors.grey[600]),
+                    const Icon(Icons.account_circle_outlined,
+                        size: 12, color: Color(0xFF94A3B8)),
                     const SizedBox(width: 4),
-                    Text(jurado['usuario'] as String,
-                        style: TextStyle(
-                            fontSize: 12, color: Colors.grey[600])),
+                    Text(
+                      usuario,
+                      style: const TextStyle(
+                          fontSize: 12, color: Color(0xFF64748B)),
+                    ),
                   ]),
-                  // ── Evento al que pertenece ──────────────────────────
                   if (eventoNombre.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 3),
                     Row(children: [
-                      Icon(Icons.event,
-                          size: 13, color: Colors.blue[400]),
+                      Icon(Icons.event_rounded,
+                          size: 12, color: Colors.blue[400]),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
@@ -925,28 +1069,28 @@ class _GestionJuradosCarreraScreenState
                     Wrap(
                       spacing: 4,
                       runSpacing: 4,
-                      children: categorias
-                          .map((cat) => Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1E3A5F)
-                                      .withOpacity(0.08),
-                                  borderRadius:
-                                      BorderRadius.circular(8),
-                                  border: Border.all(
-                                      color: const Color(0xFF1E3A5F)
-                                          .withOpacity(0.2)),
-                                ),
-                                child: Text(
-                                  cat,
-                                  style: const TextStyle(
-                                      fontSize: 10,
-                                      color: Color(0xFF1E3A5F),
-                                      fontWeight: FontWeight.w500),
-                                ),
-                              ))
-                          .toList(),
+                      children: categorias.asMap().entries.map((e) {
+                        final color = _categoryColors[
+                            e.key % _categoryColors.length];
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: color.withValues(alpha: 0.3)),
+                          ),
+                          child: Text(
+                            e.value,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: color,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ),
                   ],
                 ],
@@ -956,22 +1100,20 @@ class _GestionJuradosCarreraScreenState
             // Acciones
             Column(
               children: [
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined,
-                      color: Color(0xFF1E3A5F), size: 22),
-                  onPressed: () => _mostrarDialogoJurado(jurado: jurado),
+                _buildActionButton(
+                  icon: Icons.edit_rounded,
+                  color: const Color(0xFF1E3A5F),
+                  bgColor: const Color(0xFFF0F5FF),
+                  onTap: () => _mostrarDialogoJurado(jurado: jurado),
                   tooltip: 'Editar',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
                 ),
-                const SizedBox(height: 8),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline,
-                      color: Colors.red, size: 22),
-                  onPressed: () => _eliminarJurado(jurado['id'], nombre),
+                const SizedBox(height: 6),
+                _buildActionButton(
+                  icon: Icons.delete_rounded,
+                  color: const Color(0xFFD4453B),
+                  bgColor: const Color(0xFFFFF5F5),
+                  onTap: () => _eliminarJurado(jurado['id'], nombre),
                   tooltip: 'Eliminar',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
                 ),
               ],
             ),
@@ -981,29 +1123,89 @@ class _GestionJuradosCarreraScreenState
     );
   }
 
+  Widget _buildActionButton({
+    required IconData icon,
+    required Color color,
+    required Color bgColor,
+    required VoidCallback onTap,
+    required String tooltip,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(icon, color: color, size: 17),
+        ),
+      ),
+    );
+  }
+
+  // ── Estado vacío ──────────────────────────────────────────────────────────
   Widget _buildEmptyState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(24),
+            width: 80,
+            height: 80,
             decoration: const BoxDecoration(
-                color: Color(0xFFF0F4FF), shape: BoxShape.circle),
-            child: const Icon(Icons.people_outline,
-                size: 56, color: Color(0xFF1E3A5F)),
+              color: Color(0xFFF0F5FF),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.people_outline_rounded,
+                size: 40, color: Color(0xFF1E3A5F)),
           ),
           const SizedBox(height: 20),
-          const Text('No hay jurados',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E3A5F))),
+          const Text(
+            'No hay jurados',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1E3A5F),
+            ),
+          ),
           const SizedBox(height: 8),
-          Text('Crea el primer jurado para esta carrera',
-              style: TextStyle(fontSize: 13, color: Colors.grey[500])),
+          Text(
+            'Crea el primer jurado para esta carrera',
+            style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+          ),
         ],
       ),
+    );
+  }
+
+  // ── Helpers del diálogo ───────────────────────────────────────────────────
+  Widget _buildDialogSectionLabel(
+      String label, IconData icon, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: Colors.white, size: 15),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF1E3A5F),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1018,20 +1220,281 @@ class _GestionJuradosCarreraScreenState
       enabled: enabled,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
+        labelStyle:
+            const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+        prefixIcon:
+            Icon(icon, color: const Color(0xFF1E3A5F), size: 20),
         border:
             OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
         ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              const BorderSide(color: Color(0xFF1E3A5F), width: 1.5),
+        ),
         disabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          borderSide: const BorderSide(color: Color(0xFFE8EDF5)),
         ),
         filled: true,
         fillColor:
-            enabled ? const Color(0xFFF8FAFC) : const Color(0xFFF0F0F0),
+            enabled ? const Color(0xFFF8FAFC) : const Color(0xFFF1F5F9),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      ),
+    );
+  }
+
+  Widget _buildPasswordField({
+    required TextEditingController controller,
+    required bool obscure,
+    required VoidCallback onToggle,
+  }) {
+    return TextFormField(
+      controller: controller,
+      obscureText: obscure,
+      decoration: InputDecoration(
+        labelText: 'Contraseña',
+        labelStyle:
+            const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+        prefixIcon: const Icon(Icons.lock_outline_rounded,
+            color: Color(0xFF1E3A5F), size: 20),
+        suffixIcon: IconButton(
+          icon: Icon(
+            obscure
+                ? Icons.visibility_off_rounded
+                : Icons.visibility_rounded,
+            color: Colors.grey[400],
+            size: 20,
+          ),
+          onPressed: onToggle,
+        ),
+        border:
+            OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              const BorderSide(color: Color(0xFF1E3A5F), width: 1.5),
+        ),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      ),
+    );
+  }
+
+  Widget _buildEventoDropdown({
+    required List<Map<String, dynamic>> eventos,
+    required String? eventoSeleccionado,
+    required bool isEditing,
+    required Map<String, dynamic>? jurado,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Theme(
+      data:
+          Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: Container(
+        decoration: BoxDecoration(
+          color: eventoSeleccionado != null
+              ? const Color(0xFFF0F5FF)
+              : const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: eventoSeleccionado != null
+                ? const Color(0xFF3B6FD4)
+                : const Color(0xFFE2E8F0),
+            width: eventoSeleccionado != null ? 1.5 : 1,
+          ),
+        ),
+        child: ExpansionTile(
+          tilePadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          collapsedShape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          leading: Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: eventoSeleccionado != null
+                  ? const Color(0xFF3B6FD4).withValues(alpha: 0.15)
+                  : const Color(0xFF3B6FD4).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: const Icon(Icons.event_rounded,
+                color: Color(0xFF3B6FD4), size: 18),
+          ),
+          title: Text(
+            eventoSeleccionado != null
+                ? (eventos.firstWhere(
+                      (e) => e['id'] == eventoSeleccionado,
+                      orElse: () => {'name': 'Evento seleccionado'},
+                    )['name'] as String)
+                : (eventos.isEmpty
+                    ? 'No hay eventos disponibles'
+                    : 'Seleccionar evento'),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: eventoSeleccionado != null
+                  ? FontWeight.w700
+                  : FontWeight.w400,
+              color: eventoSeleccionado != null
+                  ? const Color(0xFF1E3A5F)
+                  : const Color(0xFF94A3B8),
+            ),
+          ),
+          subtitle: eventoSeleccionado != null
+              ? const Text(
+                  'Toca para cambiar',
+                  style: TextStyle(
+                      fontSize: 11, color: Color(0xFF3B6FD4)),
+                )
+              : null,
+          iconColor: const Color(0xFF3B6FD4),
+          collapsedIconColor: const Color(0xFF94A3B8),
+          childrenPadding:
+              const EdgeInsets.fromLTRB(10, 0, 10, 10),
+          children: eventos.isEmpty
+              ? [
+                  Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Text(
+                      'No hay eventos para esta carrera.',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.grey[500]),
+                    ),
+                  ),
+                ]
+              : eventos.map((e) {
+                  final isSelected =
+                      eventoSeleccionado == e['id'];
+                  return GestureDetector(
+                    onTap: () => onChanged(e['id'] as String),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xFFF0F5FF)
+                            : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isSelected
+                              ? const Color(0xFF3B6FD4)
+                              : const Color(0xFFE8EDF5),
+                          width: isSelected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.event_rounded,
+                              size: 16, color: Color(0xFF3B6FD4)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              e['name'] as String,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isSelected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: isSelected
+                                    ? const Color(0xFF1E3A5F)
+                                    : const Color(0xFF475569),
+                              ),
+                            ),
+                          ),
+                          if (isSelected)
+                            const Icon(Icons.check_circle_rounded,
+                                color: Color(0xFF3B6FD4), size: 18),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoriasPanel({
+    required List<String> categorias,
+    required List<String> seleccionadas,
+    required bool isLoading,
+    required void Function(String, bool) onChanged,
+  }) {
+    if (isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 16),
+          child: CircularProgressIndicator(
+              strokeWidth: 2, color: Color(0xFF8B4DC7)),
+        ),
+      );
+    }
+
+    if (categorias.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFAF5FF),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFE9D5FF)),
+        ),
+        child: const Text(
+          'No hay categorías en este evento.',
+          style: TextStyle(fontSize: 12, color: Color(0xFF6B21A8)),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAF5FF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE9D5FF)),
+      ),
+      constraints: const BoxConstraints(maxHeight: 200),
+      child: ListView.builder(
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        itemCount: categorias.length,
+        itemBuilder: (_, i) {
+          final cat = categorias[i];
+          final isSelected = seleccionadas.contains(cat);
+          final color = _categoryColors[i % _categoryColors.length];
+
+          return CheckboxListTile(
+            dense: true,
+            value: isSelected,
+            activeColor: color,
+            checkColor: Colors.white,
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14),
+            title: Text(
+              cat,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight:
+                    isSelected ? FontWeight.w600 : FontWeight.w400,
+                color: isSelected ? color : const Color(0xFF334155),
+              ),
+            ),
+            onChanged: (v) => onChanged(cat, v == true),
+          );
+        },
       ),
     );
   }

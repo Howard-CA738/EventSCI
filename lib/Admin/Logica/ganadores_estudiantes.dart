@@ -99,7 +99,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
         });
       }
     } catch (e) {
-      print('Error al cargar datos iniciales: $e');
+      debugPrint('Error al cargar datos iniciales: $e');
       if (mounted) {
         setState(() => _isLoadingInitial = false);
         _showSnackBar('Error al cargar datos: $e', isError: true);
@@ -236,7 +236,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
         }
       }
     } catch (e) {
-      print('Error al generar Excel: $e');
+      debugPrint('Error al generar Excel: $e');
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop();
         setState(() => _isGeneratingExcel = false);
@@ -428,7 +428,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
     setState(() => _isCalculando = true);
 
     try {
-      print('🏆 Iniciando cálculo de ganadores automático');
+      debugPrint('🏆 Iniciando cálculo de ganadores automático');
 
       // ✅ ACTUALIZADO: Query con filialId
       final eventosSnapshot = await _firestore
@@ -448,7 +448,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
       int totalGanadoresAsignados = 0;
 
       for (var eventoDoc in eventosSnapshot.docs) {
-        print('\n📌 Procesando evento: ${eventoDoc.id}');
+        debugPrint('\n📌 Procesando evento: ${eventoDoc.id}');
 
         final proyectosSnapshot = await _firestore
             .collection('events')
@@ -457,7 +457,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
             .get();
 
         if (proyectosSnapshot.docs.isEmpty) {
-          print('   ⚠️ Sin proyectos');
+          debugPrint('   ⚠️ Sin proyectos');
           continue;
         }
 
@@ -479,7 +479,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
               .get();
 
           if (evaluacionesSnapshot.docs.isEmpty) {
-            print('   ⚠️ Proyecto ${proyectoDoc.id} sin evaluaciones válidas');
+            debugPrint('   ⚠️ Proyecto ${proyectoDoc.id} sin evaluaciones válidas');
             continue;
           }
 
@@ -519,7 +519,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
         }
 
         for (var categoria in porCategoria.keys) {
-          print('\n   🏅 Categoría: $categoria');
+          debugPrint('\n   🏅 Categoría: $categoria');
 
           final proyectosCategoria = porCategoria[categoria]!;
 
@@ -531,8 +531,8 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
 
           final top3 = proyectosCategoria.take(3).toList();
 
-          print('   📊 ${proyectosCategoria.length} proyectos encontrados');
-          print('   🏆 Asignando TOP 3 ganadores:');
+          debugPrint('   📊 ${proyectosCategoria.length} proyectos encontrados');
+          debugPrint('   🏆 Asignando TOP 3 ganadores:');
 
           int posicion = 1;
           for (var proyecto in top3) {
@@ -540,7 +540,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
             final promedio = proyecto.value['promedio'] as double;
             final codigo = proyecto.value['data']['Código'] ?? 'Sin código';
 
-            print(
+            debugPrint(
               '      $posicion° lugar: $codigo - Promedio: ${promedio.toStringAsFixed(2)}',
             );
 
@@ -576,9 +576,9 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
         }
       }
 
-      print('\n✅ Proceso completado:');
-      print('   📦 Proyectos procesados: $totalProyectosProcesados');
-      print('   🏆 Ganadores asignados: $totalGanadoresAsignados');
+      debugPrint('\n✅ Proceso completado:');
+      debugPrint('   📦 Proyectos procesados: $totalProyectosProcesados');
+      debugPrint('   🏆 Ganadores asignados: $totalGanadoresAsignados');
 
       if (mounted) {
         _showSnackBar(
@@ -588,7 +588,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
         await _cargarGanadores();
       }
     } catch (e) {
-      print('❌ Error al calcular ganadores: $e');
+      debugPrint('❌ Error al calcular ganadores: $e');
       _showSnackBar('Error: $e');
     } finally {
       if (mounted) {
@@ -685,7 +685,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
       );
     } catch (e) {
       _showSnackBar('Error cargando ganadores: $e');
-      print('Error detallado: $e');
+      debugPrint('Error detallado: $e');
     } finally {
       setState(() {
         _isLoading = false;
@@ -811,7 +811,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                               textoLugar,
                               style: TextStyle(
                                 fontSize: 14,
-                                color: Colors.white.withOpacity(0.9),
+                                color: Colors.white.withValues(alpha:0.9),
                               ),
                             ),
                           ],
@@ -868,10 +868,10 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                           width: double.infinity,
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: colorMedalla.withOpacity(0.1),
+                            color: colorMedalla.withValues(alpha:0.1),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: colorMedalla.withOpacity(0.3),
+                              color: colorMedalla.withValues(alpha:0.3),
                             ),
                           ),
                           child: Column(
@@ -920,7 +920,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                                color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Icon(
@@ -989,7 +989,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E3A5F).withOpacity(0.1),
+              color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: const Color(0xFF1E3A5F), size: 18),
@@ -1060,7 +1060,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
     }
 
     if (_currentUserType != PrefsHelper.userTypeAdmin &&
-        _currentUserType != PrefsHelper.userTypeAsistente) {
+    _currentUserType != PrefsHelper.userTypeAdminCarrera) {
       return Scaffold(
         backgroundColor: const Color(0xFF1E3A5F),
         appBar: AppBar(
@@ -1270,7 +1270,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha:0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1284,7 +1284,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                  color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
@@ -1503,7 +1503,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha:0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1514,7 +1514,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.amber.withOpacity(0.1),
+              color: Colors.amber.withValues(alpha:0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
@@ -1551,7 +1551,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
@@ -1609,7 +1609,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha:0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1624,7 +1624,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
               gradient: LinearGradient(
                 colors: [
                   const Color(0xFF1E3A5F),
-                  const Color(0xFF1E3A5F).withOpacity(0.8),
+                  const Color(0xFF1E3A5F).withValues(alpha:0.8),
                 ],
               ),
               borderRadius: const BorderRadius.only(
@@ -1652,7 +1652,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha:0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -1699,7 +1699,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        border: Border.all(color: colorPosicion.withOpacity(0.3), width: 2),
+        border: Border.all(color: colorPosicion.withValues(alpha:0.3), width: 2),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Material(
@@ -1715,7 +1715,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                   width: 60,
                   height: 60,
                   decoration: BoxDecoration(
-                    color: colorPosicion.withOpacity(0.15),
+                    color: colorPosicion.withValues(alpha:0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
@@ -1757,7 +1757,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                              color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Row(
@@ -1787,7 +1787,7 @@ class _GanadoresEstudiantesScreenState extends State<GanadoresEstudiantesScreen>
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.1),
+                              color: Colors.green.withValues(alpha:0.1),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Row(

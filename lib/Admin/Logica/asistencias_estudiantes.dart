@@ -91,7 +91,7 @@ class _AsistenciasEstudiantesScreenState
         setState(() => _isLoadingInitial = false);
       }
     } catch (e) {
-      print('Error cargando datos iniciales: $e');
+      debugPrint('Error cargando datos iniciales: $e');
       if (mounted) {
         setState(() => _isLoadingInitial = false);
         _showSnackBar('Error al cargar datos: $e', isError: true);
@@ -225,7 +225,7 @@ class _AsistenciasEstudiantesScreenState
         });
       }
     } catch (e) {
-      print('Error cargando eventos: $e');
+      debugPrint('Error cargando eventos: $e');
       if (mounted) {
         setState(() => _isLoadingEventos = false);
         _showSnackBar('Error al cargar eventos: $e', isError: true);
@@ -255,7 +255,7 @@ class _AsistenciasEstudiantesScreenState
       if (mounted)
         setState(() => _totalAsistencias = asistenciasSnap.docs.length);
     } catch (e) {
-      print('Error cargando resumen: $e');
+      debugPrint('Error cargando resumen: $e');
     } finally {
       if (mounted) setState(() => _isLoadingResumen = false);
     }
@@ -677,7 +677,7 @@ class _AsistenciasEstudiantesScreenState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E3A5F).withOpacity(0.06),
+        color: const Color(0xFF1E3A5F).withValues(alpha:0.06),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -955,9 +955,9 @@ class _AsistenciasEstudiantesScreenState
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: Colors.white.withValues(alpha:0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.15)),
+        border: Border.all(color: Colors.white.withValues(alpha:0.15)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

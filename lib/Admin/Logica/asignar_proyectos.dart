@@ -87,7 +87,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         });
       }
     } catch (e) {
-      print('Error al cargar datos iniciales: $e');
+      debugPrint('Error al cargar datos iniciales: $e');
       if (mounted) {
         setState(() {
           _isLoadingInitial = false;
@@ -247,7 +247,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         });
       }
     } catch (e) {
-      print('Error al cargar eventos: $e');
+      debugPrint('Error al cargar eventos: $e');
       if (mounted) {
         setState(() => _isLoadingEventos = false);
       }
@@ -288,10 +288,10 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       final facultadEvento = _eventoData!['facultad'];
       final carreraEvento = _eventoData!['carreraNombre'];
 
-      print('🔍 Buscando jurados para:');
-      print('   Filial: $filialEvento');
-      print('   Facultad: $facultadEvento');
-      print('   Carrera: $carreraEvento');
+      debugPrint('🔍 Buscando jurados para:');
+      debugPrint('   Filial: $filialEvento');
+      debugPrint('   Facultad: $facultadEvento');
+      debugPrint('   Carrera: $carreraEvento');
 
       final jurados = await _rubricasService.obtenerJurados(
         filial: filialEvento,
@@ -316,7 +316,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         }
       }
     } catch (e) {
-      print('Error al cargar jurados: $e');
+      debugPrint('Error al cargar jurados: $e');
       if (mounted) {
         setState(() => _isLoadingJurados = false);
       }
@@ -341,14 +341,14 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
 
   Future<void> _cargarRubricasDelJurado(String juradoId) async {
     try {
-      print('🔍 Buscando rúbricas del jurado...');
+      debugPrint('🔍 Buscando rúbricas del jurado...');
 
       final todasRubricas = await _rubricasService.obtenerRubricas();
       final rubricasJurado = todasRubricas
           .where((r) => r.juradosAsignados.contains(juradoId))
           .toList();
 
-      print('📚 Rúbricas encontradas: ${rubricasJurado.length}');
+      debugPrint('📚 Rúbricas encontradas: ${rubricasJurado.length}');
 
       if (rubricasJurado.isEmpty) {
         if (mounted) {
@@ -385,7 +385,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         return true;
       }).toList();
 
-      print('✅ Rúbricas compatibles: ${rubricasCompatibles.length}');
+      debugPrint('✅ Rúbricas compatibles: ${rubricasCompatibles.length}');
 
       if (rubricasCompatibles.isEmpty) {
         if (mounted) {
@@ -413,7 +413,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         });
       }
     } catch (e) {
-      print('❌ Error al cargar rúbricas: $e');
+      debugPrint('❌ Error al cargar rúbricas: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -446,7 +446,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
     setState(() => _isLoadingProyectos = true);
 
     try {
-      print('📦 Cargando proyectos del evento con rúbrica: ${rubrica.nombre}');
+      debugPrint('📦 Cargando proyectos del evento con rúbrica: ${rubrica.nombre}');
 
       // Obtener las categorías del jurado
       final juradoDoc = await _firestore
@@ -459,7 +459,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         final juradoData = juradoDoc.data();
         if (juradoData != null && juradoData.containsKey('categorias')) {
           categoriasJurado = List<String>.from(juradoData['categorias'] ?? []);
-          print('🏷️ Categorías del jurado: $categoriasJurado');
+          debugPrint('🏷️ Categorías del jurado: $categoriasJurado');
         }
       }
 
@@ -483,7 +483,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
           .collection('proyectos')
           .get();
 
-      print('✅ ${proyectosSnapshot.docs.length} proyectos encontrados');
+      debugPrint('✅ ${proyectosSnapshot.docs.length} proyectos encontrados');
 
       // Cargar evaluaciones del jurado CON ESTA RÚBRICA
       final evaluacionesSnapshot = await _firestore
@@ -502,7 +502,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         }
       }
 
-      print(
+      debugPrint(
         '🔒 ${proyectosAsignados.length} proyectos ya asignados con esta rúbrica',
       );
 
@@ -545,7 +545,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         }
       }
 
-      print(
+      debugPrint(
         '🚫 $proyectosFiltrados proyectos filtrados (categorías no asignadas)',
       );
 
@@ -578,8 +578,8 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
           _isLoadingProyectos = false;
         });
 
-        print('✅ ${_proyectosDisponibles.length} proyectos disponibles');
-        print('📂 ${_proyectosPorCategoria.length} categorías');
+        debugPrint('✅ ${_proyectosDisponibles.length} proyectos disponibles');
+        debugPrint('📂 ${_proyectosPorCategoria.length} categorías');
 
         if (proyectosList.isEmpty && proyectosFiltrados > 0) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -594,7 +594,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         }
       }
     } catch (e) {
-      print('❌ Error: $e');
+      debugPrint('❌ Error: $e');
       if (mounted) {
         setState(() => _isLoadingProyectos = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -834,7 +834,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         await _cargarProyectosConRubrica(_rubricaSeleccionada!);
       }
     } catch (e) {
-      print('Error al asignar proyectos: $e');
+      debugPrint('Error al asignar proyectos: $e');
       if (mounted) {
         setState(() => _isAsignando = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1519,7 +1519,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2196F3).withOpacity(0.1),
+                    color: const Color(0xFF2196F3).withValues(alpha:0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -1597,7 +1597,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: _getColorForCategory(index).withOpacity(0.3),
+          color: _getColorForCategory(index).withValues(alpha:0.3),
           width: 2,
         ),
       ),
@@ -1627,7 +1627,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
               gradient: LinearGradient(
                 colors: [
                   _getColorForCategory(index),
-                  _getColorForCategory(index).withOpacity(0.7),
+                  _getColorForCategory(index).withValues(alpha:0.7),
                 ],
               ),
               borderRadius: BorderRadius.circular(12),

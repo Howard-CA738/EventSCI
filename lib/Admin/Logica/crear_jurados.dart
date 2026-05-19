@@ -51,7 +51,7 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
         });
       }
     } catch (e) {
-      print('Error al cargar filiales: $e');
+      debugPrint('Error al cargar filiales: $e');
     }
   }
 
@@ -160,7 +160,7 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
         }
       }
     } catch (e) {
-      print('Error al cargar categorías: $e');
+      debugPrint('Error al cargar categorías: $e');
     }
   }
 
@@ -347,7 +347,7 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
+                                  color: Colors.black.withValues(alpha:0.1),
                                   blurRadius: 15,
                                   offset: const Offset(0, 5),
                                 ),
@@ -1003,7 +1003,7 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
                             elevation: 4,
                             shadowColor: const Color(
                               0xFF1A5490,
-                            ).withOpacity(0.4),
+                            ).withValues(alpha:0.4),
                           ),
                           child: _isLoading
                               ? const SizedBox(

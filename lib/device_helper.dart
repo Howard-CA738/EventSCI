@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter/foundation.dart';
 
 class DeviceHelper {
   static const String _keyDeviceId = 'app_unique_device_id';
@@ -19,7 +20,7 @@ class DeviceHelper {
     final newId = const Uuid().v4();
     await prefs.setString(_keyDeviceId, newId);
 
-    print('✅ Nuevo UUID de dispositivo generado: $newId');
+    debugPrint('✅ Nuevo UUID de dispositivo generado: $newId');
     return newId;
   }
 }

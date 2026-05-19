@@ -2,256 +2,124 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/admin/logica/filiales_service.dart';
 import '/device_helper.dart';
-
+import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:math'; 
+import 'password_helper.dart'; 
+ 
 class PrefsHelper {
+  // ─────────────────────────────────────────────────────────────────────────
+  // CONSTANTES DE TIPO DE USUARIO
+  // ─────────────────────────────────────────────────────────────────────────
+  static const String userTypeAdmin        = 'admin';
+  static const String userTypeStudent      = 'student';
+  static const String userTypeJurado       = 'jurado';
   static const String userTypeAdminCarrera = 'admin_carrera';
-  static const String _keyAdminCarreraFilial = 'admin_carrera_filial';
-  static const String _keyAdminCarreraFilialNombre =
-      'admin_carrera_filial_nombre';
-      // Agrega estas constantes junto a las otras _key...
-static const String _keyAsistenteFilial = 'asistente_filial';
-static const String _keyAsistenteFilialNombre = 'asistente_filial_nombre';
-static const String _keyAsistenteFacultad = 'asistente_facultad';
-static const String _keyAsistenteCarreraId = 'asistente_carrera_id';
-static const String _keyAsistenteCarreraNombre = 'asistente_carrera_nombre';
-  static const String _keyAdminCarreraFacultad = 'admin_carrera_facultad';
-  static const String _keyAdminCarreraCarrera = 'admin_carrera_carrera';
-  static const String _keyAdminCarreraCarreraId = 'admin_carrera_carrera_id';
-  static const String _keyAdminCarreraPermisos = 'admin_carrera_permisos';
-  static const String _keyUserType = 'user_type';
-  static const String _keyUserName = 'user_name';
-  static const String _keyUserId = 'user_id';
-  static const String _keyIsLoggedIn = 'is_logged_in';
-  // ✅ NUEVO: Token de sesión para invalidar sesiones antiguas
-  static const String _keySessionToken = 'session_token';
-
-  static const String userTypeAdmin = 'admin';
-  static const String userTypeStudent = 'student';
-  static const String userTypeAsistente = 'asistente';
-  static const String userTypeJurado = 'jurado';
-
-  static const String adminEmail = 'admin';
-  static const String adminPassword = 'admin_2025*.';
-  static const String asistenteEmail = 'society';
-  static const String asistentePassword = 'society@2025';
-  static const String juradoEmail = 'jurado';
-  static const String juradoPassword = 'jurado123';
-
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // KEYS DE SHARED PREFERENCES
+  // ─────────────────────────────────────────────────────────────────────────
+  static const String _keyUserType                  = 'user_type';
+  static const String _keyUserName                  = 'user_name';
+  static const String _keyUserId                    = 'user_id';
+  static const String _keyIsLoggedIn                = 'is_logged_in';
+  static const String _keySessionToken              = 'session_token';
+ 
+  // AdminCarrera
+  static const String _keyAdminCarreraFilial        = 'admin_carrera_filial';
+  static const String _keyAdminCarreraFilialNombre  = 'admin_carrera_filial_nombre';
+  static const String _keyAdminCarreraFacultad      = 'admin_carrera_facultad';
+  static const String _keyAdminCarreraCarrera       = 'admin_carrera_carrera';
+  static const String _keyAdminCarreraCarreraId     = 'admin_carrera_carrera_id';
+  static const String _keyAdminCarreraPermisos      = 'admin_carrera_permisos';
+ 
+  // Jurado
+  static const String _keyJuradoFacultad            = 'jurado_facultad';
+  static const String _keyJuradoCarrera             = 'jurado_carrera';
+  static const String _keyJuradoFilial              = 'jurado_filial';
+  static const String _keyJuradoEventoId            = 'jurado_evento_id';
+  static const String _keyJuradoCategorias          = 'jurado_categorias';
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // FIRESTORE + CACHÉ
+  // ─────────────────────────────────────────────────────────────────────────
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  static final Map<String, Map<String, dynamic>> _userCache = {};
-  static DateTime? _cacheTimestamp;
-  static const Duration _cacheDuration = Duration(hours: 24);
+ 
+  static final Map<String, Map<String, dynamic>> _userCache        = {};
+  static DateTime?                               _cacheTimestamp;
+  static const Duration                          _cacheDuration     = Duration(hours: 24);
+ 
   static List<Map<String, dynamic>>? _studentsCache;
-  static DateTime? _studentsCacheTimestamp;
-  static const Duration _studentsCacheDuration = Duration(hours: 1);
-
-  static void clearStudentsCache() {
-    _studentsCache = null;
-    _studentsCacheTimestamp = null;
-    print('🗑️ Caché de estudiantes limpiado');
+  static DateTime?                   _studentsCacheTimestamp;
+  static const Duration              _studentsCacheDuration = Duration(hours: 1);
+ 
+  static SharedPreferences? _prefs;
+  static Future<SharedPreferences> _getPrefs() async {
+    _prefs ??= await SharedPreferences.getInstance();
+    return _prefs!;
   }
-static String _generateToken() {
-  return DateTime.now().millisecondsSinceEpoch.toString();
-}
-
-static Future<String> verificarSesionEstudiante({
-  required String carreraPath,
-  required String studentId,
-}) async {
-  try {
-    final doc = await _firestore
-        .collection('users')
-        .doc(carreraPath)
-        .collection('students')
-        .doc(studentId)
-        .get(const GetOptions(source: Source.server));
-
-    if (!doc.exists) return 'error';
-
-    final data = doc.data()!;
-    final currentDeviceId = await DeviceHelper.getDeviceId();
-    final bloqueadoPermanente = data['bloqueadoPermanente'] ?? false;
-    final sessionActive = data['sessionActive'] ?? false;
-
-    // ✅ 1. Estudiante bloqueado permanentemente
-    // No puede entrar desde NINGÚN celular
-    if (bloqueadoPermanente == true) {
-      return 'dispositivo_bloqueado';
-    }
-
-    // ✅ 2. Este celular ya está vinculado a OTRA cuenta
-    // El amigo no puede entrar desde el celular de A
-    final cuentasEnEsteDispositivo = await _firestore
-        .collection('users')
-        .doc(carreraPath)
-        .collection('students')
-        .where('deviceId', isEqualTo: currentDeviceId)
-        .limit(1)
-        .get();
-
-    if (cuentasEnEsteDispositivo.docs.isNotEmpty &&
-        cuentasEnEsteDispositivo.docs.first.id != studentId) {
-      return 'celular_bloqueado';
-    }
-
-    // ✅ 3. Sesión activa en otro dispositivo
-    if (sessionActive == true) {
-      return 'bloqueado';
-    }
-
-    return 'libre';
-  } catch (e) {
-    print('❌ Error verificando sesión: $e');
-    return 'error';
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // 🔐 TOKEN SEGURO — reemplaza DateTime.now().millisecondsSinceEpoch
+  // ─────────────────────────────────────────────────────────────────────────
+  static String _generateToken() {
+    final random = Random.secure();
+    final values = List<int>.generate(32, (_) => random.nextInt(256));
+    return values.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
-}
-static Future<void> saveAsistenteQRData({
-  required String filialId,
-  required String filialNombre,
-  required String facultad,
-  required String carreraId,
-  required String carreraNombre,
-}) async {
-  final prefs = await _getPrefs();
-  await prefs.setString(_keyAsistenteFilial, filialId);
-  await prefs.setString(_keyAsistenteFilialNombre, filialNombre);
-  await prefs.setString(_keyAsistenteFacultad, facultad);
-  await prefs.setString(_keyAsistenteCarreraId, carreraId);
-  await prefs.setString(_keyAsistenteCarreraNombre, carreraNombre);
-  print('✅ Datos de asistente QR guardados');
-}
-static Future<Map<String, String?>> getAsistenteQRData() async {
-  final prefs = await _getPrefs();
-  return {
-    'filialId':       prefs.getString(_keyAsistenteFilial),
-    'filialNombre':   prefs.getString(_keyAsistenteFilialNombre),
-    'facultad':       prefs.getString(_keyAsistenteFacultad),
-    'carreraId':      prefs.getString(_keyAsistenteCarreraId),
-    'carreraNombre':  prefs.getString(_keyAsistenteCarreraNombre),
-  };
-}
-static Future<bool> activarSesionEstudiante({
-  required String carreraPath,
-  required String studentId,
-}) async {
-  try {
-    final token = _generateToken();
-    final currentDeviceId = await DeviceHelper.getDeviceId();
-
-    final doc = await _firestore
-        .collection('users')
-        .doc(carreraPath)
-        .collection('students')
-        .doc(studentId)
-        .get();
-
-    final esPrimeraVez = doc.exists
-        ? (doc.data()?['primeraVez'] ?? true) == true
-        : true;
-
-    await _firestore
-        .collection('users')
-        .doc(carreraPath)
-        .collection('students')
-        .doc(studentId)
-        .update({
-      'sessionActive': true,
-      'sessionToken': token,
-      'lastLogin': FieldValue.serverTimestamp(),
-      'primeraVez': false,
-      // ✅ deviceId vinculado permanentemente
-      'deviceId': currentDeviceId,
-    });
-
-    final prefs = await _getPrefs();
-    await prefs.setString(_keySessionToken, token);
-    await prefs.setBool('es_primera_vez_advertencia', esPrimeraVez);
-
-    print('✅ Sesión activada. Dispositivo vinculado: $currentDeviceId');
-    return true;
-  } catch (e) {
-    print('❌ Error activando sesión estudiante: $e');
-    return false;
-  }
-}
-/// Se consume una sola vez (se borra tras leerlo).
-static Future<bool> debemostrarAdvertenciaPrimeraVez() async {
-  final prefs = await _getPrefs();
-  final valor = prefs.getBool('es_primera_vez_advertencia') ?? false;
-  // Limpiar para no volver a mostrarlo
-  await prefs.remove('es_primera_vez_advertencia');
-  return valor;
-}
-
-static Future<void> cerrarSesionEstudiante() async {
-  try {
-    final userIdPath = await getCurrentUserId();
-    if (userIdPath == null || !userIdPath.contains('/')) return;
-
-    final parts = userIdPath.split('/');
-    final carreraPath = parts[0];
-    final studentId = parts[1];
-    final currentDeviceId = await DeviceHelper.getDeviceId();
-
-    await _firestore
-        .collection('users')
-        .doc(carreraPath)
-        .collection('students')
-        .doc(studentId)
-        .update({
-      'sessionActive': false,
-      'sessionToken': null,
-      // ✅ Bloqueado permanentemente, solo admin puede resetear
-      'bloqueadoPermanente': true,
-      // ✅ deviceId se mantiene para bloquear el celular también
-      'deviceId': currentDeviceId,
-      'bloqueadoEn': FieldValue.serverTimestamp(),
-    });
-
-    print('✅ Estudiante bloqueado permanentemente');
-  } catch (e) {
-    print('❌ Error cerrando sesión: $e');
-  }
-}
-  // ✅ NUEVO: Verificar si la sesión del admin sigue siendo válida
-  static Future<bool> isSessionValid() async {
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // FIREBASE AUTH ANÓNIMO
+  // ─────────────────────────────────────────────────────────────────────────
+  static Future<void> crearSesionFirebaseAuth(String userId) async {
     try {
-      final userType = await getUserType();
-
-      // Solo verificar para admin y asistente
-      if (userType != userTypeAdmin && userType != userTypeAsistente) {
-        return true;
+      final auth = FirebaseAuth.instance;
+      if (auth.currentUser != null) {
+        await auth.currentUser!.getIdToken(true);
+        debugPrint('✅ Firebase Auth ya activo: ${auth.currentUser!.uid}');
+        return;
       }
-
-      final prefs = await _getPrefs();
-      final localToken = prefs.getString(_keySessionToken);
-      final userId = await getCurrentUserId();
-
-      if (localToken == null || userId == null) return false;
-
-      // Consultar contraseña actual en Firestore
-      final userDoc = await _firestore.collection('users').doc(userId).get();
-      if (!userDoc.exists) return false;
-
-      final currentPassword = userDoc.data()?['password'];
-
-      // Si el token local no coincide con la contraseña en Firestore → sesión inválida
-      final isValid = localToken == currentPassword;
-
-      if (!isValid) {
-        print(
-          '🔒 Sesión invalidada: la contraseña fue cambiada en otro dispositivo',
-        );
-      }
-
-      return isValid;
+      final credential = await auth.signInAnonymously();
+      await credential.user?.getIdToken(true);
+      await Future.delayed(const Duration(milliseconds: 300));
+      debugPrint('✅ Firebase Auth anónimo creado para: $userId');
     } catch (e) {
-      print('Error validando sesión: $e');
-      return false;
+      debugPrint('⚠️ No se pudo crear sesión Firebase Auth: $e');
     }
   }
-
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // HELPERS GENERALES
+  // ─────────────────────────────────────────────────────────────────────────
+  static void clearStudentsCache() {
+    _studentsCache          = null;
+    _studentsCacheTimestamp = null;
+    debugPrint('🗑️ Caché de estudiantes limpiado');
+  }
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // GUARDAR / LEER DATOS DE SESIÓN GENÉRICOS
+  // ─────────────────────────────────────────────────────────────────────────
+  static Future<void> saveUserData({
+    required String userType,
+    required String userName,
+    required String userId,
+  }) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keyUserType,  userType);
+    await prefs.setString(_keyUserName,  userName);
+    await prefs.setString(_keyUserId,    userId);
+    await prefs.setBool(_keyIsLoggedIn,  true);
+  }
+ 
+  static Future<bool>    isLoggedIn()       async => (await _getPrefs()).getBool(_keyIsLoggedIn)   ?? false;
+  static Future<String?> getCurrentUserId() async => (await _getPrefs()).getString(_keyUserId);
+  static Future<String?> getUserType()      async => (await _getPrefs()).getString(_keyUserType);
+  static Future<String?> getUserName()      async => (await _getPrefs()).getString(_keyUserName);
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // ADMIN CARRERA
+  // ─────────────────────────────────────────────────────────────────────────
   static Future<void> saveAdminCarreraData({
     required String userId,
     required String userName,
@@ -263,387 +131,304 @@ static Future<void> cerrarSesionEstudiante() async {
     required List<String> permisos,
   }) async {
     final prefs = await _getPrefs();
-    await prefs.setString(_keyUserType, userTypeAdminCarrera);
-    await prefs.setString(_keyUserName, userName);
-    await prefs.setString(_keyUserId, userId);
-    await prefs.setString(_keyAdminCarreraFilial, filial);
+    await prefs.setString(_keyUserType,                userTypeAdminCarrera);
+    await prefs.setString(_keyUserName,                userName);
+    await prefs.setString(_keyUserId,                  userId);
+    await prefs.setString(_keyAdminCarreraFilial,       filial);
     await prefs.setString(_keyAdminCarreraFilialNombre, filialNombre);
-    await prefs.setString(_keyAdminCarreraFacultad, facultad);
-    await prefs.setString(_keyAdminCarreraCarrera, carrera);
-    await prefs.setString(_keyAdminCarreraCarreraId, carreraId);
-    await prefs.setString(_keyAdminCarreraPermisos, permisos.join(','));
-    await prefs.setBool(_keyIsLoggedIn, true);
-    print('✅ Datos de admin carrera guardados en sesión');
+    await prefs.setString(_keyAdminCarreraFacultad,     facultad);
+    await prefs.setString(_keyAdminCarreraCarrera,      carrera);
+    await prefs.setString(_keyAdminCarreraCarreraId,    carreraId);
+    await prefs.setString(_keyAdminCarreraPermisos,     permisos.join(','));
+    await prefs.setBool(_keyIsLoggedIn,                true);
+    debugPrint('✅ Datos de admin carrera guardados en sesión');
   }
-
-  static Future<String?> getAdminCarreraFilial() async {
-    final prefs = await _getPrefs();
-    return prefs.getString(_keyAdminCarreraFilial);
-  }
-
-  static Future<String?> getAdminCarreraFilialNombre() async {
-    final prefs = await _getPrefs();
-    return prefs.getString(_keyAdminCarreraFilialNombre);
-  }
-
-  static Future<String?> getAdminCarreraFacultad() async {
-    final prefs = await _getPrefs();
-    return prefs.getString(_keyAdminCarreraFacultad);
-  }
-
-  static Future<String?> getAdminCarreraCarrera() async {
-    final prefs = await _getPrefs();
-    return prefs.getString(_keyAdminCarreraCarrera);
-  }
-
-  static Future<String?> getAdminCarreraCarreraId() async {
-    final prefs = await _getPrefs();
-    return prefs.getString(_keyAdminCarreraCarreraId);
-  }
-
+ 
+  static Future<String?> getAdminCarreraFilial()       async => (await _getPrefs()).getString(_keyAdminCarreraFilial);
+  static Future<String?> getAdminCarreraFilialNombre() async => (await _getPrefs()).getString(_keyAdminCarreraFilialNombre);
+  static Future<String?> getAdminCarreraFacultad()     async => (await _getPrefs()).getString(_keyAdminCarreraFacultad);
+  static Future<String?> getAdminCarreraCarrera()      async => (await _getPrefs()).getString(_keyAdminCarreraCarrera);
+  static Future<String?> getAdminCarreraCarreraId()    async => (await _getPrefs()).getString(_keyAdminCarreraCarreraId);
+ 
   static Future<List<String>> getAdminCarreraPermisos() async {
-    final prefs = await _getPrefs();
+    final prefs          = await _getPrefs();
     final permisosString = prefs.getString(_keyAdminCarreraPermisos);
     if (permisosString == null || permisosString.isEmpty) return [];
     return permisosString.split(',');
   }
-
-  static Future<bool> isAdminCarrera() async {
-    final userType = await getUserType();
-    return userType == userTypeAdminCarrera;
-  }
-
+ 
+  static Future<bool> isAdminCarrera() async =>
+      (await getUserType()) == userTypeAdminCarrera;
+ 
+  static Future<bool> tienePermiso(String permiso) async =>
+      (await getAdminCarreraPermisos()).contains(permiso);
+ 
   static Future<Map<String, dynamic>?> getAdminCarreraData() async {
-    final isAdmin = await isAdminCarrera();
-    if (!isAdmin) return null;
-
+    if (!await isAdminCarrera()) return null;
     return {
-      'userId': await getCurrentUserId(),
-      'userName': await getUserName(),
-      'filial': await getAdminCarreraFilial(),
+      'userId':       await getCurrentUserId(),
+      'userName':     await getUserName(),
+      'filial':       await getAdminCarreraFilial(),
       'filialNombre': await getAdminCarreraFilialNombre(),
-      'facultad': await getAdminCarreraFacultad(),
-      'carrera': await getAdminCarreraCarrera(),
-      'carreraId': await getAdminCarreraCarreraId(),
-      'permisos': await getAdminCarreraPermisos(),
+      'facultad':     await getAdminCarreraFacultad(),
+      'carrera':      await getAdminCarreraCarrera(),
+      'carreraId':    await getAdminCarreraCarreraId(),
+      'permisos':     await getAdminCarreraPermisos(),
     };
   }
-
-  static Future<bool> tienePermiso(String permiso) async {
-    final permisos = await getAdminCarreraPermisos();
-    return permisos.contains(permiso);
-  }
-
-  static Future<void> saveUserData({
-    required String userType,
-    required String userName,
-    required String userId,
-  }) async {
-    final prefs = await _getPrefs();
-    await prefs.setString(_keyUserType, userType);
-    await prefs.setString(_keyUserName, userName);
-    await prefs.setString(_keyUserId, userId);
-    await prefs.setBool(_keyIsLoggedIn, true);
-  }
-
-  static Future<bool> isLoggedIn() async {
-    final prefs = await _getPrefs();
-    return prefs.getBool(_keyIsLoggedIn) ?? false;
-  }
-
-  static Future<String?> getCurrentUserId() async {
-    final prefs = await _getPrefs();
-    return prefs.getString(_keyUserId);
-  }
-
-  static Future<String?> getUserType() async {
-    final prefs = await _getPrefs();
-    return prefs.getString(_keyUserType);
-  }
-
-  static Future<String?> getUserName() async {
-    final prefs = await _getPrefs();
-    return prefs.getString(_keyUserName);
-  }
-
-  static Future<bool> loginAdmin(String email, String password) async {
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // 🔐 JURADO — contraseña verificada con hash
+  // ─────────────────────────────────────────────────────────────────────────
+  static Future<bool> loginJurado(String usuario, String password) async {
     try {
-      // ═══════════════════════════════════════════════════════════
-      // 🔐 LOGIN ADMIN
-      // ═══════════════════════════════════════════════════════════
-      if (email.trim() == adminEmail) {
-        print('🔍 Buscando admin en Firestore...');
-
-        final adminQuery = await _firestore
-            .collection('users')
-            .where('email', isEqualTo: adminEmail)
-            .where('userType', isEqualTo: userTypeAdmin)
-            .limit(1)
-            .get();
-
-        String adminId;
-
-        if (adminQuery.docs.isEmpty) {
-          print('📝 Admin no existe, creando en Firestore...');
-          final adminDoc = await _firestore.collection('users').add({
-            'email': adminEmail,
-            'password': password,
-            'userType': userTypeAdmin,
-            'name': 'Administrador',
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-          adminId = adminDoc.id;
-          print('✅ Admin creado con contraseña: $password');
-
-          await saveUserData(
-            userType: userTypeAdmin,
-            userName: 'Administrador',
-            userId: adminId,
-          );
-          // ✅ Guardar token de sesión
-          final prefs = await _getPrefs();
-          await prefs.setString(_keySessionToken, password);
-          return true;
-        } else {
-          adminId = adminQuery.docs.first.id;
-          final adminData = adminQuery.docs.first.data();
-          final firestorePassword = adminData['password'];
-
-          print('🔍 Admin encontrado en Firestore');
-
-          if (password == firestorePassword) {
-            print('✅ Contraseña correcta (validada desde Firestore)');
-
-            await saveUserData(
-              userType: userTypeAdmin,
-              userName: 'Administrador',
-              userId: adminId,
-            );
-            // ✅ Guardar token de sesión con la contraseña actual
-            final prefs = await _getPrefs();
-            await prefs.setString(_keySessionToken, firestorePassword);
-            return true;
-          } else {
-            print('❌ Contraseña incorrecta');
-            return false;
-          }
-        }
+      debugPrint('🔍 Intentando login jurado: $usuario');
+      await crearSesionFirebaseAuth('pre_jurado');
+ 
+      final query = await _firestore
+          .collection('users')
+          .where('userType', isEqualTo: 'jurado')
+          .where('usuario',  isEqualTo: usuario.trim().toLowerCase())
+          .limit(1)
+          .get();
+ 
+      if (query.docs.isEmpty) {
+        debugPrint('❌ Jurado no encontrado: $usuario');
+        return false;
       }
-      // ═══════════════════════════════════════════════════════════
-      // 🔐 LOGIN ASISTENTE
-      // ═══════════════════════════════════════════════════════════
-      else if (email.trim() == asistenteEmail) {
-        print('🔍 Buscando asistente en Firestore...');
-
-        final asistenteQuery = await _firestore
-            .collection('users')
-            .where('email', isEqualTo: asistenteEmail)
-            .where('userType', isEqualTo: userTypeAsistente)
-            .limit(1)
-            .get();
-
-        String asistenteId;
-
-        if (asistenteQuery.docs.isEmpty) {
-          print('📝 Asistente no existe, creando en Firestore...');
-          final asistenteDoc = await _firestore.collection('users').add({
-            'email': asistenteEmail,
-            'password': password,
-            'userType': userTypeAsistente,
-            'name': 'Asistente',
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-          asistenteId = asistenteDoc.id;
-          print('✅ Asistente creado con contraseña: $password');
-
-          await saveUserData(
-            userType: userTypeAsistente,
-            userName: 'Asistente',
-            userId: asistenteId,
-          );
-          // ✅ Guardar token de sesión
-          final prefs = await _getPrefs();
-          await prefs.setString(_keySessionToken, password);
-          return true;
-        } else {
-          asistenteId = asistenteQuery.docs.first.id;
-          final asistenteData = asistenteQuery.docs.first.data();
-          final firestorePassword = asistenteData['password'];
-
-          print('🔍 Asistente encontrado en Firestore');
-
-          if (password == firestorePassword) {
-            print('✅ Contraseña correcta (validada desde Firestore)');
-
-            await saveUserData(
-              userType: userTypeAsistente,
-              userName: 'Asistente',
-              userId: asistenteId,
-            );
-            // ✅ Guardar token de sesión con la contraseña actual
-            final prefs = await _getPrefs();
-            await prefs.setString(_keySessionToken, firestorePassword);
-            return true;
-          } else {
-            print('❌ Contraseña incorrecta');
-            return false;
-          }
-        }
+ 
+      final doc  = query.docs.first;
+      final data = doc.data();
+ 
+      // 🔐 Verificación con hash (compatible con texto plano mientras migras)
+      final stored = data['password']?.toString() ?? '';
+      if (!PasswordHelper.verifyPassword(password, stored)) {
+        debugPrint('❌ Contraseña incorrecta para jurado: $usuario');
+        return false;
       }
-
-      print('❌ Usuario no reconocido: $email');
-      return false;
+ 
+      // 🔐 Si la contraseña estaba en texto plano, migramos el hash ahora
+      if (!_isSha256(stored)) {
+        final hash = PasswordHelper.hashPassword(password);
+        await _firestore.collection('users').doc(doc.id).update({'password': hash});
+        debugPrint('✅ Contraseña de jurado migrada a hash');
+      }
+ 
+      await crearSesionFirebaseAuth(doc.id);
+      await saveUserData(
+        userType: userTypeJurado,
+        userName: data['name'] ?? 'Jurado',
+        userId:   doc.id,
+      );
+ 
+      final prefs = await _getPrefs();
+      await prefs.setString(_keyJuradoFacultad, data['facultad'] ?? '');
+      await prefs.setString(_keyJuradoCarrera,  data['carrera']  ?? '');
+      await prefs.setString(_keyJuradoFilial,   data['filial']   ?? '');
+      await prefs.setString(_keyJuradoEventoId, data['eventoId'] ?? '');
+      final categorias = (data['categorias'] as List?)
+              ?.map((e) => e.toString()).join(',') ?? '';
+      await prefs.setString(_keyJuradoCategorias, categorias);
+ 
+      debugPrint('✅ Login jurado exitoso: ${data['name']}');
+      return true;
     } catch (e) {
-      print('❌ Error en login admin/asistente: $e');
+      debugPrint('❌ Error en login de jurado: $e');
       return false;
     }
   }
-
-  static String generateUsername(String fullName) {
-    final nameParts = fullName.trim().toLowerCase().split(' ');
-
-    if (nameParts.length >= 3) {
-      return '${nameParts[0]}.${nameParts[2]}';
-    } else if (nameParts.length == 2) {
-      return '${nameParts[0]}.${nameParts[1]}';
-    } else if (nameParts.length == 1) {
-      return nameParts[0];
-    }
-
-    return fullName.toLowerCase().replaceAll(' ', '.');
+ 
+  static Future<String?> getJuradoFacultad()   async => (await _getPrefs()).getString(_keyJuradoFacultad);
+  static Future<String?> getJuradoCarrera()    async => (await _getPrefs()).getString(_keyJuradoCarrera);
+  static Future<String?> getJuradoFilial()     async => (await _getPrefs()).getString(_keyJuradoFilial);
+  static Future<String?> getJuradoEventoId()   async => (await _getPrefs()).getString(_keyJuradoEventoId);
+  static Future<List<String>> getJuradoCategorias() async {
+    final prefs = await _getPrefs();
+    final raw   = prefs.getString(_keyJuradoCategorias) ?? '';
+    if (raw.isEmpty) return [];
+    return raw.split(',');
   }
-
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // 🔐 ESTUDIANTE — login con verificación de hash
+  // ─────────────────────────────────────────────────────────────────────────
   static Future<bool> loginStudent(String username, String password) async {
-  try {
-    print('🔐 Intentando login de estudiante...');
-
-    final indexDoc = await _firestore
-        .collection('student_index')
-        .doc(username.trim().toLowerCase())
-        .get();
-
-    if (!indexDoc.exists) {
-      print('❌ Usuario no encontrado en índice');
-      return false;
-    }
-
-    final indexData = indexDoc.data()!;
-    final carreraPath = indexData['carreraPath'];
-    final studentId = indexData['studentId'];
-
-    final studentDoc = await _firestore
-        .collection('users')
-        .doc(carreraPath)
-        .collection('students')
-        .doc(studentId)
-        .get();
-
-    if (!studentDoc.exists) {
-      print('⚠️ Índice corrupto, limpiando...');
-      await _firestore
-          .collection('student_index')
-          .doc(username.trim().toLowerCase())
-          .delete();
-      return false;
-    }
-
-    final studentData = studentDoc.data()!;
-    final storedPassword = studentData['dni'] ?? studentData['documento'];
-
-    if (storedPassword != password) {
-      print('❌ Contraseña incorrecta');
-      return false;
-    }
-
-    await saveUserData(
-      userType: userTypeStudent,
-      userName: studentData['name'] ?? 'Estudiante',
-      userId: '$carreraPath/$studentId',
-    );
-
-    studentData['id'] = studentId;
-    studentData['carreraPath'] = carreraPath;
-    _userCache[studentId] = studentData;
-    _cacheTimestamp = DateTime.now();
-
-    print('✅ Login exitoso');
-    return true;
-  } catch (e) {
-    print('❌ Error en login estudiante: $e');
-    return false;
-  }
-}
-static SharedPreferences? _prefs;
-static Future<SharedPreferences> _getPrefs() async {
-  _prefs ??= await SharedPreferences.getInstance();
-  return _prefs!;
-}
-  static Future<bool> _loginStudentFallback(
-    String username,
-    String password,
-  ) async {
     try {
+      debugPrint('🔐 Intentando login de estudiante: $username');
+      final usernameNorm = username.trim().toLowerCase();
+ 
+      DocumentSnapshot? indexDoc;
+      try {
+        indexDoc = await _firestore
+            .collection('student_index')
+            .doc(usernameNorm)
+            .get();
+      } catch (e) {
+        debugPrint('⚠️ Error leyendo student_index, usando fallback: $e');
+        return await _loginStudentFallback(usernameNorm, password);
+      }
+ 
+      if (!indexDoc.exists) {
+        debugPrint('ℹ️ No encontrado en índice. Buscando en subcolecciones...');
+        return await _loginStudentFallback(usernameNorm, password);
+      }
+ 
+      final indexData   = indexDoc.data() as Map<String, dynamic>;
+      final carreraPath = indexData['carreraPath'] as String?;
+      final studentId   = indexData['studentId']   as String?;
+ 
+      if (carreraPath == null || studentId == null) {
+        debugPrint('⚠️ Índice corrupto, usando fallback');
+        await _firestore.collection('student_index').doc(usernameNorm).delete();
+        return await _loginStudentFallback(usernameNorm, password);
+      }
+ 
+      DocumentSnapshot studentDoc;
+      try {
+        studentDoc = await _firestore
+            .collection('users')
+            .doc(carreraPath)
+            .collection('students')
+            .doc(studentId)
+            .get();
+      } catch (e) {
+        debugPrint('⚠️ Error leyendo estudiante, usando fallback: $e');
+        return await _loginStudentFallback(usernameNorm, password);
+      }
+ 
+      if (!studentDoc.exists) {
+        debugPrint('⚠️ Índice apunta a estudiante inexistente. Limpiando...');
+        await _firestore.collection('student_index').doc(usernameNorm).delete();
+        return await _loginStudentFallback(usernameNorm, password);
+      }
+ 
+      final studentData    = studentDoc.data() as Map<String, dynamic>;
+      // 🔐 Leer el campo hasheado (o texto plano si aún no se migró)
+      final storedPassword = studentData['dni'] ?? studentData['documento'];
+ 
+      if (storedPassword == null) {
+        return await _loginStudentFallback(usernameNorm, password);
+      }
+ 
+      // 🔐 Verificar con soporte de transición texto plano → hash
+      if (!PasswordHelper.verifyPassword(password, storedPassword.toString())) {
+        debugPrint('⚠️ Contraseña no coincide, buscando en otras carreras...');
+        return await _loginStudentFallback(usernameNorm, password);
+      }
+ 
+      // 🔐 Migrar al hash si estaba en texto plano
+      if (!_isSha256(storedPassword.toString())) {
+        final hash = PasswordHelper.hashPassword(password);
+        await _firestore
+            .collection('users')
+            .doc(carreraPath)
+            .collection('students')
+            .doc(studentId)
+            .update({'dni': hash, 'documento': hash});
+        debugPrint('✅ Contraseña de estudiante migrada a hash automáticamente');
+      }
+ 
+      await crearSesionFirebaseAuth(studentId);
+      await saveUserData(
+        userType: userTypeStudent,
+        userName: studentData['name'] ?? 'Estudiante',
+        userId:   '$carreraPath/$studentId',
+      );
+ 
+      studentData['id']           = studentId;
+      studentData['carreraPath']  = carreraPath;
+      _userCache[studentId]       = studentData;
+      _cacheTimestamp             = DateTime.now();
+ 
+      debugPrint('✅ Login exitoso vía índice');
+      return true;
+    } catch (e) {
+      debugPrint('❌ Error en login estudiante: $e');
+      try {
+        return await _loginStudentFallback(username.trim().toLowerCase(), password);
+      } catch (_) {
+        return false;
+      }
+    }
+  }
+ 
+  static Future<bool> _loginStudentFallback(String username, String password) async {
+    try {
+      debugPrint('🔄 Fallback: buscando "$username" en todas las carreras...');
+ 
       final carrerasSnapshot = await _firestore.collection('users').get();
-
+ 
       for (var carreraDoc in carrerasSnapshot.docs) {
         final carreraName = carreraDoc.id;
-
-        if (carreraName == 'admin' ||
-            carreraName == 'asistente' ||
-            carreraName == 'jurado') {
-          continue;
-        }
-
+        final carreraData = carreraDoc.data();
+        if (carreraData.containsKey('userType')) continue;
+ 
         try {
           final studentQuery = await _firestore
               .collection('users')
               .doc(carreraName)
               .collection('students')
-              .where('username', isEqualTo: username.trim().toLowerCase())
+              .where('username', isEqualTo: username)
               .limit(1)
               .get();
-
-          if (studentQuery.docs.isNotEmpty) {
-            final studentDoc = studentQuery.docs.first;
-            final studentData = studentDoc.data();
-            final storedPassword =
-                studentData['dni'] ?? studentData['documento'];
-
-            if (storedPassword == password) {
-              await saveUserData(
-                userType: userTypeStudent,
-                userName: studentData['name'] ?? 'Estudiante',
-                userId: '$carreraName/${studentDoc.id}',
-              );
-
-              await _createStudentIndex(
-  username: username.trim().toLowerCase(),
-  carreraPath: carreraName,
-  studentId: studentDoc.id,
-);
-
-// ✅ FIX: guardar en caché con campos necesarios para el stream
-studentData['id'] = studentDoc.id;
-studentData['carreraPath'] = carreraName;
-_userCache[studentDoc.id] = studentData;
-_cacheTimestamp = DateTime.now();
-
-return true;
-            }
+ 
+          if (studentQuery.docs.isEmpty) continue;
+ 
+          final studentDoc  = studentQuery.docs.first;
+          final studentData = studentDoc.data();
+          final stored      = studentData['dni'] ?? studentData['documento'];
+ 
+          if (stored == null) continue;
+ 
+          // 🔐 Verificar con soporte de transición
+          if (!PasswordHelper.verifyPassword(password, stored.toString())) continue;
+ 
+          // 🔐 Migrar al hash si estaba en texto plano
+          if (!_isSha256(stored.toString())) {
+            final hash = PasswordHelper.hashPassword(password);
+            await _firestore
+                .collection('users')
+                .doc(carreraName)
+                .collection('students')
+                .doc(studentDoc.id)
+                .update({'dni': hash, 'documento': hash});
+            debugPrint('✅ Contraseña migrada a hash en fallback');
           }
+ 
+          await crearSesionFirebaseAuth(studentDoc.id);
+          await saveUserData(
+            userType: userTypeStudent,
+            userName: studentData['name'] ?? 'Estudiante',
+            userId:   '$carreraName/${studentDoc.id}',
+          );
+ 
+          await _createStudentIndex(
+            username:    username,
+            carreraPath: carreraName,
+            studentId:   studentDoc.id,
+          );
+ 
+          studentData['id']          = studentDoc.id;
+          studentData['carreraPath'] = carreraName;
+          _userCache[studentDoc.id]  = studentData;
+          _cacheTimestamp            = DateTime.now();
+ 
+          debugPrint('✅ Login exitoso vía fallback en "$carreraName"');
+          return true;
         } catch (e) {
-          print('⚠️ Error buscando en $carreraName: $e');
+          debugPrint('⚠️ Error buscando en $carreraName: $e');
           continue;
         }
       }
-
+ 
+      debugPrint('❌ Estudiante "$username" no encontrado en ninguna carrera');
       return false;
     } catch (e) {
-      print('❌ Error en fallback login: $e');
+      debugPrint('❌ Error en fallback login: $e');
       return false;
     }
   }
-
+ 
   static Future<void> _createStudentIndex({
     required String username,
     required String carreraPath,
@@ -651,177 +436,188 @@ return true;
   }) async {
     try {
       await _firestore.collection('student_index').doc(username).set({
-        'username': username,
+        'username':    username,
         'carreraPath': carreraPath,
-        'studentId': studentId,
-        'createdAt': FieldValue.serverTimestamp(),
+        'studentId':   studentId,
+        'createdAt':   FieldValue.serverTimestamp(),
       });
-      print('✅ Índice creado para $username');
+      debugPrint('✅ Índice creado para $username');
     } catch (e) {
-      print('⚠️ Error creando índice: $e');
+      debugPrint('⚠️ Error creando índice: $e');
     }
   }
-
-  static Future<bool> createStudentAccountWithUsername({
-  required String email,
-  required String name,
-  required String username,
-  required String codigoUniversitario,
-  required String dni,
-  required String facultad,
-  required String carrera,
-  required String filial,        // ← NUEVO parámetro requerido
-  String? modoContrato,
-  String? modalidadEstudio,
-  String? sede,                  // se mantiene por compatibilidad pero ya no se usa como path
-  String? ciclo,
-  String? grupo,
-  String? correoInstitucional,
-  String? celular,
-  String? pago,
-}) async {
-  try {
-    // ── Path unificado igual que Excel: "filialNombre_carrera" ──
-    final carreraPath = '${filial}_$carrera';
-    print('🔍 Creando estudiante en path: $carreraPath');
  
-    // ── Verificar duplicado en índice global ────────────────────
-    final indexExists = await _firestore
-        .collection('student_index')
-        .doc(username.toLowerCase().trim())
-        .get();
+  // ─────────────────────────────────────────────────────────────────────────
+  // SESIÓN DE ESTUDIANTE
+  // ─────────────────────────────────────────────────────────────────────────
+  static Future<String> verificarSesionEstudiante({
+    required String carreraPath,
+    required String studentId,
+  }) async {
+    try {
+      final doc = await _firestore
+          .collection('users')
+          .doc(carreraPath)
+          .collection('students')
+          .doc(studentId)
+          .get(const GetOptions(source: Source.server));
  
-    if (indexExists.exists) {
-      print('❌ Username ya existe en índice');
-      return false;
-    }
+      if (!doc.exists) return 'error';
  
-    // ── Referencia a la subcolección con path correcto ──────────
-    final studentsRef = _firestore
-        .collection('users')
-        .doc(carreraPath)
-        .collection('students');
+      final data               = doc.data()!;
+      final currentDeviceId    = await DeviceHelper.getDeviceId();
+      final bloqueadoPermanente = data['bloqueadoPermanente'] ?? false;
+      final sessionActive       = data['sessionActive']       ?? false;
  
-    // ── Verificar duplicados en Firestore ───────────────────────
-    final existingUsername = await studentsRef
-        .where('username', isEqualTo: username.trim().toLowerCase())
-        .limit(1)
-        .get();
+      if (bloqueadoPermanente == true) return 'dispositivo_bloqueado';
  
-    if (existingUsername.docs.isNotEmpty) {
-      print('❌ Username ya existe en esta carrera');
-      return false;
-    }
- 
-    if (email.trim().isNotEmpty) {
-      final existingEmail = await studentsRef
-          .where('email', isEqualTo: email.trim())
+      final cuentasEnEsteDispositivo = await _firestore
+          .collection('users')
+          .doc(carreraPath)
+          .collection('students')
+          .where('deviceId', isEqualTo: currentDeviceId)
           .limit(1)
           .get();
  
-      if (existingEmail.docs.isNotEmpty) {
-        print('❌ Email ya existe en esta carrera');
-        return false;
+      if (cuentasEnEsteDispositivo.docs.isNotEmpty &&
+          cuentasEnEsteDispositivo.docs.first.id != studentId) {
+        return 'celular_bloqueado';
       }
+ 
+      if (sessionActive == true) return 'bloqueado';
+ 
+      return 'libre';
+    } catch (e) {
+      debugPrint('❌ Error verificando sesión: $e');
+      return 'error';
     }
- 
-    if (codigoUniversitario.trim().isNotEmpty) {
-      final existingCode = await studentsRef
-          .where('codigoUniversitario',
-              isEqualTo: codigoUniversitario.trim())
-          .limit(1)
-          .get();
- 
-      if (existingCode.docs.isNotEmpty) {
-        print('❌ Código universitario ya existe en esta carrera');
-        return false;
-      }
-    }
- 
-    if (dni.trim().isNotEmpty) {
-      final existingDni = await studentsRef
-          .where('dni', isEqualTo: dni.trim())
-          .limit(1)
-          .get();
- 
-      if (existingDni.docs.isNotEmpty) {
-        print('❌ DNI ya existe en esta carrera');
-        return false;
-      }
-    }
- 
-    // ── Datos del estudiante (filial unificado, sin sede duplicado) ─
-    final studentData = <String, dynamic>{
-      'email': email.trim(),
-      'name': name.trim(),
-      'username': username.toLowerCase().trim(),
-      'codigoUniversitario': codigoUniversitario.trim(),
-      'dni': dni.trim(),
-      'documento': dni.trim(),
-      'filial': filial,          // ← campo unificado igual que Excel
-      'facultad': facultad,
-      'carrera': carrera,
-      'userType': userTypeStudent,
-      'createdAt': FieldValue.serverTimestamp(),
-    };
- 
-    if (modoContrato != null && modoContrato.isNotEmpty) {
-      studentData['modoContrato'] = modoContrato;
-    }
-    if (modalidadEstudio != null && modalidadEstudio.isNotEmpty) {
-      studentData['modalidadEstudio'] = modalidadEstudio;
-    }
-    if (ciclo != null && ciclo.isNotEmpty) {
-      studentData['ciclo'] = ciclo;
-    }
-    if (grupo != null && grupo.isNotEmpty) {
-      studentData['grupo'] = grupo;
-    }
-    if (correoInstitucional != null && correoInstitucional.isNotEmpty) {
-      studentData['correoInstitucional'] = correoInstitucional.trim();
-    }
-    if (celular != null && celular.isNotEmpty) {
-      studentData['celular'] = celular.trim();
-    }
-    if (pago != null && pago.isNotEmpty) {
-      studentData['pago'] = pago;
-    }
- 
-    // ── Guardar estudiante ──────────────────────────────────────
-    final studentDoc = await studentsRef.add(studentData);
- 
-    // ── Índice global para login rápido ─────────────────────────
-    await _createStudentIndex(
-      username: username.toLowerCase().trim(),
-      carreraPath: carreraPath,   // ← path unificado
-      studentId: studentDoc.id,
-    );
- 
-    // ── Documento padre con metadata completa ───────────────────
-    await _firestore.collection('users').doc(carreraPath).set({
-      'name': carreraPath,
-      'filial': filial,
-      'facultad': facultad,
-      'carrera': carrera,
-      'lastUpdated': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
- 
-    print('✅ Estudiante creado en "$carreraPath": ${studentDoc.id}');
- 
-    clearStudentsCache();
-    return true;
-  } catch (e) {
-    print('❌ Error creando estudiante: $e');
-    return false;
   }
-}
-
+ 
+  static Future<bool> activarSesionEstudiante({
+    required String carreraPath,
+    required String studentId,
+  }) async {
+    try {
+      final token           = _generateToken(); // 🔐 ahora es aleatorio
+      final currentDeviceId = await DeviceHelper.getDeviceId();
+ 
+      final doc = await _firestore
+          .collection('users')
+          .doc(carreraPath)
+          .collection('students')
+          .doc(studentId)
+          .get();
+ 
+      final esPrimeraVez =
+          doc.exists ? (doc.data()?['primeraVez'] ?? true) == true : true;
+ 
+      await _firestore
+          .collection('users')
+          .doc(carreraPath)
+          .collection('students')
+          .doc(studentId)
+          .update({
+        'sessionActive': true,
+        'sessionToken':  token,
+        'lastLogin':     FieldValue.serverTimestamp(),
+        'primeraVez':    false,
+        'deviceId':      currentDeviceId,
+      });
+ 
+      final prefs = await _getPrefs();
+      await prefs.setString(_keySessionToken, token);
+      await prefs.setBool('es_primera_vez_advertencia', esPrimeraVez);
+ 
+      debugPrint('✅ Sesión activada. Dispositivo: $currentDeviceId');
+      return true;
+    } catch (e) {
+      debugPrint('❌ Error activando sesión estudiante: $e');
+      return false;
+    }
+  }
+ 
+  static Future<bool> debemostrarAdvertenciaPrimeraVez() async {
+    final prefs = await _getPrefs();
+    final valor = prefs.getBool('es_primera_vez_advertencia') ?? false;
+    await prefs.remove('es_primera_vez_advertencia');
+    return valor;
+  }
+ 
+  static Future<void> cerrarSesionEstudiante() async {
+    try {
+      final userIdPath = await getCurrentUserId();
+      if (userIdPath == null || !userIdPath.contains('/')) return;
+ 
+      final parts           = userIdPath.split('/');
+      final carreraPath     = parts[0];
+      final studentId       = parts[1];
+      final currentDeviceId = await DeviceHelper.getDeviceId();
+ 
+      await _firestore
+          .collection('users')
+          .doc(carreraPath)
+          .collection('students')
+          .doc(studentId)
+          .update({
+        'sessionActive':       false,
+        'sessionToken':        null,
+        'bloqueadoPermanente': true,
+        'deviceId':            currentDeviceId,
+        'bloqueadoEn':         FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('❌ Error cerrando sesión: $e');
+    }
+  }
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // VALIDACIÓN DE SESIÓN
+  // ─────────────────────────────────────────────────────────────────────────
+  static Future<bool> isSessionValid() async {
+    try {
+      final userType = await getUserType();
+ 
+      if (userType == 'superAdmin') return true;
+ 
+      if (userType == userTypeJurado       ||
+          userType == userTypeAdminCarrera ||
+          userType == userTypeStudent) {
+        return true;
+      }
+ 
+      final prefs      = await _getPrefs();
+      final localToken = prefs.getString(_keySessionToken);
+      final userId     = await getCurrentUserId();
+ 
+      if (localToken == null || userId == null) return false;
+ 
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (!userDoc.exists) return false;
+ 
+      final currentPassword = userDoc.data()?['password'];
+      final isValid         = localToken == currentPassword;
+ 
+      if (!isValid) {
+        debugPrint('🔒 Sesión invalidada: contraseña cambiada en otro dispositivo');
+      }
+ 
+      return isValid;
+    } catch (e) {
+      debugPrint('Error validando sesión: $e');
+      return false;
+    }
+  }
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // DATOS DEL USUARIO ACTUAL
+  // ─────────────────────────────────────────────────────────────────────────
   static Future<Map<String, dynamic>?> getCurrentUserData({
     bool forceRefresh = false,
   }) async {
     try {
       final userIdPath = await getCurrentUserId();
       if (userIdPath == null) return null;
+ 
       if (!forceRefresh &&
           _cacheTimestamp != null &&
           DateTime.now().difference(_cacheTimestamp!) < _cacheDuration) {
@@ -829,139 +625,320 @@ return true;
         if (parts.length == 2) {
           final studentId = parts[1];
           if (_userCache.containsKey(studentId)) {
-            print('✅ Datos obtenidos del caché');
+            debugPrint('✅ Datos obtenidos del caché');
             return _userCache[studentId];
           }
         }
       }
-
+ 
       if (userIdPath.contains('/')) {
         final parts = userIdPath.split('/');
         if (parts.length != 2) return null;
-
         final carreraPath = parts[0];
-        final studentId = parts[1];
-
+        final studentId   = parts[1];
+ 
         final userDoc = await _firestore
             .collection('users')
             .doc(carreraPath)
             .collection('students')
             .doc(studentId)
             .get();
-
+ 
         if (!userDoc.exists) return null;
-
-        final userData = userDoc.data()!;
-        userData['id'] = userDoc.id;
+ 
+        final userData          = userDoc.data()!;
+        userData['id']          = userDoc.id;
         userData['carreraPath'] = carreraPath;
-
+ 
         _userCache[studentId] = userData;
-        _cacheTimestamp = DateTime.now();
-
+        _cacheTimestamp       = DateTime.now();
+ 
         return userData;
       } else {
-        final userDoc = await _firestore
-            .collection('users')
-            .doc(userIdPath)
-            .get();
-
+        final userDoc = await _firestore.collection('users').doc(userIdPath).get();
         if (!userDoc.exists) return null;
-
         final userData = userDoc.data()!;
         userData['id'] = userDoc.id;
         return userData;
       }
     } catch (e) {
-      print('Error obteniendo datos del usuario: $e');
+      debugPrint('Error obteniendo datos del usuario: $e');
       return null;
     }
   }
-
-  static Future<List<Map<String, dynamic>>> getStudentsByCarrera(
-    String carrera,
-  ) async {
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // 🔐 CREAR ESTUDIANTE — dni hasheado antes de guardar
+  // ─────────────────────────────────────────────────────────────────────────
+  static Future<bool> createStudentAccountWithUsername({
+    required String email,
+    required String name,
+    required String username,
+    required String codigoUniversitario,
+    required String dni,
+    required String facultad,
+    required String carrera,
+    required String filial,
+    String? modoContrato,
+    String? modalidadEstudio,
+    String? sede,
+    String? ciclo,
+    String? grupo,
+    String? correoInstitucional,
+    String? celular,
+    String? pago,
+  }) async {
     try {
-      final studentsQuery = await _firestore
+      final carreraPath = '${filial}_$carrera';
+ 
+      final indexExists = await _firestore
+          .collection('student_index')
+          .doc(username.toLowerCase().trim())
+          .get();
+ 
+      if (indexExists.exists) {
+        debugPrint('❌ Username ya existe en índice');
+        return false;
+      }
+ 
+      final studentsRef = _firestore
+          .collection('users')
+          .doc(carreraPath)
+          .collection('students');
+ 
+      final existingUsername = await studentsRef
+          .where('username', isEqualTo: username.trim().toLowerCase())
+          .limit(1)
+          .get();
+      if (existingUsername.docs.isNotEmpty) {
+        debugPrint('❌ Username ya existe en esta carrera');
+        return false;
+      }
+ 
+      if (email.trim().isNotEmpty) {
+        final existingEmail = await studentsRef
+            .where('email', isEqualTo: email.trim())
+            .limit(1)
+            .get();
+        if (existingEmail.docs.isNotEmpty) {
+          debugPrint('❌ Email ya existe');
+          return false;
+        }
+      }
+ 
+      if (codigoUniversitario.trim().isNotEmpty) {
+        final existingCode = await studentsRef
+            .where('codigoUniversitario', isEqualTo: codigoUniversitario.trim())
+            .limit(1)
+            .get();
+        if (existingCode.docs.isNotEmpty) {
+          debugPrint('❌ Código universitario ya existe');
+          return false;
+        }
+      }
+ 
+      if (dni.trim().isNotEmpty) {
+        final existingDni = await studentsRef
+            .where('dni', isEqualTo: dni.trim())
+            .limit(1)
+            .get();
+        if (existingDni.docs.isNotEmpty) {
+          debugPrint('❌ DNI ya existe');
+          return false;
+        }
+      }
+ 
+      // 🔐 Hashear el DNI antes de guardar
+      final dniHash = PasswordHelper.hashPassword(dni.trim());
+ 
+      final studentData = <String, dynamic>{
+        'email':                email.trim(),
+        'name':                 name.trim(),
+        'username':             username.toLowerCase().trim(),
+        'codigoUniversitario':  codigoUniversitario.trim(),
+        'dni':                  dniHash,       // 🔐 hash, no texto plano
+        'documento':            dniHash,       // 🔐 hash, no texto plano
+        'filial':               filial,
+        'facultad':             facultad,
+        'carrera':              carrera,
+        'userType':             userTypeStudent,
+        'esAsisteQR':           false,
+        'createdAt':            FieldValue.serverTimestamp(),
+      };
+ 
+      if (modoContrato       != null && modoContrato.isNotEmpty)       studentData['modoContrato']       = modoContrato;
+      if (modalidadEstudio   != null && modalidadEstudio.isNotEmpty)   studentData['modalidadEstudio']   = modalidadEstudio;
+      if (ciclo              != null && ciclo.isNotEmpty)              studentData['ciclo']              = ciclo;
+      if (grupo              != null && grupo.isNotEmpty)              studentData['grupo']              = grupo;
+      if (correoInstitucional != null && correoInstitucional.isNotEmpty) studentData['correoInstitucional'] = correoInstitucional.trim();
+      if (celular            != null && celular.isNotEmpty)            studentData['celular']            = celular.trim();
+      if (pago               != null && pago.isNotEmpty)               studentData['pago']               = pago;
+ 
+      final studentDoc = await studentsRef.add(studentData);
+ 
+      await _createStudentIndex(
+        username:    username.toLowerCase().trim(),
+        carreraPath: carreraPath,
+        studentId:   studentDoc.id,
+      );
+ 
+      await _firestore.collection('users').doc(carreraPath).set({
+        'name':        carreraPath,
+        'filial':      filial,
+        'facultad':    facultad,
+        'carrera':     carrera,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+ 
+      debugPrint('✅ Estudiante creado en "$carreraPath": ${studentDoc.id}');
+      clearStudentsCache();
+      return true;
+    } catch (e) {
+      debugPrint('❌ Error creando estudiante: $e');
+      return false;
+    }
+  }
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // 🔐 CAMBIAR CONTRASEÑA — hashea la nueva contraseña
+  // ─────────────────────────────────────────────────────────────────────────
+  static Future<bool> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final userIdPath = await getCurrentUserId();
+      if (userIdPath == null) return false;
+ 
+      final parts = userIdPath.split('/');
+      if (parts.length != 2) return false;
+ 
+      final carreraPath = parts[0];
+      final studentId   = parts[1];
+ 
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(carreraPath)
+          .collection('students')
+          .doc(studentId)
+          .get();
+ 
+      if (!userDoc.exists) return false;
+ 
+      final stored = userDoc.data()!['dni'] ?? userDoc.data()!['documento'];
+ 
+      // 🔐 Verificar contraseña actual (soporta texto plano durante transición)
+      if (!PasswordHelper.verifyPassword(currentPassword, stored.toString())) {
+        return false;
+      }
+ 
+      // 🔐 Guardar la nueva contraseña como hash
+      final newHash = PasswordHelper.hashPassword(newPassword);
+ 
+      await _firestore
+          .collection('users')
+          .doc(carreraPath)
+          .collection('students')
+          .doc(studentId)
+          .update({
+        'dni':       newHash,
+        'documento': newHash,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+ 
+      _userCache.remove(studentId);
+      debugPrint('✅ Contraseña actualizada y hasheada');
+      return true;
+    } catch (e) {
+      debugPrint('Error cambiando contraseña: $e');
+      return false;
+    }
+  }
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // CRUD DE ESTUDIANTES (sin cambios relevantes al hashing)
+  // ─────────────────────────────────────────────────────────────────────────
+  static String generateUsername(String fullName) {
+    final nameParts = fullName.trim().toLowerCase().split(' ');
+    if (nameParts.length >= 3) return '${nameParts[0]}.${nameParts[2]}';
+    if (nameParts.length == 2) return '${nameParts[0]}.${nameParts[1]}';
+    if (nameParts.length == 1) return nameParts[0];
+    return fullName.toLowerCase().replaceAll(' ', '.');
+  }
+ 
+  static Future<List<Map<String, dynamic>>> getStudentsByCarrera(String carrera) async {
+    try {
+      final snap = await _firestore
           .collection('users')
           .doc(carrera)
           .collection('students')
           .orderBy('createdAt', descending: true)
           .get();
-
-      return studentsQuery.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
+      return snap.docs.map((doc) {
+        final data          = doc.data();
+        data['id']          = doc.id;
         data['carreraPath'] = carrera;
         return data;
       }).toList();
     } catch (e) {
-      print('Error obteniendo estudiantes de $carrera: $e');
+      debugPrint('Error obteniendo estudiantes de $carrera: $e');
       return [];
     }
   }
-
+ 
   static Future<List<String>> getCarreras() async {
     try {
-      final carrerasSnapshot = await _firestore.collection('users').get();
-      return carrerasSnapshot.docs
+      final snap = await _firestore.collection('users').get();
+      return snap.docs
           .map((doc) => doc.id)
-          .where((id) => id != 'admin' && id != 'asistente' && id != 'jurado')
+          .where((id) => id != 'admin')
           .toList();
     } catch (e) {
-      print('Error obteniendo carreras: $e');
+      debugPrint('Error obteniendo carreras: $e');
       return [];
     }
   }
-
+ 
   static Future<List<Map<String, dynamic>>> getStudents() async {
     try {
       if (_studentsCache != null &&
           _studentsCacheTimestamp != null &&
-          DateTime.now().difference(_studentsCacheTimestamp!) <
-              _studentsCacheDuration) {
-        print('✅ Estudiantes obtenidos del caché');
+          DateTime.now().difference(_studentsCacheTimestamp!) < _studentsCacheDuration) {
         return _studentsCache!;
       }
-
+ 
       List<Map<String, dynamic>> allStudents = [];
-      final carrerasSnapshot = await _firestore.collection('users').get();
-
-      for (var carreraDoc in carrerasSnapshot.docs) {
-        if (carreraDoc.id == 'admin' ||
-            carreraDoc.id == 'asistente' ||
-            carreraDoc.id == 'jurado') {
-          continue;
-        }
-
+      final snap = await _firestore.collection('users').get();
+ 
+      for (var carreraDoc in snap.docs) {
+        final data = carreraDoc.data();
+        if (data.containsKey('userType')) continue;
+ 
         final studentsQuery = await _firestore
             .collection('users')
             .doc(carreraDoc.id)
             .collection('students')
             .orderBy('createdAt', descending: true)
             .get();
-
+ 
         for (var studentDoc in studentsQuery.docs) {
-          final data = studentDoc.data();
-          data['id'] = studentDoc.id;
-          data['carreraPath'] = carreraDoc.id;
-          allStudents.add(data);
+          final d          = studentDoc.data();
+          d['id']          = studentDoc.id;
+          d['carreraPath'] = carreraDoc.id;
+          allStudents.add(d);
         }
       }
-
-      _studentsCache = allStudents;
+ 
+      _studentsCache          = allStudents;
       _studentsCacheTimestamp = DateTime.now();
-
       return allStudents;
     } catch (e) {
-      print('Error obteniendo estudiantes: $e');
+      debugPrint('Error obteniendo estudiantes: $e');
       return [];
     }
   }
-
-  static Future<bool> deleteStudent(
-    String carreraPath,
-    String studentId,
-  ) async {
+ 
+  static Future<bool> deleteStudent(String carreraPath, String studentId) async {
     try {
       final studentDoc = await _firestore
           .collection('users')
@@ -969,49 +946,43 @@ return true;
           .collection('students')
           .doc(studentId)
           .get();
-
+ 
       if (studentDoc.exists) {
         final username = studentDoc.data()?['username'];
         if (username != null) {
           await _firestore.collection('student_index').doc(username).delete();
         }
       }
-
+ 
       await _firestore
           .collection('users')
           .doc(carreraPath)
           .collection('students')
           .doc(studentId)
           .delete();
-
+ 
       _userCache.remove(studentId);
-
-      print('Estudiante eliminado exitosamente de $carreraPath');
       clearStudentsCache();
       return true;
     } catch (e) {
-      print('Error eliminando estudiante: $e');
+      debugPrint('Error eliminando estudiante: $e');
       return false;
     }
   }
-
+ 
   static Future<Map<String, int>> deleteMultipleStudents(
-    List<Map<String, String>> students,
-  ) async {
+      List<Map<String, String>> students) async {
     int successCount = 0;
-    int errorCount = 0;
-
+    int errorCount   = 0;
+ 
     try {
       const batchSize = 450;
-
+ 
       for (int i = 0; i < students.length; i += batchSize) {
-        final batch = _firestore.batch();
-        final endIndex = (i + batchSize < students.length)
-            ? i + batchSize
-            : students.length;
-
+        final batch    = _firestore.batch();
+        final endIndex = (i + batchSize < students.length) ? i + batchSize : students.length;
         final currentBatch = students.sublist(i, endIndex);
-
+ 
         for (var student in currentBatch) {
           try {
             final studentRef = _firestore
@@ -1019,48 +990,42 @@ return true;
                 .doc(student['carreraPath'])
                 .collection('students')
                 .doc(student['studentId']);
-
-            final studentData = _userCache[student['studentId']];
-
-            if (studentData != null) {
-              final username = studentData['username'];
+ 
+            final cached = _userCache[student['studentId']];
+            if (cached != null) {
+              final username = cached['username'];
               if (username != null) {
-                final indexRef = _firestore
-                    .collection('student_index')
-                    .doc(username);
-                batch.delete(indexRef);
+                batch.delete(_firestore.collection('student_index').doc(username));
               }
             }
-
+ 
             batch.delete(studentRef);
             successCount++;
           } catch (e) {
-            print(
-              '❌ Error preparando eliminación de ${student['studentId']}: $e',
-            );
+            debugPrint('❌ Error preparando eliminación: $e');
             errorCount++;
           }
         }
-
+ 
         try {
           await batch.commit();
         } catch (e) {
-          print('❌ Error ejecutando batch: $e');
-          errorCount += currentBatch.length - successCount;
+          debugPrint('❌ Error ejecutando batch: $e');
+          errorCount   += currentBatch.length;
+          successCount -= currentBatch.length;
         }
       }
-
+ 
       _userCache.clear();
       _cacheTimestamp = null;
-
       clearStudentsCache();
       return {'success': successCount, 'errors': errorCount};
     } catch (e) {
-      print('❌ Error general en eliminación masiva: $e');
+      debugPrint('❌ Error en eliminación masiva: $e');
       return {'success': successCount, 'errors': errorCount};
     }
   }
-
+ 
   static Future<bool> updateStudent({
     required String carreraPath,
     required String studentId,
@@ -1083,100 +1048,42 @@ return true;
       final updateData = <String, dynamic>{
         'updatedAt': FieldValue.serverTimestamp(),
       };
-
-      if (name != null) updateData['name'] = name.trim();
-      if (email != null) updateData['email'] = email.trim();
-      if (codigoUniversitario != null) {
-        updateData['codigoUniversitario'] = codigoUniversitario.trim();
+ 
+      if (name                != null) updateData['name']                = name.trim();
+      if (email               != null) updateData['email']               = email.trim();
+      if (codigoUniversitario != null) updateData['codigoUniversitario'] = codigoUniversitario.trim();
+      if (dni                 != null) {
+        // 🔐 Si se actualiza el dni, hashearlo
+        final dniHash = PasswordHelper.hashPassword(dni.trim());
+        updateData['dni']       = dniHash;
+        updateData['documento'] = dniHash;
       }
-      if (dni != null) {
-        updateData['dni'] = dni.trim();
-        updateData['documento'] = dni.trim();
-      }
-      if (facultad != null) updateData['facultad'] = facultad;
-      if (carrera != null) updateData['carrera'] = carrera;
-      if (modoContrato != null) updateData['modoContrato'] = modoContrato;
-      if (modalidadEstudio != null) {
-        updateData['modalidadEstudio'] = modalidadEstudio;
-      }
-      if (sede != null) updateData['sede'] = sede;
-      if (ciclo != null) updateData['ciclo'] = ciclo;
-      if (grupo != null) updateData['grupo'] = grupo;
-      if (correoInstitucional != null) {
-        updateData['correoInstitucional'] = correoInstitucional.trim();
-      }
-      if (celular != null) updateData['celular'] = celular.trim();
-
+      if (facultad            != null) updateData['facultad']            = facultad;
+      if (carrera             != null) updateData['carrera']             = carrera;
+      if (modoContrato        != null) updateData['modoContrato']        = modoContrato;
+      if (modalidadEstudio    != null) updateData['modalidadEstudio']    = modalidadEstudio;
+      if (sede                != null) updateData['sede']                = sede;
+      if (ciclo               != null) updateData['ciclo']               = ciclo;
+      if (grupo               != null) updateData['grupo']               = grupo;
+      if (correoInstitucional != null) updateData['correoInstitucional'] = correoInstitucional.trim();
+      if (celular             != null) updateData['celular']             = celular.trim();
+ 
       await _firestore
           .collection('users')
           .doc(carreraPath)
           .collection('students')
           .doc(studentId)
           .update(updateData);
-
+ 
       _userCache.remove(studentId);
-
-      print('Estudiante actualizado exitosamente');
       clearStudentsCache();
       return true;
     } catch (e) {
-      print('Error actualizando estudiante: $e');
+      debugPrint('Error actualizando estudiante: $e');
       return false;
     }
   }
-
-  static Future<bool> changePassword({
-    required String currentPassword,
-    required String newPassword,
-  }) async {
-    try {
-      final userIdPath = await getCurrentUserId();
-      if (userIdPath == null) return false;
-
-      final parts = userIdPath.split('/');
-      if (parts.length != 2) return false;
-
-      final carreraPath = parts[0];
-      final studentId = parts[1];
-
-      final userDoc = await _firestore
-          .collection('users')
-          .doc(carreraPath)
-          .collection('students')
-          .doc(studentId)
-          .get();
-
-      if (!userDoc.exists) return false;
-
-      final userData = userDoc.data()!;
-      final storedPassword = userData['dni'] ?? userData['documento'];
-
-      if (storedPassword != currentPassword) {
-        print('Contraseña actual incorrecta');
-        return false;
-      }
-
-      await _firestore
-          .collection('users')
-          .doc(carreraPath)
-          .collection('students')
-          .doc(studentId)
-          .update({
-            'dni': newPassword,
-            'documento': newPassword,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-
-      _userCache.remove(studentId);
-
-      print('Contraseña actualizada exitosamente');
-      return true;
-    } catch (e) {
-      print('Error cambiando contraseña: $e');
-      return false;
-    }
-  }
-
+ 
   static Future<List<Map<String, dynamic>>> searchStudents({
     String? facultad,
     String? carrera,
@@ -1187,384 +1094,157 @@ return true;
   }) async {
     try {
       List<Map<String, dynamic>> allStudents = [];
-
+ 
       if (carrera != null && carrera.isNotEmpty) {
         Query query = _firestore
             .collection('users')
             .doc(carrera)
             .collection('students');
-
-        if (ciclo != null && ciclo.isNotEmpty) {
-          query = query.where('ciclo', isEqualTo: ciclo);
-        }
-        if (grupo != null && grupo.isNotEmpty) {
-          query = query.where('grupo', isEqualTo: grupo);
-        }
-        if (sede != null && sede.isNotEmpty) {
-          query = query.where('sede', isEqualTo: sede);
-        }
-
+ 
+        if (ciclo != null && ciclo.isNotEmpty) query = query.where('ciclo', isEqualTo: ciclo);
+        if (grupo != null && grupo.isNotEmpty) query = query.where('grupo', isEqualTo: grupo);
+        if (sede  != null && sede.isNotEmpty)  query = query.where('sede',  isEqualTo: sede);
+ 
         final results = await query.get();
         allStudents = results.docs.map((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          data['id'] = doc.id;
+          final data          = doc.data() as Map<String, dynamic>;
+          data['id']          = doc.id;
           data['carreraPath'] = carrera;
           return data;
         }).toList();
       } else {
-        final carrerasSnapshot = await _firestore.collection('users').get();
-
-        for (var carreraDoc in carrerasSnapshot.docs) {
-          if (carreraDoc.id == 'admin' ||
-              carreraDoc.id == 'asistente' ||
-              carreraDoc.id == 'jurado') {
-            continue;
-          }
-
+        final snap = await _firestore.collection('users').get();
+        for (var carreraDoc in snap.docs) {
+          final data = carreraDoc.data();
+          if (data.containsKey('userType')) continue;
+ 
           Query query = _firestore
               .collection('users')
               .doc(carreraDoc.id)
               .collection('students');
-
-          if (ciclo != null && ciclo.isNotEmpty) {
-            query = query.where('ciclo', isEqualTo: ciclo);
-          }
-          if (grupo != null && grupo.isNotEmpty) {
-            query = query.where('grupo', isEqualTo: grupo);
-          }
-          if (sede != null && sede.isNotEmpty) {
-            query = query.where('sede', isEqualTo: sede);
-          }
-
+ 
+          if (ciclo != null && ciclo.isNotEmpty) query = query.where('ciclo', isEqualTo: ciclo);
+          if (grupo != null && grupo.isNotEmpty) query = query.where('grupo', isEqualTo: grupo);
+          if (sede  != null && sede.isNotEmpty)  query = query.where('sede',  isEqualTo: sede);
+ 
           final results = await query.get();
           for (var doc in results.docs) {
-            final data = doc.data() as Map<String, dynamic>;
-            data['id'] = doc.id;
-            data['carreraPath'] = carreraDoc.id;
-            allStudents.add(data);
+            final d          = doc.data() as Map<String, dynamic>;
+            d['id']          = doc.id;
+            d['carreraPath'] = carreraDoc.id;
+            allStudents.add(d);
           }
         }
       }
-
+ 
       if (facultad != null && facultad.isNotEmpty) {
-        allStudents = allStudents
-            .where((s) => s['facultad'] == facultad)
-            .toList();
+        allStudents = allStudents.where((s) => s['facultad'] == facultad).toList();
       }
-
+ 
       if (searchTerm != null && searchTerm.isNotEmpty) {
-        final searchLower = searchTerm.toLowerCase();
-        allStudents = allStudents.where((student) {
-          final name = (student['name'] ?? '').toString().toLowerCase();
-          final username = (student['username'] ?? '').toString().toLowerCase();
-          final codigo = (student['codigoUniversitario'] ?? '')
-              .toString()
-              .toLowerCase();
-          final dni = (student['dni'] ?? '').toString().toLowerCase();
-
-          return name.contains(searchLower) ||
-              username.contains(searchLower) ||
-              codigo.contains(searchLower) ||
-              dni.contains(searchLower);
+        final q = searchTerm.toLowerCase();
+        allStudents = allStudents.where((s) {
+          final name   = (s['name']                ?? '').toString().toLowerCase();
+          final user   = (s['username']            ?? '').toString().toLowerCase();
+          final codigo = (s['codigoUniversitario'] ?? '').toString().toLowerCase();
+          // 🔐 Nota: no buscar por dni ya que ahora está hasheado
+          return name.contains(q) || user.contains(q) || codigo.contains(q);
         }).toList();
       }
-
+ 
       return allStudents;
     } catch (e) {
-      print('Error buscando estudiantes: $e');
+      debugPrint('Error buscando estudiantes: $e');
       return [];
     }
   }
-
+ 
   static Future<Map<String, int>> deleteAllStudents() async {
     try {
       int successCount = 0;
-      int errorCount = 0;
-
-      final carrerasSnapshot = await _firestore.collection('users').get();
-
-      for (var carreraDoc in carrerasSnapshot.docs) {
-        if (carreraDoc.id == 'admin' ||
-            carreraDoc.id == 'asistente' ||
-            carreraDoc.id == 'jurado') {
-          continue;
-        }
-
+      int errorCount   = 0;
+ 
+      final snap = await _firestore.collection('users').get();
+ 
+      for (var carreraDoc in snap.docs) {
+        final data = carreraDoc.data();
+        if (data.containsKey('userType')) continue;
+ 
         final studentsQuery = await _firestore
             .collection('users')
             .doc(carreraDoc.id)
             .collection('students')
             .get();
-
+ 
         for (var studentDoc in studentsQuery.docs) {
           try {
             final username = studentDoc.data()['username'];
             if (username != null) {
-              await _firestore
-                  .collection('student_index')
-                  .doc(username)
-                  .delete();
+              await _firestore.collection('student_index').doc(username).delete();
             }
-
             await studentDoc.reference.delete();
             successCount++;
           } catch (e) {
-            print('Error eliminando estudiante ${studentDoc.id}: $e');
+            debugPrint('Error eliminando ${studentDoc.id}: $e');
             errorCount++;
           }
         }
       }
-
+ 
       _userCache.clear();
       _cacheTimestamp = null;
-
       return {'success': successCount, 'errors': errorCount};
     } catch (e) {
-      print('Error eliminando todos los estudiantes: $e');
+      debugPrint('Error eliminando todos los estudiantes: $e');
       return {'success': 0, 'errors': -1};
     }
   }
-
-  static Future<bool> createJuradoAccount({
-    required String nombre,
-    required String usuario,
-    required String password,
-    required String facultad,
-    required String carrera,
-    required String categoria,
-  }) async {
-    try {
-      final existingJurado = await _firestore
-          .collection('users')
-          .where('usuario', isEqualTo: usuario.trim().toLowerCase())
-          .where('userType', isEqualTo: userTypeJurado)
-          .limit(1)
-          .get();
-
-      if (existingJurado.docs.isNotEmpty) {
-        print('Ya existe un jurado con ese nombre de usuario');
-        return false;
-      }
-
-      await _firestore.collection('users').add({
-        'usuario': usuario.trim().toLowerCase(),
-        'password': password,
-        'userType': userTypeJurado,
-        'name': nombre.trim(),
-        'facultad': facultad,
-        'carrera': carrera,
-        'categoria': categoria,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      print('Jurado creado exitosamente: $nombre');
-      return true;
-    } catch (e) {
-      print('Error creando cuenta de jurado: $e');
-      return false;
-    }
-  }
-
-  static Future<bool> loginJurado(String usuario, String password) async {
-    try {
-      print('🔍 Intentando login jurado con usuario: $usuario');
-
-      if (usuario.trim().toLowerCase() == juradoEmail &&
-          password == juradoPassword) {
-        final juradoQuery = await _firestore
-            .collection('users')
-            .where('usuario', isEqualTo: juradoEmail)
-            .where('userType', isEqualTo: userTypeJurado)
-            .limit(1)
-            .get();
-
-        String juradoId;
-        if (juradoQuery.docs.isEmpty) {
-          final juradoDoc = await _firestore.collection('users').add({
-            'usuario': juradoEmail,
-            'password': juradoPassword,
-            'userType': userTypeJurado,
-            'name': 'Jurado',
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-          juradoId = juradoDoc.id;
-        } else {
-          juradoId = juradoQuery.docs.first.id;
-        }
-
-        await saveUserData(
-          userType: userTypeJurado,
-          userName: 'Jurado',
-          userId: juradoId,
-        );
-
-        return true;
-      }
-
-      final juradoQuery = await _firestore
-          .collection('users')
-          .where('usuario', isEqualTo: usuario.trim().toLowerCase())
-          .where('userType', isEqualTo: userTypeJurado)
-          .limit(1)
-          .get();
-
-      if (juradoQuery.docs.isNotEmpty) {
-        final juradoDoc = juradoQuery.docs.first;
-        final juradoData = juradoDoc.data();
-
-        if (juradoData['password'] == password) {
-          await saveUserData(
-            userType: userTypeJurado,
-            userName: juradoData['name'] ?? 'Jurado',
-            userId: juradoDoc.id,
-          );
-          return true;
-        }
-      }
-
-      return false;
-    } catch (e) {
-      print('❌ Error en login de jurado: $e');
-      return false;
-    }
-  }
-
-  static Future<List<Map<String, dynamic>>> getJurados() async {
-    try {
-      final juradosQuery = await _firestore
-          .collection('users')
-          .where('userType', isEqualTo: userTypeJurado)
-          .orderBy('createdAt', descending: true)
-          .get();
-
-      return juradosQuery.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data;
-      }).toList();
-    } catch (e) {
-      print('Error obteniendo jurados: $e');
-      return [];
-    }
-  }
-
-  static Future<bool> deleteJurado(String juradoId) async {
-    try {
-      await _firestore.collection('users').doc(juradoId).delete();
-      print('Jurado eliminado exitosamente');
-      return true;
-    } catch (e) {
-      print('Error eliminando jurado: $e');
-      return false;
-    }
-  }
-
-  static Future<bool> updateJurado({
-    required String juradoId,
-    String? nombre,
-    String? usuario,
-    String? password,
-    String? facultad,
-    String? carrera,
-    String? categoria,
-  }) async {
-    try {
-      final updateData = <String, dynamic>{
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-
-      if (nombre != null && nombre.isNotEmpty)
-        updateData['name'] = nombre.trim();
-      if (usuario != null && usuario.isNotEmpty) {
-        updateData['usuario'] = usuario.trim().toLowerCase();
-      }
-      if (password != null && password.isNotEmpty)
-        updateData['password'] = password;
-      if (facultad != null && facultad.isNotEmpty)
-        updateData['facultad'] = facultad;
-      if (carrera != null && carrera.isNotEmpty)
-        updateData['carrera'] = carrera;
-      if (categoria != null && categoria.isNotEmpty)
-        updateData['categoria'] = categoria;
-
-      await _firestore.collection('users').doc(juradoId).update(updateData);
-      print('Jurado actualizado exitosamente');
-      return true;
-    } catch (e) {
-      print('Error actualizando jurado: $e');
-      return false;
-    }
-  }
-
-  static Future<List<Map<String, dynamic>>> searchJurados({
-    String? facultad,
-    String? carrera,
-    String? categoria,
-    String? searchTerm,
-  }) async {
-    try {
-      Query query = _firestore
-          .collection('users')
-          .where('userType', isEqualTo: userTypeJurado);
-
-      if (facultad != null && facultad.isNotEmpty) {
-        query = query.where('facultad', isEqualTo: facultad);
-      }
-      if (carrera != null && carrera.isNotEmpty) {
-        query = query.where('carrera', isEqualTo: carrera);
-      }
-      if (categoria != null && categoria.isNotEmpty) {
-        query = query.where('categoria', isEqualTo: categoria);
-      }
-
-      final results = await query.get();
-      List<Map<String, dynamic>> jurados = results.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id;
-        return data;
-      }).toList();
-
-      if (searchTerm != null && searchTerm.isNotEmpty) {
-        final searchLower = searchTerm.toLowerCase();
-        jurados = jurados.where((jurado) {
-          final name = (jurado['name'] ?? '').toString().toLowerCase();
-          final usuario = (jurado['usuario'] ?? '').toString().toLowerCase();
-          return name.contains(searchLower) || usuario.contains(searchLower);
-        }).toList();
-      }
-
-      return jurados;
-    } catch (e) {
-      print('Error buscando jurados: $e');
-      return [];
-    }
-  }
-
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // LOGOUT
+  // ─────────────────────────────────────────────────────────────────────────
   static Future<void> logout() async {
-  final prefs = await _getPrefs();
-  await prefs.remove(_keyUserType);
-  await prefs.remove(_keyUserName);
-  await prefs.remove(_keyUserId);
-  await prefs.remove(_keySessionToken);
-  await prefs.setBool(_keyIsLoggedIn, false);
-  await prefs.remove(_keyAsistenteFilial);
-  await prefs.remove(_keyAsistenteFilialNombre);
-  await prefs.remove(_keyAsistenteFacultad);
-  await prefs.remove(_keyAsistenteCarreraId);
-  await prefs.remove(_keyAsistenteCarreraNombre);
-  await prefs.remove(_keyAdminCarreraFilial);
-  await prefs.remove(_keyAdminCarreraFilialNombre);
-  await prefs.remove(_keyAdminCarreraFacultad);
-  await prefs.remove(_keyAdminCarreraCarrera);
-  await prefs.remove(_keyAdminCarreraCarreraId);
-  await prefs.remove(_keyAdminCarreraPermisos);
-
-  clearStudentsCache();
-  _userCache.clear();
-  _cacheTimestamp = null;
-  _prefs = null; // limpiar singleton
-
-  FilialesService.clearCache();
-  print('✅ Sesión cerrada y caché limpiado');
-}
+    final prefs = await _getPrefs();
+    await prefs.remove(_keyUserType);
+    await prefs.remove(_keyUserName);
+    await prefs.remove(_keyUserId);
+    await prefs.remove(_keySessionToken);
+    await prefs.setBool(_keyIsLoggedIn, false);
+    await prefs.remove(_keyAdminCarreraFilial);
+    await prefs.remove(_keyAdminCarreraFilialNombre);
+    await prefs.remove(_keyAdminCarreraFacultad);
+    await prefs.remove(_keyAdminCarreraCarrera);
+    await prefs.remove(_keyAdminCarreraCarreraId);
+    await prefs.remove(_keyAdminCarreraPermisos);
+    await prefs.remove(_keyJuradoFacultad);
+    await prefs.remove(_keyJuradoCarrera);
+    await prefs.remove(_keyJuradoFilial);
+    await prefs.remove(_keyJuradoEventoId);
+    await prefs.remove(_keyJuradoCategorias);
+ 
+    clearStudentsCache();
+    _userCache.clear();
+    _cacheTimestamp = null;
+    _prefs          = null;
+ 
+    FilialesService.clearCache();
+    debugPrint('✅ Sesión cerrada y caché limpiado');
+ 
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && user.isAnonymous) {
+        await user.delete();
+        debugPrint('✅ Sesión Firebase Auth anónima eliminada');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error cerrando Firebase Auth anónimo: $e');
+    }
+  }
+ 
+  // ─────────────────────────────────────────────────────────────────────────
+  // 🔐 HELPER INTERNO — detecta si un valor ya está hasheado
+  // ─────────────────────────────────────────────────────────────────────────
+  static bool _isSha256(String value) {
+    return value.length == 64 && RegExp(r'^[a-f0-9]+$').hasMatch(value);
+  }
 }

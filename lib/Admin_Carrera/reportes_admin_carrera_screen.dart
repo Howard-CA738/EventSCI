@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
-import 'ver_ganadores.dart';
+import 'ventanas_ganadores.dart'; // ← reemplaza la importación directa de ver_ganadores.dart
 import 'ventanas_asistencia.dart';
-import 'evaluaciones_carrera.dart'; // ← nueva pantalla de evaluaciones
+import 'evaluaciones_carrera.dart';
 import 'informe_evento_carrera.dart';
+import 'package:flutter/foundation.dart';
 
 class ReportesAdminCarreraScreen extends StatefulWidget {
   const ReportesAdminCarreraScreen({super.key});
@@ -132,7 +133,7 @@ class _ReportesAdminCarreraScreenState
                               boxShadow: [
                                 BoxShadow(
                                   color: const Color(0xFF1E3A5F)
-                                      .withOpacity(0.3),
+                                      .withValues(alpha: 0.3),
                                   blurRadius: 20,
                                   offset: const Offset(0, 8),
                                 ),
@@ -143,7 +144,7 @@ class _ReportesAdminCarreraScreenState
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.2),
+                                    color: Colors.white.withValues(alpha: 0.2),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: const Icon(
@@ -234,30 +235,46 @@ class _ReportesAdminCarreraScreenState
                               ),
 
                               const SizedBox(height: 12),
-_buildReportOption(
-  title: 'Informe Final',
-  subtitle: 'Genera el informe completo del evento',
-  icon: Icons.description_rounded,
-  color: const Color(0xFF009688),
-  onTap: () => Navigator.push(
-    context,
-    MaterialPageRoute(builder: (_) => const InformeEventoCarreraScreen()),
-  ),
-),
-                              // Ganadores
+
+                              // Informe Completo
+                              _buildAnimatedCard(
+                                delay: 350,
+                                child: _buildReportOption(
+                                  title: 'Informe Completo',
+                                  subtitle:
+                                      'Genera el informe completo del evento',
+                                  icon: Icons.description_rounded,
+                                  color: const Color(0xFF009688),
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const InformeEventoCarreraScreen(),
+                                    ),
+                                  ),
+                                ),
+                              ),
+
+                              const SizedBox(height: 12),
+
+                              // Ganadores → ahora va a VentanasGanadoresScreen
                               _buildAnimatedCard(
                                 delay: 400,
                                 child: _buildReportOption(
                                   title: 'Ganadores',
                                   subtitle:
-                                      'Top 3 de proyectos por categoría en cada evento',
+                                      'Gestión de Ganadores',
                                   icon: Icons.emoji_events,
                                   color: const Color(0xFFF59E0B),
                                   onTap: () => Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) =>
-                                          const VerGanadoresScreen(),
+                                      builder: (_) => VentanasGanadoresScreen(
+                                        filialId: _filialId,
+                                        filialNombre: _sede,
+                                        facultad: _facultad,
+                                        carrera: _carrera,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -276,7 +293,7 @@ _buildReportOption(
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                 color: const Color(0xFF1E3A5F)
-                                    .withOpacity(0.15),
+                                    .withValues(alpha: 0.15),
                               ),
                             ),
                             child: Row(
@@ -285,7 +302,7 @@ _buildReportOption(
                                   padding: const EdgeInsets.all(7),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFF1E3A5F)
-                                        .withOpacity(0.1),
+                                        .withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: const Icon(
@@ -371,7 +388,7 @@ _buildReportOption(
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.07),
+                color: Colors.black.withValues(alpha: 0.07),
                 blurRadius: 16,
                 offset: const Offset(0, 4),
               ),
@@ -384,7 +401,7 @@ _buildReportOption(
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.12),
+                    color: color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(icon, size: 30, color: color),
@@ -420,7 +437,7 @@ _buildReportOption(
                 Container(
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(

@@ -87,7 +87,7 @@ class VentanasAsistenciaScreen extends StatelessWidget {
                           boxShadow: [
                             BoxShadow(
                               color: const Color(0xFF1E3A5F)
-                                  .withOpacity(0.3),
+                                  .withValues(alpha:0.3),
                               blurRadius: 20,
                               offset: const Offset(0, 8),
                             ),
@@ -98,7 +98,7 @@ class VentanasAsistenciaScreen extends StatelessWidget {
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withValues(alpha:0.2),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: const Icon(
@@ -261,7 +261,7 @@ class _OpcionCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.07),
+                color: Colors.black.withValues(alpha:0.07),
                 blurRadius: 16,
                 offset: const Offset(0, 4),
               ),
@@ -274,7 +274,7 @@ class _OpcionCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.12),
+                    color: iconColor.withValues(alpha:0.12),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(icon, size: 32, color: iconColor),
@@ -311,7 +311,7 @@ class _OpcionCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.1),
+                    color: iconColor.withValues(alpha:0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(

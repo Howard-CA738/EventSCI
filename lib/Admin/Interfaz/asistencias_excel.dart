@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart';
 
 class AsistenciasExcel {
   /// Genera y descarga un reporte de asistencias en formato Excel
@@ -450,9 +451,9 @@ class AsistenciasExcel {
       }
 
       await File(filePath).writeAsBytes(fileBytes);
-      print('✅ Archivo guardado exitosamente en: $filePath');
+      debugPrint('✅ Archivo guardado exitosamente en: $filePath');
     } catch (e) {
-      print('❌ Error al guardar archivo: $e');
+      debugPrint('❌ Error al guardar archivo: $e');
       rethrow;
     }
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '/admin/logica/periodos_helper.dart';
 
 class EventosDetallesScreen extends StatefulWidget {
   final String eventId;
@@ -18,425 +19,106 @@ class EventosDetallesScreen extends StatefulWidget {
 class _EventosDetallesScreenState extends State<EventosDetallesScreen>
     with TickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final TextEditingController _lugarController = TextEditingController();
-  final TextEditingController _ponenteController = TextEditingController();
 
-  DateTime? _selectedDate;
-  TimeOfDay? _selectedTime;
-  List<String> _ponentes = [];
+  final TextEditingController _nameController = TextEditingController();
+
   bool _isLoading = false;
+  bool _hasChanges = false;
+
+  String? _selectedPeriodoId;
+  String? _selectedPeriodoNombre;
+  List<Map<String, dynamic>> _periodos = [];
 
   late AnimationController _fadeController;
   late AnimationController _slideController;
-  late AnimationController _scaleController;
-
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
-  late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
     _initAnimations();
     _loadEventDetails();
+    _loadPeriodos();
   }
 
   void _initAnimations() {
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-
-    _slideController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-
-    _scaleController = AnimationController(
-      duration: const Duration(milliseconds: 400),
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 500),
       vsync: this,
     );
 
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
-
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
+    );
     _slideAnimation =
-        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
-          CurvedAnimation(parent: _slideController, curve: Curves.elasticOut),
-        );
-
-    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(parent: _scaleController, curve: Curves.elasticOut),
+        Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero).animate(
+      CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
     );
 
-    // Iniciar animaciones
     _fadeController.forward();
     _slideController.forward();
-    _scaleController.forward();
   }
 
   @override
   void dispose() {
     _fadeController.dispose();
     _slideController.dispose();
-    _scaleController.dispose();
-    _lugarController.dispose();
-    _ponenteController.dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
   void _loadEventDetails() {
-    final eventData = widget.eventData;
-
-    if (eventData['fecha'] != null) {
-      _selectedDate = (eventData['fecha'] as Timestamp).toDate();
-    }
-
-    if (eventData['hora'] != null) {
-      final horaString = eventData['hora'] as String;
-      final parts = horaString.split(':');
-      if (parts.length >= 2) {
-        _selectedTime = TimeOfDay(
-          hour: int.tryParse(parts[0]) ?? 0,
-          minute: int.tryParse(parts[1]) ?? 0,
-        );
-      }
-    }
-
-    _lugarController.text = eventData['lugar'] ?? '';
-
-    if (eventData['ponentes'] != null) {
-      _ponentes = List<String>.from(eventData['ponentes']);
-    }
+    final d = widget.eventData;
+    _nameController.text = d['name'] ?? '';
+    _selectedPeriodoId = d['periodoId'];
+    _selectedPeriodoNombre = d['periodoNombre'];
+    _nameController.addListener(_onFieldChanged);
   }
 
-  Future<void> _selectDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate ?? DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      locale: const Locale('es', 'ES'),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF1E3A8A),
-              brightness: Brightness.light,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null && picked != _selectedDate) {
+  Future<void> _loadPeriodos() async {
+    try {
+      final periodos = await PeriodosHelper.getPeriodosActivos();
       setState(() {
-        _selectedDate = picked;
+        _periodos = periodos;
+        final ids = _periodos.map((p) => p['id'] as String).toList();
+        if (_selectedPeriodoId != null && !ids.contains(_selectedPeriodoId)) {
+          _periodos.insert(0, {
+            'id': _selectedPeriodoId,
+            'nombre': _selectedPeriodoNombre ?? _selectedPeriodoId,
+          });
+        }
       });
+    } catch (e) {
+      debugPrint('Error cargando períodos: $e');
     }
   }
 
-  Future<void> _selectTime() async {
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: _selectedTime ?? TimeOfDay.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF1E3A8A),
-              brightness: Brightness.light,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null && picked != _selectedTime) {
-      setState(() {
-        _selectedTime = picked;
-      });
-    }
-  }
-
-  Future<void> _addPonente() async {
-    if (_ponenteController.text.trim().isNotEmpty) {
-      setState(() {
-        _ponentes.add(_ponenteController.text.trim());
-        _ponenteController.clear();
-      });
-
-      try {
-        await _firestore.collection('events').doc(widget.eventId).update({
-          'ponentes': _ponentes,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        _showSnackBar('Ponente agregado exitosamente', isSuccess: true);
-      } catch (e) {
-        _showSnackBar('Error al agregar ponente: $e', isError: true);
-        setState(() {
-          _ponentes.removeLast();
-        });
-      }
-    }
-  }
-
-  Future<void> _removePonente(int index) async {
-    final ponenteToRemove = _ponentes[index];
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => ScaleTransition(
-        scale: _scaleAnimation,
-        child: AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.warning, color: Colors.red.shade600),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Eliminar Ponente',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            '¿Estás seguro de que quieres eliminar a "$ponenteToRemove"?',
-            style: const TextStyle(fontSize: 16),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Cancelar',
-                style: TextStyle(color: Colors.grey.shade600),
-              ),
-            ),
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.red.shade400, Colors.red.shade600],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () async {
-                  Navigator.pop(context);
-                  setState(() {
-                    _ponentes.removeAt(index);
-                  });
-
-                  try {
-                    await _firestore
-                        .collection('events')
-                        .doc(widget.eventId)
-                        .update({
-                          'ponentes': _ponentes,
-                          'updatedAt': FieldValue.serverTimestamp(),
-                        });
-                    _showSnackBar(
-                      'Ponente eliminado exitosamente',
-                      isSuccess: true,
-                    );
-                  } catch (e) {
-                    _showSnackBar(
-                      'Error al eliminar ponente: $e',
-                      isError: true,
-                    );
-                    setState(() {
-                      _ponentes.insert(index, ponenteToRemove);
-                    });
-                  }
-                },
-                child: const Text(
-                  'Eliminar',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _editPonente(int index) async {
-    final controller = TextEditingController(text: _ponentes[index]);
-    final originalName = _ponentes[index];
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => ScaleTransition(
-        scale: _scaleAnimation,
-        child: AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [const Color(0xFF1E3A8A), const Color(0xFF3B82F6)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.edit, color: Colors.white),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Editar Ponente',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-          content: Container(
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
-            child: TextField(
-              controller: controller,
-              decoration: InputDecoration(
-                labelText: 'Nombre del ponente',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF1E3A8A),
-                    width: 2,
-                  ),
-                ),
-              ),
-              autofocus: true,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Cancelar',
-                style: TextStyle(color: Colors.grey.shade600),
-              ),
-            ),
-            Container(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () async {
-                  if (controller.text.trim().isNotEmpty &&
-                      controller.text.trim() != originalName) {
-                    Navigator.pop(context);
-
-                    setState(() {
-                      _ponentes[index] = controller.text.trim();
-                    });
-
-                    try {
-                      await _firestore
-                          .collection('events')
-                          .doc(widget.eventId)
-                          .update({
-                            'ponentes': _ponentes,
-                            'updatedAt': FieldValue.serverTimestamp(),
-                          });
-                      _showSnackBar(
-                        'Ponente actualizado exitosamente',
-                        isSuccess: true,
-                      );
-                    } catch (e) {
-                      _showSnackBar(
-                        'Error al actualizar ponente: $e',
-                        isError: true,
-                      );
-                      setState(() {
-                        _ponentes[index] = originalName;
-                      });
-                    }
-                  } else {
-                    Navigator.pop(context);
-                  }
-                },
-                child: const Text(
-                  'Guardar',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  void _onFieldChanged() {
+    if (!_hasChanges) setState(() => _hasChanges = true);
   }
 
   Future<void> _saveChanges() async {
-    setState(() {
-      _isLoading = true;
-    });
+    final nombre = _nameController.text.trim();
+    if (nombre.isEmpty) {
+      _showSnackBar('El nombre del evento no puede estar vacío', isError: true);
+      return;
+    }
 
+    setState(() => _isLoading = true);
     try {
       final updateData = <String, dynamic>{
-        'lugar': _lugarController.text.trim(),
-        'ponentes': _ponentes,
+        'name': nombre,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      if (_selectedDate != null) {
-        updateData['fecha'] = Timestamp.fromDate(_selectedDate!);
-      }
-
-      if (_selectedTime != null) {
-        updateData['hora'] =
-            '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}';
+      if (_selectedPeriodoId != null) {
+        updateData['periodoId'] = _selectedPeriodoId;
+        updateData['periodoNombre'] = _selectedPeriodoNombre;
       }
 
       await _firestore
@@ -444,863 +126,336 @@ class _EventosDetallesScreenState extends State<EventosDetallesScreen>
           .doc(widget.eventId)
           .update(updateData);
 
-      _showSnackBar(
-        'Detalles del evento actualizados exitosamente',
-        isSuccess: true,
-      );
+      setState(() => _hasChanges = false);
+      _showSnackBar('Evento actualizado correctamente', isSuccess: true);
     } catch (e) {
-      _showSnackBar('Error al actualizar: $e', isError: true);
+      _showSnackBar('Error al guardar: $e', isError: true);
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
-  void _showSnackBar(
-    String message, {
-    bool isError = false,
-    bool isSuccess = false,
-  }) {
-    Color backgroundColor;
-    IconData icon;
-
-    if (isError) {
-      backgroundColor = Colors.red.shade600;
-      icon = Icons.error;
-    } else if (isSuccess) {
-      backgroundColor = Colors.green.shade600;
-      icon = Icons.check_circle;
-    } else {
-      backgroundColor = const Color(0xFF1E3A8A);
-      icon = Icons.info;
-    }
+  void _showSnackBar(String message,
+      {bool isError = false, bool isSuccess = false}) {
+    final color = isError
+        ? const Color(0xFFE53935)
+        : isSuccess
+            ? const Color(0xFF43A047)
+            : const Color(0xFF1E3A5F);
+    final icon = isError
+        ? Icons.error_outline
+        : isSuccess
+            ? Icons.check_circle_outline
+            : Icons.info_outline;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            Icon(icon, color: Colors.white),
-            const SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: backgroundColor,
-        duration: const Duration(seconds: 3),
+        content: Row(children: [
+          Icon(icon, color: Colors.white, size: 20),
+          const SizedBox(width: 10),
+          Expanded(child: Text(message)),
+        ]),
+        backgroundColor: color,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
       ),
     );
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-  }
-
-  String _formatTime(TimeOfDay time) {
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      backgroundColor: const Color(0xFFE8EDF2),
+      appBar: AppBar(
+        title: const Text(
+          'Editar Evento',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        backgroundColor: const Color(0xFF1E3A5F),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        actions: [
+          if (_hasChanges)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: TextButton.icon(
+                onPressed: _isLoading ? null : _saveChanges,
+                icon: _isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Icon(Icons.check, color: Colors.white, size: 20),
+                label: const Text('Guardar',
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w600)),
+              ),
+            ),
+        ],
+      ),
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child: SlideTransition(
+          position: _slideAnimation,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildContextChip(),
+                const SizedBox(height: 16),
+                _buildSection(
+                  icon: Icons.event_note,
+                  iconColor: const Color(0xFF1E3A5F),
+                  title: 'Datos del evento',
+                  children: [
+                    _buildTextField(
+                      controller: _nameController,
+                      label: 'Nombre del evento',
+                      hint: 'Ej: Conferencia de Tecnología',
+                      icon: Icons.event,
+                    ),
+                    const SizedBox(height: 14),
+                    _buildDropdown(),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                _buildSaveButton(),
+              ],
+            ),
           ),
         ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // App Bar personalizado
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.arrow_back,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          widget.eventData['name'] ?? 'Detalles del Evento',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: _isLoading ? null : _saveChanges,
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: _isLoading
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.save,
-                                  color: Colors.white,
-                                  size: 24,
-                                ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+      ),
+    );
+  }
 
-              // Contenido principal
-              Expanded(
-                child: Container(
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(24),
-                      topRight: Radius.circular(24),
-                    ),
-                  ),
-                  child: SlideTransition(
-                    position: _slideAnimation,
-                    child: FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(20.0),
-                        child: Column(
-                          children: [
-                            _buildInfoCard(),
-                            const SizedBox(height: 16),
-                            _buildDateTimeCard(),
-                            const SizedBox(height: 16),
-                            _buildLocationCard(),
-                            const SizedBox(height: 16),
-                            _buildPonentesCard(),
-                            const SizedBox(height: 24),
-                            _buildSaveButton(),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+  Widget _buildContextChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E3A5F),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.school, color: Colors.white70, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              [
+                widget.eventData['carrera'] ??
+                    widget.eventData['carreraNombre'] ??
+                    '',
+                widget.eventData['facultad'] ?? '',
+              ].where((s) => s.isNotEmpty).join(' · '),
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Text('Editando',
+                style: TextStyle(color: Colors.white70, fontSize: 10)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSection({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required List<Widget> children,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
                 ),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 16),
+          ...children,
+        ],
       ),
     );
   }
 
-  Widget _buildInfoCard() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.white, Colors.grey.shade50],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+  }) {
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F), size: 20),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
         ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.info, color: Colors.white),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Información General',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _buildInfoRow('Evento', widget.eventData['name'] ?? 'Sin nombre'),
-            _buildInfoRow(
-              'Facultad',
-              widget.eventData['facultad'] ?? 'Sin facultad',
-            ),
-            _buildInfoRow(
-              'Carrera',
-              widget.eventData['carrera'] ?? 'Sin carrera',
-            ),
-          ],
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
         ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF1E3A5F), width: 1.5),
+        ),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       ),
     );
   }
 
-  Widget _buildDateTimeCard() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.white, Colors.grey.shade50],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+  Widget _buildDropdown() {
+    if (_periodos.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFEBEE),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.red.shade200),
         ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFEF4444), Color(0xFFF87171)],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.access_time, color: Colors.white),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Fecha y Hora',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            GestureDetector(
-              onTap: _selectDate,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.calendar_today, color: Colors.grey.shade600),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _selectedDate != null
-                                ? 'Fecha: ${_formatDate(_selectedDate!)}'
-                                : 'Seleccionar fecha',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: _selectedDate != null
-                                  ? const Color(0xFF1E293B)
-                                  : Colors.grey.shade600,
-                            ),
-                          ),
-                          if (_selectedDate == null)
-                            Text(
-                              'Toca para seleccionar una fecha',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade500,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      Icons.arrow_forward_ios,
-                      color: Colors.grey.shade400,
-                      size: 16,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            GestureDetector(
-              onTap: _selectTime,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.schedule, color: Colors.grey.shade600),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _selectedTime != null
-                                ? 'Hora: ${_formatTime(_selectedTime!)}'
-                                : 'Seleccionar hora',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: _selectedTime != null
-                                  ? const Color(0xFF1E293B)
-                                  : Colors.grey.shade600,
-                            ),
-                          ),
-                          if (_selectedTime == null)
-                            Text(
-                              'Toca para seleccionar una hora',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade500,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      Icons.arrow_forward_ios,
-                      color: Colors.grey.shade400,
-                      size: 16,
-                    ),
-                  ],
-                ),
+            Icon(Icons.warning_amber, color: Colors.red.shade600, size: 18),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'No hay períodos activos disponibles.',
+                style: TextStyle(fontSize: 12, color: Color(0xFFE53935)),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
+      );
+    }
 
-  Widget _buildLocationCard() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.white, Colors.grey.shade50],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    return DropdownButtonFormField<String>(
+      value: _selectedPeriodoId,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Período académico',
+        prefixIcon: const Icon(Icons.calendar_month,
+            color: Color(0xFF1E3A5F), size: 20),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
         ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF1E3A5F), width: 1.5),
+        ),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      ),
+      items: _periodos.map((p) {
+        return DropdownMenuItem<String>(
+          value: p['id'] as String,
+          child: Text(
+            p['nombre'] as String,
+            style: const TextStyle(fontSize: 14),
+            overflow: TextOverflow.ellipsis,
           ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF10B981), Color(0xFF34D399)],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.location_on, color: Colors.white),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Lugar del Evento',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _lugarController,
-              decoration: InputDecoration(
-                labelText: 'Lugar',
-                hintText: 'Ej: Auditorio Principal, Aula 101, etc.',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF10B981),
-                    width: 2,
-                  ),
-                ),
-                prefixIcon: const Icon(Icons.place),
-                filled: true,
-                fillColor: Colors.grey.shade50,
-              ),
-              maxLines: 2,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPonentesCard() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.white, Colors.grey.shade50],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF8B5CF6), Color(0xFFA78BFA)],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.people, color: Colors.white),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Ponentes',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Campo para agregar ponente
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _ponenteController,
-                    decoration: InputDecoration(
-                      labelText: 'Agregar ponente',
-                      hintText: 'Nombre del ponente',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF8B5CF6),
-                          width: 2,
-                        ),
-                      ),
-                      prefixIcon: const Icon(Icons.person_add),
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
-                    ),
-                    onSubmitted: (_) => _addPonente(),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF8B5CF6), Color(0xFFA78BFA)],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF8B5CF6).withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: _addPonente,
-                      child: const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Icon(Icons.add, color: Colors.white, size: 24),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-
-            // Lista de ponentes
-            if (_ponentes.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.grey.shade300,
-                    style: BorderStyle.solid,
-                  ),
-                ),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.people_outline,
-                        size: 48,
-                        color: Colors.grey.shade400,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'No hay ponentes agregados',
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Agrega el primer ponente usando el campo de arriba',
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              Column(
-                children: _ponentes.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final ponente = entry.value;
-
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.white, Colors.grey.shade50],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(16),
-                        onTap: () => _editPonente(index),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 48,
-                                height: 48,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Color(
-                                        (ponente.hashCode * 0x1000000 +
-                                                0xFF000000) |
-                                            0xFF000000,
-                                      ),
-                                      Color(
-                                        (ponente.hashCode * 0x1000000 +
-                                                0xFF000000) |
-                                            0xFF000000,
-                                      ).withOpacity(0.7),
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    ponente.substring(0, 1).toUpperCase(),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 20,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      ponente,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF1E293B),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Ponente ${index + 1}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey.shade500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade50,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Material(
-                                      color: Colors.transparent,
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(8),
-                                        onTap: () => _editPonente(index),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(8),
-                                          child: Icon(
-                                            Icons.edit,
-                                            color: Colors.blue.shade600,
-                                            size: 20,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.shade50,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Material(
-                                      color: Colors.transparent,
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(8),
-                                        onTap: () => _removePonente(index),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(8),
-                                          child: Icon(
-                                            Icons.delete,
-                                            color: Colors.red.shade600,
-                                            size: 20,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-          ],
-        ),
-      ),
+        );
+      }).toList(),
+      onChanged: (newValue) {
+        if (newValue != null) {
+          final periodo = _periodos.firstWhere((p) => p['id'] == newValue);
+          setState(() {
+            _selectedPeriodoId = newValue;
+            _selectedPeriodoNombre = periodo['nombre'] as String;
+            _hasChanges = true;
+          });
+        }
+      },
     );
   }
 
   Widget _buildSaveButton() {
-    return Container(
-      width: double.infinity,
-      height: 56,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
+    return SizedBox(
+      height: 52,
+      child: ElevatedButton.icon(
+        onPressed: _isLoading ? null : _saveChanges,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF1E3A5F),
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: Colors.grey.shade300,
+          elevation: 0,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1E3A8A).withOpacity(0.4),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: _isLoading ? null : _saveChanges,
-          child: Center(
-            child: _isLoading
-                ? const SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.save, color: Colors.white, size: 24),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Guardar Cambios',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
+        icon: _isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Icon(Icons.save_outlined, size: 22),
+        label: Text(
+          _isLoading ? 'Guardando…' : 'Guardar cambios',
+          style: const TextStyle(
+              fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.3),
         ),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 4,
-            height: 20,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
-              ),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 80,
-            child: Text(
-              '$label:',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade600,
-                fontSize: 14,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF1E293B),
-                fontSize: 16,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

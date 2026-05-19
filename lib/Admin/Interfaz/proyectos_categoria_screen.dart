@@ -92,10 +92,10 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
   // MÉTODO MEJORADO: Genera QR con ID único y registro en Firestore
   // ═══════════════════════════════════════════════════════════════
   Future<void> _generarQRParaProyecto(Map<String, dynamic> proyecto) async {
-    print('🎯 GENERANDO QR PARA PROYECTO:');
-    print('   Código: ${proyecto['Código']}');
-    print('   Título: ${proyecto['Título']}');
-    print('   Sala: ${proyecto['Sala']}');
+    debugPrint('🎯 GENERANDO QR PARA PROYECTO:');
+    debugPrint('   Código: ${proyecto['Código']}');
+    debugPrint('   Título: ${proyecto['Título']}');
+    debugPrint('   Sala: ${proyecto['Sala']}');
 
     // Generar ID único para este QR
     final qrDocRef = FirebaseFirestore.instance
@@ -125,11 +125,11 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
       'activo': true, // ✅ Estado del QR
     };
 
-    print('📦 QR INFO CREADO:');
-    print('   qrId: $qrId');
-    print('   codigoProyecto: ${qrInfo['codigoProyecto']}');
-    print('   tituloProyecto: ${qrInfo['tituloProyecto']}');
-    print('   activo: true');
+    debugPrint('📦 QR INFO CREADO:');
+    debugPrint('   qrId: $qrId');
+    debugPrint('   codigoProyecto: ${qrInfo['codigoProyecto']}');
+    debugPrint('   tituloProyecto: ${qrInfo['tituloProyecto']}');
+    debugPrint('   activo: true');
 
     try {
       // Guardar registro del QR en Firestore
@@ -145,8 +145,8 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
       });
 
       final qrJson = jsonEncode(qrInfo);
-      print('📄 QR JSON: $qrJson');
-      print('✅ QR registrado en Firestore');
+      debugPrint('📄 QR JSON: $qrJson');
+      debugPrint('✅ QR registrado en Firestore');
 
       setState(() {
         _qrDataGenerado = qrJson;
@@ -158,7 +158,7 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
       _scaleController.forward(from: 0);
       _showSnackBar('¡Código QR generado y activo!');
     } catch (e) {
-      print('❌ Error al registrar QR: $e');
+      debugPrint('❌ Error al registrar QR: $e');
       _showSnackBar('Error al generar QR: $e', isError: true);
     }
   }
@@ -183,9 +183,9 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
             'finalizadoAt': FieldValue.serverTimestamp(),
           });
 
-      print('🔒 QR FINALIZADO:');
-      print('   qrId: $_qrId');
-      print('   activo: false');
+      debugPrint('🔒 QR FINALIZADO:');
+      debugPrint('   qrId: $_qrId');
+      debugPrint('   activo: false');
 
       setState(() {
         _qrFinalizado = true;
@@ -201,7 +201,7 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
         Navigator.pop(context);
       }
     } catch (e) {
-      print('❌ Error al finalizar QR: $e');
+      debugPrint('❌ Error al finalizar QR: $e');
       setState(() => _finalizando = false);
       _showSnackBar('Error al finalizar QR: $e', isError: true);
     }
@@ -346,7 +346,7 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
         border: Border.all(color: const Color(0xFFE0E7ED)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha:0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -385,7 +385,7 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
                     const Spacer(),
                     Icon(
                       Icons.qr_code_rounded,
-                      color: const Color(0xFF1E3A5F).withOpacity(0.5),
+                      color: const Color(0xFF1E3A5F).withValues(alpha:0.5),
                     ),
                   ],
                 ),
@@ -497,7 +497,7 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF1E3A5F).withOpacity(0.15),
+                    color: const Color(0xFF1E3A5F).withValues(alpha:0.15),
                     blurRadius: 20,
                     offset: const Offset(0, 4),
                   ),

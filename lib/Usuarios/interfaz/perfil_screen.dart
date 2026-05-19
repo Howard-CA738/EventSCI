@@ -134,7 +134,7 @@ class _PerfilScreenState extends State<PerfilScreen>
       width: 48,
       height: 48,
       decoration: BoxDecoration(
-        color: (iconColor ?? const Color(0xFF1E3A5F)).withOpacity(0.1),
+        color: (iconColor ?? const Color(0xFF1E3A5F)).withValues(alpha:0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Icon(
@@ -153,7 +153,7 @@ class _PerfilScreenState extends State<PerfilScreen>
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E3A5F).withOpacity(0.1),
+              color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, size: 20, color: const Color(0xFF1E3A5F)),
@@ -183,7 +183,7 @@ class _PerfilScreenState extends State<PerfilScreen>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1565C0).withOpacity(0.3),
+            color: const Color(0xFF1565C0).withValues(alpha:0.3),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -385,7 +385,7 @@ class _PerfilScreenState extends State<PerfilScreen>
           ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF1E3A5F).withOpacity(0.3),
+              color: const Color(0xFF1E3A5F).withValues(alpha:0.3),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -406,7 +406,7 @@ class _PerfilScreenState extends State<PerfilScreen>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF4CAF50).withOpacity(0.3),
+            color: const Color(0xFF4CAF50).withValues(alpha:0.3),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -451,13 +451,6 @@ class _PerfilScreenState extends State<PerfilScreen>
             iconColor: const Color(0xFFFF5722),
             delay: 2,
           ),
-        _buildInfoCard(
-          title: 'DNI',
-          value: userData['dni'] ?? 'No disponible',
-          icon: Icons.credit_card,
-          iconColor: const Color(0xFF9C27B0),
-          delay: 3,
-        ),
         if (_controller.getCampo('celular') != null)
           _buildInfoCard(
             title: 'Celular',

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 class FilialesService {
   static final FilialesService _instance = FilialesService._internal();
@@ -114,7 +115,7 @@ class FilialesService {
   // ═══════════════════════════════════════════════════════════════
   Future<bool> inicializarSiEsNecesario() async {
     if (_isInitialized) {
-      print('✅ Estructura ya inicializada, omitiendo...');
+      debugPrint('✅ Estructura ya inicializada, omitiendo...');
       return true;
     }
 
@@ -126,12 +127,12 @@ class FilialesService {
           .get();
 
       if (filialesSnapshot.docs.isNotEmpty) {
-        print('✅ Estructura ya existe en Firebase');
+        debugPrint('✅ Estructura ya existe en Firebase');
         _isInitialized = true;
         return true;
       }
 
-      print('📝 Inicializando estructura por primera vez...');
+      debugPrint('📝 Inicializando estructura por primera vez...');
 
       // Crear estructura completa
       final batch = _firestore.batch();
@@ -180,7 +181,7 @@ class FilialesService {
             // Firebase batch limit es 500, dividir si es necesario
             if (operaciones >= 450) {
               await batch.commit();
-              print('✅ Batch de $operaciones operaciones ejecutado');
+              debugPrint('✅ Batch de $operaciones operaciones ejecutado');
               operaciones = 0;
             }
           }
@@ -190,14 +191,14 @@ class FilialesService {
       // Commit final
       if (operaciones > 0) {
         await batch.commit();
-        print('✅ Batch final de $operaciones operaciones ejecutado');
+        debugPrint('✅ Batch final de $operaciones operaciones ejecutado');
       }
 
       _isInitialized = true;
-      print('✅ Estructura completa inicializada exitosamente');
+      debugPrint('✅ Estructura completa inicializada exitosamente');
       return true;
     } catch (e) {
-      print('❌ Error inicializando estructura: $e');
+      debugPrint('❌ Error inicializando estructura: $e');
       return false;
     }
   }
@@ -213,11 +214,11 @@ class FilialesService {
         _estructuraCache != null &&
         _cacheTimestamp != null &&
         DateTime.now().difference(_cacheTimestamp!) < _cacheDuration) {
-      print('✅ Estructura obtenida del caché (válida por 24h)');
+      debugPrint('✅ Estructura obtenida del caché (válida por 24h)');
       return Map<String, dynamic>.from(_estructuraCache!);
     }
 
-    print('⚠️ Caché expirado o no disponible, cargando desde Firestore...');
+    debugPrint('⚠️ Caché expirado o no disponible, cargando desde Firestore...');
 
     try {
       final Map<String, dynamic> estructura = {};
@@ -274,10 +275,10 @@ class FilialesService {
       _estructuraCache = estructura;
       _cacheTimestamp = DateTime.now();
 
-      print('✅ Estructura cargada y cacheada exitosamente');
+      debugPrint('✅ Estructura cargada y cacheada exitosamente');
       return estructura;
     } catch (e) {
-      print('❌ Error obteniendo estructura: $e');
+      debugPrint('❌ Error obteniendo estructura: $e');
       return {};
     }
   }
@@ -293,7 +294,7 @@ class FilialesService {
     try {
       // Validar que el nombre no esté vacío
       if (nombreCarrera.trim().isEmpty) {
-        print('❌ El nombre de la carrera no puede estar vacío');
+        debugPrint('❌ El nombre de la carrera no puede estar vacío');
         return false;
       }
 
@@ -309,7 +310,7 @@ class FilialesService {
           .get();
 
       if (carrerasSnapshot.docs.isNotEmpty) {
-        print('⚠️ La carrera "$nombreCarrera" ya existe en esta facultad');
+        debugPrint('⚠️ La carrera "$nombreCarrera" ya existe en esta facultad');
         return false;
       }
 
@@ -325,14 +326,14 @@ class FilialesService {
             'createdAt': FieldValue.serverTimestamp(),
           });
 
-      print('✅ Carrera "$nombreCarrera" agregada exitosamente');
+      debugPrint('✅ Carrera "$nombreCarrera" agregada exitosamente');
 
       // Invalidar caché para que se recargue
       _invalidateCache();
 
       return true;
     } catch (e) {
-      print('❌ Error agregando carrera: $e');
+      debugPrint('❌ Error agregando carrera: $e');
       return false;
     }
   }
@@ -355,14 +356,14 @@ class FilialesService {
           .doc(carreraId)
           .delete();
 
-      print('✅ Carrera eliminada exitosamente');
+      debugPrint('✅ Carrera eliminada exitosamente');
 
       // Invalidar caché para que se recargue
       _invalidateCache();
 
       return true;
     } catch (e) {
-      print('❌ Error eliminando carrera: $e');
+      debugPrint('❌ Error eliminando carrera: $e');
       return false;
     }
   }
@@ -429,7 +430,7 @@ class FilialesService {
   static void clearCache() {
     _estructuraCache = null;
     _cacheTimestamp = null;
-    print('🗑️ Caché de filiales limpiado');
+    debugPrint('🗑️ Caché de filiales limpiado');
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -437,7 +438,7 @@ class FilialesService {
   // ═══════════════════════════════════════════════════════════════
   void _invalidateCache() {
     _cacheTimestamp = null;
-    print('🔄 Caché invalidado, se recargará en la próxima consulta');
+    debugPrint('🔄 Caché invalidado, se recargará en la próxima consulta');
   }
 
   // ═══════════════════════════════════════════════════════════════

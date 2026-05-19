@@ -386,7 +386,7 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                    color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(icon, color: const Color(0xFF1E3A5F), size: 24),
@@ -427,7 +427,7 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                 backgroundColor: const Color(0xFF1E3A5F),
                 foregroundColor: Colors.white,
                 elevation: 3,
-                shadowColor: const Color(0xFF1E3A5F).withOpacity(0.4),
+                shadowColor: const Color(0xFF1E3A5F).withValues(alpha:0.4),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16)),
               ),
@@ -478,7 +478,7 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                       right: opcion == _opcionesPago.first ? 10 : 0),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
-                    color: isSelected ? color.withOpacity(0.12) : Colors.white,
+                    color: isSelected ? color.withValues(alpha:0.12) : Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isSelected ? color : Colors.grey.shade300,

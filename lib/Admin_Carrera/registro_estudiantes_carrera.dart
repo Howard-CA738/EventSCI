@@ -3,9 +3,7 @@ import '/prefs_helper.dart';
 import 'estudiantes_registrados_carrera.dart';
 import '/admin/logica/datos_excel.dart';
 
-/// Pantalla de registro de estudiantes exclusiva para el Admin de Carrera.
-/// No consulta Firebase para cargar filiales — usa directamente los datos
-/// del admin ya almacenados en PrefsHelper, por lo que carga de forma instantánea.
+
 class RegistroEstudiantesCarreraScreen extends StatefulWidget {
   const RegistroEstudiantesCarreraScreen({super.key});
 
@@ -45,7 +43,6 @@ class _RegistroEstudiantesCarreraScreenState
   String? _selectedModalidadEstudio;
   String? _selectedCiclo;
   String? _selectedGrupo;
-  String? _selectedPago;
 
   final List<String> _modosContrato = ['Regular', 'Convenio', 'Especial'];
   final List<String> _modalidadesEstudio = [
@@ -55,10 +52,6 @@ class _RegistroEstudiantesCarreraScreenState
   ];
   final List<String> _ciclos = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
   final List<String> _grupos = ['Único', '1', '2', '3', '4'];
-  final List<Map<String, dynamic>> _opcionesPago = [
-    {'valor': 'Si', 'label': 'Pagado', 'icon': Icons.check_circle, 'color': Color(0xFF16A34A)},
-    {'valor': 'Pendiente', 'label': 'Pendiente', 'icon': Icons.schedule, 'color': Color(0xFFD97706)},
-  ];
 
   @override
   void initState() {
@@ -186,11 +179,6 @@ class _RegistroEstudiantesCarreraScreenState
   Future<void> _createStudent() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_selectedPago == null) {
-      _showMessage('Por favor selecciona el estado de pago');
-      return;
-    }
-
     final fullName =
         '${_nombresController.text.trim()} ${_apellidosController.text.trim()}';
     final username = _usernameController.text.trim().toLowerCase();
@@ -212,13 +200,12 @@ class _RegistroEstudiantesCarreraScreenState
         dni: _documentoController.text.trim(),
         facultad: _adminCarreraFacultad,
         carrera: _adminCarreraCarrera,
-        filial: _adminCarreraFilialNombre, 
+        filial: _adminCarreraFilialNombre,
         modoContrato: _selectedModoContrato,
         modalidadEstudio: _selectedModalidadEstudio,
         ciclo: _selectedCiclo,
         grupo: _selectedGrupo,
         celular: _celularController.text.trim(),
-        pago: _selectedPago,
       );
 
       if (success) {
@@ -248,7 +235,6 @@ class _RegistroEstudiantesCarreraScreenState
       _selectedModalidadEstudio = null;
       _selectedCiclo = null;
       _selectedGrupo = null;
-      _selectedPago = null;
     });
   }
 
@@ -364,7 +350,7 @@ class _RegistroEstudiantesCarreraScreenState
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                    color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(icon, color: const Color(0xFF1E3A5F), size: 24),
@@ -408,7 +394,7 @@ class _RegistroEstudiantesCarreraScreenState
                 backgroundColor: const Color(0xFF1E3A5F),
                 foregroundColor: Colors.white,
                 elevation: 3,
-                shadowColor: const Color(0xFF1E3A5F).withOpacity(0.4),
+                shadowColor: const Color(0xFF1E3A5F).withValues(alpha:0.4),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16)),
               ),
@@ -781,10 +767,6 @@ class _RegistroEstudiantesCarreraScreenState
                                     ),
                                     const SizedBox(height: 16),
 
-                                    // ── Estado de pago ────────────────────
-                                    _buildPagoSelector(),
-                                    const SizedBox(height: 16),
-
                                     Row(
                                       children: [
                                         Expanded(
@@ -863,75 +845,6 @@ class _RegistroEstudiantesCarreraScreenState
           ],
         ),
       ),
-    );
-  }
-
-  /// Selector visual de estado de pago con dos botones tipo chip.
-  Widget _buildPagoSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.payment, color: const Color(0xFF1E3A5F), size: 20),
-            const SizedBox(width: 8),
-            const Text(
-              'Estado de pago *',
-              style: TextStyle(
-                fontSize: 14,
-                color: Color(0xFF1E3A5F),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: _opcionesPago.map((opcion) {
-            final isSelected = _selectedPago == opcion['valor'];
-            final color = opcion['color'] as Color;
-            return Expanded(
-              child: GestureDetector(
-                onTap: () => setState(() => _selectedPago = opcion['valor'] as String),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  margin: EdgeInsets.only(
-                    right: opcion == _opcionesPago.first ? 10 : 0,
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: isSelected ? color.withOpacity(0.12) : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isSelected ? color : Colors.grey.shade300,
-                      width: isSelected ? 2 : 1,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        opcion['icon'] as IconData,
-                        color: isSelected ? color : Colors.grey.shade400,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        opcion['label'] as String,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                          color: isSelected ? color : Colors.grey.shade500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
     );
   }
 

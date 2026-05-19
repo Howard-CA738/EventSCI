@@ -68,7 +68,7 @@ class _ReportesScreenState extends State<ReportesScreen>
         _currentUserType = userType;
       });
     } catch (e) {
-      print('Error al obtener usuario: $e');
+      debugPrint('Error al obtener usuario: $e');
     }
   }
 
@@ -146,10 +146,10 @@ class _ReportesScreenState extends State<ReportesScreen>
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.08),
+                    color: Colors.blue.withValues(alpha:0.08),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Colors.blue.withOpacity(0.3),
+                      color: Colors.blue.withValues(alpha:0.3),
                       width: 1,
                     ),
                   ),
@@ -192,10 +192,10 @@ class _ReportesScreenState extends State<ReportesScreen>
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.08),
+                    color: Colors.green.withValues(alpha:0.08),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Colors.green.withOpacity(0.3),
+                      color: Colors.green.withValues(alpha:0.3),
                       width: 1,
                     ),
                   ),
@@ -284,10 +284,10 @@ class _ReportesScreenState extends State<ReportesScreen>
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.08),
+                      color: Colors.red.withValues(alpha:0.08),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: Colors.red.withOpacity(0.3),
+                        color: Colors.red.withValues(alpha:0.3),
                         width: 1,
                       ),
                     ),
@@ -382,7 +382,7 @@ class _ReportesScreenState extends State<ReportesScreen>
 
     // Verificar permisos
     if (_currentUserType != PrefsHelper.userTypeAdmin &&
-        _currentUserType != PrefsHelper.userTypeAsistente) {
+    _currentUserType != PrefsHelper.userTypeAdminCarrera) {
       return Scaffold(
         backgroundColor: const Color(0xFF1E3A5F),
         appBar: AppBar(
@@ -484,7 +484,7 @@ class _ReportesScreenState extends State<ReportesScreen>
                                 BoxShadow(
                                   color: const Color(
                                     0xFF2C5F7C,
-                                  ).withOpacity(0.3),
+                                  ).withValues(alpha:0.3),
                                   spreadRadius: 0,
                                   blurRadius: 20,
                                   offset: const Offset(0, 8),
@@ -496,7 +496,7 @@ class _ReportesScreenState extends State<ReportesScreen>
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.2),
+                                    color: Colors.white.withValues(alpha:0.2),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: const Icon(
@@ -634,7 +634,7 @@ class _ReportesScreenState extends State<ReportesScreen>
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: const Color(0xFF2C5F7C).withOpacity(0.2),
+                                color: const Color(0xFF2C5F7C).withValues(alpha:0.2),
                               ),
                             ),
                             child: Row(
@@ -644,7 +644,7 @@ class _ReportesScreenState extends State<ReportesScreen>
                                   decoration: BoxDecoration(
                                     color: const Color(
                                       0xFF2C5F7C,
-                                    ).withOpacity(0.1),
+                                    ).withValues(alpha:0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: const Icon(
@@ -715,7 +715,7 @@ class _ReportesScreenState extends State<ReportesScreen>
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.08),
+                color: Colors.black.withValues(alpha:0.08),
                 spreadRadius: 0,
                 blurRadius: 20,
                 offset: const Offset(0, 4),
@@ -729,7 +729,7 @@ class _ReportesScreenState extends State<ReportesScreen>
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.15),
+                    color: color.withValues(alpha:0.15),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: isLoading
@@ -775,7 +775,7 @@ class _ReportesScreenState extends State<ReportesScreen>
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: color.withOpacity(0.1),
+                      color: color.withValues(alpha:0.1),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(

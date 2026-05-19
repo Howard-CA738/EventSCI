@@ -1,7 +1,5 @@
-plugins {
-    id("com.google.gms.google-services") version "4.3.15" apply false
-}
-
+// Google Services YA NO va aqui — esta declarado en settings.gradle.kts
+// Si lo dejas aqui tambien causara conflicto de versiones
 
 allprojects {
     repositories {
@@ -17,6 +15,7 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
+
 subprojects {
     project.evaluationDependsOn(":app")
 }

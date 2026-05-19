@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 class GenerarQRController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -151,8 +152,8 @@ class GenerarQRController {
       sede: sede,
     );
 
-    print('🔧 QR generado para proyecto:');
-    print('   Código: $codigoProyecto | Sede: $sede');
+    debugPrint('🔧 QR generado para proyecto:');
+    debugPrint('   Código: $codigoProyecto | Sede: $sede');
 
     return jsonEncode(qrInfo);
   }
@@ -219,7 +220,7 @@ class GenerarQRController {
     // ✅ Incluir sede solo si es válida
     if (sedeValida) {
       qrData['sede'] = sede!.trim();
-      print('✅ Sede incluida en QR: $sede');
+      debugPrint('✅ Sede incluida en QR: $sede');
     }
 
     if (grupoValido) {
@@ -250,7 +251,7 @@ class GenerarQRController {
         return data;
       }).toList();
     } catch (e) {
-      print('❌ Error obteniendo proyectos: $e');
+      debugPrint('❌ Error obteniendo proyectos: $e');
       return [];
     }
   }
@@ -298,7 +299,7 @@ class GenerarQRController {
       qrsPorProyecto[codigo] = qrData;
     }
 
-    print('✅ Generados ${qrsPorProyecto.length} QRs para: $categoria');
+    debugPrint('✅ Generados ${qrsPorProyecto.length} QRs para: $categoria');
     return qrsPorProyecto;
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' as excel_pkg;
 import 'dart:io';
+import '/password_helper.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 
@@ -65,7 +66,6 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     'Programa estudio'  : 'carrera',      // → carrera
     'Usuario'           : 'username',
     'Unidad académica'  : 'facultad',     // → facultad
-    'Pago'              : 'pago',
     'Filial'            : 'filial',       // ← NUEVO: filial del estudiante
     'Sede'              : 'filial',       // ← alias para archivos anteriores
   };
@@ -142,10 +142,10 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
           _adminCarreraFacultad = adminData['facultad'];
           _adminCarreraCarrera  = adminData['carrera'];
         });
-        print('✅ Admin de carrera detectado en importación Excel');
-        print('   Filial   : $_adminCarreraFilial');
-        print('   Facultad : $_adminCarreraFacultad');
-        print('   Carrera  : $_adminCarreraCarrera');
+        debugPrint('✅ Admin de carrera detectado en importación Excel');
+        debugPrint('   Filial   : $_adminCarreraFilial');
+        debugPrint('   Facultad : $_adminCarreraFacultad');
+        debugPrint('   Carrera  : $_adminCarreraCarrera');
       }
     }
   }
@@ -249,7 +249,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       }
     } catch (e) {
       _showMessage('Error al leer el archivo Excel: $e');
-      print('Error detallado: $e');
+      debugPrint('Error detallado: $e');
     }
   }
 
@@ -281,7 +281,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(Icons.rocket_launch, color: Color(0xFF1E3A5F)),
@@ -380,7 +380,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
 
     if (_isAdminCarrera) {
       final key = '${_adminCarreraFilial}_$_adminCarreraCarrera';
-      print('🔒 Modo admin de carrera: Importando todo a "$key"');
+      debugPrint('🔒 Modo admin de carrera: Importando todo a "$key"');
       studentsByKey[key] = List.from(_allData);
     } else {
       // Super admin: agrupar por filial + carrera leídos del Excel
@@ -398,16 +398,16 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       final docKey   = entry.key;
       final students = entry.value;
 
-      print('📚 Procesando: "$docKey"');
-      print('   Total registros en Excel: ${students.length}');
+      debugPrint('📚 Procesando: "$docKey"');
+      debugPrint('   Total registros en Excel: ${students.length}');
 
       final uniqueMap   = _removeDuplicateStudents(students);
       final uniqueList  = uniqueMap.values.toList();
       final dupsInGroup = students.length - uniqueList.length;
       _duplicatesDetected += dupsInGroup;
 
-      print('   Estudiantes únicos: ${uniqueList.length}');
-      if (dupsInGroup > 0) print('   🗑️ Duplicados en Excel: $dupsInGroup');
+      debugPrint('   Estudiantes únicos: ${uniqueList.length}');
+      if (dupsInGroup > 0) debugPrint('   🗑️ Duplicados en Excel: $dupsInGroup');
 
       final existingUsers = await _getExistingUsersInCarrera(docKey);
       final List<Map<String, dynamic>> validStudents = [];
@@ -446,13 +446,13 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     String docKey,
   ) async {
     try {
-      print('🔎 Buscando usuarios existentes en: "$docKey"');
+      debugPrint('🔎 Buscando usuarios existentes en: "$docKey"');
       final snapshot = await _firestore
           .collection('users')
           .doc(docKey)
           .collection('students')
           .get();
-      print('   📊 Encontrados ${snapshot.docs.length} en Firestore');
+      debugPrint('   📊 Encontrados ${snapshot.docs.length} en Firestore');
 
       return snapshot.docs.map((doc) {
         final data = doc.data();
@@ -464,7 +464,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
         };
       }).toSet();
     } catch (e) {
-      print('❌ Error obteniendo existentes en "$docKey": $e');
+      debugPrint('❌ Error obteniendo existentes en "$docKey": $e');
       return {};
     }
   }
@@ -485,58 +485,52 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
         e['username'] == username);
   }
 
-  // ── Preparar datos del estudiante ─────────────────────────────────────────
-  // Se elimina por completo el campo 'sede'. Todo usa 'filial'.
-  // La clave del documento padre se construye como "filial_carrera".
   Map<String, dynamic> _prepareStudentData(
     Map<String, dynamic> rawData,
     int index,
   ) {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-
-    final name  = _getFieldValue(rawData, 'name', 'Estudiante ${index + 1}');
-    final dni   = _getFieldValue(rawData, 'dni', 'DNI${timestamp % 100000000}');
-
+ 
+    final name = _getFieldValue(rawData, 'name', 'Estudiante ${index + 1}');
+    final dniPlano = _getFieldValue(rawData, 'dni', 'DNI${timestamp % 100000000}');
+ 
+    // 🔐 Hashear el DNI antes de guardar
+    final dniHash = PasswordHelper.hashPassword(dniPlano);
+ 
     String username = _getFieldValue(rawData, 'username', '');
     if (username.isEmpty) username = _generateUsernameFromName(name);
-
+ 
     final codigoUniversitario = _getFieldValue(
       rawData, 'codigoUniversitario', 'COD${timestamp % 1000000}',
     );
-
-    // ── Filial / Facultad / Carrera ───────────────────────────────────────
-    // Admin de carrera → SIEMPRE usa los datos de su sesión.
-    // Super admin      → Lee del Excel; si falta algún campo, usa fallback.
+ 
     final String filial;
     final String facultad;
     final String carrera;
-
+ 
     if (_isAdminCarrera) {
       filial   = _adminCarreraFilial!;
       facultad = _adminCarreraFacultad!;
       carrera  = _adminCarreraCarrera!;
-      print('🔒 Forzando: filial=$filial | facultad=$facultad | carrera=$carrera');
     } else {
       filial   = _getFieldValue(rawData, 'filial',   'Sin filial');
       facultad = _getFieldValue(rawData, 'facultad', 'Sin asignar');
       carrera  = _getFieldValue(rawData, 'carrera',  'Sin asignar');
     }
-
-    // ── Documento final (sin 'sede', sin duplicados de filial) ───────────
+ 
     return {
       'name'                : name,
       'username'            : username.toLowerCase(),
       'codigoUniversitario' : codigoUniversitario,
-      'dni'                 : dni,
-      'documento'           : dni,          // alias para compatibilidad
-      'filial'              : filial,       // ← único campo de sede/filial
+      'dni'                 : dniHash,     // 🔐 hash, no texto plano
+      'documento'           : dniHash,     // 🔐 hash, no texto plano
+      'filial'              : filial,
       'facultad'            : facultad,
       'carrera'             : carrera,
       'ciclo'               : _getFieldValue(rawData, 'ciclo',   null),
       'grupo'               : _getFieldValue(rawData, 'grupo',   null),
       'celular'             : _getFieldValue(rawData, 'celular', null),
       'email'               : _getFieldValue(rawData, 'email',   ''),
-      'pago'                : _getFieldValue(rawData, 'pago',    null),
       'userType'            : 'student',
       'createdAt'           : FieldValue.serverTimestamp(),
     };
@@ -581,7 +575,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
         'updatedAt' : FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      print('📁 Doc padre actualizado: "$docKey"');
+      debugPrint('📁 Doc padre actualizado: "$docKey"');
 
       // Escribir estudiantes en lotes
       for (int i = 0; i < students.length; i += BATCH_SIZE) {
@@ -600,9 +594,9 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
         setState(() {});
       }
 
-      print('✅ Importados ${students.length} estudiantes en "$docKey"');
+      debugPrint('✅ Importados ${students.length} estudiantes en "$docKey"');
     } catch (e) {
-      print('❌ Error en batch write para "$docKey": $e');
+      debugPrint('❌ Error en batch write para "$docKey": $e');
       _showMessage('Error durante la importación en "$docKey": $e');
     }
   }
@@ -851,7 +845,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: iconColor.withOpacity(0.3)),
+        border: Border.all(color: iconColor.withValues(alpha:0.3)),
       ),
       child: Row(
         children: [
@@ -972,7 +966,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha:0.1),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -1010,7 +1004,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                     borderRadius: BorderRadius.circular(10),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
+                        color: Colors.black.withValues(alpha:0.05),
                         blurRadius: 10,
                         offset: const Offset(0, 5),
                       ),
@@ -1103,73 +1097,6 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Banner admin de carrera ───────────────────────────────────────
-          if (_isAdminCarrera) ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.orange.shade50, Colors.orange.shade100],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.orange.shade300, width: 2),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade700,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child:
-                        const Icon(Icons.lock, color: Colors.white, size: 24),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '⚠️ Modo: Admin de Carrera',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.orange.shade900,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Filial: $_adminCarreraFilial',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.orange.shade800,
-                              fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Carrera: $_adminCarreraCarrera',
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.orange.shade700),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Los datos de carrera/filial del Excel serán ignorados',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.orange.shade600,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-
           // ── Card principal ────────────────────────────────────────────────
           Card(
             elevation: 4,
@@ -1185,7 +1112,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                     width: 80,
                     height: 80,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                      color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.upload_file,
@@ -1215,9 +1142,6 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                   const SizedBox(height: 8),
                   _buildFeatureRow(Icons.delete_sweep, 'Elimina duplicados'),
                   const SizedBox(height: 8),
-                  _buildFeatureRow(
-                      Icons.folder_special, 'Separado por filial y carrera'),
-                  const SizedBox(height: 24),
                   ElevatedButton.icon(
                     onPressed: _pickExcelFile,
                     icon: const Icon(Icons.file_open),
@@ -1437,18 +1361,6 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
                                   ]),
                                   const SizedBox(height: 2),
                                   // Pago
-                                  Row(children: [
-                                    Icon(Icons.payment,
-                                        size: 14,
-                                        color: Colors.grey.shade600),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Pago: ${student['pago'] ?? "Sin dato"}',
-                                      style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.grey.shade700),
-                                    ),
-                                  ]),
                                 ],
                               ),
                             ),

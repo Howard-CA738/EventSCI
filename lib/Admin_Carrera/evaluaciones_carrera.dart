@@ -210,7 +210,7 @@ class _EvaluacionesCarreraScreenState
           };
         }).toList();
       } catch (e) {
-        print('❌ Error procesando proyecto ${proyectoDoc.id}: $e');
+        debugPrint('❌ Error procesando proyecto ${proyectoDoc.id}: $e');
         return <Map<String, dynamic>>[];
       }
     }).toList();
@@ -323,7 +323,7 @@ class _EvaluacionesCarreraScreenState
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha:0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.admin_panel_settings,
@@ -363,7 +363,7 @@ class _EvaluacionesCarreraScreenState
             padding: const EdgeInsets.symmetric(
                 horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha:0.15),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.white30),
             ),
@@ -398,7 +398,7 @@ class _EvaluacionesCarreraScreenState
               padding: const EdgeInsets.symmetric(
                   horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
@@ -419,10 +419,10 @@ class _EvaluacionesCarreraScreenState
           padding: const EdgeInsets.symmetric(
               horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.blue.withOpacity(0.08),
+            color: Colors.blue.withValues(alpha:0.08),
             borderRadius: BorderRadius.circular(10),
             border:
-                Border.all(color: Colors.blue.withOpacity(0.25)),
+                Border.all(color: Colors.blue.withValues(alpha:0.25)),
           ),
           child: Row(
             children: [
@@ -472,7 +472,7 @@ class _EvaluacionesCarreraScreenState
           border: Border.all(color: const Color(0xFFE2E8F0)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha:0.05),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -545,7 +545,7 @@ class _EvaluacionesCarreraScreenState
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
                       color:
-                          const Color(0xFF9C27B0).withOpacity(0.1),
+                          const Color(0xFF9C27B0).withValues(alpha:0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(

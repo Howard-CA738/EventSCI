@@ -2,19 +2,17 @@ import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
 import '/login.dart';
 import 'registro_estudiantes_carrera.dart';
-import '/admin/logica/reportes.dart';
-import '/admin/logica/evaluaciones.dart';
 import 'editar_admin_carrera.dart';
 import 'crear_eventos_carrera_screen.dart';
 import 'gestion_grupos_carrera_screen.dart';
 import 'asignar_proyectos_carrera_screen.dart';
 import 'gestion_rubricas_carrera_screen.dart';
 import 'gestion_jurados_carrera_screen.dart';
-import 'gestion_pagos_screen.dart'; 
 import 'generar_certificados_screen.dart';
 import 'gestion_sesiones_screen.dart';
 import 'reportes_admin_carrera_screen.dart';
 import 'gestion_roles_screen.dart';
+import 'package:flutter/foundation.dart';
 
 
 class AdminCarreraScreen extends StatefulWidget {
@@ -93,14 +91,14 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                         width: 50,
                         height: 50,
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Colors.transparent,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Image.asset(
-                          'assets/logo.png',
+                          'assets/icons/panel_admin.png',
                           fit: BoxFit.contain,
                           errorBuilder: (_, __, ___) => const Icon(
-                            Icons.school,
+                            Icons.admin_panel_settings,
                             color: Color(0xFF1E3A5F),
                             size: 30,
                           ),
@@ -136,10 +134,10 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
+                      color: Colors.white.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                          color: Colors.white.withOpacity(0.2), width: 1),
+                          color: Colors.white.withValues(alpha: 0.2), width: 1),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,7 +223,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                         physics: const NeverScrollableScrollPhysics(),
                         children: [
 
-                          // ── Registrar Estudiantes ──────────────────────
+                          // 1. Registrar Estudiantes
                           if (_tienePermiso('estudiantes'))
                             _buildMenuCard(
                               imagePath: 'assets/icons/usuario.png',
@@ -238,105 +236,19 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                               ),
                             ),
 
-                          // ── Gestión de Grupos ──────────────────────────
-                          if (_tienePermiso('grupos'))
-                            _buildMenuCard(
-                              imagePath: 'assets/icons/reunion.png',
-                              title: 'Gestión de\nGrupos',
-                              subtitle: 'Organizar estudiantes en grupos', 
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      const GestionGruposCarreraScreen(),
-                                ),
+                          // 2. Gestión de Sesiones
+                          _buildMenuCard(
+                            imagePath: 'assets/icons/sesiones.png',
+                            title: 'Gestión de\nSesiones',
+                            subtitle: 'Controlar sesiones de estudiantes',
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const GestionSesionesScreen(),
                               ),
                             ),
+                          ),
 
-                          // ── Gestión de Jurados ─────────────────────────
-                          if (_tienePermiso('proyectos'))
-                            _buildMenuCard(
-                              imagePath: 'assets/icons/jurado.png',
-                              title: 'Gestión de\nJurados',
-                              subtitle: 'Ver y gestionar jurados',
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      const GestionJuradosCarreraScreen(),
-                                ),
-                              ),
-                            ),
-
-                          // ── Asignar Proyectos ──────────────────────────
-                          if (_tienePermiso('proyectos'))
-                            _buildMenuCard(
-                              imagePath: 'assets/icons/notas.png',
-                              title: 'Asignar\nProyectos',
-                              subtitle: 'Asignar proyectos a jurados',
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      const AsignarProyectosCarreraScreen(),
-                                ),
-                              ),
-                            ),
-if (_tienePermiso('reportes'))
-  _buildMenuCard(
-    imagePath: 'assets/icons/reporte.png',
-    title: 'Reportes',
-    subtitle: 'Ver estadísticas y reportes',
-    onTap: () => Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const ReportesAdminCarreraScreen(), // ← nuevo
-      ),
-    ),
-  ),
-                          // ── Gestión de Rúbricas ────────────────────────
-                          if (_tienePermiso('proyectos'))
-                            _buildMenuCard(
-                              imagePath: 'assets/icons/criterios.png',
-                              title: 'Gestión de\nRúbricas',
-                              subtitle: 'Crear y editar rúbricas',
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      const GestionRubricasCarreraScreen(),
-                                ),
-                              ),
-                            ),
-_buildMenuCard(
-  imagePath: 'assets/icons/roles.png', // Usa cualquier ícono disponible
-  title: 'Gestión de\nRoles',
-  subtitle: 'Asignar roles a estudiantes',
-  onTap: () => Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (_) => const GestionRolesScreen(),
-    ),
-  ),
-),
-                          // ── Ver Evaluaciones ───────────────────────────
-                          if (_tienePermiso('evaluaciones'))
-                            _buildMenuCard(
-                              imagePath: 'assets/icons/evaluaciones.png',
-                              title: 'Ver\nEvaluaciones',
-                              subtitle: 'Revisar evaluaciones de jurados',
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      const EvaluacionesScreen(),
-                                ),
-                              ),
-                            ),
-_buildMenuCard(
-  imagePath: 'assets/icons/sesion.png',
-  title: 'Gestión de\nSesiones',
-  subtitle: 'Controlar sesiones de estudiantes',
-  onTap: () => Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (_) => const GestionSesionesScreen(),
-    ),
-  ),
-),
-                          // ── Gestión de Eventos ─────────────────────────
+                          // 3. Gestión de Eventos
                           if (_tienePermiso('eventos'))
                             _buildMenuCard(
                               imagePath: 'assets/icons/evento.png',
@@ -344,40 +256,108 @@ _buildMenuCard(
                               subtitle: 'Crear y ver eventos',
                               onTap: () => Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) =>
-                                      const CrearEventosCarreraScreen(),
+                                  builder: (_) => const CrearEventosCarreraScreen(),
                                 ),
                               ),
                             ),
-                                                    _buildMenuCard(
-                              imagePath: 'assets/icons/certificado.png',
-                              title: 'Generar\nCertificados',
-                              subtitle: 'Emitir certificados PDF',
+
+                          // 4. Gestión de Grupos
+                          if (_tienePermiso('grupos'))
+                            _buildMenuCard(
+                              imagePath: 'assets/icons/reunion.png',
+                              title: 'Gestión de\nGrupos',
+                              subtitle: 'Organizar estudiantes en grupos',
                               onTap: () => Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) => const GenerarCertificadosScreen(),
+                                  builder: (_) => const GestionGruposCarreraScreen(),
                                 ),
                               ),
-                            ),                       
-_buildMenuCard(
-  imagePath: 'assets/icons/pagos.png',  // o usa el icono de abajo
-  title: 'Gestión de\nPagos',
-  subtitle: 'Controlar acceso por pago',
-  onTap: () => Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (_) => const GestionPagosScreen(),
-    ),
-  ),
-),
-                          // ── Editar Cuenta (siempre visible) ────────────
+                            ),
+
+                          // 5. Gestión de Jurados
+                          if (_tienePermiso('proyectos'))
+                            _buildMenuCard(
+                              imagePath: 'assets/icons/jurado.png',
+                              title: 'Gestión de\nJurados',
+                              subtitle: 'Ver y gestionar jurados',
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const GestionJuradosCarreraScreen(),
+                                ),
+                              ),
+                            ),
+
+                          // 6. Asignar Proyectos
+                          if (_tienePermiso('proyectos'))
+                            _buildMenuCard(
+                              imagePath: 'assets/icons/notas.png',
+                              title: 'Asignar\nProyectos',
+                              subtitle: 'Asignar proyectos a jurados',
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const AsignarProyectosCarreraScreen(),
+                                ),
+                              ),
+                            ),
+
+                          // 7. Gestión de Rúbricas
+                          if (_tienePermiso('proyectos'))
+                            _buildMenuCard(
+                              imagePath: 'assets/icons/criterios.png',
+                              title: 'Gestión de\nRúbricas',
+                              subtitle: 'Crear y editar rúbricas',
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const GestionRubricasCarreraScreen(),
+                                ),
+                              ),
+                            ),
+
+                          // 8. Gestión de Roles
+                          _buildMenuCard(
+                            imagePath: 'assets/icons/roles.png',
+                            title: 'Gestión de\nRoles',
+                            subtitle: 'Asignar roles a estudiantes',
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const GestionRolesScreen(),
+                              ),
+                            ),
+                          ),
+
+                          // 9. Generar Certificados
+                          _buildMenuCard(
+                            imagePath: 'assets/icons/certificado.png',
+                            title: 'Generar\nCertificados',
+                            subtitle: 'Emitir certificados PDF',
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const GenerarCertificadosScreen(),
+                              ),
+                            ),
+                          ),
+
+                          // 10. Reportes
+                          if (_tienePermiso('reportes'))
+                            _buildMenuCard(
+                              imagePath: 'assets/icons/reporte.png',
+                              title: 'Reportes',
+                              subtitle: 'Ver Reportes generales',
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const ReportesAdminCarreraScreen(),
+                                ),
+                              ),
+                            ),
+
+                          // 11. Editar Cuenta
                           _buildMenuCard(
                             imagePath: 'assets/icons/admin.png',
                             title: 'Editar\nCuenta',
                             subtitle: 'Modificar datos personales',
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) =>
-                                    const EditarAdminCarreraScreen(),
+                                builder: (_) => const EditarAdminCarreraScreen(),
                               ),
                             ),
                           ),
@@ -397,7 +377,7 @@ _buildMenuCard(
 
   Widget _buildMenuCard({
     required String imagePath,
-    IconData? iconData, 
+    IconData? iconData,
     required String title,
     required String subtitle,
     required VoidCallback onTap,
@@ -405,8 +385,7 @@ _buildMenuCard(
     return Card(
       elevation: 2,
       shadowColor: Colors.black26,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       color: Colors.white,
       child: InkWell(
         onTap: onTap,

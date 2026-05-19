@@ -1,6 +1,4 @@
-// gestion_criterios.dart
-// Modelos de datos actualizados para usar sistema de filiales
-
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'filiales_service.dart';
 
@@ -278,7 +276,7 @@ class RubricasService {
       return snapshot.docs.map((doc) => Rubrica.fromMap(doc.data())).toList()
         ..sort((a, b) => b.fechaCreacion.compareTo(a.fechaCreacion));
     } catch (e) {
-      print('Error al obtener rúbricas: $e');
+      debugPrint('Error al obtener rúbricas: $e');
       return [];
     }
   }
@@ -293,7 +291,7 @@ class RubricasService {
       return snapshot.docs.map((doc) => Rubrica.fromMap(doc.data())).toList()
         ..sort((a, b) => b.fechaCreacion.compareTo(a.fechaCreacion));
     } catch (e) {
-      print('Error al obtener rúbricas por filial: $e');
+      debugPrint('Error al obtener rúbricas por filial: $e');
       return [];
     }
   }
@@ -312,7 +310,7 @@ class RubricasService {
       return snapshot.docs.map((doc) => Rubrica.fromMap(doc.data())).toList()
         ..sort((a, b) => b.fechaCreacion.compareTo(a.fechaCreacion));
     } catch (e) {
-      print('Error al obtener rúbricas: $e');
+      debugPrint('Error al obtener rúbricas: $e');
       return [];
     }
   }
@@ -326,7 +324,7 @@ class RubricasService {
       }
       return null;
     } catch (e) {
-      print('Error al obtener rúbrica: $e');
+      debugPrint('Error al obtener rúbrica: $e');
       return null;
     }
   }
@@ -340,7 +338,7 @@ class RubricasService {
           .set(rubrica.toMap());
       return true;
     } catch (e) {
-      print('Error al crear rúbrica: $e');
+      debugPrint('Error al crear rúbrica: $e');
       return false;
     }
   }
@@ -354,7 +352,7 @@ class RubricasService {
           .update(rubrica.toMap());
       return true;
     } catch (e) {
-      print('Error al actualizar rúbrica: $e');
+      debugPrint('Error al actualizar rúbrica: $e');
       return false;
     }
   }
@@ -365,7 +363,7 @@ class RubricasService {
       await _firestore.collection(_collection).doc(id).delete();
       return true;
     } catch (e) {
-      print('Error al eliminar rúbrica: $e');
+      debugPrint('Error al eliminar rúbrica: $e');
       return false;
     }
   }
@@ -377,10 +375,10 @@ class RubricasService {
     String? carrera,
   }) async {
     try {
-      print('🔍 Buscando jurados...');
-      print('   Filial: $filial');
-      print('   Facultad: $facultad');
-      print('   Carrera: $carrera');
+      debugPrint('🔍 Buscando jurados...');
+      debugPrint('   Filial: $filial');
+      debugPrint('   Facultad: $facultad');
+      debugPrint('   Carrera: $carrera');
 
       Query query = _firestore
           .collection('users')
@@ -400,7 +398,7 @@ class RubricasService {
       }
 
       final snapshot = await query.get();
-      print('✅ ${snapshot.docs.length} jurados encontrados');
+      debugPrint('✅ ${snapshot.docs.length} jurados encontrados');
 
       return snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
@@ -415,7 +413,7 @@ class RubricasService {
         };
       }).toList();
     } catch (e) {
-      print('❌ Error al obtener jurados: $e');
+      debugPrint('❌ Error al obtener jurados: $e');
       return [];
     }
   }
@@ -426,7 +424,7 @@ class RubricasService {
   required List<String> juradosIds,
 }) async {
   try {
-    print('🗑️ Eliminando evaluaciones de jurados removidos...');
+    debugPrint('🗑️ Eliminando evaluaciones de jurados removidos...');
 
     // 1. Traer todos los eventos en paralelo con sus proyectos
     final eventosSnapshot = await _firestore.collection('events').get();
@@ -481,9 +479,9 @@ class RubricasService {
 
     if (eliminadas > 0) await batch.commit();
 
-    print('✅ $eliminadas evaluaciones eliminadas');
+    debugPrint('✅ $eliminadas evaluaciones eliminadas');
   } catch (e) {
-    print('❌ Error al eliminar evaluaciones: $e');
+    debugPrint('❌ Error al eliminar evaluaciones: $e');
     rethrow;
   }
 }

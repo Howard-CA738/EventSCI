@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 
 import 'package:archive/archive.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -57,7 +58,7 @@ class InformeWordGenerator {
 
       return categorias.toList()..sort();
     } catch (e) {
-      print('Error al obtener categorías: $e');
+      debugPrint('Error al obtener categorías: $e');
       return [];
     }
   }
@@ -122,14 +123,14 @@ class InformeWordGenerator {
             asistentesUnicos[categoria]!.add(studentId);
           }
         } catch (e) {
-          print('collectionGroup falló para lote $lote: $e');
+          debugPrint('collectionGroup falló para lote $lote: $e');
           fallbackNecesario = true;
           break;
         }
       }
 
       if (fallbackNecesario) {
-        print('Activando fallback por alumno para eventId=$eventId');
+        debugPrint('Activando fallback por alumno para eventId=$eventId');
 
         for (final cat in categorias) {
           asistentesUnicos[cat]!.clear();
@@ -157,7 +158,7 @@ class InformeWordGenerator {
             }
           }
         } catch (e2) {
-          print('Error en fallback de asistencias: $e2');
+          debugPrint('Error en fallback de asistencias: $e2');
         }
       }
 
@@ -169,7 +170,7 @@ class InformeWordGenerator {
         ));
       }
     } catch (e) {
-      print('Error general en _obtenerFilasResultado: $e');
+      debugPrint('Error general en _obtenerFilasResultado: $e');
     }
 
     return filas;
@@ -245,7 +246,7 @@ class InformeWordGenerator {
         return c != 0 ? c : b.promedio.compareTo(a.promedio);
       });
     } catch (e) {
-      print('Error en _obtenerGanadores: $e');
+      debugPrint('Error en _obtenerGanadores: $e');
     }
     return filas;
   }

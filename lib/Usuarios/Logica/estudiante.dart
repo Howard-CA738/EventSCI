@@ -9,6 +9,7 @@ import 'asistencias.dart';
 import '/usuarios/interfaz/ver_certificados_screen.dart';
 import 'asistente_qr.dart';
 
+
 class EstudianteScreen extends StatefulWidget {
   const EstudianteScreen({super.key});
 
@@ -22,7 +23,8 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
   String? _studentCarrera;
   String? _studentFacultad;
   Stream<DocumentSnapshot>? _studentStream;
-  int _segundos = 5;
+  int _segundos = 3;
+  bool _infoExpanded = true;
 
   @override
   void initState() {
@@ -96,7 +98,7 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
   }
 
   void _showAdvertenciaSesionUnica() {
-    _segundos = 5;
+    _segundos = 3;
     Timer? timer;
 
     showDialog(
@@ -120,7 +122,6 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Header
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 24),
@@ -133,7 +134,7 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
                           width: 64,
                           height: 64,
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.15),
+                            color: Colors.white.withValues(alpha:0.15),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -154,13 +155,10 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
                       ],
                     ),
                   ),
-
-                  // Contenido
                   Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
-                        // Alerta roja
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 12),
@@ -208,10 +206,7 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
                             ],
                           ),
                         ),
-
                         const SizedBox(height: 10),
-
-                        // Recomendación azul
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 12),
@@ -238,10 +233,7 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
                             ],
                           ),
                         ),
-
                         const SizedBox(height: 20),
-
-                        // Botón
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
@@ -340,8 +332,7 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
               ),
               child: const Text(
                 'Cerrar Sesión',
-                style:
-                    TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -394,63 +385,125 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF1E3A5F),
       body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildContentArea(),
-          ],
-        ),
+        child: _buildStreamBody(),
       ),
     );
   }
 
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeaderRow(),
-          const SizedBox(height: 16),
-          _buildWelcomeCard(),
-          const SizedBox(height: 20),
-        ],
-      ),
+  Widget _buildStreamBody() {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: _buildStudentStream(),
+      builder: (context, snapshot) {
+        bool esAsisteQR = false;
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>?;
+          esAsisteQR = data?['esAsisteQR'] == true;
+        }
+
+        return CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                child: Column(
+                  children: [
+                    _buildHeaderRow(),
+                    const SizedBox(height: 14),
+                    _buildWelcomeCard(),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Color(0xFFE8EDF2),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: GridView.count(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    childAspectRatio: 0.80,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: [
+                      _buildMenuCard(
+                        imagePath: 'assets/icons/perfil.png',
+                        title: 'Mi Perfil',
+                        subtitle: 'Ver información personal',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (context) => const PerfilScreen()),
+                        ),
+                      ),
+                      _buildMenuCard(
+                        imagePath: 'assets/icons/escaner.png',
+                        title: 'Escanear QR',
+                        subtitle: 'Registrar asistencia',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (context) => const EscanearQRScreen()),
+                        ),
+                      ),
+                      _buildMenuCard(
+                        imagePath: 'assets/icons/mis-asistencias.png',
+                        title: 'Mis Asistencias',
+                        subtitle: 'Ver historial de asistencias',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (context) => AsistenciasScreen()),
+                        ),
+                      ),
+                      _buildMenuCard(
+                        imagePath: 'assets/icons/certificado.png',
+                        title: 'Mis Certificados',
+                        subtitle: 'Ver y descargar certificados',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => const VerCertificadosScreen()),
+                        ),
+                      ),
+                      if (esAsisteQR)
+                        _buildMenuCardDestacada(
+                          imagePath: 'assets/icons/crear_qr.png',
+                          title: 'Generar QR\nAsistencia',
+                          subtitle: 'Crear QR para eventos',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => const AsistenteQRScreen()),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Container(color: const Color(0xFFE8EDF2)),
+            ),
+          ],
+        );
+      },
     );
   }
+
+  // ── Header: solo logo + logout, SIN título ni ícono de graduación ──────────
 
   Widget _buildHeaderRow() {
     return Row(
       children: [
-        Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Image.asset(
-            'assets/logo.png',
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) {
-              return const Icon(Icons.school,
-                  color: Color(0xFF1E3A5F), size: 30);
-            },
-          ),
-        ),
-        const SizedBox(width: 16),
-        const Expanded(
-          child: Text(
-            'Panel de Estudiante',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-        ),
+        const Spacer(),
+        // Botón logout
         IconButton(
-          icon: const Icon(Icons.logout, color: Colors.white, size: 28),
+          icon: const Icon(Icons.logout, color: Colors.white, size: 24),
           onPressed: _showLogoutConfirmation,
           tooltip: 'Cerrar Sesión',
         ),
@@ -458,72 +511,228 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
     );
   }
 
+  // ── Welcome card: info del estudiante ocupa el espacio del header ──────────
+
   Widget _buildWelcomeCard() {
+    final hasInfo = _studentFilial != null ||
+        _studentFacultad != null ||
+        _studentCarrera != null;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: Colors.white.withOpacity(0.2), width: 1),
+        color: Colors.white.withValues(alpha:0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha:0.18), width: 1),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.waving_hand, color: Colors.amber, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Bienvenido, $_studentName',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Avatar con inicial
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha:0.20),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: Colors.white.withValues(alpha:0.35), width: 1.5),
                   ),
-                  overflow: TextOverflow.ellipsis,
+                  child: Center(
+                    child: Text(
+                      _studentName.isNotEmpty
+                          ? _studentName[0].toUpperCase()
+                          : 'E',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 12),
+                // Nombre + preview info cuando está colapsado
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Bienvenido',
+                        style: TextStyle(
+                          color: Colors.white60,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _studentName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          height: 1.1,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      // Muestra filial · carrera en una línea cuando está colapsado
+                      if (hasInfo && !_infoExpanded) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          [
+                            if (_studentFilial != null) _studentFilial!,
+                            if (_studentCarrera != null) _studentCarrera!,
+                          ].join(' · '),
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 10.5,
+                            height: 1.3,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                // Botón colapsar/expandir
+                if (hasInfo)
+                  GestureDetector(
+                    onTap: () =>
+                        setState(() => _infoExpanded = !_infoExpanded),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha:0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: AnimatedRotation(
+                        turns: _infoExpanded ? 0 : 0.5,
+                        duration: const Duration(milliseconds: 250),
+                        child: const Icon(
+                          Icons.keyboard_arrow_up_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
-          if (_studentFilial != null ||
-              _studentFacultad != null ||
-              _studentCarrera != null) ...[
-            const SizedBox(height: 10),
-            const Divider(color: Colors.white24, height: 1),
-            const SizedBox(height: 10),
-            _buildInfoChips(),
-          ],
+
+          // Sección colapsable con info académica detallada
+          if (hasInfo)
+            AnimatedSize(
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeInOut,
+              child: _infoExpanded
+                  ? Column(
+                      children: [
+                        Divider(
+                          color: Colors.white.withValues(alpha:0.15),
+                          height: 1,
+                          indent: 16,
+                          endIndent: 16,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                          child: _buildInfoRows(),
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildInfoChips() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 6,
+  Widget _buildInfoRows() {
+    return Column(
       children: [
         if (_studentFilial != null)
-          _buildInfoChip(
-            icon: Icons.location_city,
-            label: _studentFilial!,
-            color: const Color(0xFF1E88E5),
+          _buildInfoRow(
+            icon: Icons.location_city_rounded,
+            label: 'Filial',
+            value: _studentFilial!,
+            color: const Color(0xFF60A5FA),
           ),
+        if (_studentFilial != null &&
+            (_studentFacultad != null || _studentCarrera != null))
+          const SizedBox(height: 8),
         if (_studentFacultad != null)
-          _buildInfoChip(
-            icon: Icons.account_balance,
-            label: _studentFacultad!,
-            color: const Color(0xFF6A1B9A),
+          _buildInfoRow(
+            icon: Icons.account_balance_rounded,
+            label: 'Facultad',
+            value: _studentFacultad!,
+            color: const Color(0xFFA78BFA),
           ),
+        if (_studentFacultad != null && _studentCarrera != null)
+          const SizedBox(height: 8),
         if (_studentCarrera != null)
-          _buildInfoChip(
-            icon: Icons.menu_book,
-            label: _studentCarrera!,
-            color: const Color(0xFF00897B),
+          _buildInfoRow(
+            icon: Icons.menu_book_rounded,
+            label: 'Carrera',
+            value: _studentCarrera!,
+            color: const Color(0xFF34D399),
           ),
+      ],
+    );
+  }
+
+  Widget _buildInfoRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha:0.18),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: color, size: 17),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white38,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  height: 1.2,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -553,126 +762,7 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
     return _studentStream!;
   }
 
-  Widget _buildContentArea() {
-    return Expanded(
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFFE8EDF2),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(30),
-            topRight: Radius.circular(30),
-          ),
-        ),
-        child: StreamBuilder<DocumentSnapshot>(
-          stream: _buildStudentStream(),
-          builder: (context, snapshot) {
-            bool esAsisteQR = false;
-
-            if (snapshot.hasData && snapshot.data!.exists) {
-              final data =
-                  snapshot.data!.data() as Map<String, dynamic>?;
-              esAsisteQR = data?['esAsisteQR'] == true;
-            }
-
-            return Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: GridView.count(
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 0.80,
-                children: [
-                  _buildMenuCard(
-                    imagePath: 'assets/icons/perfil.png',
-                    title: 'Mi Perfil',
-                    subtitle: 'Ver información personal',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (context) => const PerfilScreen()),
-                    ),
-                  ),
-                  _buildMenuCard(
-                    imagePath: 'assets/icons/escaner.png',
-                    title: 'Escanear QR',
-                    subtitle: 'Registrar asistencia',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (context) =>
-                              const EscanearQRScreen()),
-                    ),
-                  ),
-                  _buildMenuCard(
-                    imagePath: 'assets/icons/mis-asistencias.png',
-                    title: 'Mis Asistencias',
-                    subtitle: 'Ver historial de asistencias',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (context) => AsistenciasScreen()),
-                    ),
-                  ),
-                  _buildMenuCard(
-                    imagePath: 'assets/icons/certificados.png',
-                    title: 'Mis Certificados',
-                    subtitle: 'Ver y descargar certificados',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              const VerCertificadosScreen()),
-                    ),
-                  ),
-                  if (esAsisteQR)
-                    _buildMenuCardDestacada(
-                      imagePath: 'assets/icons/escaner.png',
-                      title: 'Generar QR\nAsistencia',
-                      subtitle: 'Crear QR para eventos',
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                const AsistenteQRScreen()),
-                      ),
-                    ),
-                ],
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoChip({
-    required IconData icon,
-    required String label,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.25),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.5), width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white, size: 12),
-          const SizedBox(width: 5),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 120),
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // ── Menu cards ────────────────────────────────────────────────────────────
 
   Widget _buildMenuCard({
     required String imagePath,
@@ -683,15 +773,13 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
     return Card(
       elevation: 2,
       shadowColor: Colors.black26,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       color: Colors.white,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Padding(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
@@ -743,6 +831,8 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
     );
   }
 
+  // ── Tarjeta destacada: PNG sin color: Colors.white para mostrar colores reales ──
+
   Widget _buildMenuCardDestacada({
     required String imagePath,
     required String title,
@@ -751,16 +841,14 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
   }) {
     return Card(
       elevation: 3,
-      shadowColor: const Color(0xFF0D7377).withOpacity(0.4),
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shadowColor: const Color(0xFF0D7377).withValues(alpha:0.4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       color: const Color(0xFF0D7377),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Padding(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
@@ -769,16 +857,16 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
                 width: 65,
                 height: 65,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha:0.20),
                   shape: BoxShape.circle,
                 ),
-                padding: const EdgeInsets.all(13),
+                padding: const EdgeInsets.all(10),
+                // ✅ Sin "color:" → el PNG conserva sus colores originales
                 child: Image.asset(
                   imagePath,
                   fit: BoxFit.contain,
-                  color: Colors.white,
                   errorBuilder: (_, __, ___) => const Icon(
-                    Icons.qr_code_scanner,
+                    Icons.qr_code_2_rounded,
                     size: 32,
                     color: Colors.white,
                   ),

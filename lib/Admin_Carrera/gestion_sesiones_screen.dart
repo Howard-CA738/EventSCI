@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 
+
 class GestionSesionesScreen extends StatefulWidget {
   const GestionSesionesScreen({super.key});
 
@@ -242,7 +243,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
-                  color: colorBoton.withOpacity(0.1),
+                  color: colorBoton.withValues(alpha:0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icono, color: colorBoton, size: 32),
@@ -451,9 +452,9 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha:0.1),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withOpacity(0.2)),
+          border: Border.all(color: Colors.white.withValues(alpha:0.2)),
         ),
         child: Column(
           children: [
@@ -485,12 +486,12 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
         decoration: BoxDecoration(
           color: selected
               ? Colors.white
-              : Colors.white.withOpacity(0.15),
+              : Colors.white.withValues(alpha:0.15),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
               color: selected
                   ? Colors.white
-                  : Colors.white.withOpacity(0.3)),
+                  : Colors.white.withValues(alpha:0.3)),
         ),
         child: Text(
           label,
@@ -539,7 +540,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha:0.06),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],
@@ -553,10 +554,10 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: estadoColor.withOpacity(0.12),
+                color: estadoColor.withValues(alpha:0.12),
                 shape: BoxShape.circle,
                 border: Border.all(
-                    color: estadoColor.withOpacity(0.4), width: 1.5),
+                    color: estadoColor.withValues(alpha:0.4), width: 1.5),
               ),
               child:
                   Icon(Icons.person, color: estadoColor, size: 24),
@@ -614,10 +615,10 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: estadoColor.withOpacity(0.12),
+                    color: estadoColor.withValues(alpha:0.12),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color: estadoColor.withOpacity(0.3)),
+                        color: estadoColor.withValues(alpha:0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -677,9 +678,9 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
           width: 34,
           height: 34,
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha:0.1),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withOpacity(0.3)),
+            border: Border.all(color: color.withValues(alpha:0.3)),
           ),
           child: Icon(icon, color: color, size: 17),
         ),

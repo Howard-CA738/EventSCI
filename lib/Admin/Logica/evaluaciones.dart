@@ -67,12 +67,12 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
       // Obtener lista de filiales
       _filiales = _estructuraFiliales.keys.toList();
 
-      print('✅ Filiales cargadas: $_filiales');
+      debugPrint('✅ Filiales cargadas: $_filiales');
 
       // Cargar eventos después de cargar filiales
       await _cargarEventos();
     } catch (e) {
-      print('❌ Error cargando filiales: $e');
+      debugPrint('❌ Error cargando filiales: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -213,7 +213,7 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
         });
       }
     } catch (e) {
-      print('Error al cargar eventos: $e');
+      debugPrint('Error al cargar eventos: $e');
       if (mounted) {
         setState(() => _isLoadingEventos = false);
       }
@@ -241,7 +241,7 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
     setState(() => _isLoadingEvaluaciones = true);
 
     try {
-      print('🔍 Cargando evaluaciones del evento: $_eventoSeleccionado');
+      debugPrint('🔍 Cargando evaluaciones del evento: $_eventoSeleccionado');
 
       // 1. Cargar rúbricas en paralelo
       final rubricasFuture = _rubricasService.obtenerRubricas();
@@ -253,10 +253,10 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
           .collection('proyectos')
           .get();
 
-      print('📦 ${proyectosSnapshot.docs.length} proyectos en el evento');
+      debugPrint('📦 ${proyectosSnapshot.docs.length} proyectos en el evento');
 
       if (proyectosSnapshot.docs.isEmpty) {
-        print('⚠️ No hay proyectos en este evento');
+        debugPrint('⚠️ No hay proyectos en este evento');
         if (mounted) {
           setState(() {
             _evaluaciones = [];
@@ -323,7 +323,7 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
             };
           }).toList();
         } catch (e) {
-          print('❌ Error procesando proyecto ${proyectoDoc.id}: $e');
+          debugPrint('❌ Error procesando proyecto ${proyectoDoc.id}: $e');
           return <Map<String, dynamic>>[];
         }
       }).toList();
@@ -336,12 +336,12 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
         evaluacionesList.addAll(lista);
       }
 
-      print('📝 ${evaluacionesList.length} evaluaciones encontradas');
+      debugPrint('📝 ${evaluacionesList.length} evaluaciones encontradas');
 
       // Ordenar por código de proyecto
       evaluacionesList.sort((a, b) => a['codigo'].compareTo(b['codigo']));
 
-      print('✅ ${evaluacionesList.length} evaluaciones cargadas');
+      debugPrint('✅ ${evaluacionesList.length} evaluaciones cargadas');
 
       if (mounted) {
         setState(() {
@@ -350,7 +350,7 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
         });
       }
     } catch (e) {
-      print('❌ Error al cargar evaluaciones: $e');
+      debugPrint('❌ Error al cargar evaluaciones: $e');
       if (mounted) {
         setState(() => _isLoadingEvaluaciones = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -421,7 +421,7 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
         await _cargarEvaluaciones();
       }
     } catch (e) {
-      print('Error al cambiar bloqueo: $e');
+      debugPrint('Error al cambiar bloqueo: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
@@ -671,7 +671,7 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
           leading: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E3A5F).withOpacity(0.1),
+              color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
@@ -713,8 +713,8 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: tieneNota
-              ? Colors.green.withOpacity(0.3)
-              : Colors.grey.withOpacity(0.3),
+              ? Colors.green.withValues(alpha:0.3)
+              : Colors.grey.withValues(alpha:0.3),
         ),
       ),
       child: Row(
@@ -1236,7 +1236,7 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white.withValues(alpha:0.15),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -1256,7 +1256,7 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
             label,
             style: TextStyle(
               fontSize: 11,
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withValues(alpha:0.8),
             ),
           ),
         ],
@@ -1390,7 +1390,7 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
       elevation: 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: estadoColor.withOpacity(0.3), width: 2),
+        side: BorderSide(color: estadoColor.withValues(alpha:0.3), width: 2),
       ),
       child: InkWell(
         onTap: () => _verDetalleEvaluacion(evaluacion),
@@ -1434,7 +1434,7 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: estadoColor.withOpacity(0.1),
+                        color: estadoColor.withValues(alpha:0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
@@ -1489,10 +1489,10 @@ class _EvaluacionesScreenState extends State<EvaluacionesScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.1),
+                          color: Colors.green.withValues(alpha:0.1),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: Colors.green.withOpacity(0.3),
+                            color: Colors.green.withValues(alpha:0.3),
                           ),
                         ),
                         child: Row(

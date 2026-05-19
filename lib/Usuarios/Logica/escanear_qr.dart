@@ -4,6 +4,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'dart:convert';
 import '/prefs_helper.dart';
 import '/usuarios/logica/asistencias.dart';
+import 'dart:async';
 
 class EscanearQRScreen extends StatefulWidget {
   const EscanearQRScreen({super.key});
@@ -13,9 +14,9 @@ class EscanearQRScreen extends StatefulWidget {
 }
 
 class _EscanearQRScreenState extends State<EscanearQRScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
+  StreamSubscription<Object?>? _barcodeSub;
   MobileScannerController cameraController = MobileScannerController();
   String? _currentUserId;
   String? _currentUserName;
@@ -44,6 +45,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _getCurrentUser();
     _setupAnimations();
     _initializeZoom();
@@ -53,7 +55,26 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
     await Future.delayed(const Duration(milliseconds: 500));
     debugPrint('Zoom inicializado');
   }
-
+void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _barcodeSub = cameraController.barcodes.listen((capture) {
+          for (final barcode in capture.barcodes) {
+            if (barcode.rawValue != null && !_hasScanned && !_isProcessing) {
+              _procesarQR(barcode.rawValue!);
+              break;
+            }
+          }
+        });
+        unawaited(cameraController.start());
+      case AppLifecycleState.inactive:
+        unawaited(_barcodeSub?.cancel());
+        _barcodeSub = null;
+        unawaited(cameraController.stop());
+      default:
+        break;
+    }
+  }
   void _handleScaleStart(ScaleStartDetails details) {}
 
   void _handleScaleUpdate(ScaleUpdateDetails details) {
@@ -1533,6 +1554,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);  
+    _barcodeSub?.cancel();   
     _animationController.dispose();
     cameraController.dispose();
     _escaneosDeSesion = 0;

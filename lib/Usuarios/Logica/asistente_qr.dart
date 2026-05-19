@@ -283,7 +283,7 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
           Container(
             padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha:0.15),
               borderRadius: BorderRadius.circular(9),
             ),
             child:
@@ -315,7 +315,7 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
             icon: Container(
               padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.12),
+                color: Colors.white.withValues(alpha:0.12),
                 borderRadius: BorderRadius.circular(9),
               ),
               child: const Icon(Icons.logout_rounded, size: 18),
@@ -369,7 +369,7 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1E3A5F).withOpacity(0.3),
+            color: const Color(0xFF1E3A5F).withValues(alpha:0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -383,7 +383,7 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
+                  color: Colors.white.withValues(alpha:0.15),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.badge_outlined,
@@ -415,7 +415,7 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
                 padding: const EdgeInsets.symmetric(
                     horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0D7377).withOpacity(0.8),
+                  color: const Color(0xFF0D7377).withValues(alpha:0.8),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Row(
@@ -460,7 +460,7 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
+        color: Colors.white.withValues(alpha:0.12),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white24),
       ),
@@ -618,7 +618,7 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha:0.05),
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),
@@ -682,7 +682,7 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E3A5F).withOpacity(0.08),
+                color: const Color(0xFF1E3A5F).withValues(alpha:0.08),
                 borderRadius: BorderRadius.circular(9),
               ),
               child: const Icon(Icons.qr_code_rounded,
@@ -707,7 +707,7 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
           Container(
             padding: const EdgeInsets.all(9),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha:0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.event_available,
@@ -778,7 +778,7 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                    color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -835,7 +835,7 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
         border: Border.all(color: const Color(0xFFE0E7ED), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha:0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -854,7 +854,7 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color:
-                        const Color(0xFF1E3A5F).withOpacity(0.08),
+                        const Color(0xFF1E3A5F).withValues(alpha:0.08),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(Icons.folder_rounded,
@@ -874,7 +874,7 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0D7377).withOpacity(0.1),
+                    color: const Color(0xFF0D7377).withValues(alpha:0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(Icons.qr_code_2_rounded,

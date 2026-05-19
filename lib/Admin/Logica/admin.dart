@@ -4,7 +4,7 @@ import '/login.dart';
 import 'registro_estudiantes.dart';
 import '/admin/interfaz/crear_eventos_screen.dart';
 import 'gestion_grupos.dart';
-
+import 'configurar_firmas.dart';
 import 'reportes.dart';
 import 'asignar_proyectos.dart';
 import 'periodos.dart';
@@ -12,6 +12,7 @@ import 'gestion_rubricas.dart';
 import 'evaluaciones.dart';
 import 'editar_admin.dart';
 import 'crear_filiales.dart';
+import '/super_admin_login.dart';
 import '/admin_carrera/gestion_admins_carrera.dart';
 
 class AdminScreen extends StatefulWidget {
@@ -38,14 +39,13 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Future<void> _logout() async {
-    await PrefsHelper.logout();
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-      );
-    }
+  await SuperAdminAuthService.logout(); // cierra Firebase Auth + PrefsHelper
+  if (mounted) {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
+    );
   }
-
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -244,7 +244,15 @@ class _AdminScreenState extends State<AdminScreen> {
                           );
                         },
                       ),
-
+                      _buildMenuCard(
+                        imagePath: 'assets/icons/firma.png', // o cualquier ícono que tengas
+                        title: 'Configurar\nFirmas',
+                        subtitle: 'Gestionar firmantes del certificado',
+                        onTap: () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const ConfigurarFirmasScreen())),
+                      ),
+                      
+                      
                       _buildMenuCard(
                         imagePath: 'assets/icons/admin.png',
                         title: 'Editar\nCuenta',

@@ -4,17 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '/prefs_helper.dart';
 import 'dart:convert';
 
-/// Pantalla para crear asistencias personales (ej: Primera Asistencia,
-/// Asistencia Final, etc.).
-///
-/// Carga los datos de sesión igual que [GestionGruposCarreraScreen] usando
-/// [PrefsHelper.getAdminCarreraData()] y filtra los eventos con:
-///   filialId + facultad + carreraId  ← mismo query que el archivo de referencia
-///
-/// Flujo:
-///   1. Lista de eventos de la sesión del admin
-///   2. Seleccionar evento → formulario para crear la asistencia
-///   3. Se genera el QR de esa asistencia personal
+
 class AsistenciasPersonalesScreen extends StatefulWidget {
   const AsistenciasPersonalesScreen({super.key});
 
@@ -473,9 +463,9 @@ class _AsistenciasPersonalesScreenState
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.08),
+                color: Colors.blue.withValues(alpha:0.08),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.withOpacity(0.25)),
+                border: Border.all(color: Colors.blue.withValues(alpha:0.25)),
               ),
               child: Row(
                 children: [
@@ -510,7 +500,7 @@ class _AsistenciasPersonalesScreenState
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: _primary.withOpacity(0.1),
+                    color: _primary.withValues(alpha:0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -529,7 +519,7 @@ class _AsistenciasPersonalesScreenState
                   child: Container(
                     padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
-                      color: _primary.withOpacity(0.08),
+                      color: _primary.withValues(alpha:0.08),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(Icons.refresh,
@@ -586,7 +576,7 @@ class _AsistenciasPersonalesScreenState
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha:0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child:
@@ -631,7 +621,7 @@ class _AsistenciasPersonalesScreenState
             padding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha:0.15),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.white30),
             ),
@@ -706,7 +696,7 @@ class _AsistenciasPersonalesScreenState
           border: Border.all(color: const Color(0xFFE2E8F0)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha:0.05),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -842,7 +832,7 @@ class _AsistenciasPersonalesScreenState
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
+                          color: Colors.white.withValues(alpha:0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text(
@@ -898,7 +888,7 @@ class _AsistenciasPersonalesScreenState
                         boxShadow: sel
                             ? [
                                 BoxShadow(
-                                  color: _primary.withOpacity(0.22),
+                                  color: _primary.withValues(alpha:0.22),
                                   blurRadius: 8,
                                   offset: const Offset(0, 3),
                                 )
@@ -1026,7 +1016,7 @@ class _AsistenciasPersonalesScreenState
             borderRadius: BorderRadius.circular(22),
             boxShadow: [
               BoxShadow(
-                color: _primary.withOpacity(0.10),
+                color: _primary.withValues(alpha:0.10),
                 blurRadius: 24,
                 offset: const Offset(0, 6),
               ),
@@ -1278,7 +1268,7 @@ class _AsistenciasPersonalesScreenState
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 13, color: _primary.withOpacity(0.45)),
+          Icon(icon, size: 13, color: _primary.withValues(alpha:0.45)),
           const SizedBox(width: 6),
           SizedBox(
             width: 84,

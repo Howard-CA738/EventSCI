@@ -182,7 +182,7 @@ class _ReportesEvaluacionesScreenState extends State<ReportesEvaluacionesScreen>
         });
       }
     } catch (e) {
-      print('Error al cargar eventos: $e');
+      debugPrint('Error al cargar eventos: $e');
       if (mounted) {
         setState(() => _isLoadingEventos = false);
       }
@@ -209,7 +209,7 @@ class _ReportesEvaluacionesScreenState extends State<ReportesEvaluacionesScreen>
     setState(() => _isLoadingEvaluaciones = true);
 
     try {
-      print('🔍 Cargando evaluaciones del evento: $_eventoSeleccionado');
+      debugPrint('🔍 Cargando evaluaciones del evento: $_eventoSeleccionado');
 
       // 1. Cargar rúbricas en paralelo
       final rubricasFuture = _rubricasService.obtenerRubricas();
@@ -221,10 +221,10 @@ class _ReportesEvaluacionesScreenState extends State<ReportesEvaluacionesScreen>
           .collection('proyectos')
           .get();
 
-      print('📦 ${proyectosSnapshot.docs.length} proyectos en el evento');
+      debugPrint('📦 ${proyectosSnapshot.docs.length} proyectos en el evento');
 
       if (proyectosSnapshot.docs.isEmpty) {
-        print('⚠️ No hay proyectos en este evento');
+        debugPrint('⚠️ No hay proyectos en este evento');
         if (mounted) {
           setState(() {
             _evaluaciones = [];
@@ -291,7 +291,7 @@ class _ReportesEvaluacionesScreenState extends State<ReportesEvaluacionesScreen>
             };
           }).toList();
         } catch (e) {
-          print('❌ Error procesando proyecto ${proyectoDoc.id}: $e');
+          debugPrint('❌ Error procesando proyecto ${proyectoDoc.id}: $e');
           return <Map<String, dynamic>>[];
         }
       }).toList();
@@ -304,12 +304,12 @@ class _ReportesEvaluacionesScreenState extends State<ReportesEvaluacionesScreen>
         evaluacionesList.addAll(lista);
       }
 
-      print('📝 ${evaluacionesList.length} evaluaciones encontradas');
+      debugPrint('📝 ${evaluacionesList.length} evaluaciones encontradas');
 
       // Ordenar por código de proyecto
       evaluacionesList.sort((a, b) => a['codigo'].compareTo(b['codigo']));
 
-      print('✅ ${evaluacionesList.length} evaluaciones cargadas');
+      debugPrint('✅ ${evaluacionesList.length} evaluaciones cargadas');
 
       if (mounted) {
         setState(() {
@@ -318,7 +318,7 @@ class _ReportesEvaluacionesScreenState extends State<ReportesEvaluacionesScreen>
         });
       }
     } catch (e) {
-      print('❌ Error al cargar evaluaciones: $e');
+      debugPrint('❌ Error al cargar evaluaciones: $e');
       if (mounted) {
         setState(() => _isLoadingEvaluaciones = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -603,7 +603,7 @@ class _ReportesEvaluacionesScreenState extends State<ReportesEvaluacionesScreen>
         }
       }
     } catch (e) {
-      print('Error al generar Excel: $e');
+      debugPrint('Error al generar Excel: $e');
       if (mounted) {
         setState(() => _isGeneratingExcel = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1032,7 +1032,7 @@ class _ReportesEvaluacionesScreenState extends State<ReportesEvaluacionesScreen>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white.withValues(alpha:0.15),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -1052,7 +1052,7 @@ class _ReportesEvaluacionesScreenState extends State<ReportesEvaluacionesScreen>
             label,
             style: TextStyle(
               fontSize: 11,
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withValues(alpha:0.8),
             ),
           ),
         ],

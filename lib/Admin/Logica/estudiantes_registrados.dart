@@ -113,7 +113,7 @@ class _EstudiantesRegistradosScreenState
           _adminCarreraPath = path;
         });
 
-        print('✅ Admin carrera detectado. Path: $path');
+        debugPrint('✅ Admin carrera detectado. Path: $path');
         await _loadStudentsForPath(path);
       }
     }
@@ -304,7 +304,7 @@ class _EstudiantesRegistradosScreenState
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                  color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.edit, color: Color(0xFF1E3A5F)),
@@ -807,7 +807,7 @@ class _EstudiantesRegistradosScreenState
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color:
-                            const Color(0xFF1E3A5F).withOpacity(0.1),
+                            const Color(0xFF1E3A5F).withValues(alpha:0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(Icons.school,
@@ -840,7 +840,7 @@ class _EstudiantesRegistradosScreenState
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? const Color(0xFF1E3A5F).withOpacity(0.1)
+                              ? const Color(0xFF1E3A5F).withValues(alpha:0.1)
                               : Colors.white,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
@@ -952,7 +952,7 @@ class _EstudiantesRegistradosScreenState
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color:
-                            const Color(0xFF1E3A5F).withOpacity(0.1),
+                            const Color(0xFF1E3A5F).withValues(alpha:0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(Icons.book,
@@ -970,7 +970,7 @@ class _EstudiantesRegistradosScreenState
                   margin: const EdgeInsets.symmetric(vertical: 12),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                    color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(_selectedFacultad!,
@@ -993,7 +993,7 @@ class _EstudiantesRegistradosScreenState
                         margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? const Color(0xFF1E3A5F).withOpacity(0.1)
+                              ? const Color(0xFF1E3A5F).withValues(alpha:0.1)
                               : Colors.white,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
@@ -1079,7 +1079,7 @@ class _EstudiantesRegistradosScreenState
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha:0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -1117,7 +1117,7 @@ class _EstudiantesRegistradosScreenState
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF1E3A5F).withOpacity(0.3),
+                              color: const Color(0xFF1E3A5F).withValues(alpha:0.3),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),
@@ -1311,7 +1311,7 @@ class _EstudiantesRegistradosScreenState
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E3A5F).withOpacity(0.1),
+            color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, size: 18, color: const Color(0xFF1E3A5F)),
@@ -1386,7 +1386,7 @@ class _EstudiantesRegistradosScreenState
             child: Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, size: 80, color: const Color(0xFF1E3A5F)),
@@ -1447,7 +1447,7 @@ class _EstudiantesRegistradosScreenState
                   ),
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha:0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: IconButton(
@@ -1460,7 +1460,7 @@ class _EstudiantesRegistradosScreenState
                   const SizedBox(width: 8),
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha:0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: IconButton(
@@ -1507,7 +1507,7 @@ class _EstudiantesRegistradosScreenState
                                   borderRadius: BorderRadius.circular(20),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.05),
+                                      color: Colors.black.withValues(alpha:0.05),
                                       blurRadius: 10,
                                       offset: const Offset(0, 4),
                                     ),
@@ -1523,12 +1523,12 @@ class _EstudiantesRegistradosScreenState
                                         padding: const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
                                           color: const Color(0xFF1E3A5F)
-                                              .withOpacity(0.07),
+                                              .withValues(alpha:0.07),
                                           borderRadius:
                                               BorderRadius.circular(12),
                                           border: Border.all(
                                             color: const Color(0xFF1E3A5F)
-                                                .withOpacity(0.2),
+                                                .withValues(alpha:0.2),
                                           ),
                                         ),
                                         child: Row(
@@ -1563,7 +1563,7 @@ class _EstudiantesRegistradosScreenState
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
                                               color: const Color(0xFF1E3A5F)
-                                                  .withOpacity(0.1),
+                                                  .withValues(alpha:0.1),
                                               borderRadius:
                                                   BorderRadius.circular(10),
                                             ),
@@ -1683,9 +1683,9 @@ class _EstudiantesRegistradosScreenState
                                         decoration: BoxDecoration(
                                           gradient: LinearGradient(colors: [
                                             const Color(0xFF1E3A5F)
-                                                .withOpacity(0.1),
+                                                .withValues(alpha:0.1),
                                             const Color(0xFF1E3A5F)
-                                                .withOpacity(0.05),
+                                                .withValues(alpha:0.05),
                                           ]),
                                           borderRadius:
                                               BorderRadius.circular(12),
@@ -1766,7 +1766,7 @@ class _EstudiantesRegistradosScreenState
             ),
             borderRadius: BorderRadius.circular(12),
             color: isSelected
-                ? const Color(0xFF1E3A5F).withOpacity(0.05)
+                ? const Color(0xFF1E3A5F).withValues(alpha:0.05)
                 : Colors.white,
           ),
           child: Row(

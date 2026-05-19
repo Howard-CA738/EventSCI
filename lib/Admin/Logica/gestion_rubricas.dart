@@ -54,7 +54,7 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      print('❌ Error cargando datos: $e');
+      debugPrint('❌ Error cargando datos: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -476,7 +476,7 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1A5490).withOpacity(0.1),
+                          color: const Color(0xFF1A5490).withValues(alpha:0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Icon(
@@ -591,7 +591,7 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha:0.1),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -603,7 +603,7 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
             label,
             style: TextStyle(
               fontSize: 12,
-              color: color.withOpacity(0.9),
+              color: color.withValues(alpha:0.9),
               fontWeight: FontWeight.w500,
             ),
           ),

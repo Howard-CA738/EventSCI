@@ -49,7 +49,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
         });
       }
     } catch (e) {
-      print('Error al cargar filiales: $e');
+      debugPrint('Error al cargar filiales: $e');
       if (mounted) {
         setState(() {
           _isLoadingFiliales = false;
@@ -178,7 +178,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
         }
       }
     } catch (e) {
-      print('Error al cargar jurados: $e');
+      debugPrint('Error al cargar jurados: $e');
       if (mounted) {
         setState(() {
           _isLoadingJurados = false;
@@ -213,7 +213,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1A5490).withOpacity(0.1),
+                  color: const Color(0xFF1A5490).withValues(alpha:0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
@@ -575,7 +575,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
 
       return categoriasSet.toList()..sort();
     } catch (e) {
-      print('Error al obtener categorías: $e');
+      debugPrint('Error al obtener categorías: $e');
       return [];
     }
   }
@@ -605,7 +605,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
         await _cargarJurados();
       }
     } catch (e) {
-      print('Error al actualizar jurado: $e');
+      debugPrint('Error al actualizar jurado: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -627,7 +627,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha:0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
@@ -683,7 +683,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
           await _cargarJurados();
         }
       } catch (e) {
-        print('Error al eliminar jurado: $e');
+        debugPrint('Error al eliminar jurado: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -756,7 +756,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
+                                  color: Colors.black.withValues(alpha:0.1),
                                   blurRadius: 15,
                                   offset: const Offset(0, 5),
                                 ),
@@ -1035,13 +1035,13 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                                               decoration: BoxDecoration(
                                                 color: const Color(
                                                   0xFF1A5490,
-                                                ).withOpacity(0.1),
+                                                ).withValues(alpha:0.1),
                                                 borderRadius:
                                                     BorderRadius.circular(8),
                                                 border: Border.all(
                                                   color: const Color(
                                                     0xFF1A5490,
-                                                  ).withOpacity(0.3),
+                                                  ).withValues(alpha:0.3),
                                                 ),
                                               ),
                                               child: Text(

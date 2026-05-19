@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 class PeriodosHelper {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -18,7 +19,7 @@ class PeriodosHelper {
           .get();
 
       if (existingPeriodo.docs.isNotEmpty) {
-        print('Ya existe un período con ese nombre');
+        debugPrint('Ya existe un período con ese nombre');
         return false;
       }
 
@@ -34,10 +35,10 @@ class PeriodosHelper {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      print('Período creado exitosamente: $nombre');
+      debugPrint('Período creado exitosamente: $nombre');
       return true;
     } catch (e) {
-      print('Error creando período: $e');
+      debugPrint('Error creando período: $e');
       return false;
     }
   }
@@ -56,7 +57,7 @@ class PeriodosHelper {
         return data;
       }).toList();
     } catch (e) {
-      print('Error obteniendo períodos: $e');
+      debugPrint('Error obteniendo períodos: $e');
       return [];
     }
   }
@@ -87,7 +88,7 @@ class PeriodosHelper {
 
       return periodos;
     } catch (e) {
-      print('Error obteniendo períodos activos: $e');
+      debugPrint('Error obteniendo períodos activos: $e');
       return [];
     }
   }
@@ -107,7 +108,7 @@ class PeriodosHelper {
       final doc = querySnapshot.docs.first;
       return {'id': doc.id, ...doc.data()};
     } catch (e) {
-      print('Error al obtener período activo: $e');
+      debugPrint('Error al obtener período activo: $e');
       return null;
     }
   }
@@ -141,7 +142,7 @@ class PeriodosHelper {
 
         if (existingPeriodo.docs.isNotEmpty &&
             existingPeriodo.docs.first.id != periodoId) {
-          print('Ya existe otro período con ese nombre');
+          debugPrint('Ya existe otro período con ese nombre');
           return false;
         }
         updateData['nombre'] = nombre.trim();
@@ -162,10 +163,10 @@ class PeriodosHelper {
       }
 
       await _firestore.collection('periodos').doc(periodoId).update(updateData);
-      print('Período actualizado exitosamente');
+      debugPrint('Período actualizado exitosamente');
       return true;
     } catch (e) {
-      print('Error actualizando período: $e');
+      debugPrint('Error actualizando período: $e');
       return false;
     }
   }
@@ -177,10 +178,10 @@ class PeriodosHelper {
         'activo': true,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      print('Período activado exitosamente');
+      debugPrint('Período activado exitosamente');
       return true;
     } catch (e) {
-      print('Error activando período: $e');
+      debugPrint('Error activando período: $e');
       return false;
     }
   }
@@ -192,10 +193,10 @@ class PeriodosHelper {
         'activo': false,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      print('Período desactivado exitosamente');
+      debugPrint('Período desactivado exitosamente');
       return true;
     } catch (e) {
-      print('Error desactivando período: $e');
+      debugPrint('Error desactivando período: $e');
       return false;
     }
   }
@@ -204,10 +205,10 @@ class PeriodosHelper {
   static Future<bool> deletePeriodo(String periodoId) async {
     try {
       await _firestore.collection('periodos').doc(periodoId).delete();
-      print('Período eliminado exitosamente');
+      debugPrint('Período eliminado exitosamente');
       return true;
     } catch (e) {
-      print('Error eliminando período: $e');
+      debugPrint('Error eliminando período: $e');
       return false;
     }
   }
@@ -238,7 +239,7 @@ class PeriodosHelper {
         return nombre.contains(searchLower);
       }).toList();
     } catch (e) {
-      print('Error buscando períodos: $e');
+      debugPrint('Error buscando períodos: $e');
       return [];
     }
   }
@@ -254,7 +255,7 @@ class PeriodosHelper {
 
       return periodoQuery.docs.isNotEmpty;
     } catch (e) {
-      print('Error verificando períodos activos: $e');
+      debugPrint('Error verificando períodos activos: $e');
       return false;
     }
   }
@@ -269,7 +270,7 @@ class PeriodosHelper {
 
       return periodoQuery.docs.length;
     } catch (e) {
-      print('Error contando períodos activos: $e');
+      debugPrint('Error contando períodos activos: $e');
       return 0;
     }
   }

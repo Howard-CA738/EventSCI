@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart';
 
 class EvaluacionesGeneralExcelService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -11,7 +12,7 @@ class EvaluacionesGeneralExcelService {
   /// Genera y descarga un reporte general de TODAS las evaluaciones
   /// Una sola hoja agrupada por categoría y código de proyecto
   Future<String> generarReporteGeneralEvaluaciones() async {
-    print('🔍 Iniciando obtención de datos...');
+    debugPrint('🔍 Iniciando obtención de datos...');
 
     // Obtener todos los eventos
     final eventsSnapshot = await _firestore.collection('events').get();
@@ -20,7 +21,7 @@ class EvaluacionesGeneralExcelService {
       throw Exception('No hay eventos registrados');
     }
 
-    print('📦 Eventos encontrados: ${eventsSnapshot.docs.length}');
+    debugPrint('📦 Eventos encontrados: ${eventsSnapshot.docs.length}');
 
     final List<Map<String, dynamic>> todasLasEvaluaciones = [];
     final Map<String, String> juradosNombresCache = {};
@@ -30,7 +31,7 @@ class EvaluacionesGeneralExcelService {
       final eventId = eventDoc.id;
       final eventData = eventDoc.data();
 
-      print('📋 Procesando evento: $eventId');
+      debugPrint('📋 Procesando evento: $eventId');
 
       // Obtener proyectos del evento
       final proyectosSnapshot = await _firestore
@@ -39,7 +40,7 @@ class EvaluacionesGeneralExcelService {
           .collection('proyectos')
           .get();
 
-      print('  - Proyectos en evento: ${proyectosSnapshot.docs.length}');
+      debugPrint('  - Proyectos en evento: ${proyectosSnapshot.docs.length}');
 
       for (final proyectoDoc in proyectosSnapshot.docs) {
         final proyectoData = proyectoDoc.data();
@@ -58,7 +59,7 @@ class EvaluacionesGeneralExcelService {
             .collection('evaluaciones')
             .get();
 
-        print(
+        debugPrint(
           '    - Evaluaciones en $codigoProyecto: ${evaluacionesSnapshot.docs.length}',
         );
 
@@ -89,12 +90,12 @@ class EvaluacionesGeneralExcelService {
                   // El campo es 'name' según PrefsHelper
                   juradoNombre = juradoData?['name'] ?? 'Jurado Desconocido';
                   juradosNombresCache[juradoId] = juradoNombre;
-                  print('      ✅ Jurado encontrado: $juradoNombre');
+                  debugPrint('      ✅ Jurado encontrado: $juradoNombre');
                 } else {
-                  print('      ⚠️ Jurado no encontrado en users: $juradoId');
+                  debugPrint('      ⚠️ Jurado no encontrado en users: $juradoId');
                 }
               } catch (e) {
-                print('      ❌ Error obteniendo jurado $juradoId: $e');
+                debugPrint('      ❌ Error obteniendo jurado $juradoId: $e');
               }
             }
           }
@@ -131,7 +132,7 @@ class EvaluacionesGeneralExcelService {
       );
     }
 
-    print(
+    debugPrint(
       '✅ Total de evaluaciones encontradas: ${todasLasEvaluaciones.length}',
     );
 
@@ -621,14 +622,14 @@ class EvaluacionesGeneralExcelService {
       if (fileBytes != null) {
         final file = File(filePath);
         await file.writeAsBytes(fileBytes);
-        print('✅ Archivo guardado exitosamente en: $filePath');
-        print('📁 Ubicación: Documentos del dispositivo');
+        debugPrint('✅ Archivo guardado exitosamente en: $filePath');
+        debugPrint('📁 Ubicación: Documentos del dispositivo');
         return filePath;
       } else {
         throw Exception('Error al generar el archivo Excel');
       }
     } catch (e) {
-      print('Error al guardar archivo: $e');
+      debugPrint('Error al guardar archivo: $e');
       rethrow;
     }
   }

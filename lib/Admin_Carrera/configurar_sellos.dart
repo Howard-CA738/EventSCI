@@ -338,7 +338,7 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha:0.05),
               blurRadius: 10,
               offset: const Offset(0, 4)),
         ],
@@ -351,7 +351,7 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2563EB).withOpacity(0.1),
+                  color: const Color(0xFF2563EB).withValues(alpha:0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.event,
@@ -504,10 +504,10 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
               padding: const EdgeInsets.symmetric(
                   horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFF2563EB).withOpacity(0.08),
+                color: const Color(0xFF2563EB).withValues(alpha:0.08),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                    color: const Color(0xFF2563EB).withOpacity(0.2)),
+                    color: const Color(0xFF2563EB).withValues(alpha:0.2)),
               ),
               child: Row(
                 children: [
@@ -538,17 +538,17 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF7B61FF).withOpacity(0.08),
+        color: const Color(0xFF7B61FF).withValues(alpha:0.08),
         borderRadius: BorderRadius.circular(14),
         border:
-            Border.all(color: const Color(0xFF7B61FF).withOpacity(0.25)),
+            Border.all(color: const Color(0xFF7B61FF).withValues(alpha:0.25)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF7B61FF).withOpacity(0.15),
+              color: const Color(0xFF7B61FF).withValues(alpha:0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.info_outline,
@@ -575,7 +575,7 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha:0.05),
               blurRadius: 10,
               offset: const Offset(0, 4)),
         ],
@@ -632,7 +632,7 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: seleccionado
-              ? const Color(0xFF1E3A5F).withOpacity(0.07)
+              ? const Color(0xFF1E3A5F).withValues(alpha:0.07)
               : const Color(0xFFF5F7FA),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
@@ -663,7 +663,7 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
                 style: TextStyle(
                     fontSize: 10,
                     color: seleccionado
-                        ? const Color(0xFF1E3A5F).withOpacity(0.7)
+                        ? const Color(0xFF1E3A5F).withValues(alpha:0.7)
                         : Colors.grey.shade500)),
           ],
         ),
@@ -679,7 +679,7 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha:0.05),
               blurRadius: 10,
               offset: const Offset(0, 4)),
         ],
@@ -812,10 +812,10 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-          color: const Color(0xFF1E3A5F).withOpacity(0.08),
+          color: const Color(0xFF1E3A5F).withValues(alpha:0.08),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: const Color(0xFF1E3A5F).withOpacity(0.2)),
+              color: const Color(0xFF1E3A5F).withValues(alpha:0.2)),
         ),
         child: Icon(icono, color: const Color(0xFF1E3A5F)),
       ),
@@ -875,7 +875,7 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha:0.06),
               blurRadius: 12,
               offset: const Offset(0, -4)),
         ],
