@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
+import '/resolver_nombres_service.dart';
 
-// Archivo: lib/admin/interfaz/ver_ganadores.dart
-
-// ============================================================================
-// CONSTANTES DE DISEÑO
-// ============================================================================
 class _C {
   static const primary = Color(0xFF1E3A5F);
   static const primaryLight = Color(0xFF2D5590);
@@ -39,7 +35,7 @@ String _s(dynamic v, [String fb = '—']) {
   return s.isEmpty ? fb : s;
 }
 
-String _sf(dynamic v, [int dec = 1]) {
+String _sf(dynamic v, [int dec = 2]) {
   final d = v is num ? v.toDouble() : double.tryParse('$v') ?? 0.0;
   return d.toStringAsFixed(dec);
 }
@@ -73,7 +69,7 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
   Map<String, List<Map<String, dynamic>>> _ganadoresPorCategoria = {};
 
   _ModoVista _modoVista = _ModoVista.lista;
-
+  final _resolverNombres = ResolverNombresService();
   late AnimationController _animCtrl;
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
@@ -100,25 +96,34 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
   }
 
   Future<void> _init() async {
-    setState(() => _isLoadingInit = true);
-    try {
-      final adminData = await PrefsHelper.getAdminCarreraData();
-      if (adminData == null) {
-        _snack('No se encontró información de sesión', isError: true);
-        setState(() => _isLoadingInit = false);
-        return;
-      }
-      _filialId = adminData['filial'] as String?;
-      _filialNombre = adminData['filialNombre'] as String?;
-      _facultad = adminData['facultad'] as String?;
-      _carrera = adminData['carrera'] as String?;
-      _carreraId = adminData['carreraId'] ?? adminData['carrera'];
-      await _cargarEventos();
-    } catch (e) {
-      _snack('Error al iniciar: $e', isError: true);
+  setState(() => _isLoadingInit = true);
+  try {
+    final adminData = await PrefsHelper.getAdminCarreraData();
+    if (adminData == null) {
+      _snack('No se encontró información de sesión', isError: true);
+      setState(() => _isLoadingInit = false);
+      return;
     }
-    if (mounted) setState(() => _isLoadingInit = false);
+    _filialId     = adminData['filial']       as String?;
+    _filialNombre = adminData['filialNombre'] as String?;
+    _facultad     = adminData['facultad']     as String?;
+    _carrera      = adminData['carrera']      as String?;
+    _carreraId    = adminData['carreraId'] ?? adminData['carrera'];
+    debugPrint('🔑 filialNombre: $_filialNombre');
+    debugPrint('🔑 carrera: $_carrera');
+    debugPrint('🔑 docKey que se usará: ${_filialNombre}_$_carrera');
+    // ← AQUÍ
+    await _resolverNombres.cargarEstudiantes(
+      filialNombre: _filialNombre ?? '',
+      carrera: _carrera ?? '',
+    );
+
+    await _cargarEventos();
+  } catch (e) {
+    _snack('Error al iniciar: $e', isError: true);
   }
+  if (mounted) setState(() => _isLoadingInit = false);
+}
 
   Future<void> _cargarEventos() async {
     if (mounted) setState(() => _isLoadingEventos = true);
@@ -175,17 +180,21 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
   }
 
   Future<Map<String, List<Map<String, dynamic>>>> _calcularGanadores(
-      String eventoId) async {
-    final proyectosSnap = await _firestore
-        .collection('events')
-        .doc(eventoId)
-        .collection('proyectos')
-        .get();
+    String eventoId) async {
+  // Escala base igual que en participantes
+  const double escalaBase = 20.0;
 
-    if (proyectosSnap.docs.isEmpty) return {};
+  final proyectosSnap = await _firestore
+      .collection('events')
+      .doc(eventoId)
+      .collection('proyectos')
+      .get();
 
-    final results = await Future.wait(
-      proyectosSnap.docs.map((doc) async {
+  if (proyectosSnap.docs.isEmpty) return {};
+
+  final results = await Future.wait(
+    proyectosSnap.docs.map((doc) async {
+      try {
         final evalSnap = await _firestore
             .collection('events')
             .doc(eventoId)
@@ -198,51 +207,83 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
         if (evalSnap.docs.isEmpty) return null;
 
         final d = doc.data();
-        final notas = evalSnap.docs
-            .map((e) => ((e.data()['notaTotal'] ?? 0.0) as num).toDouble())
-            .toList();
-        final promedio = notas.reduce((a, b) => a + b) / notas.length;
+
+        // FIX: normalizar igual que en participantes_completo_carrera
+        final notasNormalizadas = <double>[];
+
+        for (final e in evalSnap.docs) {
+          final data = e.data();
+          final notaTotal =
+              ((data['notaTotal'] ?? 0.0) as num).toDouble();
+
+          if (!data.containsKey('puntajeMaximo')) {
+            debugPrint(
+                '⚠️ [Ganadores] Evaluación ${e.id} sin puntajeMaximo — omitida');
+            continue;
+          }
+
+          final puntajeMax =
+              (data['puntajeMaximo'] as num).toDouble();
+          final maxSeguro = puntajeMax > 0 ? puntajeMax : escalaBase;
+          final normalizada =
+              ((notaTotal / maxSeguro) * escalaBase)
+                  .clamp(0.0, escalaBase);
+
+          notasNormalizadas
+              .add(double.parse(normalizada.toStringAsFixed(2)));
+        }
+
+        // Si todas las evaluaciones fueron omitidas, tratar como sin eval
+        if (notasNormalizadas.isEmpty) return null;
+
+        final promedio = notasNormalizadas.reduce((a, b) => a + b) /
+            notasNormalizadas.length;
         final notaMax =
-            notas.reduce((a, b) => a > b ? a : b);
+            notasNormalizadas.reduce((a, b) => a > b ? a : b);
         final notaMin =
-            notas.reduce((a, b) => a < b ? a : b);
+            notasNormalizadas.reduce((a, b) => a < b ? a : b);
 
         return {
           'proyectoId': doc.id,
-          'codigo': _s(d['Código'], 'Sin código'),
-          'titulo': _s(d['Título'], 'Sin título'),
-          'integrantes': _s(d['Integrantes'], ''),
-          'sala': _s(d['Sala'], ''),
+          'codigo':      _s(d['Código'],       'Sin código'),
+          'titulo':      _s(d['Título'],        'Sin título'),
+          'integrantes': _resolverNombres.resolver(d['Integrantes']),
+          'sala':        _s(d['Sala'],           ''),
           'clasificacion': _s(d['Clasificación'], 'Sin categoría'),
-          'asesor': _s(d['Asesor'], ''),
-          'descripcion': _s(d['Descripción'], ''),
-          'promedio': promedio,
-          'notaMax': notaMax,
-          'notaMin': notaMin,
-          'cantidadJurados': notas.length,
-          'notas': notas,
+          'asesor':      _s(d['Asesor'],         ''),
+          'descripcion': _s(d['Descripción'],   ''),
+          'promedio':    double.parse(promedio.toStringAsFixed(2)),
+          'notaMax':     notaMax,
+          'notaMin':     notaMin,
+          'cantidadJurados': notasNormalizadas.length,
+          'notas':       notasNormalizadas,
+          'escalaBase':  escalaBase,
         };
-      }),
-    );
+      } catch (e) {
+        debugPrint('❌ [Ganadores] Error en proyecto ${doc.id}: $e');
+        return null;
+      }
+    }),
+  );
 
-    final validos = results.whereType<Map<String, dynamic>>().toList();
-    if (validos.isEmpty) return {};
+  final validos = results.whereType<Map<String, dynamic>>().toList();
+  if (validos.isEmpty) return {};
 
-    final Map<String, List<Map<String, dynamic>>> porCategoria = {};
-    for (final p in validos) {
-      final cat = p['clasificacion'] as String;
-      porCategoria.putIfAbsent(cat, () => []).add(p);
-    }
-
-    return {
-      for (final entry in porCategoria.entries)
-        entry.key: (entry.value
-              ..sort((a, b) =>
-                  (b['promedio'] as double).compareTo(a['promedio'] as double)))
-            .take(3)
-            .toList(),
-    };
+  final Map<String, List<Map<String, dynamic>>> porCategoria = {};
+  for (final p in validos) {
+    final cat = p['clasificacion'] as String;
+    porCategoria.putIfAbsent(cat, () => []).add(p);
   }
+
+  return {
+    for (final entry in porCategoria.entries)
+      entry.key: (entry.value
+            ..sort((a, b) => (b['promedio'] as double)
+                .compareTo(a['promedio'] as double)))
+          .take(3)
+          .toList(),
+  };
+}
 
   void _snack(String msg, {bool isError = false, bool isSuccess = false}) {
     if (!mounted) return;

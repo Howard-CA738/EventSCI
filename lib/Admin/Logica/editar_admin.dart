@@ -116,54 +116,60 @@ class _EditarAdminScreenState extends State<EditarAdminScreen>
       if (mounted) setState(() => _isLoading = false);
     }
   }
-
-  // ─────────────────────────────────────────────────────────
-  // ENVIAR SMS
-  // ─────────────────────────────────────────────────────────
-  Future<void> _enviarSMS() async {
-    if (_phoneNumber == null || _phoneNumber!.isEmpty) {
-      _showError('No hay número de teléfono registrado en tu cuenta');
-      return;
-    }
-    if (mounted) setState(() => _enviandoSMS = true);
-
-    try {
-      await FirebaseAuth.instance.verifyPhoneNumber(
-        phoneNumber: _phoneNumber!,
-        timeout: const Duration(seconds: 120),
-        forceResendingToken: _resendToken,
-        verificationCompleted: (PhoneAuthCredential credential) async {
-          debugPrint('✅ Auto-verificación completada');
-          await _autoVerificar(credential);
-        },
-        verificationFailed: (FirebaseAuthException e) {
-          debugPrint('❌ Error: ${e.code}');
-          if (mounted) setState(() => _enviandoSMS = false);
-          _showError(_mensajeErrorSMS(e.code));
-        },
-        codeSent: (String verificationId, int? resendToken) {
-          debugPrint('✅ SMS enviado');
-          if (mounted) {
-            setState(() {
-              _verificationId = verificationId;
-              _resendToken = resendToken;
-              _enviandoSMS = false;
-            });
-          }
-          _showCodigoDialog();
-        },
-        codeAutoRetrievalTimeout: (String verificationId) {
-          if (_verificationId == null) {
-            _verificationId = verificationId;
-          }
-        },
-      );
-    } catch (e) {
-      debugPrint('Error enviando SMS: $e');
-      if (mounted) setState(() => _enviandoSMS = false);
-      _showError('Error al enviar el SMS. Intenta de nuevo.');
-    }
+Future<void> _enviarSMS() async {
+  if (_phoneNumber == null || _phoneNumber!.isEmpty) {
+    _showError('No hay número de teléfono registrado en tu cuenta');
+    return;
   }
+  if (mounted) setState(() => _enviandoSMS = true);
+
+  try {
+
+    await FirebaseAuth.instance.verifyPhoneNumber(
+      phoneNumber: _phoneNumber!,
+      timeout: const Duration(seconds: 120),
+      forceResendingToken: _resendToken,
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        debugPrint('✅ Auto-verificación completada');
+        await _autoVerificar(credential);
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        debugPrint('❌ Error: ${e.code}');
+        if (mounted) setState(() => _enviandoSMS = false);
+
+        // ✅ Manejo explícito de error App Check
+        if (e.code == 'too-many-requests') {
+          _showError(
+            'Demasiados intentos de verificación. '
+            'Espera unos minutos e intenta de nuevo.'
+          );
+        } else {
+          _showError(_mensajeErrorSMS(e.code));
+        }
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        debugPrint('✅ SMS enviado');
+        if (mounted) {
+          setState(() {
+            _verificationId = verificationId;
+            _resendToken = resendToken;
+            _enviandoSMS = false;
+          });
+        }
+        _showCodigoDialog();
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {
+        if (_verificationId == null) {
+          _verificationId = verificationId;
+        }
+      },
+    );
+  } catch (e) {
+    debugPrint('Error enviando SMS: $e');
+    if (mounted) setState(() => _enviandoSMS = false);
+    _showError('Error al enviar el SMS. Intenta de nuevo.');
+  }
+}
 
   Future<void> _autoVerificar(PhoneAuthCredential credential) async {
     try {

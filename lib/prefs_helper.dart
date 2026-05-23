@@ -3,8 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '/admin/logica/filiales_service.dart';
 import '/device_helper.dart';
 import 'package:flutter/foundation.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math'; 
+import 'encryption_helper.dart';
 import 'password_helper.dart'; 
  
 class PrefsHelper {
@@ -67,30 +67,48 @@ class PrefsHelper {
     final values = List<int>.generate(32, (_) => random.nextInt(256));
     return values.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
- 
-  // ─────────────────────────────────────────────────────────────────────────
-  // FIREBASE AUTH ANÓNIMO
-  // ─────────────────────────────────────────────────────────────────────────
-  static Future<void> crearSesionFirebaseAuth(String userId) async {
-    try {
-      final auth = FirebaseAuth.instance;
-      if (auth.currentUser != null) {
-        await auth.currentUser!.getIdToken(true);
-        debugPrint('✅ Firebase Auth ya activo: ${auth.currentUser!.uid}');
-        return;
-      }
-      final credential = await auth.signInAnonymously();
-      await credential.user?.getIdToken(true);
-      await Future.delayed(const Duration(milliseconds: 300));
-      debugPrint('✅ Firebase Auth anónimo creado para: $userId');
-    } catch (e) {
-      debugPrint('⚠️ No se pudo crear sesión Firebase Auth: $e');
-    }
+ static Future<String?> detectarRol(String username) async { 
+  
+  try {
+    final results = await Future.wait([
+      _firestore
+          .collection('admins_carrera')
+          .where('usuario', isEqualTo: username.trim().toLowerCase())
+          .where('activo', isEqualTo: true)
+          .limit(1)
+          .get(),
+      _firestore
+          .collection('users')
+          .where('userType', isEqualTo: 'jurado')
+          .where('usuario', isEqualTo: username.trim().toLowerCase())
+          .limit(1)
+          .get(),
+      _firestore
+          .collection('student_index')
+          .doc(username.trim().toLowerCase())
+          .get(),
+    ]);
+
+    final adminSnap  = results[0] as QuerySnapshot;
+    final juradoSnap = results[1] as QuerySnapshot;
+    final studentDoc = results[2] as DocumentSnapshot;
+
+    debugPrint('🔍 detectarRol "$username": '
+        'admin=${adminSnap.docs.length}, '
+        'jurado=${juradoSnap.docs.length}, '
+        'student=${studentDoc.exists}');
+
+    if (adminSnap.docs.isNotEmpty)  return 'admin_carrera';
+    if (juradoSnap.docs.isNotEmpty) return 'jurado';
+    if (studentDoc.exists)          return 'student';
+
+    return null;
+  } catch (e) {
+    debugPrint('❌ Error detectando rol: $e');
+    return null;
   }
- 
-  // ─────────────────────────────────────────────────────────────────────────
-  // HELPERS GENERALES
-  // ─────────────────────────────────────────────────────────────────────────
+}
+
   static void clearStudentsCache() {
     _studentsCache          = null;
     _studentsCacheTimestamp = null;
@@ -183,7 +201,6 @@ class PrefsHelper {
   static Future<bool> loginJurado(String usuario, String password) async {
     try {
       debugPrint('🔍 Intentando login jurado: $usuario');
-      await crearSesionFirebaseAuth('pre_jurado');
  
       final query = await _firestore
           .collection('users')
@@ -214,7 +231,6 @@ class PrefsHelper {
         debugPrint('✅ Contraseña de jurado migrada a hash');
       }
  
-      await crearSesionFirebaseAuth(doc.id);
       await saveUserData(
         userType: userTypeJurado,
         userName: data['name'] ?? 'Jurado',
@@ -328,7 +344,6 @@ class PrefsHelper {
         debugPrint('✅ Contraseña de estudiante migrada a hash automáticamente');
       }
  
-      await crearSesionFirebaseAuth(studentId);
       await saveUserData(
         userType: userTypeStudent,
         userName: studentData['name'] ?? 'Estudiante',
@@ -395,14 +410,13 @@ class PrefsHelper {
             debugPrint('✅ Contraseña migrada a hash en fallback');
           }
  
-          await crearSesionFirebaseAuth(studentDoc.id);
           await saveUserData(
             userType: userTypeStudent,
             userName: studentData['name'] ?? 'Estudiante',
             userId:   '$carreraName/${studentDoc.id}',
           );
  
-          await _createStudentIndex(
+          await createStudentIndex(
             username:    username,
             carreraPath: carreraName,
             studentId:   studentDoc.id,
@@ -429,7 +443,7 @@ class PrefsHelper {
     }
   }
  
-  static Future<void> _createStudentIndex({
+  static Future<void> createStudentIndex({
     required String username,
     required String carreraPath,
     required String studentId,
@@ -738,10 +752,11 @@ class PrefsHelper {
       }
  
       if (dni.trim().isNotEmpty) {
-        final existingDni = await studentsRef
-            .where('dni', isEqualTo: dni.trim())
-            .limit(1)
-            .get();
+  final dniHash = PasswordHelper.hashPassword(dni.trim());
+  final existingDni = await studentsRef
+      .where('dni', isEqualTo: dniHash)  
+      .limit(1)
+      .get();
         if (existingDni.docs.isNotEmpty) {
           debugPrint('❌ DNI ya existe');
           return false;
@@ -750,6 +765,7 @@ class PrefsHelper {
  
       // 🔐 Hashear el DNI antes de guardar
       final dniHash = PasswordHelper.hashPassword(dni.trim());
+      final dniEncrypted = EncryptionHelper.encryptDni(dni.trim());
  
       final studentData = <String, dynamic>{
         'email':                email.trim(),
@@ -763,6 +779,7 @@ class PrefsHelper {
         'carrera':              carrera,
         'userType':             userTypeStudent,
         'esAsisteQR':           false,
+        'dniEncrypted':         dniEncrypted,
         'createdAt':            FieldValue.serverTimestamp(),
       };
  
@@ -776,7 +793,7 @@ class PrefsHelper {
  
       final studentDoc = await studentsRef.add(studentData);
  
-      await _createStudentIndex(
+      await createStudentIndex(
         username:    username.toLowerCase().trim(),
         carreraPath: carreraPath,
         studentId:   studentDoc.id,
@@ -1055,8 +1072,10 @@ class PrefsHelper {
       if (dni                 != null) {
         // 🔐 Si se actualiza el dni, hashearlo
         final dniHash = PasswordHelper.hashPassword(dni.trim());
+        final dniEncrypted = EncryptionHelper.encryptDni(dni.trim());
         updateData['dni']       = dniHash;
         updateData['documento'] = dniHash;
+        updateData['dniEncrypted'] = dniEncrypted;
       }
       if (facultad            != null) updateData['facultad']            = facultad;
       if (carrera             != null) updateData['carrera']             = carrera;
@@ -1230,15 +1249,6 @@ class PrefsHelper {
     FilialesService.clearCache();
     debugPrint('✅ Sesión cerrada y caché limpiado');
  
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null && user.isAnonymous) {
-        await user.delete();
-        debugPrint('✅ Sesión Firebase Auth anónima eliminada');
-      }
-    } catch (e) {
-      debugPrint('⚠️ Error cerrando Firebase Auth anónimo: $e');
-    }
   }
  
   // ─────────────────────────────────────────────────────────────────────────

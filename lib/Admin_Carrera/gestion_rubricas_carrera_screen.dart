@@ -40,7 +40,9 @@ class _GestionRubricasCarreraScreenState
         _filialId = adminData['filial'];
         _filialNombre = adminData['filialNombre'];
         _facultad = adminData['facultad'];
-        _carreraId = adminData['carreraId'] ?? adminData['carrera'];
+        // FIX C2 (aplicado por consistencia con gestion_jurados_carrera):
+        // _carreraId y _carreraNombre se asignan por separado.
+        _carreraId = adminData['carreraId']; // puede ser null
         _carreraNombre = adminData['carrera'];
       }
     } catch (e) {
@@ -188,7 +190,7 @@ class _GestionRubricasCarreraScreenState
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha:0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.school, color: Colors.white, size: 22),
@@ -225,7 +227,7 @@ class _GestionRubricasCarreraScreenState
             padding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha:0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.white30),
             ),
@@ -270,7 +272,7 @@ class _GestionRubricasCarreraScreenState
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
+                      color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.assignment,
@@ -326,7 +328,7 @@ class _GestionRubricasCarreraScreenState
                       '${rubrica.juradosAsignados.length} jurados',
                       Colors.orange),
                   _infoChip(Icons.stars,
-                      '${rubrica.puntajeMaximo.toStringAsFixed(0)} pts',
+                      '${rubrica.puntajeMaximo.toStringAsFixed(rubrica.puntajeMaximo.truncateToDouble() == rubrica.puntajeMaximo ? 0 : 1)} pts',
                       Colors.purple),
                 ],
               ),
@@ -367,7 +369,7 @@ class _GestionRubricasCarreraScreenState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha:0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -378,7 +380,7 @@ class _GestionRubricasCarreraScreenState
           Text(label,
               style: TextStyle(
                   fontSize: 11,
-                  color: color.withValues(alpha:0.9),
+                  color: color.withValues(alpha: 0.9),
                   fontWeight: FontWeight.w500)),
         ],
       ),
@@ -414,6 +416,8 @@ class _CrearRubricaCarreraScreenState
   final _formKey = GlobalKey<FormState>();
   final _nombreController = TextEditingController();
   final _descripcionController = TextEditingController();
+  // FIX M7: valor inicial sigue siendo entero para compatibilidad,
+  // pero el campo ahora acepta decimales.
   final _puntajeMaximoController = TextEditingController(text: '20');
   final RubricasService _service = RubricasService();
 
@@ -428,9 +432,6 @@ class _CrearRubricaCarreraScreenState
     _cargarJurados();
   }
 
-  /// Carga jurados filtrados por filial + facultad + carrera + eventoId.
-  /// Al asignar una rúbrica solo deben aparecer jurados del mismo evento
-  /// para evitar mezclas entre eventos.
   Future<void> _cargarJurados() async {
     final jurados = await _service.obtenerJurados(
       filial: widget.filial,
@@ -451,12 +452,38 @@ class _CrearRubricaCarreraScreenState
     });
   }
 
+  // FIX M8: validar que la suma de pesoTotal de secciones no supere
+  // el puntajeMaximo antes de guardar.
+  String? _validarPesosSecciones() {
+    final puntajeMaximo =
+        double.tryParse(_puntajeMaximoController.text) ?? 20.0;
+    final sumaSeciones =
+        _secciones.fold<double>(0.0, (s, sec) => s + sec.pesoTotal);
+
+    if (sumaSeciones > puntajeMaximo + 0.01) {
+      return 'La suma de pesos de secciones (${sumaSeciones.toStringAsFixed(2)} pts) '
+          'supera el puntaje máximo (${puntajeMaximo.toStringAsFixed(2)} pts). '
+          'Ajusta los pesos antes de guardar.';
+    }
+    return null;
+  }
+
   Future<void> _guardarRubrica() async {
     if (!_formKey.currentState!.validate()) return;
     if (_secciones.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Agrega al menos una sección'),
           backgroundColor: Colors.orange));
+      return;
+    }
+
+    // FIX M8: validar pesos antes de guardar
+    final errorPesos = _validarPesosSecciones();
+    if (errorPesos != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(errorPesos),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 5)));
       return;
     }
 
@@ -536,7 +563,7 @@ class _CrearRubricaCarreraScreenState
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha:0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.lock_outline,
@@ -574,7 +601,7 @@ class _CrearRubricaCarreraScreenState
             padding:
                 const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha:0.12),
+              color: Colors.white.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.white30),
             ),
@@ -617,14 +644,25 @@ class _CrearRubricaCarreraScreenState
               maxLines: 2,
             ),
             const SizedBox(height: 14),
+            // FIX M7: campo ahora acepta decimales (ej. 18.5)
             _buildTextField(
               controller: _puntajeMaximoController,
               label: 'Puntaje Máximo',
               icon: Icons.stars,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              validator: (v) =>
-                  v?.isEmpty ?? true ? 'Campo requerido' : null,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(
+                    RegExp(r'^\d*\.?\d{0,2}')),
+              ],
+              validator: (v) {
+                if (v?.isEmpty ?? true) return 'Campo requerido';
+                final val = double.tryParse(v!);
+                if (val == null || val <= 0) {
+                  return 'Ingresa un puntaje válido mayor a 0';
+                }
+                return null;
+              },
             ),
           ],
         ),
@@ -633,6 +671,14 @@ class _CrearRubricaCarreraScreenState
   }
 
   Widget _buildSeccionesCard() {
+    // FIX M8: mostrar advertencia si la suma supera el puntaje máximo
+    final puntajeMaximo =
+        double.tryParse(_puntajeMaximoController.text) ?? 20.0;
+    final sumaSecciones =
+        _secciones.fold<double>(0.0, (s, sec) => s + sec.pesoTotal);
+    final hayDesbordamiento =
+        _secciones.isNotEmpty && sumaSecciones > puntajeMaximo + 0.01;
+
     return Card(
       elevation: 2,
       shape:
@@ -667,6 +713,48 @@ class _CrearRubricaCarreraScreenState
                 ),
               ],
             ),
+            // FIX M8: banner de advertencia de desbordamiento de pesos
+            if (hayDesbordamiento) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.orange.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        color: Colors.orange.shade700, size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'La suma de secciones (${sumaSecciones.toStringAsFixed(2)} pts) '
+                        'supera el puntaje máximo (${puntajeMaximo.toStringAsFixed(2)} pts).',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange.shade900),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            // Indicador de suma de secciones vs puntaje máximo
+            if (_secciones.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Total secciones: ${sumaSecciones.toStringAsFixed(2)} / ${puntajeMaximo.toStringAsFixed(2)} pts',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: hayDesbordamiento
+                      ? Colors.orange.shade700
+                      : Colors.green.shade700,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             ..._secciones.asMap().entries.map((entry) {
               return _SeccionWidget(
@@ -742,6 +830,9 @@ class _CrearRubricaCarreraScreenState
               ..._juradosDisponibles.map((jurado) {
                 final isSelected =
                     _juradosSeleccionados.contains(jurado['id']);
+                // FIX M3: eventoNombre ahora viene del servicio
+                final eventoNombre =
+                    (jurado['eventoNombre'] as String?) ?? '';
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   color: isSelected ? Colors.green.shade50 : Colors.white,
@@ -752,8 +843,7 @@ class _CrearRubricaCarreraScreenState
                                 ? FontWeight.bold
                                 : FontWeight.normal,
                             fontSize: 14)),
-                    subtitle: jurado['eventoNombre'] != null &&
-                            (jurado['eventoNombre'] as String).isNotEmpty
+                    subtitle: eventoNombre.isNotEmpty
                         ? Row(
                             children: [
                               Icon(Icons.event,
@@ -761,7 +851,7 @@ class _CrearRubricaCarreraScreenState
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
-                                  jurado['eventoNombre'] as String,
+                                  eventoNombre,
                                   style: TextStyle(
                                       fontSize: 11,
                                       color: Colors.blue[600]),
@@ -918,8 +1008,6 @@ class _EditarRubricaCarreraScreenState
     _cargarJurados();
   }
 
-  /// Carga jurados filtrados por filial + facultad + carrera.
-  /// Internamente obtenerJurados ya filtra por eventoId si se provee.
   Future<void> _cargarJurados() async {
     final jurados = await _service.obtenerJurados(
       filial: widget.rubrica.filial,
@@ -929,88 +1017,118 @@ class _EditarRubricaCarreraScreenState
     if (mounted) setState(() => _juradosDisponibles = jurados);
   }
 
-  Future<void> _actualizarRubrica() async {
-  if (!_formKey.currentState!.validate()) return;
-  if (_secciones.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Agrega al menos una sección'),
-        backgroundColor: Colors.orange));
-    return;
+  // FIX M8: también validar pesos en edición
+  String? _validarPesosSecciones() {
+    final puntajeMaximo =
+        double.tryParse(_puntajeMaximoController.text) ?? 20.0;
+    final sumaSecciones =
+        _secciones.fold<double>(0.0, (s, sec) => s + sec.pesoTotal);
+
+    if (sumaSecciones > puntajeMaximo + 0.01) {
+      return 'La suma de pesos de secciones (${sumaSecciones.toStringAsFixed(2)} pts) '
+          'supera el puntaje máximo (${puntajeMaximo.toStringAsFixed(2)} pts). '
+          'Ajusta los pesos antes de guardar.';
+    }
+    return null;
   }
 
-  setState(() => _isLoading = true);
+  Future<void> _actualizarRubrica() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_secciones.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Agrega al menos una sección'),
+          backgroundColor: Colors.orange));
+      return;
+    }
 
-  // Feedback inmediato al usuario
-  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-    content: Row(
-      children: [
-        SizedBox(
-          width: 18,
-          height: 18,
-          child: CircularProgressIndicator(
-              color: Colors.white, strokeWidth: 2),
-        ),
-        SizedBox(width: 12),
-        Text('Actualizando rúbrica...'),
-      ],
-    ),
-    duration: Duration(seconds: 30),
-    backgroundColor: Color(0xFF1E3A5F),
-  ));
+    // FIX M8: validar pesos antes de actualizar
+    final errorPesos = _validarPesosSecciones();
+    if (errorPesos != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(errorPesos),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 5)));
+      return;
+    }
 
-  final rubricaActualizada = Rubrica(
-    id: widget.rubrica.id,
-    nombre: _nombreController.text.trim(),
-    descripcion: _descripcionController.text.trim(),
-    secciones: _secciones,
-    juradosAsignados: _juradosSeleccionados,
-    fechaCreacion: widget.rubrica.fechaCreacion,
-    puntajeMaximo: double.tryParse(_puntajeMaximoController.text) ?? 20,
-    filial: widget.rubrica.filial,
-    facultad: widget.rubrica.facultad,
-    carrera: widget.rubrica.carrera,
-  );
+    setState(() => _isLoading = true);
 
-  final juradosRemovidos = widget.rubrica.juradosAsignados
-      .where((id) => !_juradosSeleccionados.contains(id))
-      .toList();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Row(
+        children: [
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+                color: Colors.white, strokeWidth: 2),
+          ),
+          SizedBox(width: 12),
+          Text('Actualizando rúbrica...'),
+        ],
+      ),
+      duration: Duration(seconds: 30),
+      backgroundColor: Color(0xFF1E3A5F),
+    ));
 
-  // Ejecutar eliminación y actualización en paralelo
-  final resultados = await Future.wait([
-    juradosRemovidos.isNotEmpty
-        ? _service
-            .eliminarEvaluacionesDeJurados(
-              rubricaId: widget.rubrica.id,
-              juradosIds: juradosRemovidos,
-            )
-            .then((_) => true)
-            .catchError((_) => false)
-        : Future.value(true),
-    _service.actualizarRubrica(rubricaActualizada),
-  ]);
+    final rubricaActualizada = Rubrica(
+      id: widget.rubrica.id,
+      nombre: _nombreController.text.trim(),
+      descripcion: _descripcionController.text.trim(),
+      secciones: _secciones,
+      juradosAsignados: _juradosSeleccionados,
+      fechaCreacion: widget.rubrica.fechaCreacion,
+      puntajeMaximo: double.tryParse(_puntajeMaximoController.text) ?? 20,
+      filial: widget.rubrica.filial,
+      facultad: widget.rubrica.facultad,
+      carrera: widget.rubrica.carrera,
+    );
 
-  if (!mounted) return;
-  setState(() => _isLoading = false);
+    final juradosRemovidos = widget.rubrica.juradosAsignados
+        .where((id) => !_juradosSeleccionados.contains(id))
+        .toList();
 
-  // Cerrar el snackbar de "Actualizando..."
-  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    final resultados = await Future.wait([
+      juradosRemovidos.isNotEmpty
+          ? _service
+              .eliminarEvaluacionesDeJurados(
+                rubricaId: widget.rubrica.id,
+                juradosIds: juradosRemovidos,
+              )
+              .then((_) => true)
+              .catchError((_) => false)
+          : Future.value(true),
+      _service.actualizarRubrica(rubricaActualizada),
+    ]);
 
-  final ok = resultados[1] as bool;
+    if (!mounted) return;
+    setState(() => _isLoading = false);
 
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(ok
-        ? juradosRemovidos.isNotEmpty
-            ? 'Rúbrica actualizada y ${juradosRemovidos.length} evaluación(es) limpiada(s)'
-            : 'Rúbrica actualizada exitosamente'
-        : 'Error al actualizar'),
-    backgroundColor: ok ? Colors.green : Colors.red,
-  ));
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-  if (ok) Navigator.pop(context);
-}
+    final ok = resultados[1] as bool;
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok
+          ? juradosRemovidos.isNotEmpty
+              ? 'Rúbrica actualizada y ${juradosRemovidos.length} evaluación(es) limpiada(s)'
+              : 'Rúbrica actualizada exitosamente'
+          : 'Error al actualizar'),
+      backgroundColor: ok ? Colors.green : Colors.red,
+    ));
+
+    if (ok) Navigator.pop(context);
+  }
 
   @override
   Widget build(BuildContext context) {
+    // FIX M8: calcular estado de pesos para el banner en edición también
+    final puntajeMaximo =
+        double.tryParse(_puntajeMaximoController.text) ?? 20.0;
+    final sumaSecciones =
+        _secciones.fold<double>(0.0, (s, sec) => s + sec.pesoTotal);
+    final hayDesbordamiento =
+        _secciones.isNotEmpty && sumaSecciones > puntajeMaximo + 0.01;
+
     return Scaffold(
       backgroundColor: const Color(0xFFE8EDF2),
       appBar: AppBar(
@@ -1060,16 +1178,27 @@ class _EditarRubricaCarreraScreenState
                         maxLines: 2,
                       ),
                       const SizedBox(height: 14),
+                      // FIX M7: campo ahora acepta decimales también en edición
                       _buildTextField(
                         controller: _puntajeMaximoController,
                         label: 'Puntaje Máximo',
                         icon: Icons.stars,
-                        keyboardType: TextInputType.number,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
                         inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly
+                          FilteringTextInputFormatter.allow(
+                              RegExp(r'^\d*\.?\d{0,2}')),
                         ],
-                        validator: (v) =>
-                            v?.isEmpty ?? true ? 'Requerido' : null,
+                        validator: (v) {
+                          if (v?.isEmpty ?? true) return 'Requerido';
+                          final val = double.tryParse(v!);
+                          if (val == null || val <= 0) {
+                            return 'Ingresa un puntaje válido mayor a 0';
+                          }
+                          return null;
+                        },
+                        // Reconstruir para que el banner de advertencia se actualice
+                        onChanged: (_) => setState(() {}),
                       ),
                     ],
                   ),
@@ -1121,6 +1250,51 @@ class _EditarRubricaCarreraScreenState
                           ),
                         ],
                       ),
+                      // FIX M8: banner de advertencia en edición
+                      if (hayDesbordamiento) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border:
+                                Border.all(color: Colors.orange.shade300),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded,
+                                  color: Colors.orange.shade700,
+                                  size: 18),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'La suma de secciones '
+                                  '(${sumaSecciones.toStringAsFixed(2)} pts) '
+                                  'supera el puntaje máximo '
+                                  '(${puntajeMaximo.toStringAsFixed(2)} pts).',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.orange.shade900),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (_secciones.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Total secciones: ${sumaSecciones.toStringAsFixed(2)} / ${puntajeMaximo.toStringAsFixed(2)} pts',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: hayDesbordamiento
+                                ? Colors.orange.shade700
+                                : Colors.green.shade700,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       ..._secciones.asMap().entries.map((entry) {
                         return _SeccionWidget(
@@ -1154,6 +1328,9 @@ class _EditarRubricaCarreraScreenState
                       ..._juradosDisponibles.map((jurado) {
                         final isSelected =
                             _juradosSeleccionados.contains(jurado['id']);
+                        // FIX M3: eventoNombre ahora viene del servicio
+                        final eventoNombre =
+                            (jurado['eventoNombre'] as String?) ?? '';
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           color: isSelected
@@ -1166,9 +1343,7 @@ class _EditarRubricaCarreraScreenState
                                         ? FontWeight.bold
                                         : FontWeight.normal,
                                     fontSize: 14)),
-                            subtitle: jurado['eventoNombre'] != null &&
-                                    (jurado['eventoNombre'] as String)
-                                        .isNotEmpty
+                            subtitle: eventoNombre.isNotEmpty
                                 ? Row(
                                     children: [
                                       Icon(Icons.event,
@@ -1177,7 +1352,7 @@ class _EditarRubricaCarreraScreenState
                                       const SizedBox(width: 4),
                                       Expanded(
                                         child: Text(
-                                          jurado['eventoNombre'] as String,
+                                          eventoNombre,
                                           style: TextStyle(
                                               fontSize: 11,
                                               color: Colors.blue[600]),
@@ -1270,7 +1445,8 @@ class _EditarRubricaCarreraScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${widget.filialNombre} › ${widget.rubrica.facultad}${widget.rubrica.carrera != null ? ' › ${widget.rubrica.carrera}' : ''}',
+                  '${widget.filialNombre} › ${widget.rubrica.facultad}'
+                  '${widget.rubrica.carrera != null ? ' › ${widget.rubrica.carrera}' : ''}',
                   style: TextStyle(
                       fontSize: 12,
                       color: Colors.amber[900],
@@ -1295,6 +1471,8 @@ class _EditarRubricaCarreraScreenState
     TextInputType? keyboardType,
     List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
+    // Callback extra para poder reconstruir el widget desde _buildTextField
+    void Function(String)? onChanged,
   }) {
     return TextFormField(
       controller: controller,
@@ -1302,6 +1480,7 @@ class _EditarRubricaCarreraScreenState
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
       validator: validator,
+      onChanged: onChanged,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
@@ -1337,6 +1516,10 @@ class _EditarRubricaCarreraScreenState
 // WIDGETS INTERNOS
 // ============================================================================
 
+// FIX 3.1: _SeccionWidget ahora usa TextEditingController en lugar de
+// initialValue para evitar la pérdida de texto al colapsar/expandir el
+// ExpansionTile. Los controllers se crean en initState y se disponen
+// en dispose() para evitar memory leaks.
 class _SeccionWidget extends StatefulWidget {
   final SeccionRubrica seccion;
   final VoidCallback onEliminar;
@@ -1354,6 +1537,26 @@ class _SeccionWidget extends StatefulWidget {
 }
 
 class _SeccionWidgetState extends State<_SeccionWidget> {
+  // FIX 3.1: controllers con dispose adecuado en lugar de initialValue
+  late final TextEditingController _nombreCtrl;
+  late final TextEditingController _pesoCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _nombreCtrl =
+        TextEditingController(text: widget.seccion.nombre);
+    _pesoCtrl =
+        TextEditingController(text: widget.seccion.pesoTotal.toString());
+  }
+
+  @override
+  void dispose() {
+    _nombreCtrl.dispose();
+    _pesoCtrl.dispose();
+    super.dispose();
+  }
+
   void _agregarCriterio() {
     widget.seccion.criterios.add(Criterio(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -1392,8 +1595,9 @@ class _SeccionWidgetState extends State<_SeccionWidget> {
         children: [
           Column(
             children: [
+              // FIX 3.1: usar controller en lugar de initialValue
               TextFormField(
-                initialValue: widget.seccion.nombre,
+                controller: _nombreCtrl,
                 decoration: const InputDecoration(
                     labelText: 'Nombre de la sección',
                     border: OutlineInputBorder(),
@@ -1405,8 +1609,9 @@ class _SeccionWidgetState extends State<_SeccionWidget> {
                 },
               ),
               const SizedBox(height: 8),
+              // FIX 3.1: usar controller en lugar de initialValue
               TextFormField(
-                initialValue: widget.seccion.pesoTotal.toString(),
+                controller: _pesoCtrl,
                 decoration: const InputDecoration(
                     labelText: 'Peso total (pts)',
                     border: OutlineInputBorder(),
@@ -1454,7 +1659,9 @@ class _SeccionWidgetState extends State<_SeccionWidget> {
   }
 }
 
-class _CriterioWidget extends StatelessWidget {
+// FIX 3.1 (mismo fix): _CriterioWidget también usa controllers
+// para evitar la pérdida de texto en rebuilds.
+class _CriterioWidget extends StatefulWidget {
   final Criterio criterio;
   final VoidCallback onEliminar;
   final VoidCallback onActualizar;
@@ -1467,6 +1674,30 @@ class _CriterioWidget extends StatelessWidget {
   });
 
   @override
+  State<_CriterioWidget> createState() => _CriterioWidgetState();
+}
+
+class _CriterioWidgetState extends State<_CriterioWidget> {
+  late final TextEditingController _descripcionCtrl;
+  late final TextEditingController _pesoCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _descripcionCtrl =
+        TextEditingController(text: widget.criterio.descripcion);
+    _pesoCtrl =
+        TextEditingController(text: widget.criterio.peso.toString());
+  }
+
+  @override
+  void dispose() {
+    _descripcionCtrl.dispose();
+    _pesoCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1474,8 +1705,9 @@ class _CriterioWidget extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: Column(
           children: [
+            // FIX 3.1: controller en lugar de initialValue
             TextFormField(
-              initialValue: criterio.descripcion,
+              controller: _descripcionCtrl,
               decoration: const InputDecoration(
                   labelText: 'Criterio de Evaluación',
                   border: OutlineInputBorder(),
@@ -1483,16 +1715,17 @@ class _CriterioWidget extends StatelessWidget {
                   contentPadding: EdgeInsets.all(12)),
               maxLines: 2,
               onChanged: (v) {
-                criterio.descripcion = v;
-                onActualizar();
+                widget.criterio.descripcion = v;
+                widget.onActualizar();
               },
             ),
             const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
+                  // FIX 3.1: controller en lugar de initialValue
                   child: TextFormField(
-                    initialValue: criterio.peso.toString(),
+                    controller: _pesoCtrl,
                     decoration: const InputDecoration(
                         labelText: 'Peso (pts)',
                         border: OutlineInputBorder(),
@@ -1501,8 +1734,8 @@ class _CriterioWidget extends StatelessWidget {
                     keyboardType: const TextInputType.numberWithOptions(
                         decimal: true),
                     onChanged: (v) {
-                      criterio.peso = double.tryParse(v) ?? 0;
-                      onActualizar();
+                      widget.criterio.peso = double.tryParse(v) ?? 0;
+                      widget.onActualizar();
                     },
                   ),
                 ),
@@ -1515,7 +1748,7 @@ class _CriterioWidget extends StatelessWidget {
                   child: IconButton(
                     icon: const Icon(Icons.delete,
                         color: Colors.red, size: 18),
-                    onPressed: onEliminar,
+                    onPressed: widget.onEliminar,
                   ),
                 ),
               ],

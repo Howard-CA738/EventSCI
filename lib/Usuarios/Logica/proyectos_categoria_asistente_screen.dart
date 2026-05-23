@@ -78,6 +78,28 @@ class _ProyectosCategoriaAsistenteScreenState
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // AUTO-FINALIZAR QR AL SALIR
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Future<void> _finalizarQRSiActivo() async {
+    if (_qrId == null || _qrFinalizado) return;
+    try {
+      await FirebaseFirestore.instance
+          .collection('events')
+          .doc(widget.eventId)
+          .collection('qr_codes')
+          .doc(_qrId)
+          .update({
+        'activo': false,
+        'finalizadoAt': FieldValue.serverTimestamp(),
+      });
+      debugPrint('🔒 QR auto-finalizado: $_qrId');
+    } catch (e) {
+      debugPrint('⚠️ Error al auto-finalizar QR: $e');
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // CARGA DE PROYECTOS
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -111,11 +133,22 @@ class _ProyectosCategoriaAsistenteScreenState
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // GENERACIÓN DEL QR — incluye filialId + filialNombre para unicidad total
-  // ══════════════════════════════════════════════════════════════════════════
-
   Future<void> _generarQRParaProyecto(Map<String, dynamic> proyecto) async {
+    // ── Helper local ────────────────────────────────────────────────────────
+    String safeString(dynamic value) {
+      if (value == null) return '';
+      if (value is List) return value.join(', ');
+      return value.toString();
+    }
+
+    final codigoProyecto = safeString(proyecto['Código']).isEmpty
+        ? 'Sin código'
+        : safeString(proyecto['Código']);
+    final tituloProyecto = safeString(proyecto['Título']).isEmpty
+        ? 'Sin título'
+        : safeString(proyecto['Título']);
+    final grupo = safeString(proyecto['Sala']);
+
     debugPrint('🎯 GENERANDO QR (Asistente) para:'
         '\n  filialId   : ${widget.filialId}'
         '\n  filialNombre: ${widget.filialNombre}'
@@ -123,10 +156,9 @@ class _ProyectosCategoriaAsistenteScreenState
         '\n  carrera    : ${widget.carrera}'
         '\n  eventId    : ${widget.eventId}'
         '\n  categoría  : ${widget.categoria}'
-        '\n  código     : ${proyecto['Código']}'
-        '\n  título     : ${proyecto['Título']}');
+        '\n  código     : $codigoProyecto'
+        '\n  título     : $tituloProyecto');
 
-    // Referencia con ID automático en la subcolección qr_codes del evento
     final qrDocRef = FirebaseFirestore.instance
         .collection('events')
         .doc(widget.eventId)
@@ -135,27 +167,17 @@ class _ProyectosCategoriaAsistenteScreenState
 
     final qrId = qrDocRef.id;
 
-    // ── Payload embebido en el QR ──────────────────────────────────────────
-    // Todos los campos de identidad van en el JSON para que el escáner
-    // pueda validar que el QR pertenece a la filial/facultad/carrera correcta.
     final qrPayload = {
-      // Identidad del asistente
       'filialId': widget.filialId,
       'filialNombre': widget.filialNombre,
       'facultad': widget.facultad,
       'carrera': widget.carrera,
-
-      // Identidad del evento
       'eventId': widget.eventId,
       'eventName': widget.eventName,
       'categoria': widget.categoria,
-
-      // Identidad del proyecto
-      'codigoProyecto': proyecto['Código'] ?? 'Sin código',
-      'tituloProyecto': proyecto['Título'] ?? 'Sin título',
-      'grupo': proyecto['Sala'] ?? '',
-
-      // Control del QR
+      'codigoProyecto': codigoProyecto,
+      'tituloProyecto': tituloProyecto,
+      'grupo': grupo,
       'qrId': qrId,
       'timestamp': DateTime.now().toIso8601String(),
       'type': 'asistencia_categoria_asistente',
@@ -163,33 +185,20 @@ class _ProyectosCategoriaAsistenteScreenState
     };
 
     try {
-      // ── Registro en Firestore ──────────────────────────────────────────
-      // La clave de unicidad real está en la combinación de estos campos.
-      // El escáner debe verificar que filialId + facultad + carrera + eventId
-      // coincidan con los del usuario que escanea antes de registrar asistencia.
       await qrDocRef.set({
-        // Identidad
         'filialId': widget.filialId,
         'filialNombre': widget.filialNombre,
         'facultad': widget.facultad,
         'carrera': widget.carrera,
-
-        // Evento
         'eventId': widget.eventId,
         'eventName': widget.eventName,
         'categoria': widget.categoria,
-
-        // Proyecto
-        'codigoProyecto': proyecto['Código'] ?? 'Sin código',
-        'tituloProyecto': proyecto['Título'] ?? 'Sin título',
-        'grupo': proyecto['Sala'] ?? '',
-
-        // Estado
+        'codigoProyecto': codigoProyecto,
+        'tituloProyecto': tituloProyecto,
+        'grupo': grupo,
         'activo': true,
         'createdAt': FieldValue.serverTimestamp(),
         'finalizadoAt': null,
-
-        // Quién generó el QR (para auditoría)
         'generadoPor': 'asistente_qr',
       });
 
@@ -213,10 +222,6 @@ class _ProyectosCategoriaAsistenteScreenState
       _showSnackBar('Error al generar QR: $e', isError: true);
     }
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // FINALIZAR QR
-  // ══════════════════════════════════════════════════════════════════════════
 
   Future<void> _finalizarQR() async {
     if (_qrId == null || _qrFinalizado) return;
@@ -252,7 +257,9 @@ class _ProyectosCategoriaAsistenteScreenState
     }
   }
 
-  void _limpiarQR() {
+  // ── Volver a la lista de proyectos finalizando el QR activo ──────────────
+  void _limpiarQR() async {
+    await _finalizarQRSiActivo();
     setState(() {
       _qrDataGenerado = null;
       _proyectoSeleccionado = null;
@@ -281,18 +288,26 @@ class _ProyectosCategoriaAsistenteScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFE8EDF2),
-      appBar: _buildAppBar(),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(_primary),
-              ),
-            )
-          : _qrDataGenerado != null
-              ? _buildQRView()
-              : _buildProyectosList(),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _finalizarQRSiActivo();
+        if (context.mounted) Navigator.of(context).pop();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFE8EDF2),
+        appBar: _buildAppBar(),
+        body: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(_primary),
+                ),
+              )
+            : _qrDataGenerado != null
+                ? _buildQRView()
+                : _buildProyectosList(),
+      ),
     );
   }
 
@@ -314,7 +329,6 @@ class _ProyectosCategoriaAsistenteScreenState
           ),
         ],
       ),
-      // Badge de filial visible en el AppBar para recordar el contexto
       actions: [
         if (widget.filialNombre.isNotEmpty)
           Padding(
@@ -324,7 +338,7 @@ class _ProyectosCategoriaAsistenteScreenState
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha:0.15),
+                  color: Colors.white.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -381,10 +395,7 @@ class _ProyectosCategoriaAsistenteScreenState
       opacity: _fadeController,
       child: Column(
         children: [
-          // ── Banda de contexto ────────────────────────────────────────────
           _buildContextBanner(),
-
-          // ── Instrucción ──────────────────────────────────────────────────
           Container(
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             padding: const EdgeInsets.all(14),
@@ -407,8 +418,6 @@ class _ProyectosCategoriaAsistenteScreenState
               ],
             ),
           ),
-
-          // ── Lista ────────────────────────────────────────────────────────
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -432,16 +441,14 @@ class _ProyectosCategoriaAsistenteScreenState
     );
   }
 
-  /// Banda que muestra filial → facultad → carrera para confirmar el contexto
-  /// exacto del QR que se va a generar.
   Widget _buildContextBanner() {
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: _primary.withValues(alpha:0.06),
+        color: _primary.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _primary.withValues(alpha:0.15)),
+        border: Border.all(color: _primary.withValues(alpha: 0.15)),
       ),
       child: Row(
         children: [
@@ -467,7 +474,7 @@ class _ProyectosCategoriaAsistenteScreenState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: _primary.withValues(alpha:0.10),
+        color: _primary.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -492,6 +499,21 @@ class _ProyectosCategoriaAsistenteScreenState
   }
 
   Widget _buildProyectoCard(Map<String, dynamic> proyecto) {
+    String resolverCampo(dynamic valor) {
+      if (valor == null) return '';
+      if (valor is List) return valor.map((e) => e.toString()).join(', ');
+      return valor.toString();
+    }
+
+    final integrantes = resolverCampo(proyecto['Integrantes']);
+    final sala = resolverCampo(proyecto['Sala']);
+    final codigo = resolverCampo(proyecto['Código']).isNotEmpty
+        ? resolverCampo(proyecto['Código'])
+        : 'Sin código';
+    final titulo = resolverCampo(proyecto['Título']).isNotEmpty
+        ? resolverCampo(proyecto['Título'])
+        : 'Sin título';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -500,8 +522,8 @@ class _ProyectosCategoriaAsistenteScreenState
         border: Border.all(color: const Color(0xFFE0E7ED)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.04),
-            blurRadius: 8,
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
             offset: const Offset(0, 2),
           ),
         ],
@@ -516,54 +538,55 @@ class _ProyectosCategoriaAsistenteScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Código + ícono QR ──────────────────────────────────────
                 Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
-                        color: _primary,
+                        color: const Color(0xFF1E3A5F),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        proyecto['Código'] ?? 'Sin código',
+                        codigo,
                         style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13),
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                     const Spacer(),
-                    Icon(Icons.qr_code_rounded,
-                        color: _primary.withValues(alpha:0.4), size: 22),
+                    Icon(
+                      Icons.qr_code_rounded,
+                      color: const Color(0xFF1E3A5F).withValues(alpha: 0.5),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 10),
-
-                // ── Título ─────────────────────────────────────────────────
+                const SizedBox(height: 12),
                 Text(
-                  proyecto['Título'] ?? 'Sin título',
+                  titulo,
                   style: const TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600,
-                      color: _primary,
-                      height: 1.3),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E3A5F),
+                    height: 1.3,
+                  ),
                 ),
-
-                // ── Integrantes ────────────────────────────────────────────
-                if (proyecto['Integrantes'] != null) ...[
+                if (integrantes.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       Icon(Icons.people_rounded,
-                          size: 14, color: Colors.grey[500]),
-                      const SizedBox(width: 5),
+                          size: 16, color: Colors.grey.shade600),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          proyecto['Integrantes'],
+                          integrantes,
                           style: TextStyle(
-                              fontSize: 12, color: Colors.grey[500]),
+                              fontSize: 12, color: Colors.grey.shade600),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -571,30 +594,27 @@ class _ProyectosCategoriaAsistenteScreenState
                     ],
                   ),
                 ],
-
-                // ── Sala ───────────────────────────────────────────────────
-                if (proyecto['Sala'] != null) ...[
-                  const SizedBox(height: 5),
+                if (sala.isNotEmpty) ...[
+                  const SizedBox(height: 6),
                   Row(
                     children: [
                       Icon(Icons.room_rounded,
-                          size: 14, color: Colors.grey[500]),
-                      const SizedBox(width: 5),
+                          size: 16, color: Colors.grey.shade600),
+                      const SizedBox(width: 6),
                       Text(
-                        'Sala: ${proyecto['Sala']}',
+                        'Sala: $sala',
                         style: TextStyle(
-                            fontSize: 12, color: Colors.grey[500]),
+                            fontSize: 12, color: Colors.grey.shade600),
                       ),
                     ],
                   ),
                 ],
-
                 const SizedBox(height: 12),
-
-                // ── CTA ────────────────────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 7),
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.green.shade50,
                     borderRadius: BorderRadius.circular(8),
@@ -603,14 +623,15 @@ class _ProyectosCategoriaAsistenteScreenState
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.touch_app_rounded,
-                          size: 15, color: Colors.green.shade700),
-                      const SizedBox(width: 5),
+                          size: 16, color: Colors.green.shade700),
+                      const SizedBox(width: 6),
                       Text(
                         'Toca para generar QR',
                         style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.green.shade700,
-                            fontWeight: FontWeight.w600),
+                          fontSize: 12,
+                          color: Colors.green.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ),
@@ -622,10 +643,6 @@ class _ProyectosCategoriaAsistenteScreenState
       ),
     );
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // VISTA DEL QR GENERADO
-  // ══════════════════════════════════════════════════════════════════════════
 
   Widget _buildQRView() {
     return ScaleTransition(
@@ -644,7 +661,7 @@ class _ProyectosCategoriaAsistenteScreenState
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: _primary.withValues(alpha:0.12),
+                    color: _primary.withValues(alpha: 0.12),
                     blurRadius: 20,
                     offset: const Offset(0, 4),
                   ),
@@ -652,22 +669,19 @@ class _ProyectosCategoriaAsistenteScreenState
               ),
               child: Column(
                 children: [
-                  // ── Estado del QR ────────────────────────────────────────
+                  // ── Estado del QR ──────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
-                      color:
-                          _qrFinalizado ? Colors.red.shade600 : _primary,
+                      color: _qrFinalizado ? Colors.red.shade600 : _primary,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          _qrFinalizado
-                              ? Icons.block
-                              : Icons.check_circle,
+                          _qrFinalizado ? Icons.block : Icons.check_circle,
                           color: Colors.white,
                           size: 17,
                         ),
@@ -687,7 +701,7 @@ class _ProyectosCategoriaAsistenteScreenState
                   ),
                   const SizedBox(height: 20),
 
-                  // ── Imagen del QR ────────────────────────────────────────
+                  // ── Imagen del QR ──────────────────────────────────────
                   Stack(
                     alignment: Alignment.center,
                     children: [
@@ -723,8 +737,7 @@ class _ProyectosCategoriaAsistenteScreenState
                           child: const Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.block,
-                                  color: Colors.white, size: 44),
+                              Icon(Icons.block, color: Colors.white, size: 44),
                               SizedBox(height: 6),
                               Text(
                                 'QR INACTIVO',
@@ -740,7 +753,7 @@ class _ProyectosCategoriaAsistenteScreenState
                   ),
                   const SizedBox(height: 20),
 
-                  // ── Información del QR ───────────────────────────────────
+                  // ── Información del QR ─────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -750,17 +763,14 @@ class _ProyectosCategoriaAsistenteScreenState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Bloque de unicidad (datos que hacen único al QR)
                         _buildSectionLabel('Identidad del QR'),
-                        _buildInfoRow(
-                            Icons.location_city, 'Filial:', widget.filialNombre),
+                        _buildInfoRow(Icons.location_city, 'Filial:',
+                            widget.filialNombre),
                         _buildInfoRow(
                             Icons.account_balance, 'Facultad:', widget.facultad),
                         _buildInfoRow(
                             Icons.menu_book, 'Carrera:', widget.carrera),
                         const Divider(height: 20, thickness: 0.6),
-
-                        // Bloque del evento y proyecto
                         _buildSectionLabel('Evento y proyecto'),
                         _buildInfoRow(
                             Icons.event, 'Evento:', widget.eventName),
@@ -769,19 +779,23 @@ class _ProyectosCategoriaAsistenteScreenState
                         _buildInfoRow(
                             Icons.tag,
                             'Código:',
-                            _proyectoSeleccionado!['Código'] ?? 'N/A'),
+                            _proyectoSeleccionado!['Código']?.toString() ??
+                                'N/A'),
                         _buildInfoRow(
                             Icons.title,
                             'Título:',
-                            _proyectoSeleccionado!['Título'] ?? 'N/A'),
+                            _proyectoSeleccionado!['Título']?.toString() ??
+                                'N/A'),
                         if (_proyectoSeleccionado!['Sala'] != null)
                           _buildInfoRow(
-                              Icons.room,
-                              'Sala:',
-                              _proyectoSeleccionado!['Sala']),
+                            Icons.room,
+                            'Sala:',
+                            _proyectoSeleccionado!['Sala'] is List
+                                ? (_proyectoSeleccionado!['Sala'] as List)
+                                    .join(', ')
+                                : _proyectoSeleccionado!['Sala'].toString(),
+                          ),
                         const Divider(height: 20, thickness: 0.6),
-
-                        // Control
                         _buildSectionLabel('Control'),
                         _buildInfoRow(
                             Icons.fingerprint, 'ID QR:', _qrId ?? 'N/A'),
@@ -798,13 +812,14 @@ class _ProyectosCategoriaAsistenteScreenState
                   ),
                   const SizedBox(height: 20),
 
-                  // ── Botones ──────────────────────────────────────────────
+                  // ── Botones ────────────────────────────────────────────
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: _qrFinalizado ? null : _limpiarQR,
-                          icon: const Icon(Icons.arrow_back_rounded, size: 19),
+                          icon:
+                              const Icon(Icons.arrow_back_rounded, size: 19),
                           label: const Text('Volver'),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -827,9 +842,7 @@ class _ProyectosCategoriaAsistenteScreenState
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed:
-                              _qrFinalizado || _finalizando
-                                  ? null
-                                  : _finalizarQR,
+                              _qrFinalizado || _finalizando ? null : _finalizarQR,
                           icon: _finalizando
                               ? const SizedBox(
                                   width: 19,
@@ -899,7 +912,7 @@ class _ProyectosCategoriaAsistenteScreenState
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 13, color: _primary.withValues(alpha:0.5)),
+          Icon(icon, size: 13, color: _primary.withValues(alpha: 0.5)),
           const SizedBox(width: 6),
           SizedBox(
             width: 82,
@@ -914,8 +927,8 @@ class _ProyectosCategoriaAsistenteScreenState
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
-                  color: Color(0xFF4A5568), fontSize: 12.5),
+              style:
+                  const TextStyle(color: Color(0xFF4A5568), fontSize: 12.5),
               overflow: TextOverflow.ellipsis,
               maxLines: 3,
             ),

@@ -139,12 +139,19 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
     return snapshot.docs.where((doc) {
       final data = doc.data() as Map<String, dynamic>;
 
-      // Filtrar por facultad si está disponible
+      // Filtrar por filial
+      if (_filialNombre != null && _filialNombre!.isNotEmpty) {
+        final eventoFilial = data['filialNombre']?.toString() ?? 
+                             data['filialId']?.toString() ?? '';
+        if (eventoFilial != _filialNombre) return false;
+      }
+
+      // Filtrar por facultad
       if (_facultad != null && _facultad!.isNotEmpty) {
         if (data['facultad'] != _facultad) return false;
       }
 
-      // Filtrar por carreraNombre (el campo que sí coincide)
+      // Filtrar por carrera
       if (_carreraNombre != null && _carreraNombre!.isNotEmpty) {
         if (data['carreraNombre'] != _carreraNombre) return false;
       }

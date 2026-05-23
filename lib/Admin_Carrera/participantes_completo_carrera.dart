@@ -4,12 +4,9 @@ import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
 import '/prefs_helper.dart';
 import 'participantes_carrera_excel.dart';
+import '/resolver_nombres_service.dart';
 
-// Archivo: lib/admin/interfaz/participantes_completo_carrera.dart
 
-// ============================================================================
-// CONSTANTES DE DISEÑO
-// ============================================================================
 class _C {
   static const primary       = Color(0xFF1E3A5F);
   static const primaryLight  = Color(0xFF2D5590);
@@ -18,6 +15,10 @@ class _C {
   static const bronze        = Color(0xFFCD7F32);
   static const textSecondary = Color(0xFF64748B);
   static const bg            = Color(0xFFEEF2F7);
+
+  // Escala base a la que se normalizan TODAS las notas para el ranking.
+  // Cambiar este valor aquí lo propaga a toda la pantalla y al Excel.
+  static const double escalaBase = 20.0;
 }
 
 // ============================================================================
@@ -34,7 +35,8 @@ String _s(dynamic v, [String fb = '—']) {
   return s.isEmpty ? fb : s;
 }
 
-String _sf(dynamic v, [int dec = 1]) {
+String _sf(dynamic v, [int dec = 2]) {
+  // FIX: dec por defecto = 2 para mostrar decimales en todas las notas
   final d = v is num ? v.toDouble() : double.tryParse('$v') ?? 0.0;
   return d.toStringAsFixed(dec);
 }
@@ -71,6 +73,7 @@ class _ParticipantesCompletoCarreraScreenState
     with SingleTickerProviderStateMixin {
   final _firestore    = FirebaseFirestore.instance;
   final _excelService = ParticipantesCarreraExcelService();
+  
 
   // ── Datos de sesión ────────────────────────────────────────────────────────
   String? _filialId;
@@ -100,7 +103,7 @@ class _ParticipantesCompletoCarreraScreenState
   final _searchCtrl = TextEditingController();
   String _busqueda  = '';
   _ModoVista _modoVista = _ModoVista.lista;
-
+  final _resolverNombres = ResolverNombresService();
   // ── Animación de entrada (solo fade) ──────────────────────────────────────
   late AnimationController _animCtrl;
   late Animation<double>   _fadeAnim;
@@ -128,26 +131,37 @@ class _ParticipantesCompletoCarreraScreenState
   }
 
   // ── Inicialización ────────────────────────────────────────────────────────
-  Future<void> _init() async {
-    setState(() => _isLoadingInit = true);
-    try {
-      final adminData = await PrefsHelper.getAdminCarreraData();
-      if (adminData == null) {
-        _snack('No se encontró información de sesión', isError: true);
-        if (mounted) setState(() => _isLoadingInit = false);
-        return;
-      }
-      _filialId     = adminData['filial']       as String?;
-      _filialNombre = adminData['filialNombre'] as String?;
-      _facultad     = adminData['facultad']     as String?;
-      _carrera      = adminData['carrera']      as String?;
-      _carreraId    = adminData['carreraId'] ?? adminData['carrera'];
-      await _cargarEventos();
-    } catch (e) {
-      _snack('Error al iniciar: $e', isError: true);
+ Future<void> _init() async {
+  setState(() => _isLoadingInit = true);
+  try {
+    final adminData = await PrefsHelper.getAdminCarreraData();
+    if (adminData == null) {
+      _snack('No se encontró información de sesión', isError: true);
+      if (mounted) setState(() => _isLoadingInit = false);
+      return;
     }
-    if (mounted) setState(() => _isLoadingInit = false);
+    _filialId     = adminData['filial']       as String?;
+    _filialNombre = adminData['filialNombre'] as String?;
+    _facultad     = adminData['facultad']     as String?;
+    _carrera      = adminData['carrera']      as String?;
+    _carreraId    = adminData['carreraId'] ?? adminData['carrera'];
+
+    // DEBUG — ver qué valores se están usando
+    debugPrint('🔑 filialNombre: $_filialNombre');
+    debugPrint('🔑 carrera: $_carrera');
+    debugPrint('🔑 docKey que se usará: ${_filialNombre}_$_carrera');
+
+    await _resolverNombres.cargarEstudiantes(
+      filialNombre: _filialNombre ?? '',
+      carrera: _carrera ?? '',
+    );
+
+    await _cargarEventos();
+  } catch (e) {
+    _snack('Error al iniciar: $e', isError: true);
   }
+  if (mounted) setState(() => _isLoadingInit = false);
+}
 
   // ── Cargar lista de eventos ───────────────────────────────────────────────
   Future<void> _cargarEventos() async {
@@ -216,27 +230,32 @@ class _ParticipantesCompletoCarreraScreenState
         _isLoadingParticipantes = false;
       });
       _animCtrl.forward();
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoadingParticipantes = false);
-        _snack('Error al cargar participantes: $e', isError: true);
-      }
-    }
+    } catch (e, stack) {          // ← agregar stack
+  if (mounted) {
+    setState(() => _isLoadingParticipantes = false);
+    debugPrint('❌ Error seleccionar evento: $e');
+    debugPrint('$stack');     // ← agregar esto
+    _snack('Error al cargar participantes: $e', isError: true);
+  }
+}
   }
 
   // ── Cargar participantes en lotes de 10 ───────────────────────────────────
   Future<List<_CategoriaData>> _cargarParticipantes(String eventoId) async {
+  try {                        // ← envolver en try/catch
     final proyectosSnap = await _firestore
         .collection('events')
         .doc(eventoId)
         .collection('proyectos')
         .get();
 
+    debugPrint('📦 Proyectos encontrados: ${proyectosSnap.docs.length}');
+
     if (proyectosSnap.docs.isEmpty) return [];
 
     const batchSize = 10;
-    final docs      = proyectosSnap.docs;
-    final results   = <Map<String, dynamic>>[];
+    final docs    = proyectosSnap.docs;
+    final results = <Map<String, dynamic>>[];
 
     for (int i = 0; i < docs.length; i += batchSize) {
       final batch = docs.sublist(i, (i + batchSize).clamp(0, docs.length));
@@ -244,31 +263,40 @@ class _ParticipantesCompletoCarreraScreenState
         batch.map((doc) => _procesarProyecto(eventoId, doc)),
       );
       results.addAll(batchResults);
+      debugPrint('✅ Lote procesado: ${i ~/ batchSize + 1} — total acumulado: ${results.length}'); // ← agregar
     }
 
-    // Agrupar por categoría
     final Map<String, List<Map<String, dynamic>>> porCategoria = {};
     for (final p in results) {
       final cat = p['clasificacion'] as String;
       porCategoria.putIfAbsent(cat, () => []).add(p);
     }
 
-    // Ordenar proyectos por promedio descendente dentro de cada categoría
     for (final lista in porCategoria.values) {
       lista.sort((a, b) =>
           (b['promedio'] as double).compareTo(a['promedio'] as double));
     }
 
-    // Convertir a lista de _CategoriaData (inmutable, estable)
+    debugPrint('📊 Categorías generadas: ${porCategoria.length}'); // ← agregar
+
     return porCategoria.entries
         .map((e) => _CategoriaData(nombre: e.key, proyectos: e.value))
         .toList();
+
+  } catch (e, stack) {         // ← agregar
+    debugPrint('❌ Error en _cargarParticipantes: $e');
+    debugPrint('$stack');
+    rethrow;
   }
-
+}
+  
   Future<Map<String, dynamic>> _procesarProyecto(
-      String eventoId, QueryDocumentSnapshot doc) async {
+    String eventoId, QueryDocumentSnapshot doc) async {
+  try {
     final d = doc.data() as Map<String, dynamic>;
-
+    debugPrint('🔍 Integrantes raw: ${d['Integrantes']}');
+    debugPrint('🔍 Tipo: ${d['Integrantes'].runtimeType}');
+    debugPrint('🔍 Resuelto: ${_resolverNombres.resolver(d['Integrantes'])}');
     final evalSnap = await _firestore
         .collection('events')
         .doc(eventoId)
@@ -283,42 +311,115 @@ class _ParticipantesCompletoCarreraScreenState
         'proyectoId':        doc.id,
         'codigo':            _s(d['Código'],       'Sin código'),
         'titulo':            _s(d['Título'],        'Sin título'),
-        'integrantes':       _s(d['Integrantes'],   ''),
+        'integrantes': _resolverNombres.resolver(d['Integrantes']),
         'sala':              _s(d['Sala'],           ''),
         'clasificacion':     _s(d['Clasificación'], 'Sin categoría'),
         'asesor':            _s(d['Asesor'],         ''),
         'descripcion':       _s(d['Descripción'],   ''),
         'promedio':          0.0,
+        'promedioRaw':       0.0,
         'notaMax':           0.0,
         'notaMin':           0.0,
         'cantidadJurados':   0,
         'notas':             <double>[],
+        'notasRaw':          <double>[],
+        'escalaBase':        _C.escalaBase,
         'tieneEvaluaciones': false,
       };
     }
 
-    final notas = evalSnap.docs
-        .map((e) => ((e.data()['notaTotal'] ?? 0.0) as num).toDouble())
-        .toList();
-    final promedio = notas.reduce((a, b) => a + b) / notas.length;
+    final notasNormalizadas = <double>[];
+    final notasRaw          = <double>[];
+
+    for (final e in evalSnap.docs) {
+      final data      = e.data() as Map<String, dynamic>;
+      final notaTotal = (data['notaTotal'] ?? 0.0 as num).toDouble();
+
+      if (!data.containsKey('puntajeMaximo')) {
+        debugPrint('⚠️ Evaluación ${e.id} sin puntajeMaximo — omitida del ranking');
+        continue;
+      }
+
+      final puntajeMax = (data['puntajeMaximo'] as num).toDouble();
+      final maxSeguro  = puntajeMax > 0 ? puntajeMax : _C.escalaBase;
+      final normalizada =
+          ((notaTotal / maxSeguro) * _C.escalaBase).clamp(0.0, _C.escalaBase);
+
+      notasNormalizadas.add(double.parse(normalizada.toStringAsFixed(2)));
+      notasRaw.add(notaTotal);
+    }
+
+    if (notasNormalizadas.isEmpty) {
+      return {
+        'proyectoId':        doc.id,
+        'codigo':            _s(d['Código'],       'Sin código'),
+        'titulo':            _s(d['Título'],        'Sin título'),
+        'integrantes':       _resolverNombres.resolver(d['Integrantes']),
+        'sala':              _s(d['Sala'],           ''),
+        'clasificacion':     _s(d['Clasificación'], 'Sin categoría'),
+        'asesor':            _s(d['Asesor'],         ''),
+        'descripcion':       _s(d['Descripción'],   ''),
+        'promedio':          0.0,
+        'promedioRaw':       0.0,
+        'notaMax':           0.0,
+        'notaMin':           0.0,
+        'cantidadJurados':   0,
+        'notas':             <double>[],
+        'notasRaw':          <double>[],
+        'escalaBase':        _C.escalaBase,
+        'tieneEvaluaciones': false,
+      };
+    }
+
+    final promedio    = notasNormalizadas.reduce((a, b) => a + b) / notasNormalizadas.length;
+    final promedioRaw = notasRaw.reduce((a, b) => a + b) / notasRaw.length;
+    final notaMax     = notasNormalizadas.reduce((a, b) => a > b ? a : b);
+    final notaMin     = notasNormalizadas.reduce((a, b) => a < b ? a : b);
 
     return {
       'proyectoId':        doc.id,
       'codigo':            _s(d['Código'],       'Sin código'),
       'titulo':            _s(d['Título'],        'Sin título'),
-      'integrantes':       _s(d['Integrantes'],   ''),
+      'integrantes': _resolverNombres.resolver(d['Integrantes']),
       'sala':              _s(d['Sala'],           ''),
       'clasificacion':     _s(d['Clasificación'], 'Sin categoría'),
       'asesor':            _s(d['Asesor'],         ''),
       'descripcion':       _s(d['Descripción'],   ''),
-      'promedio':          promedio,
-      'notaMax':           notas.reduce((a, b) => a > b ? a : b),
-      'notaMin':           notas.reduce((a, b) => a < b ? a : b),
-      'cantidadJurados':   notas.length,
-      'notas':             notas,
+      'promedio':          double.parse(promedio.toStringAsFixed(2)),
+      'promedioRaw':       double.parse(promedioRaw.toStringAsFixed(2)),
+      'notaMax':           notaMax,
+      'notaMin':           notaMin,
+      'cantidadJurados':   notasNormalizadas.length,
+      'notas':             notasNormalizadas,
+      'notasRaw':          notasRaw,
+      'escalaBase':        _C.escalaBase,
       'tieneEvaluaciones': true,
     };
+
+  } catch (e, stack) {
+    debugPrint('❌ Error en proyecto ${doc.id}: $e');
+    debugPrint('$stack');
+    return {
+      'proyectoId':        doc.id,
+      'codigo':            'Error',
+      'titulo':            'Error al procesar',
+      'integrantes':       '',
+      'sala':              '',
+      'clasificacion':     'Sin categoría',
+      'asesor':            '',
+      'descripcion':       '',
+      'promedio':          0.0,
+      'promedioRaw':       0.0,
+      'notaMax':           0.0,
+      'notaMin':           0.0,
+      'cantidadJurados':   0,
+      'notas':             <double>[],
+      'notasRaw':          <double>[],
+      'escalaBase':        _C.escalaBase,
+      'tieneEvaluaciones': false,
+    };
   }
+}
 
   // ── Filtro con memoización estricta ───────────────────────────────────────
   List<_CategoriaData> get _datosFiltrados {
@@ -368,7 +469,6 @@ class _ParticipantesCompletoCarreraScreenState
     }
     setState(() => _isGeneratingExcel = true);
 
-    // Reconstruir el mapa que espera el servicio de Excel
     final Map<String, List<Map<String, dynamic>>> mapa = {
       for (final c in _categoriasData) c.nombre: c.proyectos,
     };
@@ -404,6 +504,7 @@ class _ParticipantesCompletoCarreraScreenState
         filialNombre: _s(_filialNombre),
         facultad:     _s(_facultad),
         carrera:      _carrera,
+        escalaBase:   _C.escalaBase,   // FIX: pasar escala para que Excel la muestre
       );
 
       if (!mounted) return;
@@ -602,7 +703,8 @@ class _ParticipantesCompletoCarreraScreenState
                         color: Colors.white,
                         overflow: TextOverflow.ellipsis),
                     maxLines: 1),
-                Text('Ranking completo por categoría',
+                // FIX: indicar la escala de normalización en el subtítulo
+                Text('Ranking normalizado a /${_C.escalaBase} pts',
                     style: TextStyle(fontSize: 12, color: Colors.white60)),
               ],
             ),
@@ -756,15 +858,8 @@ class _ParticipantesCompletoCarreraScreenState
     );
   }
 
-  // ── Modo lista ────────────────────────────────────────────────────────────
-  //
-  // OPTIMIZACIÓN CLAVE: cada _CategoriaAcordeon es StatefulWidget y gestiona
-  // su propio estado de expansión. El toggle ya NO llama a setState() en el
-  // padre, por lo que SOLO se reconstruye la tarjeta tocada.
   Widget _buildLista(List<_CategoriaData> datos) {
     return CustomScrollView(
-      // ClampingScrollPhysics evita el rebote de iOS que puede causar jank
-      // en combinación con muchos elementos animados.
       physics: const ClampingScrollPhysics(),
       slivers: [
         SliverPadding(
@@ -772,15 +867,11 @@ class _ParticipantesCompletoCarreraScreenState
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
               (_, i) => _CategoriaAcordeon(
-                // ValueKey estable → Flutter reutiliza el elemento sin
-                // destruir el State interno ni reconstruir la lista entera.
                 key:           ValueKey(datos[i].nombre),
                 data:          datos[i],
                 onTapProyecto: _mostrarDetalle,
               ),
               childCount: datos.length,
-              // addAutomaticKeepAlives: false → los acordeones cerrados se
-              // pueden descartar de memoria; los abiertos mantienen su State.
               addAutomaticKeepAlives: false,
             ),
           ),
@@ -799,7 +890,6 @@ class _ParticipantesCompletoCarreraScreenState
     );
   }
 
-  // ── Modo tabla ────────────────────────────────────────────────────────────
   Widget _buildTabla(List<_CategoriaData> datos) {
     return CustomScrollView(
       physics: const ClampingScrollPhysics(),
@@ -862,12 +952,9 @@ class _ParticipantesCompletoCarreraScreenState
 // ============================================================================
 // MODELO DE DATOS INMUTABLE
 // ============================================================================
-// _CategoriaData no puede ser `const` porque `conEval` se computa
-// en el constructor — pero sigue siendo efectivamente inmutable.
 class _CategoriaData {
   final String nombre;
   final List<Map<String, dynamic>> proyectos;
-  // Pre-calculado una sola vez; evita .where().length en cada build()
   final int conEval;
 
   _CategoriaData({required this.nombre, required this.proyectos})
@@ -1361,16 +1448,7 @@ class _EventoCard extends StatelessWidget {
 }
 
 // ============================================================================
-// ACORDEÓN DE CATEGORÍA — StatefulWidget con estado LOCAL
-//
-// OPTIMIZACIÓN PRINCIPAL:
-// - Estado de expansión LOCAL → toggle ya no dispara setState() en el padre
-// - Solo esta tarjeta se reconstruye al tocar el header
-// - AnimatedContainer + ClipRect en lugar de AnimatedSize + Offstage
-//   · Offstage mantiene el subárbol en el árbol de renderizado completo
-//   · ClipRect + SizeTransition solo hace layout del área visible
-// - RepaintBoundary en el contenido → la capa se rasteriza una vez y se
-//   reutiliza mientras no haya cambios internos
+// ACORDEÓN DE CATEGORÍA
 // ============================================================================
 class _CategoriaAcordeon extends StatefulWidget {
   final _CategoriaData data;
@@ -1393,13 +1471,7 @@ class _CategoriaAcordeonState extends State<_CategoriaAcordeon>
   late Animation<double>   _rotateAnim;
 
   bool _expandida    = false;
-  // Flag de "construcción diferida": los hijos se inflan UNA sola vez
-  // (la primera vez que se abre) y luego se mantienen vivos en memoria.
-  // Así el cierre no necesita recalcular ningún layout.
   bool _fueExpandido = false;
-
-  // Lista de widgets pre-construidos, guardada en el State.
-  // Se crea solo cuando _fueExpandido pasa a true.
   late final List<Widget> _hijosPrebuilts;
 
   @override
@@ -1419,31 +1491,24 @@ class _CategoriaAcordeonState extends State<_CategoriaAcordeon>
     super.dispose();
   }
 
-  // Construye los hijos SOLO la primera vez que se abre.
-  // Las llamadas posteriores (abrir/cerrar/abrir) devuelven la lista cacheada.
-  List<Widget> _buildHijos() {
-    if (!_fueExpandido) {
-      _fueExpandido = true;
-      final cat = widget.data;
-      _hijosPrebuilts = List.generate(cat.proyectos.length, (i) {
-        return RepaintBoundary(
-          key: ValueKey(cat.proyectos[i]['proyectoId']),
-          child: _ProyectoCard(
-            proyecto: cat.proyectos[i],
-            posicion: i,
-            onTap:    () => widget.onTapProyecto(cat.proyectos[i], i),
-          ),
-        );
-      });
-    }
-    return _hijosPrebuilts;
-  }
+ List<Widget> _buildHijos() {
+  _fueExpandido = true;
+  final cat = widget.data;
+  _hijosPrebuilts = List.generate(cat.proyectos.length, (i) {
+    return RepaintBoundary(
+      key: ValueKey(cat.proyectos[i]['proyectoId']),
+      child: _ProyectoCard(
+        proyecto: cat.proyectos[i],
+        posicion: i,
+        onTap: () => widget.onTapProyecto(cat.proyectos[i], i),
+      ),
+    );
+  });
+  return _hijosPrebuilts;
+}
 
   void _toggle() {
-    // Aseguramos que los hijos existan ANTES de arrancar la animación,
-    // de modo que el primer frame ya los tiene listos y no hay spike.
     if (!_fueExpandido) _buildHijos();
-
     setState(() => _expandida = !_expandida);
     _expandida ? _ctrl.forward() : _ctrl.reverse();
   }
@@ -1451,7 +1516,7 @@ class _CategoriaAcordeonState extends State<_CategoriaAcordeon>
   @override
   Widget build(BuildContext context) {
     final cat     = widget.data;
-    final conEval = cat.conEval; // O(1), pre-calculado
+    final conEval = cat.conEval;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1469,7 +1534,6 @@ class _CategoriaAcordeonState extends State<_CategoriaAcordeon>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Header ────────────────────────────────────────────────────
           Material(
             color: _C.primary,
             child: InkWell(
@@ -1521,22 +1585,6 @@ class _CategoriaAcordeonState extends State<_CategoriaAcordeon>
               ),
             ),
           ),
-
-          // ── Contenido animado ──────────────────────────────────────────
-          //
-          // POR QUÉ NO ListView.builder aquí:
-          // ListView.builder con shrinkWrap:true recalcula su altura total
-          // en CADA frame de la animación (tanto forward como reverse).
-          // Eso es un double-pass de layout por frame → lag en el cierre.
-          //
-          // SOLUCIÓN:
-          // · Los hijos se construyen ONE-SHOT la primera vez (_buildHijos)
-          //   y se guardan en _hijosPrebuilts dentro del State.
-          // · SizeTransition solo clipea/escala una superficie ya renderizada.
-          // · En frames de animación NO hay builds ni layouts nuevos:
-          //   SizeTransition opera en el layer de composición (GPU).
-          // · RepaintBoundary por ítem impide que el scroll del padre
-          //   invalide los tiles de las tarjetas individuales.
           SizeTransition(
             sizeFactor:    _expandAnim,
             axisAlignment: -1.0,
@@ -1545,7 +1593,6 @@ class _CategoriaAcordeonState extends State<_CategoriaAcordeon>
                 padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  // _fueExpandido garantiza que _hijosPrebuilts existe
                   children: _fueExpandido ? _hijosPrebuilts : const [],
                 ),
               ),
@@ -1577,6 +1624,7 @@ class _ProyectoCard extends StatelessWidget {
     final promedio  = (proyecto['promedio'] as num?)?.toDouble() ?? 0.0;
     final jurados   = (proyecto['cantidadJurados'] as int?) ?? 0;
     final tieneEval = proyecto['tieneEvaluaciones'] == true;
+    final escala    = (proyecto['escalaBase'] as num?)?.toDouble() ?? _C.escalaBase;
 
     final color = _posColor(posicion, tieneEval);
     final icono = _posIcono(posicion, tieneEval);
@@ -1602,7 +1650,6 @@ class _ProyectoCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Posición / medalla
             SizedBox(
               width: 36,
               child: Center(
@@ -1684,7 +1731,7 @@ class _ProyectoCard extends StatelessWidget {
 
             const SizedBox(width: 10),
 
-            // Nota
+            // FIX: mostrar nota normalizada con su escala base
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -1704,9 +1751,11 @@ class _ProyectoCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 3),
-                Text(tieneEval ? 'pts' : 'Sin eval.',
-                    style: const TextStyle(
-                        fontSize: 10, color: _C.textSecondary)),
+                Text(
+                  tieneEval ? '/${escala.toStringAsFixed(0)}' : 'Sin eval.',
+                  style: const TextStyle(
+                      fontSize: 10, color: _C.textSecondary),
+                ),
                 if (tieneEval) ...[
                   const SizedBox(height: 2),
                   Row(mainAxisSize: MainAxisSize.min, children: [
@@ -1758,7 +1807,6 @@ class _TablaCategoria extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Header
           Container(
             padding: const EdgeInsets.all(14),
             color: _C.primary,
@@ -1783,21 +1831,21 @@ class _TablaCategoria extends StatelessWidget {
             ),
           ),
 
-          // Cabecera de columnas
-          const ColoredBox(
-            color: Color(0x101E3A5F),
+          // FIX: encabezado actualizado para indicar escala base
+          ColoredBox(
+            color: const Color(0x101E3A5F),
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               child: Row(
                 children: [
-                  SizedBox(
+                  const SizedBox(
                       width: 32,
                       child: Text('#',
                           style: TextStyle(
                               fontSize:   11,
                               fontWeight: FontWeight.bold,
                               color:      _C.textSecondary))),
-                  Expanded(
+                  const Expanded(
                       flex: 3,
                       child: Text('Proyecto',
                           style: TextStyle(
@@ -1805,14 +1853,14 @@ class _TablaCategoria extends StatelessWidget {
                               fontWeight: FontWeight.bold,
                               color:      _C.textSecondary))),
                   SizedBox(
-                      width: 52,
-                      child: Text('Prom.',
-                          style: TextStyle(
-                              fontSize:   11,
+                      width: 60,
+                      child: Text('Prom./${_C.escalaBase.toStringAsFixed(0)}',
+                          style: const TextStyle(
+                              fontSize:   10,
                               fontWeight: FontWeight.bold,
                               color:      _C.textSecondary),
                           textAlign: TextAlign.center)),
-                  SizedBox(
+                  const SizedBox(
                       width: 36,
                       child: Text('J.',
                           style: TextStyle(
@@ -1825,7 +1873,6 @@ class _TablaCategoria extends StatelessWidget {
             ),
           ),
 
-          // Filas
           ...List.generate(data.proyectos.length, (i) {
             final p         = data.proyectos[i];
             final tieneEval = p['tieneEvaluaciones'] == true;
@@ -1880,7 +1927,7 @@ class _TablaCategoria extends StatelessWidget {
                       ),
                     ),
                     SizedBox(
-                      width: 52,
+                      width: 60,
                       child: Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(
@@ -1890,6 +1937,7 @@ class _TablaCategoria extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
+                            // FIX: 2 decimales en tabla
                             tieneEval ? _sf(promedio) : 'S/E',
                             style: const TextStyle(
                                 fontSize:   11,
@@ -1947,12 +1995,16 @@ class _DetalleProyectoSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final promedio  = (proyecto['promedio'] as num?)?.toDouble() ?? 0.0;
-    final notaMax   = (proyecto['notaMax']  as num?)?.toDouble() ?? 0.0;
-    final notaMin   = (proyecto['notaMin']  as num?)?.toDouble() ?? 0.0;
-    final jurados   = (proyecto['cantidadJurados'] as int?) ?? 0;
-    final notas     = (proyecto['notas'] as List?)?.cast<double>() ?? [];
-    final tieneEval = proyecto['tieneEvaluaciones'] == true;
+    final promedio    = (proyecto['promedio']    as num?)?.toDouble() ?? 0.0;
+    final promedioRaw = (proyecto['promedioRaw'] as num?)?.toDouble() ?? 0.0;
+    final notaMax     = (proyecto['notaMax']     as num?)?.toDouble() ?? 0.0;
+    final notaMin     = (proyecto['notaMin']     as num?)?.toDouble() ?? 0.0;
+    final jurados     = (proyecto['cantidadJurados'] as int?) ?? 0;
+    // FIX: usar notas normalizadas para el detalle
+    final notas       = (proyecto['notas']    as List?)?.cast<double>() ?? [];
+    final notasRaw    = (proyecto['notasRaw'] as List?)?.cast<double>() ?? [];
+    final tieneEval   = proyecto['tieneEvaluaciones'] == true;
+    final escala      = (proyecto['escalaBase'] as num?)?.toDouble() ?? _C.escalaBase;
 
     final color    = _posColor(posicion, tieneEval);
     final icono    = _posIcono(posicion, tieneEval);
@@ -1977,7 +2029,6 @@ class _DetalleProyectoSheet extends StatelessWidget {
         ),
         child: Column(
           children: [
-            // Handle
             Container(
               margin: const EdgeInsets.only(top: 12, bottom: 8),
               width:  40,
@@ -1987,7 +2038,6 @@ class _DetalleProyectoSheet extends StatelessWidget {
                   borderRadius: BorderRadius.circular(2)),
             ),
 
-            // Header
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
               child: Row(
@@ -2048,10 +2098,8 @@ class _DetalleProyectoSheet extends StatelessWidget {
             Expanded(
               child: ListView(
                 controller: controller,
-                padding:
-                    const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                 children: [
-                  // Stats de notas
                   if (tieneEval)
                     Container(
                       padding: const EdgeInsets.all(16),
@@ -2063,37 +2111,60 @@ class _DetalleProyectoSheet extends StatelessWidget {
                         ),
                         borderRadius: BorderRadius.all(Radius.circular(16)),
                       ),
-                      child: Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment.spaceAround,
+                      child: Column(
                         children: [
-                          _StatItem(
-                              label:  'Promedio',
-                              value:  _sf(promedio),
-                              icon:   Icons.star_rounded,
-                              color:  _C.gold,
-                              grande: true),
-                          Container(
-                              width: 1, height: 40, color: Colors.white24),
-                          _StatItem(
-                              label: 'Nota máx.',
-                              value: _sf(notaMax),
-                              icon:  Icons.arrow_upward_rounded,
-                              color: Colors.greenAccent),
-                          Container(
-                              width: 1, height: 40, color: Colors.white24),
-                          _StatItem(
-                              label: 'Nota mín.',
-                              value: _sf(notaMin),
-                              icon:  Icons.arrow_downward_rounded,
-                              color: Colors.redAccent.shade100),
-                          Container(
-                              width: 1, height: 40, color: Colors.white24),
-                          _StatItem(
-                              label: 'Jurados',
-                              value: '$jurados',
-                              icon:  Icons.how_to_vote_outlined,
-                              color: Colors.lightBlueAccent),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _StatItem(
+                                  // FIX: mostrar promedio normalizado con escala
+                                  label:  'Prom./${escala.toStringAsFixed(0)}',
+                                  value:  _sf(promedio),
+                                  icon:   Icons.star_rounded,
+                                  color:  _C.gold,
+                                  grande: true),
+                              Container(
+                                  width: 1, height: 40, color: Colors.white24),
+                              _StatItem(
+                                  label: 'Nota máx.',
+                                  value: _sf(notaMax),
+                                  icon:  Icons.arrow_upward_rounded,
+                                  color: Colors.greenAccent),
+                              Container(
+                                  width: 1, height: 40, color: Colors.white24),
+                              _StatItem(
+                                  label: 'Nota mín.',
+                                  value: _sf(notaMin),
+                                  icon:  Icons.arrow_downward_rounded,
+                                  color: Colors.redAccent.shade100),
+                              Container(
+                                  width: 1, height: 40, color: Colors.white24),
+                              _StatItem(
+                                  label: 'Jurados',
+                                  value: '$jurados',
+                                  icon:  Icons.how_to_vote_outlined,
+                                  color: Colors.lightBlueAccent),
+                            ],
+                          ),
+                          // FIX: mostrar el promedio original (sin normalizar) como referencia
+                          if (promedioRaw > 0) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'Nota original promedio: ${_sf(promedioRaw)} pts (sin normalizar)',
+                                style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.white60),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     )
@@ -2121,10 +2192,10 @@ class _DetalleProyectoSheet extends StatelessWidget {
 
                   const SizedBox(height: 20),
 
-                  // Notas individuales
+                  // FIX: mostrar notas normalizadas Y las originales
                   if (notas.isNotEmpty) ...[
-                    const _SheetSection(
-                        titulo: 'Notas por jurado',
+                    _SheetSection(
+                        titulo: 'Notas por jurado (normalizadas a /${escala.toStringAsFixed(0)})',
                         icon:   Icons.how_to_vote_rounded),
                     const SizedBox(height: 10),
                     Wrap(
@@ -2133,6 +2204,9 @@ class _DetalleProyectoSheet extends StatelessWidget {
                       children: notas.asMap().entries.map((e) {
                         final isMax = e.value == notaMax;
                         final isMin = e.value == notaMin && jurados > 1;
+                        final rawVal = e.key < notasRaw.length
+                            ? notasRaw[e.key]
+                            : null;
                         return Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 8),
@@ -2166,6 +2240,12 @@ class _DetalleProyectoSheet extends StatelessWidget {
                                           : isMin
                                               ? Colors.red.shade700
                                               : _C.primary)),
+                              // FIX: mostrar nota original debajo de la normalizada
+                              if (rawVal != null)
+                                Text('(${_sf(rawVal)} orig.)',
+                                    style: TextStyle(
+                                        fontSize: 9,
+                                        color: Colors.grey.shade500)),
                             ],
                           ),
                         );
@@ -2174,7 +2254,6 @@ class _DetalleProyectoSheet extends StatelessWidget {
                     const SizedBox(height: 20),
                   ],
 
-                  // Info del proyecto
                   const _SheetSection(
                       titulo: 'Información del proyecto',
                       icon:   Icons.info_outline_rounded),
@@ -2239,7 +2318,7 @@ class _DetalleProyectoSheet extends StatelessWidget {
 }
 
 // ============================================================================
-// WIDGETS AUXILIARES
+// WIDGETS AUXILIARES (sin cambios estructurales)
 // ============================================================================
 class _CenteredLoader extends StatelessWidget {
   final String mensaje;
@@ -2360,11 +2439,13 @@ class _SheetSection extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: _C.primary),
         const SizedBox(width: 8),
-        Text(titulo,
-            style: const TextStyle(
-                fontSize:   13,
-                fontWeight: FontWeight.bold,
-                color:      _C.primary)),
+        Expanded(
+          child: Text(titulo,
+              style: const TextStyle(
+                  fontSize:   13,
+                  fontWeight: FontWeight.bold,
+                  color:      _C.primary)),
+        ),
       ],
     );
   }
@@ -2453,7 +2534,7 @@ class _IntegrantesCard extends StatelessWidget {
               Expanded(
                 child: Text(nombre,
                     style: const TextStyle(
-                        fontSize: 12, color: _C.textSecondary)),
+                        fontSize: 13, color: _C.textSecondary)),
               ),
             ],
           ),

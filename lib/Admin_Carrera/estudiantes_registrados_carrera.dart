@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
+import '/encryption_helper.dart';
 
 class EstudiantesRegistradosCarreraScreen extends StatefulWidget {
   const EstudiantesRegistradosCarreraScreen({super.key});
@@ -17,7 +18,13 @@ class _EstudiantesRegistradosCarreraScreenState
   String _carreraNombre = '';
   String _facultadNombre = '';
   String _sedeNombre = '';
-
+String _decryptDni(Map<String, dynamic> student) {
+  final encrypted = student['dniEncrypted'] as String?;
+  if (encrypted != null && encrypted.isNotEmpty) {
+    return EncryptionHelper.decryptDni(encrypted);
+  }
+  return 'Sin DNI';
+}
   bool _isLoading = true;
 
   List<Map<String, dynamic>> _allStudents = [];
@@ -106,28 +113,28 @@ class _EstudiantesRegistradosCarreraScreenState
     setState(() => _isLoading = false);
   }
 
-  void _applySearch() {
-    final term = _searchController.text.toLowerCase().trim();
-    if (term.isEmpty) {
-      setState(() => _filteredStudents = List.from(_allStudents));
-      return;
-    }
-    setState(() {
-      _filteredStudents = _allStudents.where((s) {
-        final name = (s['name'] ?? '').toString().toLowerCase();
-        final codigo = (s['codigoUniversitario'] ?? '').toString().toLowerCase();
-        final dni = (s['dni'] ?? '').toString().toLowerCase();
-        return name.contains(term) || codigo.contains(term) || dni.contains(term);
-      }).toList();
-    });
+ void _applySearch() {
+  final term = _searchController.text.toLowerCase().trim();
+  if (term.isEmpty) {
+    setState(() => _filteredStudents = List.from(_allStudents));
+    return;
   }
+  setState(() {
+    _filteredStudents = _allStudents.where((s) {
+      final name   = (s['name'] ?? '').toString().toLowerCase();
+      final codigo = (s['codigoUniversitario'] ?? '').toString().toLowerCase();
+      final dni    = _decryptDni(s).toLowerCase(); // ← descifrado, no el hash
+      return name.contains(term) || codigo.contains(term) || dni.contains(term);
+    }).toList();
+  });
+}
 
   // ── Edición ──────────────────────────────────────────────────────
   Future<void> _showEditDialog(Map<String, dynamic> student, String studentId) async {
     _editNombreController.text = student['name'] ?? '';
     _editEmailController.text = student['email'] ?? '';
     _editCodigoController.text = student['codigoUniversitario'] ?? '';
-    _editDniController.text = student['dni'] ?? '';
+    _editDniController.text = _decryptDni(student);
     _editCelularController.text = student['celular'] ?? '';
     _editCorreoInstitucionalController.text = student['correoInstitucional'] ?? '';
 
@@ -680,7 +687,7 @@ class _EstudiantesRegistradosCarreraScreenState
                                 Colors.blue,
                               ),
                               _badge(
-                                student['dni'] ?? 'N/A',
+                                _decryptDni(student),
                                 Icons.credit_card,
                                 Colors.green,
                               ),
@@ -758,13 +765,17 @@ class _EstudiantesRegistradosCarreraScreenState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _infoRow('Email:',
-                                  student['email'] ?? 'Sin email', Icons.email),
                               const SizedBox(height: 12),
                               _infoRow('Usuario:',
                                   student['username'] ?? 'Sin usuario', Icons.person),
                               const SizedBox(height: 12),
-                              _infoRow('Celular:',
+                              _infoRow(
+                                      'DNI:',
+                                      _decryptDni(student),
+                                      Icons.credit_card,
+                                    ),
+                                    const SizedBox(height: 12),
+                                _infoRow('Celular:',
                                   student['celular'] ?? 'Sin celular', Icons.phone),
                               if (student['modoContrato'] != null) ...[
                                 const SizedBox(height: 12),

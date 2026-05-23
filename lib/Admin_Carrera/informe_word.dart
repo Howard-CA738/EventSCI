@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-
+import '/resolver_nombres_service.dart';
 import 'package:archive/archive.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
@@ -63,193 +63,229 @@ class InformeWordGenerator {
     }
   }
 
-  // ─── OBTENER FILAS DE RESULTADO PARA LA TABLA DE RESULTADOS ──────────────
-
   static Future<List<_FilaResultado>> _obtenerFilasResultado(
-      String eventId) async {
-    final List<_FilaResultado> filas = [];
-
-    try {
-      final proyectosSnap = await FirebaseFirestore.instance
-          .collection('events')
-          .doc(eventId)
-          .collection('proyectos')
-          .get();
-
-      final Map<String, int> conteoPorCategoria = {};
-      for (final doc in proyectosSnap.docs) {
-        final clasificacion =
-            (doc.data()['Clasificación'] as String?)?.trim() ?? '';
-        if (clasificacion.isNotEmpty) {
-          conteoPorCategoria[clasificacion] =
-              (conteoPorCategoria[clasificacion] ?? 0) + 1;
+  String eventId,
+) async {
+  final List<_FilaResultado> filas = [];
+ 
+  try {
+    final proyectosSnap = await FirebaseFirestore.instance
+        .collection('events')
+        .doc(eventId)
+        .collection('proyectos')
+        .get();
+ 
+    final Map<String, int> conteoPorCategoria = {};
+    for (final doc in proyectosSnap.docs) {
+      final clasificacion =
+          (doc.data()['Clasificación'] as String?)?.trim() ?? '';
+      if (clasificacion.isNotEmpty) {
+        conteoPorCategoria[clasificacion] =
+            (conteoPorCategoria[clasificacion] ?? 0) + 1;
+      }
+    }
+ 
+    if (conteoPorCategoria.isEmpty) return [];
+ 
+    final categorias = conteoPorCategoria.keys.toList()..sort();
+ 
+    final Map<String, Set<String>> asistentesUnicos = {
+      for (final cat in categorias) cat: <String>{},
+    };
+ 
+    bool fallbackNecesario = false;
+ 
+    final lotes = <List<String>>[];
+    for (int i = 0; i < categorias.length; i += 10) {
+      lotes.add(categorias.skip(i).take(10).toList());
+    }
+ 
+    for (final lote in lotes) {
+      try {
+        final scansSnap = await FirebaseFirestore.instance
+            .collectionGroup('scans')
+            .where('categoria', whereIn: lote)
+            .get();
+ 
+        for (final scanDoc in scansSnap.docs) {
+          final segments = scanDoc.reference.path.split('/');
+          if (segments.length < 6)         continue;
+          if (segments[0] != 'events')     continue;
+          // ✅ CORRECCIÓN B: validación ya existente reforzada
+          if (segments[1] != eventId)      continue;
+          if (segments[2] != 'asistencias') continue;
+ 
+          final categoria =
+              scanDoc.data()['categoria']?.toString() ?? '';
+          if (!asistentesUnicos.containsKey(categoria)) continue;
+ 
+          final studentId = segments[3];
+          asistentesUnicos[categoria]!.add(studentId);
         }
+      } catch (e) {
+        debugPrint('collectionGroup falló para lote $lote: $e');
+        fallbackNecesario = true;
+        break;
       }
-
-      if (conteoPorCategoria.isEmpty) return [];
-
-      final categorias = conteoPorCategoria.keys.toList()..sort();
-
-      final Map<String, Set<String>> asistentesUnicos = {
-        for (final cat in categorias) cat: <String>{},
-      };
-
-      bool fallbackNecesario = false;
-
-      final lotes = <List<String>>[];
-      for (int i = 0; i < categorias.length; i += 10) {
-        lotes.add(categorias.skip(i).take(10).toList());
+    }
+ 
+    // Fallback (sin cambios respecto al original)
+    if (fallbackNecesario) {
+      debugPrint('Activando fallback por alumno para eventId=$eventId');
+      for (final cat in categorias) {
+        asistentesUnicos[cat]!.clear();
       }
-
-      for (final lote in lotes) {
-        try {
-          final scansSnap = await FirebaseFirestore.instance
-              .collectionGroup('scans')
-              .where('categoria', whereIn: lote)
-              .get();
-
-          for (final scanDoc in scansSnap.docs) {
-            final segments = scanDoc.reference.path.split('/');
-            if (segments.length < 6) continue;
-            if (segments[0] != 'events') continue;
-            if (segments[1] != eventId) continue;
-            if (segments[2] != 'asistencias') continue;
-
+ 
+      try {
+        final alumnosSnap = await FirebaseFirestore.instance
+            .collection('events')
+            .doc(eventId)
+            .collection('asistencias')
+            .get();
+ 
+        for (final alumnoDoc in alumnosSnap.docs) {
+          final studentId   = alumnoDoc.id;
+          final scansAlumno =
+              await alumnoDoc.reference.collection('scans').get();
+ 
+          for (final scanDoc in scansAlumno.docs) {
             final categoria =
                 scanDoc.data()['categoria']?.toString() ?? '';
-            if (!asistentesUnicos.containsKey(categoria)) continue;
-
-            final studentId = segments[3];
-            asistentesUnicos[categoria]!.add(studentId);
-          }
-        } catch (e) {
-          debugPrint('collectionGroup falló para lote $lote: $e');
-          fallbackNecesario = true;
-          break;
-        }
-      }
-
-      if (fallbackNecesario) {
-        debugPrint('Activando fallback por alumno para eventId=$eventId');
-
-        for (final cat in categorias) {
-          asistentesUnicos[cat]!.clear();
-        }
-
-        try {
-          final alumnosSnap = await FirebaseFirestore.instance
-              .collection('events')
-              .doc(eventId)
-              .collection('asistencias')
-              .get();
-
-          for (final alumnoDoc in alumnosSnap.docs) {
-            final studentId = alumnoDoc.id;
-
-            final scansAlumno =
-                await alumnoDoc.reference.collection('scans').get();
-
-            for (final scanDoc in scansAlumno.docs) {
-              final categoria =
-                  scanDoc.data()['categoria']?.toString() ?? '';
-              if (asistentesUnicos.containsKey(categoria)) {
-                asistentesUnicos[categoria]!.add(studentId);
-              }
+            if (asistentesUnicos.containsKey(categoria)) {
+              asistentesUnicos[categoria]!.add(studentId);
             }
           }
-        } catch (e2) {
-          debugPrint('Error en fallback de asistencias: $e2');
         }
+      } catch (e2) {
+        debugPrint('Error en fallback de asistencias: $e2');
       }
+    }
+ 
+    for (final categoria in categorias) {
+      filas.add(_FilaResultado(
+        categoria              : categoria,
+        trabajosAceptados      : conteoPorCategoria[categoria]!,
+        estudiantesAsistentes  : asistentesUnicos[categoria]?.length ?? 0,
+      ));
+    }
+  } catch (e) {
+    debugPrint('Error general en _obtenerFilasResultado: $e');
+  }
+ 
+  return filas;
+}
 
-      for (final categoria in categorias) {
-        filas.add(_FilaResultado(
-          categoria: categoria,
-          trabajosAceptados: conteoPorCategoria[categoria]!,
-          estudiantesAsistentes: asistentesUnicos[categoria]?.length ?? 0,
+  static Future<List<_FilaGanador>> _obtenerGanadores(
+  String eventId, {
+  required String filialId,   // ← nuevo
+  required String facultad,   // ← nuevo
+  required ResolverNombresService resolver,
+}) async {
+  final List<_FilaGanador> filas = [];
+  const double escalaBase = 20.0;
+ 
+  try {
+    final proyectosSnap = await FirebaseFirestore.instance
+        .collection('events')
+        .doc(eventId)
+        .collection('proyectos')
+        .get();
+ 
+    if (proyectosSnap.docs.isEmpty) return [];
+ 
+    final results = await Future.wait(
+      proyectosSnap.docs.map((proyectoDoc) async {
+        // ✅ CORRECCIÓN A: filtrar por evaluada + filialId + facultad
+        Query evalQuery = FirebaseFirestore.instance
+            .collection('events')
+            .doc(eventId)
+            .collection('proyectos')
+            .doc(proyectoDoc.id)
+            .collection('evaluaciones')
+            .where('evaluada', isEqualTo: true);
+ 
+        if (filialId.isNotEmpty) {
+          evalQuery = evalQuery.where('filialId', isEqualTo: filialId);
+        }
+        if (facultad.isNotEmpty) {
+          evalQuery = evalQuery.where('facultad', isEqualTo: facultad);
+        }
+ 
+        final evalSnap = await evalQuery.get();
+ 
+        if (evalSnap.docs.isEmpty) return null;
+ 
+        final pData = proyectoDoc.data();
+ 
+        final notasNormalizadas = <double>[];
+        for (final e in evalSnap.docs) {
+          final data = e.data() as Map<String, dynamic>;
+          final notaTotal = ((data['notaTotal'] ?? 0.0) as num).toDouble();
+ 
+          if (!data.containsKey('puntajeMaximo')) {
+            debugPrint(
+              '⚠️ [InformeWord] Evaluación ${e.id} sin puntajeMaximo — omitida',
+            );
+            continue;
+          }
+ 
+          final puntajeMax  = (data['puntajeMaximo'] as num).toDouble();
+          final maxSeguro   = puntajeMax > 0 ? puntajeMax : escalaBase;
+          final normalizada =
+              ((notaTotal / maxSeguro) * escalaBase).clamp(0.0, escalaBase);
+ 
+          notasNormalizadas
+              .add(double.parse(normalizada.toStringAsFixed(2)));
+        }
+ 
+        if (notasNormalizadas.isEmpty) return null;
+ 
+        final promedio = notasNormalizadas.reduce((a, b) => a + b) /
+            notasNormalizadas.length;
+ 
+        return {
+          'codigo'       : pData['Código']       ?? '',
+          'titulo'       : pData['Título']        ?? '',
+          'integrantes': resolver.resolver(pData['Integrantes']),
+          'clasificacion': pData['Clasificación'] ?? 'Sin categoría',
+          'promedio'     : double.parse(promedio.toStringAsFixed(2)),
+        };
+      }),
+    );
+ 
+    final validos =
+        results.whereType<Map<String, dynamic>>().toList();
+    if (validos.isEmpty) return [];
+ 
+    final Map<String, List<Map<String, dynamic>>> porCategoria = {};
+    for (final p in validos) {
+      final cat = p['clasificacion'] as String;
+      porCategoria.putIfAbsent(cat, () => []).add(p);
+    }
+ 
+    porCategoria.forEach((categoria, lista) {
+      lista.sort((a, b) =>
+          (b['promedio'] as double).compareTo(a['promedio'] as double));
+      for (final p in lista.take(3)) {
+        filas.add(_FilaGanador(
+          categoria  : categoria,
+          codigo     : p['codigo']      as String,
+          titulo     : p['titulo']      as String,
+          integrantes: p['integrantes'] as String,
+          promedio   : p['promedio']    as double,
         ));
       }
-    } catch (e) {
-      debugPrint('Error general en _obtenerFilasResultado: $e');
-    }
-
-    return filas;
+    });
+ 
+    filas.sort((a, b) {
+      final c = a.categoria.compareTo(b.categoria);
+      return c != 0 ? c : b.promedio.compareTo(a.promedio);
+    });
+  } catch (e) {
+    debugPrint('Error en _obtenerGanadores: $e');
   }
-
-  // ─── OBTENER TOP 2 GANADORES POR CATEGORÍA DESDE FIRESTORE ───────────────
-
-  static Future<List<_FilaGanador>> _obtenerGanadores(String eventId) async {
-    final List<_FilaGanador> filas = [];
-    try {
-      final proyectosSnap = await FirebaseFirestore.instance
-          .collection('events')
-          .doc(eventId)
-          .collection('proyectos')
-          .get();
-
-      if (proyectosSnap.docs.isEmpty) return [];
-
-      final results = await Future.wait(
-        proyectosSnap.docs.map((proyectoDoc) async {
-          final evalSnap = await FirebaseFirestore.instance
-              .collection('events')
-              .doc(eventId)
-              .collection('proyectos')
-              .doc(proyectoDoc.id)
-              .collection('evaluaciones')
-              .where('evaluada', isEqualTo: true)
-              .get();
-
-          if (evalSnap.docs.isEmpty) return null;
-
-          final pData = proyectoDoc.data();
-          final notas = evalSnap.docs
-              .map((e) => (e.data()['notaTotal'] ?? 0.0) as num)
-              .toList();
-          final promedio = notas.reduce((a, b) => a + b) / notas.length;
-
-          return {
-            'codigo':        pData['Código']       ?? '',
-            'titulo':        pData['Título']        ?? '',
-            'integrantes':   pData['Integrantes']   ?? '',
-            'clasificacion': pData['Clasificación'] ?? 'Sin categoría',
-            'promedio':      promedio.toDouble(),
-          };
-        }),
-      );
-
-      final validos = results.whereType<Map<String, dynamic>>().toList();
-      if (validos.isEmpty) return [];
-
-      final Map<String, List<Map<String, dynamic>>> porCategoria = {};
-      for (final p in validos) {
-        final cat = p['clasificacion'] as String;
-        porCategoria.putIfAbsent(cat, () => []).add(p);
-      }
-
-      porCategoria.forEach((categoria, lista) {
-        lista.sort((a, b) =>
-            (b['promedio'] as double).compareTo(a['promedio'] as double));
-        for (final p in lista.take(2)) {
-          filas.add(_FilaGanador(
-            categoria:   categoria,
-            codigo:      p['codigo']      as String,
-            titulo:      p['titulo']      as String,
-            integrantes: p['integrantes'] as String,
-            promedio:    p['promedio']    as double,
-          ));
-        }
-      });
-
-      filas.sort((a, b) {
-        final c = a.categoria.compareTo(b.categoria);
-        return c != 0 ? c : b.promedio.compareTo(a.promedio);
-      });
-    } catch (e) {
-      debugPrint('Error en _obtenerGanadores: $e');
-    }
-    return filas;
-  }
+  return filas;
+}
 
   // ─── XML: PIE DE TABLA (párrafo "Descripción" centrado) ──────────────────
 
@@ -647,23 +683,34 @@ class InformeWordGenerator {
     </w:tc>''';
   }
 
-  // ─── OBTENER BYTES DEL DOCX MODIFICADO ───────────────────────────────────
+ static Future<Uint8List> _obtenerBytes({
+  required Map<String, dynamic> evento,
+  required Map<String, dynamic> adminData,
+}) async {
+  final String facultadRaw  = adminData['facultad']     as String? ?? '';
+  final String carrera      = adminData['carrera']      as String? ?? '';
+  final String filialRaw    = adminData['filialNombre'] as String? ?? '';
+  final String nombreEvento = evento['name']            as String? ?? '';
+  final String eventId      = evento['id']              as String? ?? '';
+  final String filialId     = adminData['filial']       as String? ?? '';
 
-  static Future<Uint8List> _obtenerBytes({
-    required Map<String, dynamic> evento,
-    required Map<String, dynamic> adminData,
-  }) async {
-    final String facultadRaw  = adminData['facultad']     as String? ?? '';
-    final String carrera      = adminData['carrera']      as String? ?? '';
-    final String filialRaw    = adminData['filialNombre'] as String? ?? '';
-    final String nombreEvento = evento['name']            as String? ?? '';
-    final String eventId      = evento['id']              as String? ?? '';
+  // ── NUEVO: cargar nombres antes de usarlos ──────────────────────────────
+  final resolverNombres = ResolverNombresService();
+  await resolverNombres.cargarEstudiantes(
+    filialNombre: filialRaw,
+    carrera: carrera,
+  );
+  // ────────────────────────────────────────────────────────────────────────
 
-    final List<String> categorias       = await _obtenerCategorias(eventId);
-    final List<_FilaResultado> filasResultado =
-        await _obtenerFilasResultado(eventId);
-    final List<_FilaGanador> filasGanadores =
-        await _obtenerGanadores(eventId);
+  final List<String> categorias = await _obtenerCategorias(eventId);
+  final List<_FilaResultado> filasResultado = await _obtenerFilasResultado(eventId);
+
+  final List<_FilaGanador> filasGanadores = await _obtenerGanadores(
+    eventId,
+    filialId: filialId,
+    facultad: facultadRaw,
+    resolver: resolverNombres, 
+  );
 
     final DateTime hoy = DateTime.now();
     final String anio = hoy.year.toString();

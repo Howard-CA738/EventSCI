@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
+import '/encryption_helper.dart';
 
 class EstudiantesRegistradosScreen extends StatefulWidget {
   const EstudiantesRegistradosScreen({super.key});
@@ -19,7 +20,13 @@ class _EstudiantesRegistradosScreenState
   bool _isLoading = false;
   List<Map<String, dynamic>> _allStudents = [];
   List<Map<String, dynamic>> _filteredStudents = [];
-
+  String _decryptDni(Map<String, dynamic> student) {
+    final encrypted = student['dniEncrypted']?.toString() ?? '';
+    if (encrypted.isNotEmpty) {
+      return EncryptionHelper.decryptDni(encrypted);
+    }
+    return 'Sin DNI';
+}
   // Filtros (solo para admin general)
   String? _selectedFacultad;
   String? _selectedCarrera;
@@ -1162,10 +1169,10 @@ class _EstudiantesRegistradosScreenState
                                 Colors.blue,
                               ),
                               _badge(
-                                student['dni'] ?? 'N/A',
-                                Icons.credit_card,
-                                Colors.green,
-                              ),
+                              _decryptDni(student),
+                              Icons.credit_card,
+                              Colors.green,
+                            ),
                             ],
                           ),
                         ],

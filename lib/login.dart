@@ -112,48 +112,87 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _ejecutarLogin() async {
-    final username = _userController.text.trim();
-    final password = _passwordController.text;
+  final username = _userController.text.trim();
+  final password = _passwordController.text;
 
-    // ── 1. SUPERADMIN — detectado por el @ en el email ─────────────────────
-    if (username.contains('@')) {
-      final error = await SuperAdminAuthService.login(username, password);
-      if (error != null) {
-        if (mounted) _showMessage(error);
-        return;
-      }
-
-      if (!mounted) return;
-
-      final user       = FirebaseAuth.instance.currentUser!;
-      final errorCodigo = await SuperAdminAuthService.enviarCodigoEmail(
-          user.uid, username);
-
-      if (!mounted) return;
-
-      if (errorCodigo != null) {
-        _showMessage(errorCodigo);
-        return;
-      }
-
-      _mostrarDialogOTP(user.uid, username);
+  // ── 1. SUPERADMIN ─────────────────────────────────────────────────
+  if (username.contains('@')) {
+    final error = await SuperAdminAuthService.login(username, password);
+    if (error != null) {
+      if (mounted) _showMessage(error);
       return;
     }
+    if (!mounted) return;
+    final user = FirebaseAuth.instance.currentUser!;
+    final errorCodigo = await SuperAdminAuthService.enviarCodigoEmail(
+        user.uid, username);
+    if (!mounted) return;
+    if (errorCodigo != null) {
+      _showMessage(errorCodigo);
+      return;
+    }
+    _mostrarDialogOTP(user.uid, username);
+    return;
+  }
 
-    // ── 2. ESTUDIANTE (y asistente QR) — tiene punto en el usuario ─────────
-    //    El asistente QR es un estudiante con esAsisteQR == true.
-    //    Su login es exactamente igual al de estudiante; EstudianteScreen
-    //    detecta el flag y muestra las opciones extra.
-    if (username.contains('.')) {
-      await PrefsHelper.crearSesionFirebaseAuth('pre_login');
 
+  // ── 3. DETECTAR ROL — ya con auth activo ──────────────────────────
+  final rol = await PrefsHelper.detectarRol(username.toLowerCase());
+
+  if (rol == null) {
+    if (mounted) _showMessage('Usuario o contraseña incorrectos');
+    return;
+  }
+
+  switch (rol) {
+    case 'admin_carrera':
+      final adminCarreraService = AdminCarreraService();
+      final adminCarreraData = await adminCarreraService.loginAdminCarrera(
+        usuario:  username,
+        password: password,
+      );
+      if (adminCarreraData == null) {
+        if (mounted) _showMessage('Usuario o contraseña incorrectos');
+        return;
+      }
+
+      await PrefsHelper.saveAdminCarreraData(
+        userId:       adminCarreraData['id'],
+        userName:     adminCarreraData['usuario'] ?? 'Admin',
+        filial:       adminCarreraData['filial'],
+        filialNombre: adminCarreraData['filialNombre'],
+        facultad:     adminCarreraData['facultad'],
+        carrera:      adminCarreraData['carrera'],
+        carreraId:    adminCarreraData['carreraId'],
+        permisos:     adminCarreraData['permisos'],
+      );
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const AdminCarreraScreen()),
+        );
+      }
+      break;
+
+    case 'jurado':
+      final esJurado = await PrefsHelper.loginJurado(username, password);
+      if (!esJurado) {
+        if (mounted) _showMessage('Usuario o contraseña incorrectos');
+        return;
+      }
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const JuradosScreen()),
+        );
+      }
+      break;
+
+    case 'student':
       final success = await PrefsHelper.loginStudent(username, password);
       if (!success) {
         if (mounted) _showMessage('Usuario o contraseña incorrectos');
         return;
       }
 
-      // Verificar estado de sesión
       final userIdPath = await PrefsHelper.getCurrentUserId();
       if (userIdPath != null && userIdPath.contains('/')) {
         final parts       = userIdPath.split('/');
@@ -167,17 +206,26 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (estadoSesion == 'dispositivo_bloqueado') {
           await PrefsHelper.logout();
-          if (mounted) { setState(() => _isLoading = false); _showDispositivoBloqueadoDialog(); }
+          if (mounted) {
+            setState(() => _isLoading = false);
+            _showDispositivoBloqueadoDialog();
+          }
           return;
         }
         if (estadoSesion == 'bloqueado') {
           await PrefsHelper.logout();
-          if (mounted) { setState(() => _isLoading = false); _showSesionBloqueadaDialog(); }
+          if (mounted) {
+            setState(() => _isLoading = false);
+            _showSesionBloqueadaDialog();
+          }
           return;
         }
         if (estadoSesion == 'celular_bloqueado') {
           await PrefsHelper.logout();
-          if (mounted) { setState(() => _isLoading = false); _showCelularBloqueadoDialog(); }
+          if (mounted) {
+            setState(() => _isLoading = false);
+            _showCelularBloqueadoDialog();
+          }
           return;
         }
 
@@ -192,58 +240,9 @@ class _LoginScreenState extends State<LoginScreen> {
           MaterialPageRoute(builder: (_) => const EstudianteScreen()),
         );
       }
-      return;
-    }
-
-    // ── 3. ADMIN CARRERA y JURADO — sin punto, sin @ ───────────────────────
-    await PrefsHelper.crearSesionFirebaseAuth('pre_login');
-
-    // Intentar admin carrera primero
-    final adminCarreraService = AdminCarreraService();
-    final adminCarreraData    = await adminCarreraService.loginAdminCarrera(
-      usuario:  username,
-      password: password,
-    );
-
-    if (adminCarreraData != null) {
-      await PrefsHelper.crearSesionFirebaseAuth(adminCarreraData['id']);
-      await PrefsHelper.saveAdminCarreraData(
-        userId:       adminCarreraData['id'],
-        userName:     adminCarreraData['usuario'] ?? 'Admin',
-        filial:       adminCarreraData['filial'],
-        filialNombre: adminCarreraData['filialNombre'],
-        facultad:     adminCarreraData['facultad'],
-        carrera:      adminCarreraData['carrera'],
-        carreraId:    adminCarreraData['carreraId'],
-        permisos:     adminCarreraData['permisos'],
-      );
-
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const AdminCarreraScreen()),
-        );
-      }
-      return;
-    }
-
-    // Intentar jurado (creado dinámicamente por admin carrera en Firestore)
-    final esJurado = await PrefsHelper.loginJurado(username, password);
-    if (esJurado) {
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const JuradosScreen()),
-        );
-      }
-      return;
-    }
-
-    // Ningún rol coincidió
-    if (mounted) _showMessage('Usuario o contraseña incorrectos');
+      break;
   }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // DIÁLOGO OTP — SuperAdmin
-  // ─────────────────────────────────────────────────────────────────────────
+}
   void _mostrarDialogOTP(String uid, String email) {
     final otpController = TextEditingController();
     final otpFocusNode  = FocusNode();
@@ -713,13 +712,13 @@ class _LoginScreenState extends State<LoginScreen> {
       return const Scaffold(
           body: Center(child: CircularProgressIndicator()));
     }
-
-    final isLandscape   = MediaQuery.of(context).orientation == Orientation.landscape;
-    final screenHeight  = MediaQuery.of(context).size.height;
-
+ 
+    final isLandscape  = MediaQuery.of(context).orientation == Orientation.landscape;
+    final screenHeight = MediaQuery.of(context).size.height;
+ 
     return Scaffold(
       body: Stack(children: [
-        // Fondo animado
+        // Fondo animado — sin cambios
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 1000),
           child: Container(
@@ -734,8 +733,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
-
-        // Contenido
+ 
         SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -746,7 +744,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Logo
+                  // Logo universidad — sin cambios
                   Image.asset(
                     'assets/images/logo.png',
                     height: isLandscape ? screenHeight * 0.25 : 180,
@@ -757,65 +755,69 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   SizedBox(height: isLandscape ? 20 : 40),
-
-                  // Formulario
+ 
                   ConstrainedBox(
                     constraints: BoxConstraints(
                         maxWidth: isLandscape ? 500 : double.infinity),
                     child: Container(
                       padding: EdgeInsets.all(isLandscape ? 24 : 30),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.85),
+                        // Azul oscuro del logo semitransparente
+                        color: const Color.fromARGB(255, 78, 94, 123).withOpacity(0.72),
                         borderRadius: BorderRadius.circular(30),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.08),
+                          width: 1,
+                        ),
                         boxShadow: [
                           BoxShadow(
-                            color:      Colors.black.withOpacity(0.15),
-                            blurRadius: 15,
-                            offset:     const Offset(0, 5),
+                            color:      Colors.black.withOpacity(0.25),
+                            blurRadius: 20,
+                            offset:     const Offset(0, 6),
                           ),
                         ],
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Campo usuario
                           _buildTextField(
-                            controller: _userController,
-                            hint:       'Usuario o correo',
-                            icon:       Icons.person_outline,
-                            isLandscape: isLandscape,
+                            controller:   _userController,
+                            hint:         'Usuario',
+                            icon:         Icons.person_outline,
+                            isLandscape:  isLandscape,
                             keyboardType: TextInputType.emailAddress,
                           ),
                           SizedBox(height: isLandscape ? 15 : 20),
-
-                          // Campo contraseña
+ 
                           _buildPasswordField(isLandscape),
                           SizedBox(height: isLandscape ? 20 : 30),
-
-                          // Botón login
+ 
+                          // Botón dorado
                           SizedBox(
                             width:  double.infinity,
                             height: isLandscape ? 50 : 55,
                             child: ElevatedButton(
                               onPressed: _isLoading ? null : _login,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor:        const Color(0xFF1A5490),
-                                foregroundColor:        Colors.white,
+                                backgroundColor:        const Color(0xFFF5B731),
+                                foregroundColor:        const Color(0xFF0F1E35),
                                 elevation:              0,
                                 shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(15)),
-                                disabledBackgroundColor: Colors.grey[400],
+                                disabledBackgroundColor:
+                                    const Color(0xFFF5B731).withOpacity(0.4),
                               ),
                               child: _isLoading
                                   ? const SizedBox(
                                       height: 24, width: 24,
                                       child: CircularProgressIndicator(
-                                          color: Colors.white, strokeWidth: 2.5))
+                                          color: Color(0xFF0F1E35),
+                                          strokeWidth: 2.5))
                                   : const Text(
                                       'Ingresar',
                                       style: TextStyle(
                                           fontSize: 18,
-                                          fontWeight: FontWeight.w600,
+                                          fontWeight: FontWeight.w700,
                                           letterSpacing: 0.5),
                                     ),
                             ),

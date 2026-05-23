@@ -35,18 +35,19 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   // Asistencias de proyectos (flujo normal)
   List<Map<String, dynamic>> _asistenciasDelEvento = [];
 
-  // Asistencias personales (apertura, clausura, etc.)
+  // Asistencias personales
   List<Map<String, dynamic>> _asistenciasPersonalesDelEvento = [];
 
-  // ── Tab seleccionado en la vista de evento ─────────────────────
-  // 0 = Sellos de proyectos, 1 = Asistencias personales
+  // ── Tab seleccionado: 0 = Proyectos, 1 = Personales ───────────
   int _tabSeleccionado = 0;
+
   // ── Meta de sellos ─────────────────────────────────────────────
   int? _metaSellos;
+
+  // ── Guard de generación para evitar mezcla de cargas paralelas ─
   int _loadGeneration = 0;
 
   late AnimationController _animationController;
-  late AnimationController _tabController;
   late Animation<double> _fadeAnimation;
 
   @override
@@ -55,10 +56,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
-    );
-    _tabController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
     );
     _fadeAnimation = CurvedAnimation(
       parent: _animationController,
@@ -71,13 +68,13 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   @override
   void dispose() {
     _animationController.dispose();
-    _tabController.dispose();
     super.dispose();
   }
 
   // ═══════════════════════════════════════════════════════════════
   // OBTENER USUARIO
   // ═══════════════════════════════════════════════════════════════
+
   Future<void> _getCurrentUserId() async {
     try {
       final userId = await PrefsHelper.getCurrentUserId();
@@ -99,8 +96,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
         });
         await _cargarMisAsistencias();
       } else {
-        _showSnackBar('No se pudo obtener el usuario actual',
-            isError: true);
+        _showSnackBar('No se pudo obtener el usuario actual', isError: true);
       }
     } catch (e) {
       _showSnackBar('Error al obtener usuario: $e', isError: true);
@@ -108,147 +104,103 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // CARGA DE ASISTENCIAS DE PROYECTOS
+  // CARGA PRINCIPAL
   // ═══════════════════════════════════════════════════════════════
+
   Future<void> _cargarMisAsistencias() async {
-  if (_currentUserId == null) return;
+    if (_currentUserId == null) return;
 
-  _loadGeneration++; // incrementa ANTES del await
-  final myGen = _loadGeneration;
+    _loadGeneration++;
+    final myGen = _loadGeneration;
 
-  setState(() {
-    _isLoadingAsistencias = true;
-    _eventosConAsistencias.clear();
-    _eventoSeleccionadoId = null;
-    _eventoSeleccionadoNombre = null;
-    _asistenciasDelEvento.clear();
-    _asistenciasPersonalesDelEvento.clear();
-    _metaSellos = null;
-    _tabSeleccionado = 0;
-  });
+    setState(() {
+      _isLoadingAsistencias = true;
+      _eventosConAsistencias.clear();
+      _eventoSeleccionadoId = null;
+      _eventoSeleccionadoNombre = null;
+      _asistenciasDelEvento.clear();
+      _asistenciasPersonalesDelEvento.clear();
+      _metaSellos = null;
+      _tabSeleccionado = 0;
+    });
 
-  try {
-    final parts = _currentUserId!.split('/');
-    if (parts.length != 2) throw Exception('ID de usuario inválido');
-    final studentId = parts[1];
-    await _cargarAsistenciasDirecto(studentId);
-  } catch (e) {
-    if (myGen != _loadGeneration) return; // llegó tarde, ignorar
-    _showSnackBar('Error al cargar asistencias: $e', isError: true);
-  } finally {
-    if (myGen != _loadGeneration) return; // llegó tarde, ignorar
-    setState(() => _isLoadingAsistencias = false);
-  }
-}
-
-  Future<void> _cargarAsistenciasDirecto(String studentId) async {
     try {
-      final scansSnapshot = await _firestore
-          .collectionGroup('scans')
-          .where(FieldPath.documentId,
-              isGreaterThanOrEqualTo: '_${studentId}_')
-          .get();
+      final parts = _currentUserId!.split('/');
+      if (parts.length != 2) throw Exception('ID de usuario inválido');
+      final studentId = parts[1];
 
-      if (scansSnapshot.docs.isEmpty) {
-        await _cargarAsistenciasFallback(studentId);
-        return;
-      }
-      await _procesarScans(scansSnapshot.docs, studentId);
+      await _cargarTodo(studentId, myGen);
     } catch (e) {
-      debugPrint('collectionGroup falló, usando fallback: $e');
-      await _cargarAsistenciasFallback(studentId);
+      if (!mounted || myGen != _loadGeneration) return;
+      _showSnackBar('Error al cargar asistencias: $e', isError: true);
+    } finally {
+      if (!mounted || myGen != _loadGeneration) return;
+      setState(() => _isLoadingAsistencias = false);
     }
   }
 
-  Future<void> _cargarAsistenciasFallback(String studentId) async {
-    final eventosSnapshot = await _firestore
-        .collection('events')
-        .orderBy('createdAt', descending: true)
+  Future<void> _cargarTodo(String studentId, int gen) async {
+  final eventosSnapshot = await _firestore
+      .collection('events')
+      .orderBy('createdAt', descending: true)
+      .get();
+
+  await Future.wait(
+    eventosSnapshot.docs
+        .map((doc) => _cargarScansDeEvento(doc, studentId, gen)),
+  );
+
+  if (!mounted || gen != _loadGeneration) return;
+
+  // Cargar asistencias personales con collectionGroup
+  // y fallback si falla
+  try {
+    final registrosSnap = await _firestore
+        .collectionGroup('registros')
+        .where('studentId', isEqualTo: studentId)
         .get();
 
-    await Future.wait(eventosSnapshot.docs
-        .map((doc) => _cargarAsistenciasDeEvento(doc, studentId)));
+    if (!mounted || gen != _loadGeneration) return;
 
-    _sortEventos();
-  }
+    for (final registroDoc in registrosSnap.docs) {
+      final data = registroDoc.data();
+      final eventoId = data['eventId']?.toString();
+      if (eventoId == null) continue;
 
-  Future<void> _procesarScans(
-      List<QueryDocumentSnapshot> scanDocs,
-      String studentId) async {
-    final Map<String, List<Map<String, dynamic>>> scansPorEvento = {};
+      final idx = _eventosConAsistencias
+          .indexWhere((e) => e['eventId'] == eventoId);
 
-    for (final scanDoc in scanDocs) {
-      final pathParts = scanDoc.reference.path.split('/');
-      if (pathParts.length < 5) continue;
-      if (pathParts[3] != studentId) continue;
-
-      final eventId = pathParts[1];
-      final scanData = scanDoc.data() as Map<String, dynamic>;
-      if (scanData['timestamp'] == null) continue;
-
-      scansPorEvento.putIfAbsent(eventId, () => []).add({
-        'id': scanDoc.id,
-        'timestamp': scanData['timestamp'],
-        'categoria': scanData['categoria'] ?? 'Sin categoría',
-        'tipoInvestigacion': scanData['categoria'] ?? 'Sin categoría',
-        'codigoProyecto': scanData['codigoProyecto'] ?? 'Sin código',
-        'tituloProyecto': scanData['tituloProyecto'] ?? 'Sin título',
-        'grupo': scanData['grupo'],
-        'qrId': scanData['qrId'],
-        'registrationMethod':
-            scanData['registrationMethod'] ?? 'qr_scan',
-      });
-    }
-
-    for (final entry in scansPorEvento.entries) {
-      final eventId = entry.key;
-      final scans = entry.value
-        ..sort((a, b) {
-          final tA = (a['timestamp'] as Timestamp?)?.toDate();
-          final tB = (b['timestamp'] as Timestamp?)?.toDate();
-          if (tA == null || tB == null) return 0;
-          return tB.compareTo(tA);
-        });
-
-      try {
-        final eventDoc =
-            await _firestore.collection('events').doc(eventId).get();
-        final eventData = eventDoc.exists
-            ? eventDoc.data() as Map<String, dynamic>
-            : {};
-
+      if (idx == -1) {
         _eventosConAsistencias.add({
-          'eventId': eventId,
-          'eventName': eventData['name'] ?? 'Sin nombre',
-          'eventDescription': eventData['description'] ?? '',
-          'eventDate': eventData['date'],
-          'eventFacultad': eventData['facultad'] ?? '',
-          'eventCarrera': eventData['carrera'] ?? '',
-          'eventFilial': eventData['filial']?.toString() ??
-              eventData['filialNombre']?.toString() ??
-              '',
-          'asistencias': scans,
-        });
-      } catch (e) {
-        debugPrint('Error al cargar evento $eventId: $e');
-        _eventosConAsistencias.add({
-          'eventId': eventId,
-          'eventName': 'Evento $eventId',
+          'eventId': eventoId,
+          'eventName': data['eventName'] ?? 'Sin nombre',
           'eventDescription': '',
           'eventDate': null,
-          'eventFacultad': '',
-          'eventCarrera': '',
-          'eventFilial': '',
-          'asistencias': scans,
+          'eventFacultad': data['facultad'] ?? '',
+          'eventCarrera': data['carrera'] ?? '',
+          'eventFilial': data['filial'] ?? '',
+          'asistencias': <Map<String, dynamic>>[],
         });
       }
     }
-
-    _sortEventos();
+  } catch (e) {
+    debugPrint('collectionGroup falló, usando fallback: $e');
+    if (!mounted || gen != _loadGeneration) return;
+    await _cargarAsistenciasPersonalesFallback(studentId, gen);
   }
 
-  Future<void> _cargarAsistenciasDeEvento(
-      DocumentSnapshot eventDoc, String studentId) async {
+  if (!mounted || gen != _loadGeneration) return;
+
+  _aplicarSortYDedup();
+}
+
+  /// Carga los scans de proyectos de un evento para el estudiante.
+  /// Verifica la generación antes de modificar la lista compartida.
+  Future<void> _cargarScansDeEvento(
+    DocumentSnapshot eventDoc,
+    String studentId,
+    int gen,
+  ) async {
     try {
       final eventId = eventDoc.id;
       final eventData = eventDoc.data() as Map<String, dynamic>;
@@ -284,14 +236,16 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
               'tituloProyecto': d['tituloProyecto'] ?? 'Sin título',
               'grupo': d['grupo'],
               'qrId': d['qrId'],
-              'registrationMethod':
-                  d['registrationMethod'] ?? 'qr_scan',
+              'registrationMethod': d['registrationMethod'] ?? 'qr_scan',
             };
           })
           .whereType<Map<String, dynamic>>()
           .toList();
 
       if (asistencias.isEmpty) return;
+
+      // Verificar generación antes de mutar la lista compartida
+      if (!mounted || gen != _loadGeneration) return;
 
       _eventosConAsistencias.add({
         'eventId': eventId,
@@ -306,15 +260,99 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
         'asistencias': asistencias,
       });
     } catch (e) {
-      debugPrint('Error cargando evento ${eventDoc.id}: $e');
+      debugPrint('Error cargando scans del evento ${eventDoc.id}: $e');
     }
   }
 
-  void _sortEventos() {
-  final unique = <String, Map<String, dynamic>>{};
-  for (final e in _eventosConAsistencias) {
-    unique[e['eventId'] as String] = e;
+  /// Carga asistencias personales usando collectionGroup.
+  Future<void> _cargarAsistenciasPersonalesFallback(
+    String studentId, int gen) async {
+  try {
+    final eventosSnapshot = await _firestore
+        .collection('events')
+        .orderBy('createdAt', descending: true)
+        .get();
+
+    for (final eventDoc in eventosSnapshot.docs) {
+      if (!mounted || gen != _loadGeneration) return;
+
+      final eventId = eventDoc.id;
+      final eventData = eventDoc.data();
+
+      final asistenciasPersonalesSnap = await _firestore
+          .collection('events')
+          .doc(eventId)
+          .collection('asistencias_personales')
+          .get();
+
+      for (final asistenciaDoc in asistenciasPersonalesSnap.docs) {
+        if (!mounted || gen != _loadGeneration) return;
+
+        final registroDoc = await _firestore
+            .collection('events')
+            .doc(eventId)
+            .collection('asistencias_personales')
+            .doc(asistenciaDoc.id)
+            .collection('registros')
+            .doc(studentId)
+            .get();
+
+        if (registroDoc.exists) {
+          // Verificar si el evento ya está en la lista
+          final idx = _eventosConAsistencias
+              .indexWhere((e) => e['eventId'] == eventId);
+
+          if (idx == -1) {
+            _eventosConAsistencias.add({
+              'eventId': eventId,
+              'eventName': eventData['name'] ?? 'Sin nombre',
+              'eventDescription': eventData['description'] ?? '',
+              'eventDate': eventData['date'],
+              'eventFacultad': eventData['facultad'] ?? '',
+              'eventCarrera': eventData['carrera'] ?? '',
+              'eventFilial': eventData['filial']?.toString() ??
+                  eventData['filialNombre']?.toString() ??
+                  '',
+              'asistencias': <Map<String, dynamic>>[],
+            });
+          }
+          // Ya encontramos un registro en este evento, pasamos al siguiente
+          break;
+        }
+      }
+    }
+  } catch (e) {
+    debugPrint('Error en fallback de asistencias personales: $e');
   }
+}
+
+  /// Deduplica por eventId fusionando asistencias, y ordena por fecha desc.
+  void _aplicarSortYDedup() {
+  final unique = <String, Map<String, dynamic>>{};
+
+  for (final e in _eventosConAsistencias) {
+    final id = e['eventId'] as String;
+    if (unique.containsKey(id)) {
+      final existing = unique[id]!;
+      final merged = List<Map<String, dynamic>>.from(
+          existing['asistencias'] as List<dynamic>);
+      merged.addAll(
+          (e['asistencias'] as List<dynamic>)
+              .cast<Map<String, dynamic>>());
+      existing['asistencias'] = merged;
+
+      if (existing['eventDate'] == null && e['eventDate'] != null) {
+        existing['eventDate'] = e['eventDate'];
+        existing['eventName'] = e['eventName'];
+        existing['eventFacultad'] = e['eventFacultad'];
+        existing['eventCarrera'] = e['eventCarrera'];
+        existing['eventFilial'] = e['eventFilial'];
+      }
+    } else {
+      unique[id] = Map<String, dynamic>.from(e);
+    }
+  }
+
   _eventosConAsistencias
     ..clear()
     ..addAll(unique.values);
@@ -322,16 +360,18 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   _eventosConAsistencias.sort((a, b) {
     final dateA = (a['eventDate'] as Timestamp?)?.toDate();
     final dateB = (b['eventDate'] as Timestamp?)?.toDate();
-    if (dateA == null || dateB == null) return 0;
+    if (dateA == null && dateB == null) return 0;
+    if (dateA == null) return 1;
+    if (dateB == null) return -1;
     return dateB.compareTo(dateA);
   });
 }
 
   // ═══════════════════════════════════════════════════════════════
-  // SELECCIONAR EVENTO — carga proyectos Y asistencias personales
+  // SELECCIONAR EVENTO
   // ═══════════════════════════════════════════════════════════════
-  Future<void> _seleccionarEvento(
-      Map<String, dynamic> eventoData) async {
+
+  Future<void> _seleccionarEvento(Map<String, dynamic> eventoData) async {
     final eventoId = eventoData['eventId'] as String;
     final nombre = eventoData['eventName'] as String;
     final asistencias = List<Map<String, dynamic>>.from(
@@ -342,8 +382,11 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
 
     try {
       final parts = _currentUserId!.split('/');
-      final studentId =
-          parts.length > 1 ? parts[1] : _currentUserId!;
+if (parts.length != 2) {
+  _showSnackBar('ID de usuario inválido', isError: true);
+  return;
+}
+final studentId = parts[1];
 
       // ── Meta de sellos ───────────────────────────────────────────
       final eventDoc =
@@ -355,9 +398,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
         final facultad = eventData['facultad']?.toString();
         final carreraId = eventData['carreraId']?.toString();
 
-        if (filialId != null &&
-            facultad != null &&
-            carreraId != null) {
+        if (filialId != null && facultad != null && carreraId != null) {
           final docId =
               '${filialId}_${facultad}_${carreraId}_$eventoId'
                   .replaceAll(' ', '_');
@@ -379,8 +420,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
       }
 
       // ── Asistencias personales del estudiante ────────────────────
-      // Recorre todas las asistencias_personales del evento
-      // y busca si el estudiante tiene un registro en cada una
       final asistenciasPersonalesSnap = await _firestore
           .collection('events')
           .doc(eventoId)
@@ -430,6 +469,11 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
       debugPrint('Error cargando detalle del evento: $e');
     }
 
+    // Auto-seleccionar tab: si no hay scans de proyectos pero sí personales,
+    // mostrar directamente el tab de personales.
+    final tabInicial =
+        asistencias.isEmpty && asistenciasPersonales.isNotEmpty ? 1 : 0;
+
     setState(() {
       _eventoSeleccionadoId = eventoId;
       _eventoSeleccionadoNombre = nombre;
@@ -442,10 +486,12 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
         });
       _metaSellos = meta;
       _asistenciasPersonalesDelEvento = asistenciasPersonales;
-      _tabSeleccionado = 0;
+      _tabSeleccionado = tabInicial;
     });
 
-    _animationController..reset()..forward();
+    _animationController
+      ..reset()
+      ..forward();
   }
 
   void _volverASeleccion() {
@@ -457,12 +503,15 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
       _metaSellos = null;
       _tabSeleccionado = 0;
     });
-    _animationController..reset()..forward();
+    _animationController
+      ..reset()
+      ..forward();
   }
 
   // ═══════════════════════════════════════════════════════════════
   // HELPERS
   // ═══════════════════════════════════════════════════════════════
+
   void _showSnackBar(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -470,10 +519,9 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
         content: Row(
           children: [
             Icon(
-                isError
-                    ? Icons.error_outline
-                    : Icons.check_circle_outline,
-                color: Colors.white),
+              isError ? Icons.error_outline : Icons.check_circle_outline,
+              color: Colors.white,
+            ),
             const SizedBox(width: 12),
             Expanded(child: Text(message)),
           ],
@@ -481,8 +529,8 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
         backgroundColor:
             isError ? Colors.red.shade600 : Colors.green.shade600,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -535,6 +583,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   // ═══════════════════════════════════════════════════════════════
   // BUILD
   // ═══════════════════════════════════════════════════════════════
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -573,11 +622,9 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          _eventoSeleccionadoId != null
-                              ? 'Mis Asistencias'
-                              : 'Mis Asistencias',
-                          style: const TextStyle(
+                        const Text(
+                          'Mis Asistencias',
+                          style: TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
                               color: Colors.white),
@@ -587,8 +634,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                             _eventoSeleccionadoNombre!,
                             style: TextStyle(
                                 fontSize: 12,
-                                color:
-                                    Colors.white.withValues(alpha: 0.8)),
+                                color: Colors.white.withValues(alpha: 0.8)),
                             overflow: TextOverflow.ellipsis,
                           )
                         else if (_currentUserName != null)
@@ -596,8 +642,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                             _currentUserName!,
                             style: TextStyle(
                                 fontSize: 13,
-                                color:
-                                    Colors.white.withValues(alpha: 0.8)),
+                                color: Colors.white.withValues(alpha: 0.8)),
                           ),
                       ],
                     ),
@@ -626,8 +671,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                     : _isLoadingAsistencias
                         ? const Center(
                             child: Column(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.center,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 CircularProgressIndicator(
                                     color: Color(0xFF1E3A5F)),
@@ -653,6 +697,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   // ═══════════════════════════════════════════════════════════════
   // PANTALLA: SELECCIÓN DE EVENTO
   // ═══════════════════════════════════════════════════════════════
+
   Widget _buildPantallaSeleccionEvento() {
     if (_eventosConAsistencias.isEmpty) {
       return Center(
@@ -778,8 +823,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
 
             return TweenAnimationBuilder<double>(
               tween: Tween(begin: 0, end: 1),
-              duration:
-                  Duration(milliseconds: 200 + (index * 80)),
+              duration: Duration(milliseconds: 200 + (index * 80)),
               curve: Curves.easeOut,
               builder: (ctx, val, _) => Transform.translate(
                 offset: Offset(0, 20 * (1 - val)),
@@ -795,8 +839,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color:
-                                Colors.black.withValues(alpha: 0.05),
+                            color: Colors.black.withValues(alpha: 0.05),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -881,10 +924,10 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   // ═══════════════════════════════════════════════════════════════
   // PANTALLA: DETALLE DEL EVENTO CON TABS
   // ═══════════════════════════════════════════════════════════════
+
   Widget _buildPantallaEvento() {
     final tieneProyectos = _asistenciasDelEvento.isNotEmpty;
-    final tienePersonales =
-        _asistenciasPersonalesDelEvento.isNotEmpty;
+    final tienePersonales = _asistenciasPersonalesDelEvento.isNotEmpty;
 
     return RefreshIndicator(
       onRefresh: _cargarMisAsistencias,
@@ -897,15 +940,10 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Banner académico ───────────────────────────────
               _buildBannerAcademico(),
-
-              // ── Tabs de selección ──────────────────────────────
               _buildTabs(tieneProyectos, tienePersonales),
-
               const SizedBox(height: 16),
 
-              // ── Contenido según tab ────────────────────────────
               if (_tabSeleccionado == 0) ...[
                 if (tieneProyectos) ...[
                   _buildColeccionSellos(),
@@ -938,6 +976,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   }
 
   // ── Tabs ───────────────────────────────────────────────────────
+
   Widget _buildTabs(bool tieneProyectos, bool tienePersonales) {
     return Container(
       decoration: BoxDecoration(
@@ -1095,7 +1134,8 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
     );
   }
 
-  // ── Estado vacío genérico ──────────────────────────────────────
+  // ── Estado vacío ───────────────────────────────────────────────
+
   Widget _buildEstadoVacio({
     required IconData icon,
     required String titulo,
@@ -1122,8 +1162,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           const SizedBox(height: 8),
           Text(
             subtitulo,
-            style:
-                TextStyle(fontSize: 13, color: Colors.grey.shade500),
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
             textAlign: TextAlign.center,
           ),
         ],
@@ -1134,6 +1173,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   // ═══════════════════════════════════════════════════════════════
   // BANNER ACADÉMICO
   // ═══════════════════════════════════════════════════════════════
+
   Widget _buildBannerAcademico() {
     if (_studentFilial == null && _studentFacultad == null) {
       return const SizedBox.shrink();
@@ -1165,8 +1205,8 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                 decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.school,
-                    color: Colors.white, size: 20),
+                child:
+                    const Icon(Icons.school, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 10),
               const Text('Mi Información Académica',
@@ -1213,18 +1253,17 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
     );
   }
 
-  Widget _buildAcademicoChip(
-      {required IconData icon,
-      required String label,
-      required Color bgColor}) {
+  Widget _buildAcademicoChip({
+    required IconData icon,
+    required String label,
+    required Color bgColor,
+  }) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: bgColor.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(20),
-        border:
-            Border.all(color: Colors.white.withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1246,15 +1285,15 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // TAB 0: COLECCIÓN DE SELLOS (proyectos)
+  // TAB 0: COLECCIÓN DE SELLOS
   // ═══════════════════════════════════════════════════════════════
+
   Widget _buildColeccionSellos() {
     final totalGanados = _asistenciasDelEvento.length;
     final metaFija = _metaSellos != null && _metaSellos! > 0;
     final meta = metaFija ? _metaSellos! : 0;
-    final totalCeldas = metaFija
-        ? math.max(meta, totalGanados)
-        : totalGanados;
+    final totalCeldas =
+        metaFija ? math.max(meta, totalGanados) : totalGanados;
 
     return AnimatedOpacity(
       opacity: 1.0,
@@ -1299,10 +1338,8 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [
-                      Color(0xFF1E3A5F),
-                      Color(0xFF2563EB)
-                    ]),
+                    gradient: const LinearGradient(
+                        colors: [Color(0xFF1E3A5F), Color(0xFF2563EB)]),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -1363,8 +1400,8 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                 const SizedBox(height: 6),
                 Text(
                   '${meta - totalGanados} sello${meta - totalGanados == 1 ? '' : 's'} restante${meta - totalGanados == 1 ? '' : 's'}',
-                  style: TextStyle(
-                      fontSize: 11, color: Colors.grey.shade500),
+                  style:
+                      TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
               ],
             ],
@@ -1383,8 +1420,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                       Icon(Icons.workspace_premium_outlined,
                           size: 64, color: Colors.grey.shade400),
                       const SizedBox(height: 16),
-                      Text(
-                          'Aún no tienes sellos en este evento',
+                      Text('Aún no tienes sellos en este evento',
                           style: TextStyle(
                               fontSize: 16,
                               color: Colors.grey.shade700,
@@ -1511,8 +1547,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                 spreadRadius: 2,
                 offset: const Offset(0, 4)),
           ],
-          border:
-              Border.all(color: color.withValues(alpha: 0.8), width: 3),
+          border: Border.all(color: color.withValues(alpha: 0.8), width: 3),
         ),
         child: Stack(
           children: [
@@ -1596,6 +1631,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   // ═══════════════════════════════════════════════════════════════
   // HISTORIAL DETALLADO (proyectos)
   // ═══════════════════════════════════════════════════════════════
+
   Widget _buildHistorialCard() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1755,9 +1791,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                                   size: 14, color: Colors.white),
                               const SizedBox(width: 6),
                               Text(
-                                codigoProyecto
-                                    .toString()
-                                    .toUpperCase(),
+                                codigoProyecto.toString().toUpperCase(),
                                 style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 13,
@@ -1810,8 +1844,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                           const SizedBox(width: 6),
                           Text(categoria,
                               style: TextStyle(
-                                  color:
-                                      _getColorByCategoria(categoria),
+                                  color: _getColorByCategoria(categoria),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600)),
                         ],
@@ -1850,8 +1883,8 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF4F46E5)
-                          .withValues(alpha: 0.1),
+                      color:
+                          const Color(0xFF4F46E5).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                           color: const Color(0xFF4F46E5)
@@ -1873,8 +1906,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text('Proyecto Presentado',
                                   style: TextStyle(
@@ -1918,8 +1950,9 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // TAB 1: LISTA DE ASISTENCIAS PERSONALES
+  // TAB 1: ASISTENCIAS PERSONALES
   // ═══════════════════════════════════════════════════════════════
+
   Widget _buildListaAsistenciasPersonales() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1938,7 +1971,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Encabezado
           Row(
             children: [
               Container(
@@ -1952,16 +1984,11 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
               ),
               const SizedBox(width: 12),
               const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Asistencias Generales',
-                        style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E3A5F))),
-                  ],
-                ),
+                child: Text('Asistencias Generales',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E3A5F))),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -1983,13 +2010,11 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
 
           const SizedBox(height: 20),
 
-          // Lista de registros
           ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: _asistenciasPersonalesDelEvento.length,
-            separatorBuilder: (_, __) =>
-                const SizedBox(height: 12),
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final asistencia =
                   _asistenciasPersonalesDelEvento[index];
@@ -2031,13 +2056,11 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                       ),
                       child: Row(
                         children: [
-                          // Ícono
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: Colors.deepPurple.shade600,
-                              borderRadius:
-                                  BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(14),
                             ),
                             child: const Icon(
                                 Icons.how_to_reg_rounded,
@@ -2050,7 +2073,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                               crossAxisAlignment:
                                   CrossAxisAlignment.start,
                               children: [
-                                // Badge PERSONAL
                                 Row(
                                   children: [
                                     Container(
@@ -2059,8 +2081,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                                               horizontal: 8,
                                               vertical: 3),
                                       decoration: BoxDecoration(
-                                        color: Colors.deepPurple
-                                            .shade600,
+                                        color: Colors.deepPurple.shade600,
                                         borderRadius:
                                             BorderRadius.circular(6),
                                       ),
@@ -2080,17 +2101,14 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                                         tipo,
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: Colors.deepPurple
-                                              .shade400,
+                                          color: Colors.deepPurple.shade400,
                                         ),
-                                        overflow:
-                                            TextOverflow.ellipsis,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                   ],
                                 ),
                                 const SizedBox(height: 5),
-                                // Nombre
                                 Text(
                                   nombre,
                                   style: const TextStyle(
@@ -2107,8 +2125,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                                     children: [
                                       Icon(Icons.schedule,
                                           size: 12,
-                                          color:
-                                              Colors.grey.shade500),
+                                          color: Colors.grey.shade500),
                                       const SizedBox(width: 4),
                                       Text(
                                         '${timestamp.day}/${timestamp.month}/${timestamp.year}  '
@@ -2124,7 +2141,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
                               ],
                             ),
                           ),
-                          // Check
                           Container(
                             padding: const EdgeInsets.all(7),
                             decoration: const BoxDecoration(
@@ -2154,8 +2170,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
     required Color color,
   }) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
@@ -2190,6 +2205,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
 // ══════════════════════════════════════════════════════════════════
 // PAINTERS
 // ══════════════════════════════════════════════════════════════════
+
 class SelloPainter extends CustomPainter {
   final Color color;
   const SelloPainter({required this.color});
@@ -2226,8 +2242,8 @@ class TextoCurvadoPainter extends CustomPainter {
       ..color = Colors.white.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
-    canvas.drawCircle(Offset(size.width / 2, size.height / 2),
-        size.width / 2 - 8, paint);
+    canvas.drawCircle(
+        Offset(size.width / 2, size.height / 2), size.width / 2 - 8, paint);
   }
 
   @override

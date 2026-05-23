@@ -49,13 +49,14 @@ class ParticipantesCarreraExcelService {
   static const _tealBg    = '#F0FDFA';
 
   /// Genera el reporte Excel de participantes de un evento.
-  Future<String?> generarReporteParticipantes({
-    required Map<String, List<Map<String, dynamic>>> participantesPorCategoria,
-    required String eventoNombre,
-    required String filialNombre,
-    required String facultad,
-    String? carrera,
-  }) async {
+ Future<String?> generarReporteParticipantes({
+  required Map<String, List<Map<String, dynamic>>> participantesPorCategoria,
+  required String eventoNombre,
+  required String filialNombre,
+  required String facultad,
+  String? carrera,
+  double escalaBase = 20.0, 
+}) async {
     try {
       final excel = Excel.createExcel();
 
@@ -79,6 +80,7 @@ class ParticipantesCarreraExcelService {
         filialNombre: filialNombre,
         facultad: facultad,
         carrera: carrera,
+        escalaBase: escalaBase,
       );
 
       _crearHojaListaCompleta(
@@ -88,12 +90,14 @@ class ParticipantesCarreraExcelService {
         filialNombre: filialNombre,
         facultad: facultad,
         carrera: carrera,
+        escalaBase: escalaBase,
       );
 
       _crearHojaPodio(
         excel: excel,
         participantesPorCategoria: participantesPorCategoria,
         eventoNombre: eventoNombre,
+        escalaBase: escalaBase,
       );
 
       excel.delete('Sheet1');
@@ -125,6 +129,7 @@ class ParticipantesCarreraExcelService {
     required String filialNombre,
     required String facultad,
     String? carrera,
+    double escalaBase = 20.0,
   }) {
     final sheet = excel['Resumen por Categoría'];
 
@@ -335,7 +340,7 @@ class ParticipantesCarreraExcelService {
     final encabezados = [
       'CATEGORÍA', 'POS', 'CÓDIGO', 'TÍTULO DEL PROYECTO',
       'INTEGRANTES', 'ASESOR', 'SALA',
-      'PROMEDIO', 'MÁX', 'MÍN', 'JURADOS',
+      'PROMEDIO/${escalaBase.toStringAsFixed(0)}', 'MÁX', 'MÍN', 'JURADOS',
     ];
     for (int c = 0; c < encabezados.length; c++) {
       _cel(sheet, fEnc, c, encabezados[c], sEncCol);
@@ -476,6 +481,7 @@ class ParticipantesCarreraExcelService {
     required String filialNombre,
     required String facultad,
     String? carrera,
+    double escalaBase = 20.0,
   }) {
     final sheet = excel['Lista Completa'];
 
@@ -595,11 +601,11 @@ class ParticipantesCarreraExcelService {
 
     // ── Encabezados de tabla ──────────────────────────────────────────────────
     const fEnc = 10;
-    const encabezados = [
-      'N°', 'CÓDIGO', 'TÍTULO DEL PROYECTO',
-      'CATEGORÍA', 'INTEGRANTES', 'ASESOR',
-      'SALA', 'PROMEDIO', 'JURADOS', 'ESTADO',
-    ];
+    final encabezados = [
+  'N°', 'CÓDIGO', 'TÍTULO DEL PROYECTO',
+  'CATEGORÍA', 'INTEGRANTES', 'ASESOR',
+  'SALA', 'PROMEDIO/${escalaBase.toStringAsFixed(0)}', 'JURADOS', 'ESTADO',
+];
     for (int c = 0; c < encabezados.length; c++) {
       _cel(sheet, fEnc, c, encabezados[c], c == 7 ? sEncPromedio : sEnc);
     }
@@ -678,6 +684,7 @@ class ParticipantesCarreraExcelService {
     required Excel excel,
     required Map<String, List<Map<String, dynamic>>> participantesPorCategoria,
     required String eventoNombre,
+    double escalaBase = 20.0,
   }) {
     final sheet = excel['Podio por Categoría'];
 
@@ -830,7 +837,7 @@ class ParticipantesCarreraExcelService {
         {'label': 'Código', 'key': 'codigo'},
         {'label': 'Integrantes', 'key': 'integrantes'},
         {'label': 'Asesor', 'key': 'asesor'},
-        {'label': 'Promedio', 'key': 'promedio'},
+        {'label': 'Prom./${escalaBase.toStringAsFixed(0)}', 'key': 'promedio'},
       ];
 
       final valStyles = [sOroVal, sPlataVal, sBronceVal];

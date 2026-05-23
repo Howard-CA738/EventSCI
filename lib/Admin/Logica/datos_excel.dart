@@ -5,6 +5,7 @@ import 'dart:io';
 import '/password_helper.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
+import '/encryption_helper.dart';
 
 class StudentGroup {
   final String normalizedName;
@@ -493,9 +494,8 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
  
     final name = _getFieldValue(rawData, 'name', 'Estudiante ${index + 1}');
     final dniPlano = _getFieldValue(rawData, 'dni', 'DNI${timestamp % 100000000}');
- 
-    // 🔐 Hashear el DNI antes de guardar
     final dniHash = PasswordHelper.hashPassword(dniPlano);
+    final dniEncrypted = EncryptionHelper.encryptDni(dniPlano);
  
     String username = _getFieldValue(rawData, 'username', '');
     if (username.isEmpty) username = _generateUsernameFromName(name);
@@ -522,8 +522,9 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       'name'                : name,
       'username'            : username.toLowerCase(),
       'codigoUniversitario' : codigoUniversitario,
-      'dni'                 : dniHash,     // 🔐 hash, no texto plano
-      'documento'           : dniHash,     // 🔐 hash, no texto plano
+      'dni'                 : dniHash,    
+      'documento'           : dniHash,
+      'dniEncrypted'        : dniEncrypted,     
       'filial'              : filial,
       'facultad'            : facultad,
       'carrera'             : carrera,
@@ -584,14 +585,39 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
             ? i + BATCH_SIZE
             : students.length;
 
+        final List<Map<String, String>> indexQueue = [];
+
         for (int j = i; j < end; j++) {
           final docRef = carreraDocRef.collection('students').doc();
           batch.set(docRef, students[j]);
+          final username = students[j]['username'] as String?;
+          if (username != null && username.isNotEmpty) {
+            indexQueue.add({
+              'username': username,
+              'studentId': docRef.id,
+            });
+          }
         }
 
         await batch.commit();
         _successCount += (end - i);
         setState(() {});
+
+        // Crear student_index en batch
+        final indexBatch = _firestore.batch();
+        for (final item in indexQueue) {
+          final indexRef = _firestore
+              .collection('student_index')
+              .doc(item['username']);
+          indexBatch.set(indexRef, {
+            'username':    item['username'],
+            'carreraPath': docKey,
+            'studentId':   item['studentId'],
+            'createdAt':   FieldValue.serverTimestamp(),
+          });
+        }
+        await indexBatch.commit();
+        debugPrint('✅ ${indexQueue.length} índices creados en batch para "$docKey"');
       }
 
       debugPrint('✅ Importados ${students.length} estudiantes en "$docKey"');

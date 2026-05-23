@@ -108,7 +108,7 @@ class SeccionRubrica {
   }
 }
 
-/// Modelo principal para una rúbrica completa - ACTUALIZADO CON FILIAL
+/// Modelo principal para una rúbrica completa
 class Rubrica {
   String id;
   String nombre;
@@ -117,7 +117,6 @@ class Rubrica {
   List<String> juradosAsignados;
   DateTime fechaCreacion;
   double puntajeMaximo;
-  // ✅ NUEVO: Sistema de filiales
   String filial;
   String facultad;
   String? carrera;
@@ -217,48 +216,40 @@ class Rubrica {
   }
 }
 
-/// Servicio actualizado para usar FilialesService
+/// Servicio de rúbricas con todos los fixes aplicados
 class RubricasService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FilialesService _filialesService = FilialesService();
   final String _collection = 'rubricas';
 
-  // ✅ Cache para estructura de filiales
   Map<String, dynamic>? _estructuraCache;
 
-  // ✅ Obtener estructura completa de filiales
   Future<Map<String, dynamic>> getEstructuraCompleta() async {
     if (_estructuraCache != null) {
       return _estructuraCache!;
     }
-
     _estructuraCache = await _filialesService.getEstructuraCompleta();
     return _estructuraCache!;
   }
 
-  // ✅ Obtener lista de filiales
   Future<List<String>> getFiliales() async {
     final estructura = await getEstructuraCompleta();
     return estructura.keys.toList();
   }
 
-  // ✅ Obtener nombre de filial
   Future<String> getNombreFilial(String filialId) async {
     final estructura = await getEstructuraCompleta();
     return estructura[filialId]?['nombre'] ?? filialId;
   }
 
-  // ✅ Obtener facultades de una filial
   Future<List<String>> getFacultadesByFilial(String filialId) async {
     final estructura = await getEstructuraCompleta();
     final filial = estructura[filialId];
     if (filial == null) return [];
-
     final facultades = filial['facultades'] as Map<String, dynamic>;
     return facultades.keys.toList();
   }
 
-  // ✅ Obtener carreras de una facultad
   Future<List<Map<String, dynamic>>> getCarrerasByFacultad(
     String filialId,
     String facultadNombre,
@@ -269,7 +260,7 @@ class RubricasService {
     );
   }
 
-  // Obtener todas las rúbricas
+  // Obtener todas las rúbricas (sin filtro — para el panel del jurado)
   Future<List<Rubrica>> obtenerRubricas() async {
     try {
       final snapshot = await _firestore.collection(_collection).get();
@@ -281,7 +272,6 @@ class RubricasService {
     }
   }
 
-  // ✅ Obtener rúbricas por filial
   Future<List<Rubrica>> obtenerRubricasPorFilial(String filial) async {
     try {
       final snapshot = await _firestore
@@ -296,7 +286,6 @@ class RubricasService {
     }
   }
 
-  // ✅ Obtener rúbricas por filial y facultad
   Future<List<Rubrica>> obtenerRubricasPorFilialYFacultad(
     String filial,
     String facultad,
@@ -315,7 +304,6 @@ class RubricasService {
     }
   }
 
-  // Obtener una rúbrica por ID
   Future<Rubrica?> obtenerRubricaPorId(String id) async {
     try {
       final doc = await _firestore.collection(_collection).doc(id).get();
@@ -329,7 +317,6 @@ class RubricasService {
     }
   }
 
-  // Crear una nueva rúbrica
   Future<bool> crearRubrica(Rubrica rubrica) async {
     try {
       await _firestore
@@ -343,7 +330,6 @@ class RubricasService {
     }
   }
 
-  // Actualizar una rúbrica existente
   Future<bool> actualizarRubrica(Rubrica rubrica) async {
     try {
       await _firestore
@@ -357,7 +343,6 @@ class RubricasService {
     }
   }
 
-  // Eliminar una rúbrica
   Future<bool> eliminarRubrica(String id) async {
     try {
       await _firestore.collection(_collection).doc(id).delete();
@@ -368,7 +353,9 @@ class RubricasService {
     }
   }
 
-  // ✅ Obtener jurados filtrados por filial, facultad y carrera
+  // FIX M3 (4.1): obtenerJurados ahora incluye eventoNombre y eventoId
+  // en el mapa retornado, para que el selector de jurados en la rúbrica
+  // pueda mostrar el evento asignado a cada jurado correctamente.
   Future<List<Map<String, dynamic>>> obtenerJurados({
     String? filial,
     String? facultad,
@@ -384,15 +371,12 @@ class RubricasService {
           .collection('users')
           .where('userType', isEqualTo: 'jurado');
 
-      // Aplicar filtros
       if (filial != null && filial.isNotEmpty) {
         query = query.where('filial', isEqualTo: filial);
       }
-
       if (facultad != null && facultad.isNotEmpty) {
         query = query.where('facultad', isEqualTo: facultad);
       }
-
       if (carrera != null && carrera.isNotEmpty) {
         query = query.where('carrera', isEqualTo: carrera);
       }
@@ -410,6 +394,10 @@ class RubricasService {
           'facultad': data['facultad'] ?? '',
           'carrera': data['carrera'] ?? '',
           'categoria': data['categoria'] ?? '',
+          // FIX M3/4.1: campos agregados para que el selector de rúbricas
+          // muestre el evento asignado a cada jurado.
+          'eventoNombre': data['eventoNombre'] ?? '',
+          'eventoId': data['eventoId'] ?? '',
         };
       }).toList();
     } catch (e) {
@@ -418,75 +406,86 @@ class RubricasService {
     }
   }
 
-  // Eliminar evaluaciones cuando se remueven jurados
+  // FIX C4 + 4.2: eliminarEvaluacionesDeJurados ahora maneja tanto
+  // evaluaciones nuevas (con rubricaId) como legacy (sin rubricaId).
+  // - Evaluaciones con rubricaId == este rubricaId → eliminar.
+  // - Evaluaciones legacy sin rubricaId → eliminar también (el jurado
+  //   fue removido de la rúbrica, así que su evaluación debe limpiarse).
+  // - Evaluaciones con rubricaId de OTRA rúbrica → NO tocar.
   Future<void> eliminarEvaluacionesDeJurados({
-  required String rubricaId,
-  required List<String> juradosIds,
-}) async {
-  try {
-    debugPrint('🗑️ Eliminando evaluaciones de jurados removidos...');
+    required String rubricaId,
+    required List<String> juradosIds,
+  }) async {
+    try {
+      debugPrint('🗑️ Eliminando evaluaciones de jurados removidos...');
 
-    // 1. Traer todos los eventos en paralelo con sus proyectos
-    final eventosSnapshot = await _firestore.collection('events').get();
+      // 1. Traer todos los eventos
+      final eventosSnapshot = await _firestore.collection('events').get();
 
-    // 2. Obtener todos los proyectos de todos los eventos en paralelo
-    final proyectosSnapshotList = await Future.wait(
-      eventosSnapshot.docs.map((eventoDoc) => _firestore
-          .collection('events')
-          .doc(eventoDoc.id)
-          .collection('proyectos')
-          .get()),
-    );
+      // 2. Obtener todos los proyectos de todos los eventos en paralelo
+      final proyectosSnapshotList = await Future.wait(
+        eventosSnapshot.docs.map((eventoDoc) => _firestore
+            .collection('events')
+            .doc(eventoDoc.id)
+            .collection('proyectos')
+            .get()),
+      );
 
-    // 3. Construir todas las rutas de evaluación a verificar
-    final List<DocumentReference> refsAVerificar = [];
+      // 3. Construir todas las rutas de evaluación a verificar
+      final List<DocumentReference> refsAVerificar = [];
 
-    for (int i = 0; i < eventosSnapshot.docs.length; i++) {
-      final eventoId = eventosSnapshot.docs[i].id;
-      final proyectos = proyectosSnapshotList[i].docs;
+      for (int i = 0; i < eventosSnapshot.docs.length; i++) {
+        final eventoId = eventosSnapshot.docs[i].id;
+        final proyectos = proyectosSnapshotList[i].docs;
 
-      for (var proyectoDoc in proyectos) {
-        for (var juradoId in juradosIds) {
-          refsAVerificar.add(_firestore
-              .collection('events')
-              .doc(eventoId)
-              .collection('proyectos')
-              .doc(proyectoDoc.id)
-              .collection('evaluaciones')
-              .doc(juradoId));
+        for (var proyectoDoc in proyectos) {
+          for (var juradoId in juradosIds) {
+            refsAVerificar.add(_firestore
+                .collection('events')
+                .doc(eventoId)
+                .collection('proyectos')
+                .doc(proyectoDoc.id)
+                .collection('evaluaciones')
+                .doc(juradoId));
+          }
         }
       }
-    }
 
-    // 4. Leer todas las evaluaciones en paralelo
-    final evaluacionesDocs = await Future.wait(
-      refsAVerificar.map((ref) => ref.get()),
-    );
+      // 4. Leer todas las evaluaciones en paralelo
+      final evaluacionesDocs = await Future.wait(
+        refsAVerificar.map((ref) => ref.get()),
+      );
 
-    // 5. Eliminar solo las que corresponden a esta rúbrica, en lotes
-    final WriteBatch batch = _firestore.batch();
-    int eliminadas = 0;
+      // 5. Eliminar en lotes según la lógica de rubricaId
+      //    - rubricaId coincide → eliminar
+      //    - rubricaId ausente (legacy) → eliminar (evaluación huérfana)
+      //    - rubricaId de otra rúbrica → conservar
+      final WriteBatch batch = _firestore.batch();
+      int eliminadas = 0;
 
-    for (var doc in evaluacionesDocs) {
-  if (doc.exists) {
-    final data = doc.data() as Map<String, dynamic>?;
-    if (data != null && data['rubricaId'] == rubricaId) {
-      batch.delete(doc.reference);
-      eliminadas++;
+      for (var doc in evaluacionesDocs) {
+        if (doc.exists) {
+          final data = doc.data() as Map<String, dynamic>?;
+          if (data != null) {
+            final docRubricaId = data['rubricaId'] as String?;
+            final debeEliminar =
+                docRubricaId == rubricaId || docRubricaId == null;
+            if (debeEliminar) {
+              batch.delete(doc.reference);
+              eliminadas++;
+            }
+          }
+        }
+      }
+
+      if (eliminadas > 0) await batch.commit();
+      debugPrint('✅ $eliminadas evaluaciones eliminadas');
+    } catch (e) {
+      debugPrint('❌ Error al eliminar evaluaciones: $e');
+      rethrow;
     }
   }
-}
 
-    if (eliminadas > 0) await batch.commit();
-
-    debugPrint('✅ $eliminadas evaluaciones eliminadas');
-  } catch (e) {
-    debugPrint('❌ Error al eliminar evaluaciones: $e');
-    rethrow;
-  }
-}
-
-  // ✅ Filtrar rúbricas en memoria
   List<Rubrica> filtrarRubricas(
     List<Rubrica> rubricas, {
     String? filial,
@@ -498,11 +497,9 @@ class RubricasService {
     if (filial != null && filial.isNotEmpty) {
       resultado = resultado.where((r) => r.filial == filial).toList();
     }
-
     if (facultad != null && facultad.isNotEmpty) {
       resultado = resultado.where((r) => r.facultad == facultad).toList();
     }
-
     if (carrera != null && carrera.isNotEmpty) {
       resultado = resultado.where((r) => r.carrera == carrera).toList();
     }
@@ -510,7 +507,6 @@ class RubricasService {
     return resultado;
   }
 
-  // ✅ Limpiar cache
   void clearCache() {
     _estructuraCache = null;
     FilialesService.clearCache();

@@ -711,7 +711,7 @@ Future<void> _resolverNombresDeProyectos(
   }
 
   Widget _buildExistingProjectItem(Map<String, dynamic> proyecto) {
-    final integrantesList = _toIntegrantesList(proyecto['Integrantes']);
+    final integrantesList = _integrantesResueltos(proyecto['Integrantes']);
     final totalIntegrantes =
         proyecto['totalIntegrantes'] ?? integrantesList.length;
 

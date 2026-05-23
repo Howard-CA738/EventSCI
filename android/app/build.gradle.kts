@@ -20,7 +20,7 @@ android {
 
     // Valores explicitos — no dependen de que version de Flutter tengas
     compileSdk = 36
-    ndkVersion = flutter.ndkVersion   // Flutter lo gestiona, backward compatible
+    ndkVersion = "27.0.12077973"   // Flutter lo gestiona, backward compatible
 
     defaultConfig {
         applicationId = "com.eventsci.eventos"
@@ -46,7 +46,7 @@ android {
             // Lee desde key.properties — nunca hardcodear contrasenas
             keyAlias     = keystoreProperties["keyAlias"]     as String? ?: ""
             keyPassword  = keystoreProperties["keyPassword"]  as String? ?: ""
-            storeFile    = keystoreProperties["storeFile"]?.let { file(it) }
+            storeFile = file("C:/Users/Usuario.DESKTOP-F84NT06/Documents/UPeU/Apps/AppEventos/mi-app.jks")
             storePassword = keystoreProperties["storePassword"] as String? ?: ""
         }
     }
@@ -78,6 +78,4 @@ dependencies {
 
     // Firebase BOM — controla versiones de todos los paquetes Firebase de golpe
     implementation(platform("com.google.firebase:firebase-bom:33.14.0"))
-    implementation("com.google.firebase:firebase-analytics")
-    implementation("com.google.firebase:firebase-messaging")
 }

@@ -1,6 +1,6 @@
 name: eventos
 description: "Sistema de Gestión de Eventos UPEU"
-version: 1.0.0+1
+version: 1.0.0+12
 
 environment:
   sdk: ^3.8.1
@@ -32,12 +32,32 @@ dependencies:
   uuid: ^4.0.0
   archive: ^3.6.1
   firebase_app_check: ^0.3.2+10
+  encrypt: ^5.0.3
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.3.9
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/eventsci_logo.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/eventsci_logo.png"
+
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/images/eventsci_logo.png
+  android: true
+  ios: true
+  android_12:
+    color: "#FFFFFF"
+    image: assets/images/eventsci_logo.png
+    icon_background_color: "#FFFFFF"
+  fullscreen: true
 
 flutter:
   uses-material-design: true
@@ -67,10 +87,3 @@ flutter:
     - family: GreatVibes  
       fonts:
         - asset: assets/fonts/GreatVibes-Regular.ttf
-
-flutter_launcher_icons:
-  android: true
-  ios: true
-  image_path: "assets/images/logo_upeu.png"
-  adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/images/logo_upeu.png"

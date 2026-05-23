@@ -3,10 +3,6 @@ import 'configurar_sellos.dart';
 import 'asistencias_admin_carrera_screen.dart';
 import 'asistencias_personales.dart';
 
-/// Pantalla intermedia que ofrece tres rutas:
-/// 1. Configurar sellos de asistencia
-/// 2. Ver asistencias del evento
-/// 3. Crear asistencias personales (Primera Asistencia, Asistencia Final, etc.)
 class VentanasAsistenciaScreen extends StatelessWidget {
   final String filialId;
   final String filialNombre;
@@ -71,7 +67,7 @@ class VentanasAsistenciaScreen extends StatelessWidget {
                   topRight: Radius.circular(30),
                 ),
               ),
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -87,7 +83,7 @@ class VentanasAsistenciaScreen extends StatelessWidget {
                           boxShadow: [
                             BoxShadow(
                               color: const Color(0xFF1E3A5F)
-                                  .withValues(alpha:0.3),
+                                  .withValues(alpha: 0.3),
                               blurRadius: 20,
                               offset: const Offset(0, 8),
                             ),
@@ -98,7 +94,7 @@ class VentanasAsistenciaScreen extends StatelessWidget {
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha:0.2),
+                                color: Colors.white.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: const Icon(
@@ -202,8 +198,7 @@ class VentanasAsistenciaScreen extends StatelessWidget {
                     const SizedBox(height: 16),
 
                     // ── Opción 3: Asistencias personales ─────────────────
-                    // AsistenciasPersonalesScreen carga su propia sesión
-                    // internamente con PrefsHelper, no necesita parámetros.
+                    // Crear QR + configurar tiempo límite y ventana horaria
                     _TweenCard(
                       delay: 440,
                       child: _OpcionCard(
@@ -211,16 +206,17 @@ class VentanasAsistenciaScreen extends StatelessWidget {
                         iconColor: const Color(0xFF0D7377),
                         title: 'Asistencias personales',
                         subtitle:
-                            'Crea asistencias manuales como Primera Asistencia o Asistencia Final para un evento',
+                            'Crea asistencias como Primera Asistencia o Asistencia Final, genera su QR y configura cuándo funciona',
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) =>
-                                const AsistenciasPersonalesScreen(),
+                            builder: (_) => AsistenciasPersonalesScreen(),
                           ),
                         ),
                       ),
                     ),
+
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
@@ -261,7 +257,7 @@ class _OpcionCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha:0.07),
+                color: Colors.black.withValues(alpha: 0.07),
                 blurRadius: 16,
                 offset: const Offset(0, 4),
               ),
@@ -274,7 +270,7 @@ class _OpcionCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha:0.12),
+                    color: iconColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(icon, size: 32, color: iconColor),
@@ -311,7 +307,7 @@ class _OpcionCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha:0.1),
+                    color: iconColor.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(

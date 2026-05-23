@@ -5,6 +5,7 @@ import 'dart:convert';
 import '/prefs_helper.dart';
 import '/usuarios/logica/asistencias.dart';
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class EscanearQRScreen extends StatefulWidget {
   const EscanearQRScreen({super.key});
@@ -27,8 +28,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
 
   double _currentZoom = 0.0;
 
-  DateTime? _ultimoEscaneo;
-  static const int _cooldownSegundos = 3;
+  static const int _cooldownMinutos = 5;
+  static const String _keyCooldown = 'ultimo_escaneo_global';
 
   Map<String, dynamic>? _cachedUserData;
   int _escaneosDeSesion = 0;
@@ -48,25 +49,22 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
     WidgetsBinding.instance.addObserver(this);
     _getCurrentUser();
     _setupAnimations();
-    _initializeZoom();
   }
 
-  void _initializeZoom() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    debugPrint('Zoom inicializado');
-  }
+  @override
 void didChangeAppLifecycleState(AppLifecycleState state) {
-    switch (state) {
-      case AppLifecycleState.resumed:
-        _barcodeSub = cameraController.barcodes.listen((capture) {
-          for (final barcode in capture.barcodes) {
-            if (barcode.rawValue != null && !_hasScanned && !_isProcessing) {
-              _procesarQR(barcode.rawValue!);
-              break;
-            }
-          }
-        });
-        unawaited(cameraController.start());
+  switch (state) {
+    case AppLifecycleState.resumed:
+  _barcodeSub?.cancel();
+  _barcodeSub = cameraController.barcodes.listen((capture) {
+    for (final barcode in capture.barcodes) {
+      if (barcode.rawValue != null && !_hasScanned && !_isProcessing) {
+        _procesarQR(barcode.rawValue!);
+        break;
+      }
+    }
+  });
+  unawaited(cameraController.start());
       case AppLifecycleState.inactive:
         unawaited(_barcodeSub?.cancel());
         _barcodeSub = null;
@@ -75,6 +73,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
         break;
     }
   }
+
   void _handleScaleStart(ScaleStartDetails details) {}
 
   void _handleScaleUpdate(ScaleUpdateDetails details) {
@@ -103,6 +102,34 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
+  }
+
+  Future<bool> _verificarYGuardarCooldown() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ultimoMs = prefs.getInt('${_keyCooldown}_${_currentUserId}');
+
+    if (ultimoMs != null) {
+      final ultimo = DateTime.fromMillisecondsSinceEpoch(ultimoMs);
+      final diferencia = DateTime.now().difference(ultimo);
+
+      if (diferencia.inMinutes < _cooldownMinutos) {
+        final restanteTotal =
+            (_cooldownMinutos * 60) - diferencia.inSeconds;
+        final minutos = restanteTotal ~/ 60;
+        final segundos = restanteTotal % 60;
+        _showSnackBar(
+          '⏳ Debes esperar ${minutos}m ${segundos}s para escanear de nuevo',
+          isError: true,
+        );
+        return false;
+      }
+    }
+
+    await prefs.setInt(
+      '${_keyCooldown}_${_currentUserId}',
+      DateTime.now().millisecondsSinceEpoch,
+    );
+    return true;
   }
 
   Future<void> _getCurrentUser() async {
@@ -174,23 +201,12 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // PROCESAR QR — ENTRADA PRINCIPAL
+  // PROCESAR QR PRINCIPAL
   // ═══════════════════════════════════════════════════════════════
+
   Future<void> _procesarQR(String qrData) async {
     if (_isProcessing || _hasScanned) return;
 
-    if (_ultimoEscaneo != null) {
-      final diferencia = DateTime.now().difference(_ultimoEscaneo!);
-      if (diferencia.inSeconds < _cooldownSegundos) {
-        _showSnackBar(
-          'Espera ${_cooldownSegundos - diferencia.inSeconds}s antes de escanear',
-          isError: true,
-        );
-        return;
-      }
-    }
-
-    _ultimoEscaneo = DateTime.now();
     setState(() {
       _isProcessing = true;
       _hasScanned = true;
@@ -199,7 +215,6 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     try {
       await cameraController.stop();
 
-      // ── Parsear QR ───────────────────────────────────────────────
       Map<String, dynamic> qrInfo;
       try {
         if (qrData.startsWith('myapp://')) {
@@ -221,7 +236,6 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
         return;
       }
 
-      // ── Validar qrId ─────────────────────────────────────────────
       final qrId = qrInfo['qrId'];
       if (qrId == null || qrId.toString().isEmpty) {
         _showResult(
@@ -231,8 +245,6 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
         return;
       }
 
-      // ── Verificar estado del QR en Firestore ─────────────────────
-      // (esto se hace ANTES de bifurcar, aplica a ambos tipos)
       final eventId = qrInfo['eventId']?.toString();
       if (eventId == null || eventId.isEmpty) {
         _showResult(
@@ -261,21 +273,13 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
       final isActive = qrDocData['activo'] ?? false;
 
       if (!isActive) {
-        final finalizadoAt = qrDocData['finalizadoAt'] as Timestamp?;
-        final fechaFinalizado =
-            finalizadoAt?.toDate().toString().substring(0, 16) ??
-            'Fecha desconocida';
         _showResult(
           success: false,
-          message:
-              '🔒 Este código QR ya fue FINALIZADO\n\n'
-              '❌ No se pueden registrar más asistencias\n\n'
-              '📅 Finalizado: $fechaFinalizado',
+          message: '🔒 Este código QR ya fue FINALIZADO',
         );
         return;
       }
 
-      // ── Verificar usuario logueado ───────────────────────────────
       if (_currentUserId == null || _cachedUserData == null) {
         _showResult(
           success: false,
@@ -284,19 +288,16 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
         return;
       }
 
-      // ══════════════════════════════════════════════════════════════
-      // BIFURCACIÓN POR TIPO DE QR
-      // Lee 'type' desde Firestore (fuente confiable) y del payload
-      // ══════════════════════════════════════════════════════════════
-      final qrType =
-          (qrDocData['type'] ?? qrInfo['type'] ?? '').toString();
+      final qrType = (qrDocData['type'] ?? qrInfo['type'] ?? '').toString();
 
       if (qrType == 'asistencia_personal') {
+        // Delegamos completamente — este método maneja su propio ciclo de vida
         await _procesarQRAsistenciaPersonal(qrInfo, qrDocData);
         return;
       }
 
-      // ── Flujo normal: asistencia por proyecto/categoría ──────────
+      // ── Flujo normal de proyectos ────────────────────────────────
+
       const requiredFields = [
         'eventId',
         'eventName',
@@ -305,8 +306,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
         'categoria',
       ];
       for (final field in requiredFields) {
-        if (qrInfo[field] == null ||
-            qrInfo[field].toString().trim().isEmpty) {
+        if (qrInfo[field] == null || qrInfo[field].toString().trim().isEmpty) {
           _showResult(
             success: false,
             message: 'QR incompleto: Falta el campo "$field"',
@@ -315,65 +315,56 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
         }
       }
 
-      // ── Validación de filial / facultad / carrera ────────────────
       final esUniversitario = _esEventoUniversitario(qrInfo);
 
       if (!esUniversitario) {
-        if (!_filialCoincide(qrInfo)) {
-          final qrFilial =
-              qrInfo['filialNombre']?.toString() ?? 'Sin filial';
-          _showResult(
-            success: false,
-            message:
-                '🏛️ Este evento es de otra filial.\n\n'
-                '📌 EVENTO:\n'
-                'Filial: "$qrFilial"\n\n'
-                '👤 TU FILIAL:\n'
-                '"${_studentFilial ?? 'No registrada'}"',
-          );
-          return;
-        }
+  if (!_filialCoincide(qrInfo)) {
+    final qrFilial = qrInfo['filialNombre']?.toString() ?? 'Sin filial';
+    _showResult(
+      success: false,
+      message:
+          '🏛️ Este evento es de otra filial.\n\n'
+          '📌 EVENTO:\n'
+          'Filial: "$qrFilial"\n\n'
+          '👤 TU FILIAL:\n'
+          '"${_studentFilial ?? 'No registrada'}"',
+    );
+    return;
+  }
 
-        final userFacultad = _normalizar(_cachedUserData!['facultad']);
-        final userCarrera =
-            _normalizarCarrera(_cachedUserData!['carrera']);
-        final eventFacultad = _normalizar(qrInfo['facultad']);
-        final eventCarrera = _normalizarCarrera(qrInfo['carrera']);
-        final esDeSede = _esEventoDeSede(qrInfo);
+  final userFacultad = _normalizar(_cachedUserData!['facultad']);
+  final userCarrera = _normalizarCarrera(_cachedUserData!['carrera']);
+  final eventFacultad = _normalizar(qrInfo['facultad']);
+  final eventCarrera = _normalizarCarrera(qrInfo['carrera']);
+  final esDeSede = _esEventoDeSede(qrInfo);
 
-        if (!esDeSede) {
-          if (userFacultad != eventFacultad ||
-              userCarrera != eventCarrera) {
-            _showResult(
-              success: false,
-              message:
-                  '🚫 Este evento no corresponde a tu facultad/carrera.\n\n'
-                  '📌 EVENTO:\n'
-                  'Facultad: "${qrInfo['facultad']}"\n'
-                  'Carrera: "${qrInfo['carrera']}"\n\n'
-                  '👤 TU PERFIL:\n'
-                  'Facultad: "${_cachedUserData!['facultad']}"\n'
-                  'Carrera: "${_cachedUserData!['carrera']}"',
-            );
-            return;
-          }
-        }
-      }
+  if (!esDeSede) {
+    if (userFacultad != eventFacultad || userCarrera != eventCarrera) {
+      _showResult(
+        success: false,
+        message:
+            '🚫 Este evento no corresponde a tu facultad/carrera.\n\n'
+            '📌 EVENTO:\n'
+            'Facultad: "${qrInfo['facultad']}"\n'
+            'Carrera: "${qrInfo['carrera']}"\n\n'
+            '👤 TU PERFIL:\n'
+            'Facultad: "${_cachedUserData!['facultad']}"\n'
+            'Carrera: "${_cachedUserData!['carrera']}"',
+      );
+      return;
+    }
+  }
+}
 
-      // ── Extraer datos del proyecto ───────────────────────────────
-      final codigoProyecto =
-          qrInfo['codigoProyecto']?.toString().trim();
-      final tituloProyecto =
-          qrInfo['tituloProyecto']?.toString().trim();
+      final codigoProyecto = qrInfo['codigoProyecto']?.toString().trim();
+      final tituloProyecto = qrInfo['tituloProyecto']?.toString().trim();
       final grupo = qrInfo['grupo']?.toString().trim();
 
       final parts = _currentUserId!.split('/');
       final studentId = parts[1];
 
-      final scanId =
-          '${qrInfo['eventId']}_${studentId}_$codigoProyecto';
+      final scanId = '${qrInfo['eventId']}_${studentId}_$codigoProyecto';
 
-      // ── Verificar duplicado ──────────────────────────────────────
       final existingDoc = await _firestore
           .collection('events')
           .doc(qrInfo['eventId'])
@@ -391,29 +382,24 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                 .toString()
                 .substring(0, 16) ??
             'Fecha desconocida';
-
         _showResult(
           success: false,
           message:
               '⚠️ Ya escaneaste este código anteriormente\n\n'
-              '📋 Proyecto: ${existingData['tituloProyecto']}\n'
-              '🔢 Código: $codigoProyecto\n'
-              '📂 Categoría: ${qrInfo['categoria']}\n'
               '📅 Registrado: $registeredDate',
         );
         return;
       }
 
-      // ── Normalizar valores finales ───────────────────────────────
-      final codigoFinal = _esBlancoONulo(codigoProyecto)
-          ? 'Sin código'
-          : codigoProyecto!;
-      final tituloFinal = _esBlancoONulo(tituloProyecto)
-          ? 'Sin título'
-          : tituloProyecto!;
+      final codigoFinal =
+          _esBlancoONulo(codigoProyecto) ? 'Sin código' : codigoProyecto!;
+      final tituloFinal =
+          _esBlancoONulo(tituloProyecto) ? 'Sin título' : tituloProyecto!;
       final grupoFinal = _esBlancoONulo(grupo) ? null : grupo;
 
-      // ── Guardar asistencia de proyecto ───────────────────────────
+      final cooldownOk = await _verificarYGuardarCooldown();
+      if (!cooldownOk) return;
+
       _escaneosDeSesion++;
       final debeActualizarResumen =
           (_escaneosDeSesion % _intervaloActualizacionResumen == 0) ||
@@ -475,24 +461,35 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
         filial: qrInfo['filialNombre']?.toString(),
       );
     } catch (e) {
-      debugPrint('Error procesando asistencia: $e');
+      debugPrint('Error en _procesarQR: $e');
       _showResult(
-          success: false,
-          message: 'Error al procesar asistencia: $e');
+        success: false,
+        message: 'Error al registrar asistencia: $e',
+      );
     } finally {
-      setState(() => _isProcessing = false);
+      // Solo reseteamos _isProcessing aquí.
+      // _hasScanned se maneja en _showResult / _resetScanner para
+      // evitar que el escáner se reactive antes de que el usuario
+      // cierre el diálogo.
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // PROCESAR QR — ASISTENCIA PERSONAL (apertura, clausura, etc.)
+  // PROCESAR QR ASISTENCIA PERSONAL
   // ═══════════════════════════════════════════════════════════════
+
   Future<void> _procesarQRAsistenciaPersonal(
     Map<String, dynamic> qrInfo,
     Map<String, dynamic> qrDocData,
   ) async {
+    // NOTA: _isProcessing y _hasScanned ya están en true (set por _procesarQR).
+    // Este método NO tiene su propio finally — el finally de _procesarQR
+    // es el único punto de reset de _isProcessing.
+    // _hasScanned se resetea solo cuando el usuario toca "Reintentar" o cierra.
+
     try {
-      // ── Validar campos mínimos ───────────────────────────────────
+      // ── 1. Campos obligatorios ──────────────────────────────────────────
       for (final field in [
         'eventId',
         'eventName',
@@ -501,66 +498,176 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
         'asistenciaId',
         'qrId',
       ]) {
-        if (qrInfo[field] == null ||
-            qrInfo[field].toString().trim().isEmpty) {
+        if (qrInfo[field] == null || qrInfo[field].toString().trim().isEmpty) {
           _showResult(
             success: false,
-            message:
-                'QR de asistencia personal incompleto: falta "$field"',
+            message: 'QR de asistencia personal incompleto: falta "$field"',
           );
           return;
         }
       }
 
-      // ── Validar filial ───────────────────────────────────────────
+      // ── 2. Validación de filial ─────────────────────────────────────────
       if (!_filialCoincide(qrInfo)) {
-        final qrFilial =
-            qrInfo['filialNombre']?.toString() ?? 'Sin filial';
+        final qrFilial = qrInfo['filialNombre']?.toString() ?? 'Sin filial';
         _showResult(
           success: false,
           message:
               '🏛️ Este evento es de otra filial.\n\n'
-              '📌 EVENTO:\n'
-              'Filial: "$qrFilial"\n\n'
-              '👤 TU FILIAL:\n'
-              '"${_studentFilial ?? 'No registrada'}"',
+              '📌 EVENTO:\nFilial: "$qrFilial"\n\n'
+              '👤 TU FILIAL:\n"${_studentFilial ?? 'No registrada'}"',
         );
         return;
       }
 
-      // ── Validar facultad + carrera ───────────────────────────────
-      final userFacultad = _normalizar(_cachedUserData!['facultad']);
-      final userCarrera =
-          _normalizarCarrera(_cachedUserData!['carrera']);
-      final eventFacultad = _normalizar(qrInfo['facultad']);
-      final eventCarrera = _normalizarCarrera(qrInfo['carrera']);
+      // ── 3. Validación de facultad/carrera ───────────────────────────────
+      // ── 3. Validación de facultad/carrera ───────────────────────────────────────
+final userFacultad = _normalizar(_cachedUserData!['facultad']);
+final userCarrera = _normalizarCarrera(_cachedUserData!['carrera']);
+final eventFacultad = _normalizar(qrInfo['facultad']);
+final eventCarrera = _normalizarCarrera(qrInfo['carrera']);
 
-      if (userFacultad != eventFacultad ||
-          userCarrera != eventCarrera) {
-        _showResult(
-          success: false,
-          message:
-              '🚫 Este evento no corresponde a tu facultad/carrera.\n\n'
-              '📌 EVENTO:\n'
-              'Facultad: "${qrInfo['facultad']}"\n'
-              'Carrera: "${qrInfo['carrera']}"\n\n'
-              '👤 TU PERFIL:\n'
-              'Facultad: "${_cachedUserData!['facultad']}"\n'
-              'Carrera: "${_cachedUserData!['carrera']}"',
-        );
-        return;
-      }
+final esUniversitarioPersonal = _esEventoUniversitario(qrInfo);
+final esDeSedePersonal = _esEventoDeSede(qrInfo);
 
-      // ── IDs ──────────────────────────────────────────────────────
+if (!esUniversitarioPersonal && !esDeSedePersonal) {
+  if (userFacultad != eventFacultad || userCarrera != eventCarrera) {
+    _showResult(
+      success: false,
+      message:
+          '🚫 Este evento no corresponde a tu facultad/carrera.\n\n'
+          '📌 EVENTO:\nFacultad: "${qrInfo['facultad']}"\nCarrera: "${qrInfo['carrera']}"\n\n'
+          '👤 TU PERFIL:\nFacultad: "${_cachedUserData!['facultad']}"\nCarrera: "${_cachedUserData!['carrera']}"',
+    );
+    return;
+  }
+}
+
       final eventId = qrInfo['eventId'] as String;
       final asistenciaId = qrInfo['asistenciaId'] as String;
       final qrId = qrInfo['qrId'] as String;
-      final parts = _currentUserId!.split('/');
-      final studentId =
-          parts.length > 1 ? parts[1] : _currentUserId!;
 
-      // ── Verificar duplicado ──────────────────────────────────────
-      // Un estudiante solo puede registrarse una vez por asistencia personal
+      // ── 4. Leer documento live de asistencia_personal ───────────────────
+      final asistenciaDoc = await _firestore
+          .collection('events')
+          .doc(eventId)
+          .collection('asistencias_personales')
+          .doc(asistenciaId)
+          .get();
+
+      if (!asistenciaDoc.exists) {
+        _showResult(
+          success: false,
+          message: '⚠️ Esta asistencia ya no existe.',
+        );
+        return;
+      }
+
+      final aData = asistenciaDoc.data()!;
+      final ahora = DateTime.now();
+
+      // ── 4a. ¿Está activo el QR? ─────────────────────────────────────────
+      final activoBase = aData['activo'] as bool? ?? false;
+      if (!activoBase) {
+        _showResult(
+          success: false,
+          message: '🔒 Este código QR ha sido DESACTIVADO por el administrador.',
+        );
+        return;
+      }
+
+      // ── 4b. Ventana horaria ─────────────────────────────────────────────
+      final ventanaActiva = aData['ventanaHorariaActiva'] as bool? ?? false;
+      if (ventanaActiva) {
+        final inicioTs = aData['ventanaInicio'] as Timestamp?;
+        final finTs = aData['ventanaFin'] as Timestamp?;
+
+        if (inicioTs != null && finTs != null) {
+          final inicio = inicioTs.toDate();
+          final fin = finTs.toDate();
+
+          if (ahora.isBefore(inicio)) {
+            final diff = inicio.difference(ahora);
+            final horas = diff.inHours;
+            final minutos = diff.inMinutes.remainder(60);
+            _showResult(
+              success: false,
+              message:
+                  '⏳ Este QR aún no está disponible.\n\n'
+                  '🕐 Disponible a partir de las '
+                  '${inicio.hour.toString().padLeft(2, '0')}:'
+                  '${inicio.minute.toString().padLeft(2, '0')}\n'
+                  'Faltan: ${horas > 0 ? '${horas}h ' : ''}${minutos}min',
+            );
+            return;
+          }
+
+          if (ahora.isAfter(fin)) {
+            _showResult(
+              success: false,
+              message:
+                  '⌛ La ventana horaria de este QR ha cerrado.\n\n'
+                  '🕐 Estuvo disponible de '
+                  '${inicio.hour.toString().padLeft(2, '0')}:'
+                  '${inicio.minute.toString().padLeft(2, '0')} '
+                  'a '
+                  '${fin.hour.toString().padLeft(2, '0')}:'
+                  '${fin.minute.toString().padLeft(2, '0')}',
+            );
+            return;
+          }
+        }
+      }
+
+      // ── 4c. Tiempo límite ───────────────────────────────────────────────
+      final tiempoLimiteActivo = aData['tiempoLimiteActivo'] as bool? ?? false;
+      if (tiempoLimiteActivo) {
+        final activadoTs = aData['activadoEn'] as Timestamp?;
+        final minutos = (aData['tiempoLimiteMinutos'] as num?)?.toInt() ?? 30;
+
+        if (activadoTs != null) {
+          final expira = activadoTs.toDate().add(Duration(minutes: minutos));
+          if (ahora.isAfter(expira)) {
+            // Auto-desactivar en Firestore (best-effort, no bloqueante)
+            _firestore
+                .collection('events')
+                .doc(eventId)
+                .collection('asistencias_personales')
+                .doc(asistenciaId)
+                .update({
+              'activo': false,
+              'finalizadoAt': FieldValue.serverTimestamp(),
+            }).catchError((_) {});
+
+            final qrIdDoc = aData['qrId']?.toString();
+            if (qrIdDoc != null && qrIdDoc.isNotEmpty) {
+              _firestore
+                  .collection('events')
+                  .doc(eventId)
+                  .collection('qr_codes')
+                  .doc(qrIdDoc)
+                  .update({
+                'activo': false,
+                'finalizadoAt': FieldValue.serverTimestamp(),
+              }).catchError((_) {});
+            }
+
+            _showResult(
+              success: false,
+              message:
+                  '⏱️ El tiempo de este QR ha expirado.\n\n'
+                  'El código estuvo activo durante $minutos minuto${minutos != 1 ? 's' : ''}.\n'
+                  'El administrador puede reactivarlo si es necesario.',
+            );
+            return;
+          }
+        }
+      }
+
+      // ── 5. Verificar si ya registró esta asistencia ─────────────────────
+      final parts = _currentUserId!.split('/');
+      final studentId = parts.length > 1 ? parts[1] : _currentUserId!;
+
       final existingDoc = await _firestore
           .collection('events')
           .doc(eventId)
@@ -588,10 +695,18 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
         return;
       }
 
-      // ── Guardar en Firestore ─────────────────────────────────────
+      // ── 6. Verificar cooldown ───────────────────────────────────────────
+      final cooldownOk = await _verificarYGuardarCooldown();
+      if (!cooldownOk) {
+        // Reseteamos _hasScanned para que el usuario pueda reintentar
+        // después de que expire el cooldown sin salir de la pantalla.
+        if (mounted) setState(() => _hasScanned = false);
+        return;
+      }
+
+      // ── 7. Guardar registro ─────────────────────────────────────────────
       final batch = _firestore.batch();
 
-      // Registro individual del estudiante
       final registroRef = _firestore
           .collection('events')
           .doc(eventId)
@@ -622,7 +737,6 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
         'registrationMethod': 'qr_scan',
       });
 
-      // Actualiza contador del documento padre
       final resumenRef = _firestore
           .collection('events')
           .doc(eventId)
@@ -650,9 +764,8 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
         success: false,
         message: 'Error al procesar asistencia personal: $e',
       );
-    } finally {
-      setState(() => _isProcessing = false);
     }
+    // SIN finally aquí — el finally de _procesarQR maneja _isProcessing.
   }
 
   bool _esBlancoONulo(String? valor) {
@@ -669,6 +782,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
   // ═══════════════════════════════════════════════════════════════
   // DIÁLOGO DE RESULTADO
   // ═══════════════════════════════════════════════════════════════
+
   void _showResult({
     required bool success,
     required String message,
@@ -678,13 +792,14 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     String? filial,
     bool esPersonal = false,
   }) {
+    if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           elevation: 5,
           child: Container(
             constraints: BoxConstraints(
@@ -720,9 +835,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: (success
-                                        ? Colors.green
-                                        : Colors.red)
+                                color: (success ? Colors.green : Colors.red)
                                     .withValues(alpha: 0.3),
                                 blurRadius: 20,
                                 spreadRadius: 5,
@@ -767,8 +880,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
-                        border:
-                            Border.all(color: Colors.green.shade200),
+                        border: Border.all(color: Colors.green.shade200),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.grey.shade200,
@@ -786,12 +898,10 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
                                   color: Colors.green.shade50,
-                                  borderRadius:
-                                      BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Icon(Icons.event_available,
-                                    color: Colors.green.shade600,
-                                    size: 20),
+                                    color: Colors.green.shade600, size: 20),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -809,7 +919,6 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                             ],
                           ),
 
-                          // Badge de tipo personal
                           if (esPersonal) ...[
                             const SizedBox(height: 10),
                             Container(
@@ -817,18 +926,15 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                                   horizontal: 10, vertical: 5),
                               decoration: BoxDecoration(
                                 color: Colors.deepPurple.shade600,
-                                borderRadius:
-                                    BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Row(
+                              child: const Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(
-                                      Icons.how_to_reg_rounded,
-                                      color: Colors.white,
-                                      size: 14),
-                                  const SizedBox(width: 6),
-                                  const Text(
+                                  Icon(Icons.how_to_reg_rounded,
+                                      color: Colors.white, size: 14),
+                                  SizedBox(width: 6),
+                                  Text(
                                     'ASISTENCIA PERSONAL',
                                     style: TextStyle(
                                       color: Colors.white,
@@ -842,8 +948,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                             ),
                           ],
 
-                          if (filial != null &&
-                              filial.isNotEmpty) ...[
+                          if (filial != null && filial.isNotEmpty) ...[
                             const SizedBox(height: 10),
                             _buildResultRow(
                               icon: Icons.location_city,
@@ -883,8 +988,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                           Row(
                             children: [
                               Icon(Icons.person,
-                                  color: Colors.grey.shade600,
-                                  size: 16),
+                                  color: Colors.grey.shade600, size: 16),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Column(
@@ -940,8 +1044,8 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                               Navigator.of(context).pop();
                             },
                             style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 14),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14),
                               side: const BorderSide(
                                   color: Color(0xFF64748B)),
                               shape: RoundedRectangleBorder(
@@ -965,8 +1069,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                             if (success) {
                               Navigator.of(context).pushReplacement(
                                 MaterialPageRoute(
-                                  builder: (_) =>
-                                      const AsistenciasScreen(),
+                                  builder: (_) => const AsistenciasScreen(),
                                 ),
                               );
                             } else {
@@ -977,8 +1080,8 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                             backgroundColor: success
                                 ? Colors.green
                                 : const Color(0xFF1E3A5F),
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 14),
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -1020,8 +1123,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
             label,
             style: TextStyle(
               fontSize: 13,
-              fontWeight:
-                  bold ? FontWeight.w600 : FontWeight.normal,
+              fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
               color: bold
                   ? const Color(0xFF1E3A5F)
                   : const Color(0xFF64748B),
@@ -1035,6 +1137,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
   }
 
   void _resetScanner() async {
+    if (!mounted) return;
     setState(() {
       _hasScanned = false;
       _isProcessing = false;
@@ -1044,18 +1147,19 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
 
   Future<void> _toggleFlash() async {
     await cameraController.toggleTorch();
-    setState(() => _isFlashOn = !_isFlashOn);
+    if (mounted) setState(() => _isFlashOn = !_isFlashOn);
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: isError ? Colors.red : Colors.green,
         duration: const Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -1067,11 +1171,10 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
       body: SafeArea(
         child: _currentUserId == null
             ? const Center(
-                child:
-                    CircularProgressIndicator(color: Colors.white))
+                child: CircularProgressIndicator(color: Colors.white))
             : Column(
                 children: [
-                  // ── Header ──────────────────────────────────────
+                  // ── Header ─────────────────────────────────────
                   Padding(
                     padding: const EdgeInsets.all(20.0),
                     child: Row(
@@ -1084,8 +1187,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                           child: IconButton(
                             icon: const Icon(Icons.arrow_back_ios_new,
                                 color: Colors.white, size: 22),
-                            onPressed: () =>
-                                Navigator.of(context).pop(),
+                            onPressed: () => Navigator.of(context).pop(),
                             tooltip: 'Regresar',
                           ),
                         ),
@@ -1118,10 +1220,9 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                               scale: _pulseAnimation.value,
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: Colors.white
-                                      .withValues(alpha: 0.2),
-                                  borderRadius:
-                                      BorderRadius.circular(12),
+                                  color:
+                                      Colors.white.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: IconButton(
                                   icon: Icon(
@@ -1142,7 +1243,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                     ),
                   ),
 
-                  // ── Content ──────────────────────────────────────
+                  // ── Content ─────────────────────────────────────
                   Expanded(
                     child: Container(
                       decoration: const BoxDecoration(
@@ -1154,18 +1255,18 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                       ),
                       child: Column(
                         children: [
-                          // ── Tarjeta del estudiante ────────────────
+                          // Tarjeta del estudiante
                           Container(
-                            margin: const EdgeInsets.fromLTRB(
-                                20, 20, 20, 0),
+                            margin:
+                                const EdgeInsets.fromLTRB(20, 20, 20, 0),
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black
-                                      .withValues(alpha: 0.05),
+                                  color:
+                                      Colors.black.withValues(alpha: 0.05),
                                   blurRadius: 10,
                                   offset: const Offset(0, 4),
                                 ),
@@ -1195,8 +1296,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        _currentUserName ??
-                                            'Cargando...',
+                                        _currentUserName ?? 'Cargando...',
                                         style: const TextStyle(
                                           fontSize: 15,
                                           fontWeight: FontWeight.bold,
@@ -1223,15 +1323,15 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                                             _buildMiniChip(
                                               icon: Icons.location_city,
                                               label: _studentFilial!,
-                                              color: const Color(
-                                                  0xFF1565C0),
+                                              color:
+                                                  const Color(0xFF1565C0),
                                             ),
                                           if (_studentCarrera != null)
                                             _buildMiniChip(
                                               icon: Icons.menu_book,
                                               label: _studentCarrera!,
-                                              color: const Color(
-                                                  0xFF00897B),
+                                              color:
+                                                  const Color(0xFF00897B),
                                             ),
                                         ],
                                       ),
@@ -1242,7 +1342,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                             ),
                           ),
 
-                          // ── Cámara ────────────────────────────────
+                          // Cámara
                           Expanded(
                             child: Container(
                               margin: const EdgeInsets.all(20),
@@ -1251,8 +1351,8 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                                 borderRadius: BorderRadius.circular(20),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black
-                                        .withValues(alpha: 0.3),
+                                    color:
+                                        Colors.black.withValues(alpha: 0.3),
                                     blurRadius: 15,
                                     offset: const Offset(0, 5),
                                   ),
@@ -1269,12 +1369,10 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                                       onDetect: (capture) {
                                         for (final barcode
                                             in capture.barcodes) {
-                                          if (barcode.rawValue !=
-                                                  null &&
+                                          if (barcode.rawValue != null &&
                                               !_hasScanned &&
                                               !_isProcessing) {
-                                            _procesarQR(
-                                                barcode.rawValue!);
+                                            _procesarQR(barcode.rawValue!);
                                             break;
                                           }
                                         }
@@ -1282,6 +1380,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                                     ),
                                   ),
 
+                                  // Indicador de zoom
                                   if (_currentZoom > 0.0)
                                     Positioned(
                                       top: 16,
@@ -1343,26 +1442,26 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                                                   border: Border(
                                                     top: index < 2
                                                         ? const BorderSide(
-                                                            color: Colors
-                                                                .white,
+                                                            color:
+                                                                Colors.white,
                                                             width: 4)
                                                         : BorderSide.none,
                                                     bottom: index >= 2
                                                         ? const BorderSide(
-                                                            color: Colors
-                                                                .white,
+                                                            color:
+                                                                Colors.white,
                                                             width: 4)
                                                         : BorderSide.none,
                                                     left: index % 2 == 0
                                                         ? const BorderSide(
-                                                            color: Colors
-                                                                .white,
+                                                            color:
+                                                                Colors.white,
                                                             width: 4)
                                                         : BorderSide.none,
                                                     right: index % 2 == 1
                                                         ? const BorderSide(
-                                                            color: Colors
-                                                                .white,
+                                                            color:
+                                                                Colors.white,
                                                             width: 4)
                                                         : BorderSide.none,
                                                   ),
@@ -1375,30 +1474,27 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                                             builder: (context, child) {
                                               return Positioned(
                                                 top: 250 *
-                                                    _scanLineAnimation
-                                                        .value,
+                                                    _scanLineAnimation.value,
                                                 left: 0,
                                                 right: 0,
                                                 child: Container(
                                                   height: 2,
-                                                  decoration: BoxDecoration(
+                                                  decoration:
+                                                      BoxDecoration(
                                                     gradient:
                                                         LinearGradient(
                                                       colors: [
                                                         Colors.transparent,
-                                                        Colors.green
-                                                            .shade400,
+                                                        Colors.green.shade400,
                                                         Colors.transparent,
                                                       ],
                                                     ),
                                                     boxShadow: [
                                                       BoxShadow(
                                                         color: Colors
-                                                            .green
-                                                            .shade400
+                                                            .green.shade400
                                                             .withValues(
-                                                                alpha:
-                                                                    0.5),
+                                                                alpha: 0.5),
                                                         blurRadius: 8,
                                                         spreadRadius: 2,
                                                       ),
@@ -1413,6 +1509,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                                     ),
                                   ),
 
+                                  // Overlay de procesamiento
                                   if (_isProcessing)
                                     Container(
                                       color: Colors.black87,
@@ -1436,8 +1533,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                                               style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 16,
-                                                fontWeight:
-                                                    FontWeight.w600,
+                                                fontWeight: FontWeight.w600,
                                               ),
                                             ),
                                           ],
@@ -1449,18 +1545,18 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                             ),
                           ),
 
-                          // ── Pie ───────────────────────────────────
+                          // Pie
                           Container(
-                            margin: const EdgeInsets.fromLTRB(
-                                20, 0, 20, 20),
+                            margin:
+                                const EdgeInsets.fromLTRB(20, 0, 20, 20),
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black
-                                      .withValues(alpha: 0.05),
+                                  color:
+                                      Colors.black.withValues(alpha: 0.05),
                                   blurRadius: 10,
                                   offset: const Offset(0, 4),
                                 ),
@@ -1477,8 +1573,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                                         BorderRadius.circular(12),
                                   ),
                                   child: const Icon(Icons.qr_code_2,
-                                      color: Color(0xFF1E3A5F),
-                                      size: 32),
+                                      color: Color(0xFF1E3A5F), size: 32),
                                 ),
                                 const SizedBox(width: 16),
                                 const Expanded(
@@ -1554,11 +1649,10 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);  
-    _barcodeSub?.cancel();   
+    WidgetsBinding.instance.removeObserver(this);
+    _barcodeSub?.cancel();
     _animationController.dispose();
     cameraController.dispose();
-    _escaneosDeSesion = 0;
     super.dispose();
   }
 }

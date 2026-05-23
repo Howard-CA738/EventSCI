@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/admin/logica/gestion_criterios.dart';
+import 'evaluaciones_carrera_excel.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:share_plus/share_plus.dart';
 
-// ═══════════════════════════════════════════════════════════════════════
-// DESIGN TOKENS
-// ═══════════════════════════════════════════════════════════════════════
 class _T {
   // Paleta principal
   static const navy = Color(0xFF0F2342);
@@ -56,7 +56,9 @@ class _DetalleEvaluacionesCarreraScreenState
     extends State<DetalleEvaluacionesCarreraScreen>
     with TickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
+  final EvaluacionesCarreraExcelService _excelService =
+      EvaluacionesCarreraExcelService();
+  bool _isGeneratingExcel = false;
   late TabController _tabController;
   late List<Map<String, dynamic>> _evaluaciones;
   late AnimationController _headerAnim;
@@ -155,7 +157,157 @@ class _DetalleEvaluacionesCarreraScreenState
       builder: (_) => _DetalleBottomSheet(evaluacion: evaluacion),
     );
   }
+Future<void> _exportarExcel() async {
+  if (_evaluaciones.isEmpty) return;
+  setState(() => _isGeneratingExcel = true);
 
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(color: _T.purple),
+          const SizedBox(height: 20),
+          const Text(
+            'Generando reporte Excel...',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${_evaluaciones.length} evaluaciones',
+            style: const TextStyle(fontSize: 12, color: _T.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    ),
+  );
+
+  try {
+    // Obtener filial/facultad/carrera del evento desde los datos disponibles
+    final filialNombre = _evaluaciones.isNotEmpty
+        ? (_evaluaciones.first['filialNombre']?.toString() ?? '')
+        : '';
+    final facultad = _evaluaciones.isNotEmpty
+        ? (_evaluaciones.first['facultad']?.toString() ?? '')
+        : '';
+    final carrera = _evaluaciones.isNotEmpty
+        ? (_evaluaciones.first['carrera']?.toString() ?? '')
+        : '';
+
+    final ruta = await _excelService.generarReporteEvaluaciones(
+      evaluaciones: _evaluaciones,
+      eventoNombre: widget.eventoNombre,
+      filialNombre: filialNombre,
+      facultad: facultad,
+      carrera: carrera,
+    );
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+    setState(() => _isGeneratingExcel = false);
+
+    if (ruta == null) {
+      _showSnack('Error al generar el reporte', _T.danger, Icons.error_outline_rounded);
+      return;
+    }
+
+    _mostrarOpcionesArchivo(ruta);
+  } catch (e) {
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+      setState(() => _isGeneratingExcel = false);
+      _showSnack('Error: $e', _T.danger, Icons.error_outline_rounded);
+    }
+  }
+}
+
+void _mostrarOpcionesArchivo(String ruta) {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: _T.success.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.check_circle_rounded,
+                color: _T.success, size: 22),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text('Reporte generado',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+      content: const Text(
+        '¿Qué deseas hacer con el archivo Excel?',
+        style: TextStyle(fontSize: 14, color: _T.textSecondary),
+      ),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      actions: [
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final result = await OpenFilex.open(ruta);
+              if (result.type != ResultType.done && mounted) {
+                _showSnack(
+                  'No se encontró app para abrir Excel. Prueba compartirlo.',
+                  _T.warning,
+                  Icons.warning_rounded,
+                );
+              }
+            },
+            icon: const Icon(Icons.open_in_new, size: 20),
+            label: const Text('Abrir archivo',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _T.navy,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await Share.shareXFiles(
+                [XFile(ruta)],
+                subject: 'Reporte de Evaluaciones – ${widget.eventoNombre}',
+              );
+            },
+            icon: const Icon(Icons.share, size: 20),
+            label: const Text('Compartir',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _T.navy,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              side: const BorderSide(color: _T.navy, width: 1.5),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
   Future<void> _editarNotas(Map<String, dynamic> evaluacion) async {
     final rubrica = evaluacion['rubrica'] as Rubrica?;
     if (rubrica == null) {
@@ -277,53 +429,98 @@ class _DetalleEvaluacionesCarreraScreenState
   }
 
   Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 12, 20, 8),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                color: Colors.white, size: 20),
-            onPressed: () => Navigator.pop(context),
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.white.withValues(alpha: 0.12),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              padding: const EdgeInsets.all(10),
-            ),
+  return Padding(
+    padding: const EdgeInsets.fromLTRB(8, 12, 20, 8),
+    child: Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Colors.white, size: 20),
+          onPressed: () => Navigator.pop(context),
+          style: IconButton.styleFrom(
+            backgroundColor: Colors.white.withValues(alpha: 0.12),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.all(10),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Evaluaciones',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Evaluaciones',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: -0.3,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  widget.eventoNombre,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.65),
-                    fontWeight: FontWeight.w400,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                widget.eventoNombre,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.white.withValues(alpha: 0.65),
+                  fontWeight: FontWeight.w400,
                 ),
-              ],
-            ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
+        ),
+
+        // ── Botón Excel ──────────────────────────────────────────
+        GestureDetector(
+          onTap: _isGeneratingExcel ? null : _exportarExcel,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: _isGeneratingExcel
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : _T.success.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _isGeneratingExcel
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : _T.success.withValues(alpha: 0.5),
+              ),
+            ),
+            child: _isGeneratingExcel
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.file_download_rounded,
+                          color: Colors.white, size: 17),
+                      SizedBox(width: 5),
+                      Text(
+                        'Excel',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildStatsRow() {
     final total = _evaluaciones.length;

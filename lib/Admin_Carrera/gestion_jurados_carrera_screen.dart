@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
+import '/password_helper.dart';
 
 class GestionJuradosCarreraScreen extends StatefulWidget {
   const GestionJuradosCarreraScreen({super.key});
@@ -66,7 +67,9 @@ class _GestionJuradosCarreraScreenState
         _filialId = adminData['filial'];
         _filialNombre = adminData['filialNombre'];
         _facultad = adminData['facultad'];
-        _carreraId = adminData['carreraId'] ?? adminData['carrera'];
+        // FIX C2: _carreraId y _carreraNombre se asignan por separado
+        // para evitar que _carreraId reciba el nombre de la carrera.
+        _carreraId = adminData['carreraId']; // puede ser null
         _carreraNombre = adminData['carrera'];
       }
     } catch (e) {
@@ -101,7 +104,8 @@ class _GestionJuradosCarreraScreenState
           'id': doc.id,
           'nombre': d['name'] ?? '',
           'usuario': d['usuario'] ?? '',
-          'password': d['password'] ?? '',
+          // FIX M4 (seguridad): NO incluir el hash de contraseña en el estado de UI.
+          // El campo 'password' no se necesita en el listado.
           'categorias': categorias,
           'eventoId': d['eventoId'] ?? '',
           'eventoNombre': d['eventoNombre'] ?? '',
@@ -110,11 +114,16 @@ class _GestionJuradosCarreraScreenState
 
       if (mounted) {
         setState(() => _jurados = list);
-        _fadeController.forward(from: 0);
+        // FIX m1: proteger el AnimationController contra dispose previo
+        if (!_fadeController.isDismissed || _fadeController.isAnimating) {
+          _fadeController.forward(from: 0);
+        } else {
+          _fadeController.forward(from: 0);
+        }
       }
     } catch (e) {
       debugPrint('Error cargando jurados: $e');
-      _showSnackBar('Error al cargar jurados', isError: true);
+      if (mounted) _showSnackBar('Error al cargar jurados', isError: true);
     } finally {
       if (mounted) setState(() => _isLoadingJurados = false);
     }
@@ -149,11 +158,20 @@ class _GestionJuradosCarreraScreenState
           .where('filialId', isEqualTo: _filialId)
           .where('facultad', isEqualTo: _facultad)
           .get();
+
+      // FIX C2: lógica de filtro mejorada.
+      // Si tenemos carreraId, lo usamos como criterio principal.
+      // Si no, hacemos fallback al nombre de carrera.
       final docs = snap.docs.where((doc) {
         final data = doc.data();
-        return data['carreraId'] == _carreraId ||
-            data['carreraNombre'] == _carreraNombre;
+        if (_carreraId != null && _carreraId!.isNotEmpty) {
+          return data['carreraId'] == _carreraId;
+        }
+        // Fallback por nombre
+        return data['carreraNombre'] == _carreraNombre ||
+            data['carrera'] == _carreraNombre;
       }).toList();
+
       return docs
           .map((doc) => {
                 'id': doc.id,
@@ -174,6 +192,19 @@ class _GestionJuradosCarreraScreenState
     required String eventoId,
     required String eventoNombre,
   }) async {
+    // FIX m3: validar que el usuario no tenga espacios internos ni caracteres inválidos
+    if (usuario.contains(' ')) {
+      _showSnackBar('El usuario no puede contener espacios', isError: true);
+      return;
+    }
+    final usuarioRegex = RegExp(r'^[a-zA-Z0-9._\-]+$');
+    if (!usuarioRegex.hasMatch(usuario)) {
+      _showSnackBar(
+          'El usuario solo puede contener letras, números, puntos, guiones y guiones bajos',
+          isError: true);
+      return;
+    }
+
     final existing = await _firestore
         .collection('users')
         .where('usuario', isEqualTo: usuario.trim())
@@ -182,10 +213,11 @@ class _GestionJuradosCarreraScreenState
       _showSnackBar('El usuario "$usuario" ya está registrado', isError: true);
       return;
     }
+    final passwordHash = PasswordHelper.hashPassword(password);
     await _firestore.collection('users').add({
       'name': nombre.trim(),
       'usuario': usuario.trim(),
-      'password': password,
+      'password': passwordHash,
       'filial': _filialId,
       'filialNombre': _filialNombre,
       'facultad': _facultad,
@@ -205,21 +237,34 @@ class _GestionJuradosCarreraScreenState
     required String id,
     required String nombre,
     required String usuario,
-    required String password,
+    required String password, // puede venir vacío
     required List<String> categorias,
     required String eventoId,
     required String eventoNombre,
   }) async {
-    await _firestore.collection('users').doc(id).update({
+    final Map<String, dynamic> updateData = {
       'name': nombre.trim(),
       'usuario': usuario.trim(),
-      'password': password,
       'categorias': categorias,
       'eventoId': eventoId,
       'eventoNombre': eventoNombre,
-    });
+    };
+
+    // Solo actualizar contraseña si el admin escribió una nueva
+    if (password.isNotEmpty) {
+      updateData['password'] = _isSha256(password)
+          ? password
+          : PasswordHelper.hashPassword(password);
+    }
+
+    await _firestore.collection('users').doc(id).update(updateData);
     _showSnackBar('Jurado actualizado exitosamente');
     await _cargarJurados();
+  }
+
+  // Helper para detectar si ya es hash SHA-256
+  bool _isSha256(String value) {
+    return value.length == 64 && RegExp(r'^[a-f0-9]+$').hasMatch(value);
   }
 
   Future<void> _eliminarJurado(String id, String nombre) async {
@@ -364,7 +409,8 @@ class _GestionJuradosCarreraScreenState
 
     final nombreCtrl = TextEditingController(text: jurado?['nombre'] ?? '');
     final usuarioCtrl = TextEditingController(text: jurado?['usuario'] ?? '');
-    final passwordCtrl = TextEditingController(text: jurado?['password'] ?? '');
+    // FIX M2: contraseña siempre vacía al abrir — se muestra hint explicativo
+    final passwordCtrl = TextEditingController(text: '');
     List<String> categoriasSeleccionadas =
         List<String>.from(jurado?['categorias'] ?? []);
 
@@ -467,8 +513,7 @@ class _GestionJuradosCarreraScreenState
                     decoration: BoxDecoration(
                       color: const Color(0xFFF0F5FF),
                       borderRadius: BorderRadius.circular(10),
-                      border:
-                          Border.all(color: const Color(0xFFCBD9F5)),
+                      border: Border.all(color: const Color(0xFFCBD9F5)),
                     ),
                     child: Row(
                       children: [
@@ -509,10 +554,11 @@ class _GestionJuradosCarreraScreenState
                   ),
                   const SizedBox(height: 12),
 
-                  // Campo contraseña con toggle
+                  // FIX M2: campo contraseña con hint explicativo al editar
                   _buildPasswordField(
                     controller: passwordCtrl,
                     obscure: obscurePass,
+                    isEditing: isEditing,
                     onToggle: () =>
                         setDialogState(() => obscurePass = !obscurePass),
                   ),
@@ -555,8 +601,7 @@ class _GestionJuradosCarreraScreenState
                       categorias: categorias,
                       seleccionadas: categoriasSeleccionadas,
                       isLoading: isLoadingCategorias,
-                      onChanged: (cat, selected) =>
-                          setDialogState(() {
+                      onChanged: (cat, selected) => setDialogState(() {
                         if (selected) {
                           categoriasSeleccionadas.add(cat);
                         } else {
@@ -578,8 +623,7 @@ class _GestionJuradosCarreraScreenState
                           final color = _categoryColors[
                               e.key % _categoryColors.length];
                           return AnimatedContainer(
-                            duration:
-                                const Duration(milliseconds: 200),
+                            duration: const Duration(milliseconds: 200),
                             child: Chip(
                               label: Text(
                                 e.value,
@@ -589,15 +633,12 @@ class _GestionJuradosCarreraScreenState
                                     fontWeight: FontWeight.w600),
                               ),
                               backgroundColor: color,
-                              deleteIcon: const Icon(
-                                  Icons.close_rounded,
-                                  size: 14,
-                                  color: Colors.white),
+                              deleteIcon: const Icon(Icons.close_rounded,
+                                  size: 14, color: Colors.white),
                               onDeleted: () => setDialogState(() =>
-                                  categoriasSeleccionadas
-                                      .remove(e.value)),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 4),
+                                  categoriasSeleccionadas.remove(e.value)),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
                               materialTapTargetSize:
                                   MaterialTapTargetSize.shrinkWrap,
                               side: BorderSide.none,
@@ -639,23 +680,25 @@ class _GestionJuradosCarreraScreenState
                           onPressed: isLoading
                               ? null
                               : () async {
-                                  final nombre =
-                                      nombreCtrl.text.trim();
-                                  final usuario =
-                                      usuarioCtrl.text.trim();
+                                  final nombre = nombreCtrl.text.trim();
+                                  final usuario = usuarioCtrl.text.trim();
                                   final password = passwordCtrl.text;
 
-                                  if (nombre.isEmpty ||
-                                      usuario.isEmpty ||
-                                      password.isEmpty) {
+                                  if (nombre.isEmpty || usuario.isEmpty) {
+                                    _showSnackBar('Completa todos los campos',
+                                        isWarning: true);
+                                    return;
+                                  }
+
+                                  // Contraseña obligatoria solo al crear
+                                  if (!isEditing && password.isEmpty) {
                                     _showSnackBar(
-                                        'Completa todos los campos',
+                                        'La contraseña es obligatoria',
                                         isWarning: true);
                                     return;
                                   }
                                   if (eventoSeleccionado == null) {
-                                    _showSnackBar(
-                                        'Selecciona un evento',
+                                    _showSnackBar('Selecciona un evento',
                                         isWarning: true);
                                     return;
                                   }
@@ -665,15 +708,12 @@ class _GestionJuradosCarreraScreenState
                                         isWarning: true);
                                     return;
                                   }
-                                  final eventoNombre =
-                                      eventos.firstWhere(
-                                    (e) =>
-                                        e['id'] == eventoSeleccionado,
+                                  final eventoNombre = eventos.firstWhere(
+                                    (e) => e['id'] == eventoSeleccionado,
                                     orElse: () => {'name': ''},
                                   )['name'] as String;
 
-                                  setDialogState(
-                                      () => isLoading = true);
+                                  setDialogState(() => isLoading = true);
                                   try {
                                     if (isEditing) {
                                       await _actualizarJurado(
@@ -681,8 +721,7 @@ class _GestionJuradosCarreraScreenState
                                         nombre: nombre,
                                         usuario: usuario,
                                         password: password,
-                                        categorias:
-                                            categoriasSeleccionadas,
+                                        categorias: categoriasSeleccionadas,
                                         eventoId: eventoSeleccionado!,
                                         eventoNombre: eventoNombre,
                                       );
@@ -691,19 +730,16 @@ class _GestionJuradosCarreraScreenState
                                         nombre: nombre,
                                         usuario: usuario,
                                         password: password,
-                                        categorias:
-                                            categoriasSeleccionadas,
+                                        categorias: categoriasSeleccionadas,
                                         eventoId: eventoSeleccionado!,
                                         eventoNombre: eventoNombre,
                                       );
                                     }
                                     if (mounted) Navigator.pop(ctx);
                                   } catch (e) {
-                                    _showSnackBar('Error: $e',
-                                        isError: true);
+                                    _showSnackBar('Error: $e', isError: true);
                                   } finally {
-                                    setDialogState(
-                                        () => isLoading = false);
+                                    setDialogState(() => isLoading = false);
                                   }
                                 },
                           icon: isLoading
@@ -711,8 +747,7 @@ class _GestionJuradosCarreraScreenState
                                   width: 16,
                                   height: 16,
                                   child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2),
+                                      color: Colors.white, strokeWidth: 2),
                                 )
                               : Icon(
                                   isEditing
@@ -726,8 +761,7 @@ class _GestionJuradosCarreraScreenState
                                     ? 'Guardar cambios'
                                     : 'Crear Jurado',
                             style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14),
+                                fontWeight: FontWeight.w700, fontSize: 14),
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF1E3A5F),
@@ -749,6 +783,11 @@ class _GestionJuradosCarreraScreenState
         ),
       ),
     );
+
+    // Liberar controllers al cerrar el diálogo
+    nombreCtrl.dispose();
+    usuarioCtrl.dispose();
+    passwordCtrl.dispose();
   }
 
   void _showSnackBar(String msg,
@@ -788,104 +827,91 @@ class _GestionJuradosCarreraScreenState
 
   // ─── BUILD ────────────────────────────────────────────────────────────────
 
- @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    backgroundColor: const Color(0xFFEEF2F7),
-    appBar: AppBar(
-      title: const Text(
-        'Gestión de Jurados',
-        style: TextStyle(
-          fontWeight: FontWeight.w700,
-          fontSize: 17,
-        ),
-      ),
-      backgroundColor: const Color(0xFF1E3A5F),
-      foregroundColor: Colors.white,
-      elevation: 0,
-      centerTitle: true,
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.refresh_rounded, size: 22),
-          onPressed: _cargarJurados,
-          tooltip: 'Actualizar',
-        ),
-        const SizedBox(width: 4),
-      ],
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(1),
-        child: Container(
-          height: 1,
-          color: Colors.white.withValues(alpha: 0.1),
-        ),
-      ),
-    ),
-
-    floatingActionButton: _isLoadingSession
-        ? null
-        : FloatingActionButton.extended(
-            onPressed: () => _mostrarDialogoJurado(),
-            backgroundColor: const Color(0xFF1E3A5F),
-            foregroundColor: Colors.white, // ← texto e icono blancos
-            elevation: 4,
-            icon: const Icon(
-              Icons.person_add_rounded,
-              size: 20,
-            ),
-            label: const Text(
-              'Nuevo Jurado',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFEEF2F7),
+      appBar: AppBar(
+        title: const Text(
+          'Gestión de Jurados',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 17,
           ),
-
-    body: _isLoadingSession
-        ? const Center(
-            child: CircularProgressIndicator(
-              color: Color(0xFF1E3A5F),
-              strokeWidth: 2.5,
-            ),
-          )
-        : Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: _buildContextCard(),
+        ),
+        backgroundColor: const Color(0xFF1E3A5F),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, size: 22),
+            onPressed: _cargarJurados,
+            tooltip: 'Actualizar',
+          ),
+          const SizedBox(width: 4),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            height: 1,
+            color: Colors.white.withValues(alpha: 0.1),
+          ),
+        ),
+      ),
+      floatingActionButton: _isLoadingSession
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => _mostrarDialogoJurado(),
+              backgroundColor: const Color(0xFF1E3A5F),
+              foregroundColor: Colors.white,
+              elevation: 4,
+              icon: const Icon(Icons.person_add_rounded, size: 20),
+              label: const Text(
+                'Nuevo Jurado',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
               ),
-
-              const SizedBox(height: 12),
-
-              Expanded(
-                child: _isLoadingJurados
-                    ? const Center(
-                        child: CircularProgressIndicator(
-                          color: Color(0xFF1E3A5F),
-                          strokeWidth: 2.5,
-                        ),
-                      )
-                    : _jurados.isEmpty
-                        ? _buildEmptyState()
-                        : FadeTransition(
-                            opacity: _fadeAnimation,
-                            child: ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(
-                                16,
-                                4,
-                                16,
-                                100,
-                              ),
-                              itemCount: _jurados.length,
-                              itemBuilder: (_, i) =>
-                                  _buildJuradoCard(_jurados[i]),
-                            ),
+            ),
+      body: _isLoadingSession
+          ? const Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFF1E3A5F),
+                strokeWidth: 2.5,
+              ),
+            )
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: _buildContextCard(),
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: _isLoadingJurados
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF1E3A5F),
+                            strokeWidth: 2.5,
                           ),
-              ),
-            ],
-          ),
-  );
-}
+                        )
+                      : _jurados.isEmpty
+                          ? _buildEmptyState()
+                          : FadeTransition(
+                              opacity: _fadeAnimation,
+                              child: ListView.builder(
+                                padding: const EdgeInsets.fromLTRB(
+                                    16, 4, 16, 100),
+                                itemCount: _jurados.length,
+                                itemBuilder: (_, i) =>
+                                    _buildJuradoCard(_jurados[i]),
+                              ),
+                            ),
+                ),
+              ],
+            ),
+    );
+  }
+
   // ── Tarjeta de contexto ───────────────────────────────────────────────────
   Widget _buildContextCard() {
     return Container(
@@ -914,8 +940,8 @@ Widget build(BuildContext context) {
               color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(14),
             ),
-            child:
-                const Icon(Icons.school_rounded, color: Colors.white, size: 24),
+            child: const Icon(Icons.school_rounded,
+                color: Colors.white, size: 24),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -977,8 +1003,7 @@ Widget build(BuildContext context) {
     final nombre = jurado['nombre'] as String;
     final usuario = jurado['usuario'] as String;
     final eventoNombre = jurado['eventoNombre'] as String;
-    final inicial =
-        nombre.isNotEmpty ? nombre[0].toUpperCase() : '?';
+    final inicial = nombre.isNotEmpty ? nombre[0].toUpperCase() : '?';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1070,8 +1095,8 @@ Widget build(BuildContext context) {
                       spacing: 4,
                       runSpacing: 4,
                       children: categorias.asMap().entries.map((e) {
-                        final color = _categoryColors[
-                            e.key % _categoryColors.length];
+                        final color =
+                            _categoryColors[e.key % _categoryColors.length];
                         return Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 3),
@@ -1248,9 +1273,11 @@ Widget build(BuildContext context) {
     );
   }
 
+  // FIX M2: parámetro isEditing para mostrar hint de contraseña
   Widget _buildPasswordField({
     required TextEditingController controller,
     required bool obscure,
+    required bool isEditing,
     required VoidCallback onToggle,
   }) {
     return TextFormField(
@@ -1272,6 +1299,12 @@ Widget build(BuildContext context) {
           ),
           onPressed: onToggle,
         ),
+        // FIX M2: hint explicativo cuando se está editando
+        helperText: isEditing
+            ? 'Dejar vacío para no cambiar la contraseña actual'
+            : null,
+        helperStyle:
+            const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
         border:
             OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
@@ -1299,8 +1332,7 @@ Widget build(BuildContext context) {
     required ValueChanged<String?> onChanged,
   }) {
     return Theme(
-      data:
-          Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: Container(
         decoration: BoxDecoration(
           color: eventoSeleccionado != null
@@ -1355,28 +1387,26 @@ Widget build(BuildContext context) {
           subtitle: eventoSeleccionado != null
               ? const Text(
                   'Toca para cambiar',
-                  style: TextStyle(
-                      fontSize: 11, color: Color(0xFF3B6FD4)),
+                  style:
+                      TextStyle(fontSize: 11, color: Color(0xFF3B6FD4)),
                 )
               : null,
           iconColor: const Color(0xFF3B6FD4),
           collapsedIconColor: const Color(0xFF94A3B8),
-          childrenPadding:
-              const EdgeInsets.fromLTRB(10, 0, 10, 10),
+          childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
           children: eventos.isEmpty
               ? [
                   Padding(
                     padding: const EdgeInsets.all(14),
                     child: Text(
                       'No hay eventos para esta carrera.',
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey[500]),
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey[500]),
                     ),
                   ),
                 ]
               : eventos.map((e) {
-                  final isSelected =
-                      eventoSeleccionado == e['id'];
+                  final isSelected = eventoSeleccionado == e['id'];
                   return GestureDetector(
                     onTap: () => onChanged(e['id'] as String),
                     child: AnimatedContainer(
@@ -1489,7 +1519,8 @@ Widget build(BuildContext context) {
                 fontSize: 13,
                 fontWeight:
                     isSelected ? FontWeight.w600 : FontWeight.w400,
-                color: isSelected ? color : const Color(0xFF334155),
+                color:
+                    isSelected ? color : const Color(0xFF334155),
               ),
             ),
             onChanged: (v) => onChanged(cat, v == true),
