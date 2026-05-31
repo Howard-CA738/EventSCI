@@ -128,15 +128,18 @@ class _EvaluacionesCarreraScreenState
           await _cargarEvaluacionesDeEvento(evento['id'] as String);
       if (mounted) {
         await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => DetalleEvaluacionesCarreraScreen(
-              eventoId: evento['id'] as String,
-              eventoNombre: evento['name'] as String,
-              evaluaciones: evaluaciones,
-            ),
-          ),
-        );
+  context,
+  MaterialPageRoute(
+    builder: (_) => DetalleEvaluacionesCarreraScreen(
+      eventoId: evento['id'] as String,
+      eventoNombre: evento['name'] as String,
+      evaluaciones: evaluaciones,
+      filialNombre: _filialNombre ?? '',
+      facultad: _facultad ?? '',
+      carrera: _carrera ?? '',
+    ),
+  ),
+);
       }
     } catch (e) {
       if (mounted) {

@@ -39,12 +39,18 @@ class DetalleEvaluacionesCarreraScreen extends StatefulWidget {
   final String eventoId;
   final String eventoNombre;
   final List<Map<String, dynamic>> evaluaciones;
+  final String filialNombre;
+  final String facultad;
+  final String carrera;
 
   const DetalleEvaluacionesCarreraScreen({
     super.key,
     required this.eventoId,
     required this.eventoNombre,
     required this.evaluaciones,
+    required this.filialNombre,
+    required this.facultad,
+    required this.carrera,
   });
 
   @override
@@ -189,15 +195,9 @@ Future<void> _exportarExcel() async {
 
   try {
     // Obtener filial/facultad/carrera del evento desde los datos disponibles
-    final filialNombre = _evaluaciones.isNotEmpty
-        ? (_evaluaciones.first['filialNombre']?.toString() ?? '')
-        : '';
-    final facultad = _evaluaciones.isNotEmpty
-        ? (_evaluaciones.first['facultad']?.toString() ?? '')
-        : '';
-    final carrera = _evaluaciones.isNotEmpty
-        ? (_evaluaciones.first['carrera']?.toString() ?? '')
-        : '';
+    final filialNombre = widget.filialNombre;
+final facultad = widget.facultad;
+final carrera = widget.carrera;
 
     final ruta = await _excelService.generarReporteEvaluaciones(
       evaluaciones: _evaluaciones,

@@ -39,17 +39,9 @@ class _RegistroEstudiantesCarreraScreenState
   bool _isLoading = false;
   bool _isLoadingAdminData = true; // Solo carga los prefs locales (muy rápido)
 
-  String? _selectedModoContrato;
-  String? _selectedModalidadEstudio;
   String? _selectedCiclo;
   String? _selectedGrupo;
 
-  final List<String> _modosContrato = ['Regular', 'Convenio', 'Especial'];
-  final List<String> _modalidadesEstudio = [
-    'Presencial',
-    'Semipresencial',
-    'Virtual',
-  ];
   final List<String> _ciclos = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
   final List<String> _grupos = ['Único', '1', '2', '3', '4'];
 
@@ -201,8 +193,6 @@ class _RegistroEstudiantesCarreraScreenState
         facultad: _adminCarreraFacultad,
         carrera: _adminCarreraCarrera,
         filial: _adminCarreraFilialNombre,
-        modoContrato: _selectedModoContrato,
-        modalidadEstudio: _selectedModalidadEstudio,
         ciclo: _selectedCiclo,
         grupo: _selectedGrupo,
         celular: _celularController.text.trim(),
@@ -231,8 +221,6 @@ class _RegistroEstudiantesCarreraScreenState
     _celularController.clear();
     _usernameController.clear();
     setState(() {
-      _selectedModoContrato = null;
-      _selectedModalidadEstudio = null;
       _selectedCiclo = null;
       _selectedGrupo = null;
     });
@@ -720,30 +708,6 @@ class _RegistroEstudiantesCarreraScreenState
                                       icon: Icons.badge,
                                       hintText: 'Ej: 202320800',
                                       validator: (_) => null,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _buildDropdown<String>(
-                                      label: 'Modo contrato',
-                                      icon: Icons.description,
-                                      value: _selectedModoContrato,
-                                      items: _modosContrato
-                                          .map((m) => DropdownMenuItem(
-                                              value: m, child: Text(m)))
-                                          .toList(),
-                                      onChanged: (v) => setState(
-                                          () => _selectedModoContrato = v),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _buildDropdown<String>(
-                                      label: 'Modalidad estudio',
-                                      icon: Icons.book,
-                                      value: _selectedModalidadEstudio,
-                                      items: _modalidadesEstudio
-                                          .map((m) => DropdownMenuItem(
-                                              value: m, child: Text(m)))
-                                          .toList(),
-                                      onChanged: (v) => setState(
-                                          () => _selectedModalidadEstudio = v),
                                     ),
                                     const SizedBox(height: 16),
 

@@ -1,0 +1,316 @@
+import 'package:flutter/material.dart';
+import 'datos_excel.dart';
+import 'importacion_estudiantes_pagos.dart';
+
+/// Pantalla previa que aparece SOLO para el super admin.
+/// Permite elegir entre importación completa de estudiantes
+/// o importación de pagos por evento.
+class ImportacionSelectorScreen extends StatelessWidget {
+  const ImportacionSelectorScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF1E3A5F),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ── Header ─────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Row(
+                children: [
+                  Container(
+                    width: 50, height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.upload_file,
+                        color: Color(0xFF1E3A5F), size: 30),
+                  ),
+                  const SizedBox(width: 16),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Importar desde Excel',
+                            style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white)),
+                        Text('Selecciona el tipo de importación',
+                            style: TextStyle(
+                                fontSize: 13, color: Colors.white70)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                    onPressed: () => Navigator.pop(context),
+                    tooltip: 'Cerrar',
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Body ───────────────────────────────────────────────
+            Expanded(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Color(0xFFE8EDF2),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
+                  ),
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 8),
+
+                      // Título de sección
+                      const Text(
+                        '¿Qué deseas importar?',
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E3A5F)),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Elige el tipo de importación según tus necesidades',
+                        style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 28),
+
+                      // ── Opción 1: Importación completa ────────────
+                      _ImportOptionCard(
+                        icon: Icons.group_add,
+                        iconBgColor: const Color(0xFF1E3A5F),
+                        title: 'Importación completa',
+                        subtitle: 'Registrar todos los estudiantes matriculados',
+                        features: const [
+                          'Crea nuevas cuentas de estudiantes',
+                          'Importa datos completos del Excel',
+                          'Elimina duplicados automáticamente',
+                        ],
+                        featureIcon: Icons.check_circle_outline,
+                        featureColor: const Color(0xFF1E3A5F),
+                        buttonLabel: 'Importar Estudiantes',
+                        buttonColor: const Color(0xFF1E3A5F),
+                        onTap: () => Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const DatosExcelScreen()),
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Separador con "O"
+                      Row(
+                        children: [
+                          Expanded(child: Divider(color: Colors.grey.shade400)),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Container(
+                              width: 36, height: 36,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: const Center(
+                                child: Text('O',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF64748B),
+                                        fontSize: 14)),
+                              ),
+                            ),
+                          ),
+                          Expanded(child: Divider(color: Colors.grey.shade400)),
+                        ],
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // ── Opción 2: Importación de pagos ────────────
+                      _ImportOptionCard(
+                        icon: Icons.payments,
+                        iconBgColor: Colors.green.shade700,
+                        title: 'Importación de pagos',
+                        subtitle: 'Marcar estudiantes que pagaron para un evento',
+                        features: const [
+                          'Busca por código universitario',
+                          'Actualiza estado de pago en el evento',
+                          'Reporta códigos no encontrados',
+                        ],
+                        featureIcon: Icons.check_circle_outline,
+                        featureColor: Colors.green.shade700,
+                        buttonLabel: 'Importar Pagos',
+                        buttonColor: Colors.green.shade700,
+                        onTap: () => Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const ImportacionPagosScreen()),
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Nota informativa
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.blue.shade100),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline,
+                                color: Colors.blue.shade700, size: 20),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Text(
+                                'Para importar pagos, primero asegúrate de haber '
+                                'importado la lista completa de estudiantes y de que '
+                                'el admin de carrera haya creado el evento correspondiente.',
+                                style: TextStyle(
+                                    fontSize: 12, color: Color(0xFF1E3A5F)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Card de opción de importación ─────────────────────────────────────
+class _ImportOptionCard extends StatelessWidget {
+  final IconData icon;
+  final Color    iconBgColor;
+  final String   title;
+  final String   subtitle;
+  final List<String> features;
+  final IconData featureIcon;
+  final Color    featureColor;
+  final String   buttonLabel;
+  final Color    buttonColor;
+  final VoidCallback onTap;
+
+  const _ImportOptionCard({
+    required this.icon,
+    required this.iconBgColor,
+    required this.title,
+    required this.subtitle,
+    required this.features,
+    required this.featureIcon,
+    required this.featureColor,
+    required this.buttonLabel,
+    required this.buttonColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 4,
+      shadowColor: Colors.black26,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Encabezado
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: iconBgColor,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 28),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1E3A5F))),
+                      const SizedBox(height: 4),
+                      Text(subtitle,
+                          style: const TextStyle(
+                              fontSize: 12, color: Color(0xFF64748B))),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+
+            // Features
+            ...features.map((f) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Icon(featureIcon, size: 16, color: featureColor),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(f,
+                            style: const TextStyle(
+                                fontSize: 13, color: Color(0xFF64748B))),
+                      ),
+                    ],
+                  ),
+                )),
+
+            const SizedBox(height: 18),
+
+            // Botón
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: onTap,
+                icon: Icon(icon, size: 20),
+                label: Text(buttonLabel,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: buttonColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  elevation: 2,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

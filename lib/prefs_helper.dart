@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; 
 import '/admin/logica/filiales_service.dart';
 import '/device_helper.dart';
 import 'package:flutter/foundation.dart';
@@ -8,17 +9,12 @@ import 'encryption_helper.dart';
 import 'password_helper.dart'; 
  
 class PrefsHelper {
-  // ─────────────────────────────────────────────────────────────────────────
-  // CONSTANTES DE TIPO DE USUARIO
-  // ─────────────────────────────────────────────────────────────────────────
+
   static const String userTypeAdmin        = 'admin';
   static const String userTypeStudent      = 'student';
   static const String userTypeJurado       = 'jurado';
   static const String userTypeAdminCarrera = 'admin_carrera';
- 
-  // ─────────────────────────────────────────────────────────────────────────
-  // KEYS DE SHARED PREFERENCES
-  // ─────────────────────────────────────────────────────────────────────────
+
   static const String _keyUserType                  = 'user_type';
   static const String _keyUserName                  = 'user_name';
   static const String _keyUserId                    = 'user_id';
@@ -40,11 +36,9 @@ class PrefsHelper {
   static const String _keyJuradoEventoId            = 'jurado_evento_id';
   static const String _keyJuradoCategorias          = 'jurado_categorias';
  
-  // ─────────────────────────────────────────────────────────────────────────
-  // FIRESTORE + CACHÉ
-  // ─────────────────────────────────────────────────────────────────────────
+
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
- 
+  static Future<void> ensureAuthActiva() => _activarAuthAnonima();
   static final Map<String, Map<String, dynamic>> _userCache        = {};
   static DateTime?                               _cacheTimestamp;
   static const Duration                          _cacheDuration     = Duration(hours: 24);
@@ -60,48 +54,98 @@ class PrefsHelper {
   }
  
   // ─────────────────────────────────────────────────────────────────────────
-  // 🔐 TOKEN SEGURO — reemplaza DateTime.now().millisecondsSinceEpoch
+  // 🔐 TOKEN SEGURO
   // ─────────────────────────────────────────────────────────────────────────
   static String _generateToken() {
     final random = Random.secure();
     final values = List<int>.generate(32, (_) => random.nextInt(256));
     return values.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
- static Future<String?> detectarRol(String username) async { 
-  
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 🔐 AUTH ANÓNIMA — activa Firebase Auth para satisfacer reglas Firestore
+  // ─────────────────────────────────────────────────────────────────────────
+  static Future<void> _activarAuthAnonima() async {
+    try {
+      if (FirebaseAuth.instance.currentUser == null) {
+        await FirebaseAuth.instance.signInAnonymously();
+        debugPrint('✅ Auth anónima activada');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Auth anónima fallida: $e');
+    }
+  }
+
+  static Future<void> _cerrarAuthAnonima() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && user.isAnonymous) {
+        await FirebaseAuth.instance.signOut();
+        debugPrint('✅ Auth anónima cerrada');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error cerrando auth anónima: $e');
+    }
+  }
+static Future<bool> verificarBloqueoporPago({
+  required String carreraPath,
+  required String studentId,
+}) async {
   try {
+    final doc = await _firestore
+        .collection('users')
+        .doc(carreraPath)
+        .collection('students')
+        .doc(studentId)
+        .get();
+ 
+    if (!doc.exists) return false;
+ 
+    // Si el campo no existe aún en Firestore (estudiantes antiguos),
+    // se asume false — no se bloquea por defecto.
+    return doc.data()?['bloqueadoPorPago'] == true;
+  } catch (e) {
+    // Ante cualquier error de red o permisos, no se bloquea —
+    // el estudiante pasa y el admin puede corregir manualmente.
+    debugPrint('⚠️ Error verificando bloqueo por pago: $e');
+    return false;
+  }
+}
+ static Future<Map<String, dynamic>?> detectarRolConDoc(String username) async {
+  debugPrint('🔐 Auth state antes de query: ${FirebaseAuth.instance.currentUser?.uid}');
+  try {
+    final norm = username.trim().toLowerCase();
     final results = await Future.wait([
       _firestore
           .collection('admins_carrera')
-          .where('usuario', isEqualTo: username.trim().toLowerCase())
+          .where('usuario', isEqualTo: norm)
           .where('activo', isEqualTo: true)
           .limit(1)
           .get(),
       _firestore
           .collection('users')
           .where('userType', isEqualTo: 'jurado')
-          .where('usuario', isEqualTo: username.trim().toLowerCase())
+          .where('usuario', isEqualTo: norm)
           .limit(1)
           .get(),
+      // ← CAMBIA ESTO: buscar en entries, no en el doc padre
       _firestore
           .collection('student_index')
-          .doc(username.trim().toLowerCase())
+          .doc(norm)
+          .collection('entries')
+          .limit(1)
           .get(),
     ]);
 
-    final adminSnap  = results[0] as QuerySnapshot;
-    final juradoSnap = results[1] as QuerySnapshot;
-    final studentDoc = results[2] as DocumentSnapshot;
+    final adminSnap   = results[0] as QuerySnapshot;
+    final juradoSnap  = results[1] as QuerySnapshot;
+    final studentSnap = results[2] as QuerySnapshot; // ← ahora es QuerySnapshot
 
-    debugPrint('🔍 detectarRol "$username": '
-        'admin=${adminSnap.docs.length}, '
-        'jurado=${juradoSnap.docs.length}, '
-        'student=${studentDoc.exists}');
-
-    if (adminSnap.docs.isNotEmpty)  return 'admin_carrera';
-    if (juradoSnap.docs.isNotEmpty) return 'jurado';
-    if (studentDoc.exists)          return 'student';
-
+    if (adminSnap.docs.isNotEmpty)  return {'rol': 'admin_carrera', 'doc': adminSnap.docs.first};
+    if (juradoSnap.docs.isNotEmpty) return {'rol': 'jurado',        'doc': juradoSnap.docs.first};
+    if (studentSnap.docs.isNotEmpty) return {'rol': 'student',      'doc': studentSnap.docs.first};
+    
+    debugPrint('❌ No se encontró rol para: "$norm"');
     return null;
   } catch (e) {
     debugPrint('❌ Error detectando rol: $e');
@@ -159,6 +203,10 @@ class PrefsHelper {
     await prefs.setString(_keyAdminCarreraCarreraId,    carreraId);
     await prefs.setString(_keyAdminCarreraPermisos,     permisos.join(','));
     await prefs.setBool(_keyIsLoggedIn,                true);
+
+    // 🔐 Auth anónima para AdminCarrera
+    await _activarAuthAnonima();
+
     debugPrint('✅ Datos de admin carrera guardados en sesión');
   }
  
@@ -196,7 +244,7 @@ class PrefsHelper {
   }
  
   // ─────────────────────────────────────────────────────────────────────────
-  // 🔐 JURADO — contraseña verificada con hash
+  // 🔐 JURADO — contraseña verificada con hash + auth anónima
   // ─────────────────────────────────────────────────────────────────────────
   static Future<bool> loginJurado(String usuario, String password) async {
     try {
@@ -217,14 +265,12 @@ class PrefsHelper {
       final doc  = query.docs.first;
       final data = doc.data();
  
-      // 🔐 Verificación con hash (compatible con texto plano mientras migras)
       final stored = data['password']?.toString() ?? '';
       if (!PasswordHelper.verifyPassword(password, stored)) {
         debugPrint('❌ Contraseña incorrecta para jurado: $usuario');
         return false;
       }
  
-      // 🔐 Si la contraseña estaba en texto plano, migramos el hash ahora
       if (!_isSha256(stored)) {
         final hash = PasswordHelper.hashPassword(password);
         await _firestore.collection('users').doc(doc.id).update({'password': hash});
@@ -245,6 +291,9 @@ class PrefsHelper {
       final categorias = (data['categorias'] as List?)
               ?.map((e) => e.toString()).join(',') ?? '';
       await prefs.setString(_keyJuradoCategorias, categorias);
+
+      // 🔐 Auth anónima para que las reglas Firestore funcionen
+      await _activarAuthAnonima();
  
       debugPrint('✅ Login jurado exitoso: ${data['name']}');
       return true;
@@ -266,39 +315,127 @@ class PrefsHelper {
   }
  
   // ─────────────────────────────────────────────────────────────────────────
-  // 🔐 ESTUDIANTE — login con verificación de hash
+  // 🔐 ESTUDIANTE — login con verificación de hash + auth anónima
   // ─────────────────────────────────────────────────────────────────────────
   static Future<bool> loginStudent(String username, String password) async {
+  try {
+    debugPrint('🔐 Intentando login de estudiante: $username');
+    final usernameNorm = username.trim().toLowerCase();
+
+    // ── Leer entries del índice ──────────────────────────────────────
+    QuerySnapshot entriesSnap;
     try {
-      debugPrint('🔐 Intentando login de estudiante: $username');
-      final usernameNorm = username.trim().toLowerCase();
- 
-      DocumentSnapshot? indexDoc;
-      try {
-        indexDoc = await _firestore
-            .collection('student_index')
-            .doc(usernameNorm)
-            .get();
-      } catch (e) {
-        debugPrint('⚠️ Error leyendo student_index, usando fallback: $e');
-        return await _loginStudentFallback(usernameNorm, password);
-      }
- 
-      if (!indexDoc.exists) {
-        debugPrint('ℹ️ No encontrado en índice. Buscando en subcolecciones...');
-        return await _loginStudentFallback(usernameNorm, password);
-      }
- 
-      final indexData   = indexDoc.data() as Map<String, dynamic>;
-      final carreraPath = indexData['carreraPath'] as String?;
-      final studentId   = indexData['studentId']   as String?;
- 
+      entriesSnap = await _firestore
+          .collection('student_index')
+          .doc(usernameNorm)
+          .collection('entries')
+          .get();
+          debugPrint('🔍 Buscando en índice username: "$usernameNorm"');
+debugPrint('   Entries encontradas: ${entriesSnap.docs.length}');
+for (var doc in entriesSnap.docs) {
+  debugPrint('   Entry data: ${doc.data()}');
+}
+    } catch (e) {
+      debugPrint('⚠️ Error leyendo student_index, usando fallback: $e');
+      return await _loginStudentFallback(usernameNorm, password);
+    }
+
+    if (entriesSnap.docs.isEmpty) {
+      debugPrint('ℹ️ No encontrado en índice. Buscando en subcolecciones...');
+      return await _loginStudentFallback(usernameNorm, password);
+    }
+
+    // ── Username único ───────────────────────────────────────────────
+    if (entriesSnap.docs.length == 1) {
+      final entryData   = entriesSnap.docs.first.data() as Map<String, dynamic>;
+      final carreraPath = entryData['carreraPath'] as String?;
+      final studentId   = entryData['studentId']   as String?;
+
       if (carreraPath == null || studentId == null) {
         debugPrint('⚠️ Índice corrupto, usando fallback');
-        await _firestore.collection('student_index').doc(usernameNorm).delete();
+        await entriesSnap.docs.first.reference.delete();
         return await _loginStudentFallback(usernameNorm, password);
       }
- 
+
+      DocumentSnapshot studentDoc;
+      try {
+        studentDoc = await _firestore
+            .collection('users')
+            .doc(carreraPath)
+            .collection('students')
+            .doc(studentId)
+            .get();
+            debugPrint('   carreraPath: "$carreraPath"');
+debugPrint('   studentId: "$studentId"');
+debugPrint('   studentDoc.exists: ${studentDoc.exists}');
+if (studentDoc.exists) {
+  final d = studentDoc.data() as Map<String, dynamic>;
+  debugPrint('   username en Firestore: "${d['username']}"');
+  debugPrint('   dni en Firestore: "${d['dni']}"');
+}
+      } catch (e) {
+        debugPrint('⚠️ Error leyendo estudiante, usando fallback: $e');
+        return await _loginStudentFallback(usernameNorm, password);
+      }
+
+      if (!studentDoc.exists) {
+        debugPrint('⚠️ Índice apunta a estudiante inexistente. Limpiando...');
+        await entriesSnap.docs.first.reference.delete();
+        return await _loginStudentFallback(usernameNorm, password);
+      }
+
+      final studentData    = studentDoc.data() as Map<String, dynamic>;
+      final storedPassword = studentData['dni'] ?? studentData['documento'];
+
+      if (storedPassword == null) {
+        return await _loginStudentFallback(usernameNorm, password);
+      }
+
+      if (!PasswordHelper.verifyPassword(password, storedPassword.toString())) {
+        debugPrint('⚠️ Contraseña no coincide, buscando en otras carreras...');
+        return await _loginStudentFallback(usernameNorm, password);
+      }
+
+      if (!_isSha256(storedPassword.toString())) {
+        final hash = PasswordHelper.hashPassword(password);
+        await _firestore
+            .collection('users')
+            .doc(carreraPath)
+            .collection('students')
+            .doc(studentId)
+            .update({'dni': hash, 'documento': hash});
+        debugPrint('✅ Contraseña migrada a hash automáticamente');
+      }
+
+      await saveUserData(
+        userType: userTypeStudent,
+        userName: studentData['name'] ?? 'Estudiante',
+        userId:   '$carreraPath/$studentId',
+      );
+
+      studentData['id']          = studentId;
+      studentData['carreraPath'] = carreraPath;
+      _userCache[studentId]      = studentData;
+      _cacheTimestamp            = DateTime.now();
+
+      await _activarAuthAnonima();
+      debugPrint('✅ Login exitoso vía índice (username único)');
+      return true;
+    }
+
+    // ── Username duplicado — resolver por DNI ────────────────────────
+    debugPrint('⚠️ Username duplicado detectado: ${entriesSnap.docs.length} entradas');
+
+    for (var entry in entriesSnap.docs) {
+      final entryData   = entry.data() as Map<String, dynamic>;
+      final carreraPath = entryData['carreraPath'] as String?;
+      final studentId   = entryData['studentId']   as String?;
+
+      if (carreraPath == null || studentId == null) {
+        debugPrint('⚠️ Entry corrupta, saltando...');
+        continue;
+      }
+
       DocumentSnapshot studentDoc;
       try {
         studentDoc = await _firestore
@@ -308,31 +445,26 @@ class PrefsHelper {
             .doc(studentId)
             .get();
       } catch (e) {
-        debugPrint('⚠️ Error leyendo estudiante, usando fallback: $e');
-        return await _loginStudentFallback(usernameNorm, password);
+        debugPrint('⚠️ Error leyendo estudiante en loop: $e');
+        continue;
       }
- 
+
       if (!studentDoc.exists) {
-        debugPrint('⚠️ Índice apunta a estudiante inexistente. Limpiando...');
-        await _firestore.collection('student_index').doc(usernameNorm).delete();
-        return await _loginStudentFallback(usernameNorm, password);
+        debugPrint('⚠️ Entry huérfana detectada, saltando...');
+        continue;
       }
- 
+
       final studentData    = studentDoc.data() as Map<String, dynamic>;
-      // 🔐 Leer el campo hasheado (o texto plano si aún no se migró)
       final storedPassword = studentData['dni'] ?? studentData['documento'];
- 
-      if (storedPassword == null) {
-        return await _loginStudentFallback(usernameNorm, password);
-      }
- 
-      // 🔐 Verificar con soporte de transición texto plano → hash
+
+      if (storedPassword == null) continue;
+
       if (!PasswordHelper.verifyPassword(password, storedPassword.toString())) {
-        debugPrint('⚠️ Contraseña no coincide, buscando en otras carreras...');
-        return await _loginStudentFallback(usernameNorm, password);
+        debugPrint('⚠️ DNI no coincide con $carreraPath, probando siguiente...');
+        continue;
       }
- 
-      // 🔐 Migrar al hash si estaba en texto plano
+
+      // ── Encontrado — migrar hash si necesario ────────────────────
       if (!_isSha256(storedPassword.toString())) {
         final hash = PasswordHelper.hashPassword(password);
         await _firestore
@@ -341,31 +473,38 @@ class PrefsHelper {
             .collection('students')
             .doc(studentId)
             .update({'dni': hash, 'documento': hash});
-        debugPrint('✅ Contraseña de estudiante migrada a hash automáticamente');
+        debugPrint('✅ Contraseña migrada a hash automáticamente');
       }
- 
+
       await saveUserData(
         userType: userTypeStudent,
         userName: studentData['name'] ?? 'Estudiante',
         userId:   '$carreraPath/$studentId',
       );
- 
-      studentData['id']           = studentId;
-      studentData['carreraPath']  = carreraPath;
-      _userCache[studentId]       = studentData;
-      _cacheTimestamp             = DateTime.now();
- 
-      debugPrint('✅ Login exitoso vía índice');
+
+      studentData['id']          = studentId;
+      studentData['carreraPath'] = carreraPath;
+      _userCache[studentId]      = studentData;
+      _cacheTimestamp            = DateTime.now();
+
+      await _activarAuthAnonima();
+      debugPrint('✅ Login exitoso — duplicado resuelto por DNI en $carreraPath');
       return true;
-    } catch (e) {
-      debugPrint('❌ Error en login estudiante: $e');
-      try {
-        return await _loginStudentFallback(username.trim().toLowerCase(), password);
-      } catch (_) {
-        return false;
-      }
+    }
+
+    // Ninguna entry coincidió con el DNI
+    debugPrint('❌ Ningún estudiante coincidió con el DNI proporcionado');
+    return await _loginStudentFallback(usernameNorm, password);
+
+  } catch (e) {
+    debugPrint('❌ Error en login estudiante: $e');
+    try {
+      return await _loginStudentFallback(username.trim().toLowerCase(), password);
+    } catch (_) {
+      return false;
     }
   }
+}
  
   static Future<bool> _loginStudentFallback(String username, String password) async {
     try {
@@ -395,10 +534,8 @@ class PrefsHelper {
  
           if (stored == null) continue;
  
-          // 🔐 Verificar con soporte de transición
           if (!PasswordHelper.verifyPassword(password, stored.toString())) continue;
  
-          // 🔐 Migrar al hash si estaba en texto plano
           if (!_isSha256(stored.toString())) {
             final hash = PasswordHelper.hashPassword(password);
             await _firestore
@@ -426,6 +563,9 @@ class PrefsHelper {
           studentData['carreraPath'] = carreraName;
           _userCache[studentDoc.id]  = studentData;
           _cacheTimestamp            = DateTime.now();
+
+          // 🔐 Auth anónima para que las reglas Firestore funcionen
+          await _activarAuthAnonima();
  
           debugPrint('✅ Login exitoso vía fallback en "$carreraName"');
           return true;
@@ -444,22 +584,26 @@ class PrefsHelper {
   }
  
   static Future<void> createStudentIndex({
-    required String username,
-    required String carreraPath,
-    required String studentId,
-  }) async {
-    try {
-      await _firestore.collection('student_index').doc(username).set({
-        'username':    username,
-        'carreraPath': carreraPath,
-        'studentId':   studentId,
-        'createdAt':   FieldValue.serverTimestamp(),
-      });
-      debugPrint('✅ Índice creado para $username');
-    } catch (e) {
-      debugPrint('⚠️ Error creando índice: $e');
-    }
+  required String username,
+  required String carreraPath,
+  required String studentId,
+}) async {
+  try {
+    await _firestore
+        .collection('student_index')
+        .doc(username)
+        .collection('entries')
+        .add({
+      'username':    username,
+      'carreraPath': carreraPath,
+      'studentId':   studentId,
+      'createdAt':   FieldValue.serverTimestamp(),
+    });
+    debugPrint('✅ Índice creado para $username');
+  } catch (e) {
+    debugPrint('⚠️ Error creando índice: $e');
   }
+}
  
   // ─────────────────────────────────────────────────────────────────────────
   // SESIÓN DE ESTUDIANTE
@@ -467,6 +611,7 @@ class PrefsHelper {
   static Future<String> verificarSesionEstudiante({
     required String carreraPath,
     required String studentId,
+    DocumentSnapshot? cachedDoc,
   }) async {
     try {
       final doc = await _firestore
@@ -512,7 +657,7 @@ class PrefsHelper {
     required String studentId,
   }) async {
     try {
-      final token           = _generateToken(); // 🔐 ahora es aleatorio
+      final token           = _generateToken();
       final currentDeviceId = await DeviceHelper.getDeviceId();
  
       final doc = await _firestore
@@ -705,16 +850,6 @@ class PrefsHelper {
     try {
       final carreraPath = '${filial}_$carrera';
  
-      final indexExists = await _firestore
-          .collection('student_index')
-          .doc(username.toLowerCase().trim())
-          .get();
- 
-      if (indexExists.exists) {
-        debugPrint('❌ Username ya existe en índice');
-        return false;
-      }
- 
       final studentsRef = _firestore
           .collection('users')
           .doc(carreraPath)
@@ -752,19 +887,18 @@ class PrefsHelper {
       }
  
       if (dni.trim().isNotEmpty) {
-  final dniHash = PasswordHelper.hashPassword(dni.trim());
-  final existingDni = await studentsRef
-      .where('dni', isEqualTo: dniHash)  
-      .limit(1)
-      .get();
+        final dniHash = PasswordHelper.hashPassword(dni.trim());
+        final existingDni = await studentsRef
+            .where('dni', isEqualTo: dniHash)  
+            .limit(1)
+            .get();
         if (existingDni.docs.isNotEmpty) {
           debugPrint('❌ DNI ya existe');
           return false;
         }
       }
  
-      // 🔐 Hashear el DNI antes de guardar
-      final dniHash = PasswordHelper.hashPassword(dni.trim());
+      final dniHash      = PasswordHelper.hashPassword(dni.trim());
       final dniEncrypted = EncryptionHelper.encryptDni(dni.trim());
  
       final studentData = <String, dynamic>{
@@ -772,8 +906,8 @@ class PrefsHelper {
         'name':                 name.trim(),
         'username':             username.toLowerCase().trim(),
         'codigoUniversitario':  codigoUniversitario.trim(),
-        'dni':                  dniHash,       // 🔐 hash, no texto plano
-        'documento':            dniHash,       // 🔐 hash, no texto plano
+        'dni':                  dniHash,
+        'documento':            dniHash,
         'filial':               filial,
         'facultad':             facultad,
         'carrera':              carrera,
@@ -783,13 +917,13 @@ class PrefsHelper {
         'createdAt':            FieldValue.serverTimestamp(),
       };
  
-      if (modoContrato       != null && modoContrato.isNotEmpty)       studentData['modoContrato']       = modoContrato;
-      if (modalidadEstudio   != null && modalidadEstudio.isNotEmpty)   studentData['modalidadEstudio']   = modalidadEstudio;
-      if (ciclo              != null && ciclo.isNotEmpty)              studentData['ciclo']              = ciclo;
-      if (grupo              != null && grupo.isNotEmpty)              studentData['grupo']              = grupo;
+      if (modoContrato        != null && modoContrato.isNotEmpty)        studentData['modoContrato']        = modoContrato;
+      if (modalidadEstudio    != null && modalidadEstudio.isNotEmpty)    studentData['modalidadEstudio']    = modalidadEstudio;
+      if (ciclo               != null && ciclo.isNotEmpty)               studentData['ciclo']               = ciclo;
+      if (grupo               != null && grupo.isNotEmpty)               studentData['grupo']               = grupo;
       if (correoInstitucional != null && correoInstitucional.isNotEmpty) studentData['correoInstitucional'] = correoInstitucional.trim();
-      if (celular            != null && celular.isNotEmpty)            studentData['celular']            = celular.trim();
-      if (pago               != null && pago.isNotEmpty)               studentData['pago']               = pago;
+      if (celular             != null && celular.isNotEmpty)             studentData['celular']             = celular.trim();
+      if (pago                != null && pago.isNotEmpty)                studentData['pago']                = pago;
  
       final studentDoc = await studentsRef.add(studentData);
  
@@ -817,7 +951,7 @@ class PrefsHelper {
   }
  
   // ─────────────────────────────────────────────────────────────────────────
-  // 🔐 CAMBIAR CONTRASEÑA — hashea la nueva contraseña
+  // 🔐 CAMBIAR CONTRASEÑA
   // ─────────────────────────────────────────────────────────────────────────
   static Future<bool> changePassword({
     required String currentPassword,
@@ -844,12 +978,10 @@ class PrefsHelper {
  
       final stored = userDoc.data()!['dni'] ?? userDoc.data()!['documento'];
  
-      // 🔐 Verificar contraseña actual (soporta texto plano durante transición)
       if (!PasswordHelper.verifyPassword(currentPassword, stored.toString())) {
         return false;
       }
  
-      // 🔐 Guardar la nueva contraseña como hash
       final newHash = PasswordHelper.hashPassword(newPassword);
  
       await _firestore
@@ -873,7 +1005,7 @@ class PrefsHelper {
   }
  
   // ─────────────────────────────────────────────────────────────────────────
-  // CRUD DE ESTUDIANTES (sin cambios relevantes al hashing)
+  // CRUD DE ESTUDIANTES
   // ─────────────────────────────────────────────────────────────────────────
   static String generateUsername(String fullName) {
     final nameParts = fullName.trim().toLowerCase().split(' ');
@@ -965,11 +1097,20 @@ class PrefsHelper {
           .get();
  
       if (studentDoc.exists) {
-        final username = studentDoc.data()?['username'];
-        if (username != null) {
-          await _firestore.collection('student_index').doc(username).delete();
-        }
-      }
+  final username = studentDoc.data()?['username'];
+  if (username != null) {
+    final entriesSnap = await _firestore
+        .collection('student_index')
+        .doc(username)
+        .collection('entries')
+        .where('studentId', isEqualTo: studentId)
+        .get();
+
+    for (var entry in entriesSnap.docs) {
+      await entry.reference.delete();
+    }
+  }
+}
  
       await _firestore
           .collection('users')
@@ -991,48 +1132,101 @@ class PrefsHelper {
       List<Map<String, String>> students) async {
     int successCount = 0;
     int errorCount   = 0;
- 
+
     try {
-      const batchSize = 450;
- 
-      for (int i = 0; i < students.length; i += batchSize) {
-        final batch    = _firestore.batch();
-        final endIndex = (i + batchSize < students.length) ? i + batchSize : students.length;
-        final currentBatch = students.sublist(i, endIndex);
- 
-        for (var student in currentBatch) {
-          try {
-            final studentRef = _firestore
-                .collection('users')
-                .doc(student['carreraPath'])
-                .collection('students')
-                .doc(student['studentId']);
- 
-            final cached = _userCache[student['studentId']];
-            if (cached != null) {
-              final username = cached['username'];
-              if (username != null) {
-                batch.delete(_firestore.collection('student_index').doc(username));
-              }
-            }
- 
-            batch.delete(studentRef);
-            successCount++;
-          } catch (e) {
-            debugPrint('❌ Error preparando eliminación: $e');
-            errorCount++;
-          }
-        }
- 
+      // 1️⃣ Obtener usernames — primero desde caché, luego Firestore en paralelo
+      final List<Future<String?>> usernameFutures = students.map((student) async {
+        final studentId   = student['studentId']!;
+        final carreraPath = student['carreraPath']!;
+
+        // Intentar desde caché primero
+        final cached = _userCache[studentId]?['username']?.toString();
+        if (cached != null && cached.isNotEmpty) return cached;
+
+        // Si no está en caché, leer de Firestore
         try {
+          final doc = await _firestore
+              .collection('users')
+              .doc(carreraPath)
+              .collection('students')
+              .doc(studentId)
+              .get();
+          return doc.data()?['username']?.toString();
+        } catch (_) {
+          return null;
+        }
+      }).toList();
+
+      final usernames = await Future.wait(usernameFutures);
+
+      // 2️⃣ Buscar todas las entries en paralelo (solo usernames no nulos)
+      final Set<String> uniqueUsernames = usernames
+          .where((u) => u != null && u.isNotEmpty)
+          .cast<String>()
+          .toSet();
+
+      final entriesFutures = uniqueUsernames.map((username) =>
+          _firestore
+              .collection('student_index')
+              .doc(username)
+              .collection('entries')
+              .get());
+
+      final entriesResults = await Future.wait(entriesFutures);
+
+      // Mapear studentId → entries para filtrar solo las relevantes
+      final studentIds = students.map((s) => s['studentId']!).toSet();
+
+      // 3️⃣ Batch de todos los deletes (entries + estudiantes)
+      const batchSize = 500;
+      var batch = _firestore.batch();
+      int opsInBatch = 0;
+
+      Future<void> commitIfFull() async {
+        if (opsInBatch >= batchSize) {
           await batch.commit();
-        } catch (e) {
-          debugPrint('❌ Error ejecutando batch: $e');
-          errorCount   += currentBatch.length;
-          successCount -= currentBatch.length;
+          batch = _firestore.batch();
+          opsInBatch = 0;
         }
       }
- 
+
+      // Agregar entries al batch (solo las que corresponden a estos estudiantes)
+      for (var snap in entriesResults) {
+        for (var entry in snap.docs) {
+          final entryStudentId = entry.data()['studentId']?.toString();
+          if (entryStudentId != null && studentIds.contains(entryStudentId)) {
+            batch.delete(entry.reference);
+            opsInBatch++;
+            await commitIfFull();
+          }
+        }
+      }
+
+      // Agregar documentos de estudiantes al batch
+      for (var student in students) {
+        try {
+          final studentRef = _firestore
+              .collection('users')
+              .doc(student['carreraPath'])
+              .collection('students')
+              .doc(student['studentId']);
+          batch.delete(studentRef);
+          opsInBatch++;
+          successCount++;
+          await commitIfFull();
+        } catch (e) {
+          debugPrint('❌ Error preparando eliminación: $e');
+          errorCount++;
+        }
+      }
+
+      // Commit final
+      if (opsInBatch > 0) {
+        await batch.commit();
+      }
+
+      debugPrint('✅ Eliminados $successCount estudiantes con sus índices en batch');
+
       _userCache.clear();
       _cacheTimestamp = null;
       clearStudentsCache();
@@ -1070,11 +1264,10 @@ class PrefsHelper {
       if (email               != null) updateData['email']               = email.trim();
       if (codigoUniversitario != null) updateData['codigoUniversitario'] = codigoUniversitario.trim();
       if (dni                 != null) {
-        // 🔐 Si se actualiza el dni, hashearlo
-        final dniHash = PasswordHelper.hashPassword(dni.trim());
+        final dniHash      = PasswordHelper.hashPassword(dni.trim());
         final dniEncrypted = EncryptionHelper.encryptDni(dni.trim());
-        updateData['dni']       = dniHash;
-        updateData['documento'] = dniHash;
+        updateData['dni']          = dniHash;
+        updateData['documento']    = dniHash;
         updateData['dniEncrypted'] = dniEncrypted;
       }
       if (facultad            != null) updateData['facultad']            = facultad;
@@ -1166,7 +1359,6 @@ class PrefsHelper {
           final name   = (s['name']                ?? '').toString().toLowerCase();
           final user   = (s['username']            ?? '').toString().toLowerCase();
           final codigo = (s['codigoUniversitario'] ?? '').toString().toLowerCase();
-          // 🔐 Nota: no buscar por dni ya que ahora está hasheado
           return name.contains(q) || user.contains(q) || codigo.contains(q);
         }).toList();
       }
@@ -1182,36 +1374,79 @@ class PrefsHelper {
     try {
       int successCount = 0;
       int errorCount   = 0;
- 
+
       final snap = await _firestore.collection('users').get();
- 
+
       for (var carreraDoc in snap.docs) {
         final data = carreraDoc.data();
         if (data.containsKey('userType')) continue;
- 
+
         final studentsQuery = await _firestore
             .collection('users')
             .doc(carreraDoc.id)
             .collection('students')
             .get();
- 
-        for (var studentDoc in studentsQuery.docs) {
-          try {
-            final username = studentDoc.data()['username'];
-            if (username != null) {
-              await _firestore.collection('student_index').doc(username).delete();
-            }
-            await studentDoc.reference.delete();
-            successCount++;
-          } catch (e) {
-            debugPrint('Error eliminando ${studentDoc.id}: $e');
-            errorCount++;
+
+        if (studentsQuery.docs.isEmpty) continue;
+
+        // 1️⃣ Recopilar todos los usernames del grupo
+        final usernames = studentsQuery.docs
+            .map((d) => d.data()['username']?.toString())
+            .where((u) => u != null && u.isNotEmpty)
+            .cast<String>()
+            .toSet(); // Set para evitar duplicados
+
+        // 2️⃣ Buscar todas las entries en paralelo
+        final entriesFutures = usernames.map((username) =>
+            _firestore
+                .collection('student_index')
+                .doc(username)
+                .collection('entries')
+                .get());
+
+        final entriesResults = await Future.wait(entriesFutures);
+
+        // 3️⃣ Borrar entries + estudiantes en batches de 500
+        const batchSize = 500;
+        var batch = _firestore.batch();
+        int opsInBatch = 0;
+
+        Future<void> commitIfFull() async {
+          if (opsInBatch >= batchSize) {
+            await batch.commit();
+            batch = _firestore.batch();
+            opsInBatch = 0;
           }
         }
+
+        // Agregar entries al batch
+        for (var snap in entriesResults) {
+          for (var entry in snap.docs) {
+            batch.delete(entry.reference);
+            opsInBatch++;
+            await commitIfFull();
+          }
+        }
+
+        // Agregar estudiantes al batch
+        for (var studentDoc in studentsQuery.docs) {
+          batch.delete(studentDoc.reference);
+          opsInBatch++;
+          await commitIfFull();
+          successCount++;
+        }
+
+        // Commit final del grupo
+        if (opsInBatch > 0) {
+          await batch.commit();
+        }
+
+        debugPrint('✅ Carrera ${carreraDoc.id}: ${studentsQuery.docs.length} estudiantes eliminados');
       }
- 
+
       _userCache.clear();
       _cacheTimestamp = null;
+      clearStudentsCache();
       return {'success': successCount, 'errors': errorCount};
     } catch (e) {
       debugPrint('Error eliminando todos los estudiantes: $e');
@@ -1247,8 +1482,11 @@ class PrefsHelper {
     _prefs          = null;
  
     FilialesService.clearCache();
+
+    // 🔐 Cerrar auth anónima si existe
+    await _cerrarAuthAnonima();
+
     debugPrint('✅ Sesión cerrada y caché limpiado');
- 
   }
  
   // ─────────────────────────────────────────────────────────────────────────

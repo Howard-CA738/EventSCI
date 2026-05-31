@@ -112,137 +112,165 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _ejecutarLogin() async {
-  final username = _userController.text.trim();
-  final password = _passwordController.text;
+    final username = _userController.text.trim();
+    final password = _passwordController.text;
 
-  // ── 1. SUPERADMIN ─────────────────────────────────────────────────
-  if (username.contains('@')) {
-    final error = await SuperAdminAuthService.login(username, password);
-    if (error != null) {
-      if (mounted) _showMessage(error);
+    // ── 1. SUPERADMIN ─────────────────────────────────────────────────
+    if (username.contains('@')) {
+      final error = await SuperAdminAuthService.login(username, password);
+      if (error != null) {
+        if (mounted) _showMessage(error);
+        return;
+      }
+      if (!mounted) return;
+      final user = FirebaseAuth.instance.currentUser!;
+      final errorCodigo = await SuperAdminAuthService.enviarCodigoEmail(
+          user.uid, username);
+      if (!mounted) return;
+      if (errorCodigo != null) {
+        _showMessage(errorCodigo);
+        return;
+      }
+      _mostrarDialogOTP(user.uid, username);
       return;
     }
-    if (!mounted) return;
-    final user = FirebaseAuth.instance.currentUser!;
-    final errorCodigo = await SuperAdminAuthService.enviarCodigoEmail(
-        user.uid, username);
-    if (!mounted) return;
-    if (errorCodigo != null) {
-      _showMessage(errorCodigo);
+
+    // ── 2. AUTH PRIMERO (obligatorio antes de cualquier query) ─────────
+    await PrefsHelper.ensureAuthActiva();
+
+    // ── 3. DETECTAR ROL ────────────────────────────────────────────────
+    final rolData = await PrefsHelper.detectarRolConDoc(username.toLowerCase());
+
+    if (rolData == null) {
+      if (mounted) _showMessage('Usuario o contraseña incorrectos');
       return;
     }
-    _mostrarDialogOTP(user.uid, username);
-    return;
-  }
 
+    final rol = rolData['rol'] as String;
 
-  // ── 3. DETECTAR ROL — ya con auth activo ──────────────────────────
-  final rol = await PrefsHelper.detectarRol(username.toLowerCase());
+    // ── 4. SWITCH DE ROLES ────────────────────────────────────────────
+    switch (rol) {
 
-  if (rol == null) {
-    if (mounted) _showMessage('Usuario o contraseña incorrectos');
-    return;
-  }
-
-  switch (rol) {
-    case 'admin_carrera':
-      final adminCarreraService = AdminCarreraService();
-      final adminCarreraData = await adminCarreraService.loginAdminCarrera(
-        usuario:  username,
-        password: password,
-      );
-      if (adminCarreraData == null) {
-        if (mounted) _showMessage('Usuario o contraseña incorrectos');
-        return;
-      }
-
-      await PrefsHelper.saveAdminCarreraData(
-        userId:       adminCarreraData['id'],
-        userName:     adminCarreraData['usuario'] ?? 'Admin',
-        filial:       adminCarreraData['filial'],
-        filialNombre: adminCarreraData['filialNombre'],
-        facultad:     adminCarreraData['facultad'],
-        carrera:      adminCarreraData['carrera'],
-        carreraId:    adminCarreraData['carreraId'],
-        permisos:     adminCarreraData['permisos'],
-      );
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const AdminCarreraScreen()),
+      case 'admin_carrera':
+        final adminCarreraService = AdminCarreraService();
+        final adminCarreraData = await adminCarreraService.loginAdminCarrera(
+          usuario:  username,
+          password: password,
         );
-      }
-      break;
-
-    case 'jurado':
-      final esJurado = await PrefsHelper.loginJurado(username, password);
-      if (!esJurado) {
-        if (mounted) _showMessage('Usuario o contraseña incorrectos');
-        return;
-      }
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const JuradosScreen()),
-        );
-      }
-      break;
-
-    case 'student':
-      final success = await PrefsHelper.loginStudent(username, password);
-      if (!success) {
-        if (mounted) _showMessage('Usuario o contraseña incorrectos');
-        return;
-      }
-
-      final userIdPath = await PrefsHelper.getCurrentUserId();
-      if (userIdPath != null && userIdPath.contains('/')) {
-        final parts       = userIdPath.split('/');
-        final carreraPath = parts[0];
-        final studentId   = parts[1];
-
-        final estadoSesion = await PrefsHelper.verificarSesionEstudiante(
-          carreraPath: carreraPath,
-          studentId:   studentId,
-        );
-
-        if (estadoSesion == 'dispositivo_bloqueado') {
-          await PrefsHelper.logout();
-          if (mounted) {
-            setState(() => _isLoading = false);
-            _showDispositivoBloqueadoDialog();
-          }
+        if (adminCarreraData == null) {
+          if (mounted) _showMessage('Usuario o contraseña incorrectos');
           return;
         }
-        if (estadoSesion == 'bloqueado') {
-          await PrefsHelper.logout();
-          if (mounted) {
-            setState(() => _isLoading = false);
-            _showSesionBloqueadaDialog();
-          }
+        await PrefsHelper.saveAdminCarreraData(
+          userId:       adminCarreraData['id'],
+          userName:     adminCarreraData['usuario'] ?? 'Admin',
+          filial:       adminCarreraData['filial'],
+          filialNombre: adminCarreraData['filialNombre'],
+          facultad:     adminCarreraData['facultad'],
+          carrera:      adminCarreraData['carrera'],
+          carreraId:    adminCarreraData['carreraId'],
+          permisos:     adminCarreraData['permisos'],
+        );
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const AdminCarreraScreen()),
+          );
+        }
+        break;
+
+      case 'jurado':
+        final esJurado = await PrefsHelper.loginJurado(username, password);
+        if (!esJurado) {
+          if (mounted) _showMessage('Usuario o contraseña incorrectos');
           return;
         }
-        if (estadoSesion == 'celular_bloqueado') {
-          await PrefsHelper.logout();
-          if (mounted) {
-            setState(() => _isLoading = false);
-            _showCelularBloqueadoDialog();
-          }
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const JuradosScreen()),
+          );
+        }
+        break;
+
+      case 'student':
+        final success = await PrefsHelper.loginStudent(username, password);
+        if (!success) {
+          if (mounted) _showMessage('Usuario o contraseña incorrectos');
           return;
         }
 
-        await PrefsHelper.activarSesionEstudiante(
-          carreraPath: carreraPath,
-          studentId:   studentId,
-        );
-      }
+        // ── VERIFICACIÓN DE PAGO ─────────────────────────────────────
+        // Se ejecuta DESPUÉS de loginStudent (que ya guardó el userId).
+        // Lee el campo bloqueadoPorPago directamente del doc del estudiante.
+        // No interfiere con ninguna lógica de sesión existente.
+        final userIdPath = await PrefsHelper.getCurrentUserId();
+        if (userIdPath != null && userIdPath.contains('/')) {
+          final parts       = userIdPath.split('/');
+          final carreraPath = parts[0];
+          final studentId   = parts[1];
 
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const EstudianteScreen()),
-        );
-      }
-      break;
+          // ── Verificar bloqueo por pago ───────────────────────────
+          final bloqueado = await PrefsHelper.verificarBloqueoporPago(
+            carreraPath: carreraPath,
+            studentId:   studentId,
+          );
+
+          if (bloqueado) {
+            // Limpiar la sesión guardada por loginStudent —
+            // el estudiante no debe quedar "logueado" si está bloqueado.
+            await PrefsHelper.logout();
+            if (mounted) {
+              setState(() => _isLoading = false);
+              _showPagoPendienteDialog();
+            }
+            return;
+          }
+
+          // ── Verificar sesión activa / dispositivo (lógica existente) ──
+          final estadoSesion = await PrefsHelper.verificarSesionEstudiante(
+            carreraPath: carreraPath,
+            studentId:   studentId,
+          );
+
+          if (estadoSesion == 'dispositivo_bloqueado') {
+            await PrefsHelper.logout();
+            if (mounted) {
+              setState(() => _isLoading = false);
+              _showDispositivoBloqueadoDialog();
+            }
+            return;
+          }
+          if (estadoSesion == 'bloqueado') {
+            await PrefsHelper.logout();
+            if (mounted) {
+              setState(() => _isLoading = false);
+              _showSesionBloqueadaDialog();
+            }
+            return;
+          }
+          if (estadoSesion == 'celular_bloqueado') {
+            await PrefsHelper.logout();
+            if (mounted) {
+              setState(() => _isLoading = false);
+              _showCelularBloqueadoDialog();
+            }
+            return;
+          }
+
+          await PrefsHelper.activarSesionEstudiante(
+            carreraPath: carreraPath,
+            studentId:   studentId,
+          );
+        }
+
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const EstudianteScreen()),
+          );
+        }
+        break;
+    }
   }
-}
+
   void _mostrarDialogOTP(String uid, String email) {
     final otpController = TextEditingController();
     final otpFocusNode  = FocusNode();
@@ -258,7 +286,6 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor:     Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
-          // Countdown con Future.delayed encadenado correctamente
           void tick() {
             Future.delayed(const Duration(seconds: 1), () {
               if (!ctx.mounted) return;
@@ -269,7 +296,6 @@ class _LoginScreenState extends State<LoginScreen> {
             });
           }
 
-          // Solo iniciamos el tick la primera vez
           if (segundos == 300) tick();
 
           final mm       = (segundos ~/ 60).toString().padLeft(2, '0');
@@ -289,7 +315,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Handle
                     Container(
                       width: 40, height: 4,
                       decoration: BoxDecoration(
@@ -298,8 +323,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-
-                    // Ícono
                     Container(
                       width: 64, height: 64,
                       decoration: BoxDecoration(
@@ -310,7 +333,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: Color(0xFF1E3A5F), size: 32),
                     ),
                     const SizedBox(height: 16),
-
                     const Text(
                       'Verifica tu identidad',
                       style: TextStyle(
@@ -337,8 +359,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-
-                    // Cajas OTP
                     SizedBox(
                       height: 56,
                       child: Stack(children: [
@@ -419,7 +439,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ]),
                     ),
-
                     if (errorOtp != null) ...[
                       const SizedBox(height: 10),
                       Text(errorOtp!,
@@ -428,8 +447,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           textAlign: TextAlign.center),
                     ],
                     const SizedBox(height: 24),
-
-                    // Botón verificar
                     SizedBox(
                       width: double.infinity, height: 52,
                       child: ElevatedButton(
@@ -460,8 +477,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-
-                    // Reenviar
                     TextButton(
                       onPressed: expirado
                           ? () async {
@@ -491,8 +506,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-
-                    // Cancelar
                     TextButton(
                       onPressed: () {
                         Navigator.of(ctx).pop();
@@ -567,7 +580,7 @@ class _LoginScreenState extends State<LoginScreen> {
   // ─────────────────────────────────────────────────────────────────────────
   // DIÁLOGOS DE ERROR
   // ─────────────────────────────────────────────────────────────────────────
-  void _showSinInternetDialog()         => _showErrorDialog(
+  void _showSinInternetDialog()          => _showErrorDialog(
     icono: Icons.wifi_off_rounded,
     iconColor: Colors.orange.shade700,
     bgColor: Colors.orange.shade50,
@@ -578,7 +591,7 @@ class _LoginScreenState extends State<LoginScreen> {
     textoColor: const Color(0xFF78350F),
   );
 
-  void _showSesionBloqueadaDialog()     => _showErrorDialog(
+  void _showSesionBloqueadaDialog()      => _showErrorDialog(
     icono: Icons.devices_outlined,
     iconColor: Colors.orange.shade700,
     bgColor: Colors.orange.shade50,
@@ -604,7 +617,7 @@ class _LoginScreenState extends State<LoginScreen> {
     textoColor: const Color(0xFF7F1D1D),
   );
 
-  void _showCelularBloqueadoDialog()    => _showErrorDialog(
+  void _showCelularBloqueadoDialog()     => _showErrorDialog(
     icono: Icons.phone_locked_rounded,
     iconColor: Colors.red.shade700,
     bgColor: Colors.red.shade50,
@@ -614,6 +627,20 @@ class _LoginScreenState extends State<LoginScreen> {
         'No puedes iniciar sesión con una cuenta diferente '
         'desde este dispositivo.',
     textoColor: const Color(0xFF7F1D1D),
+  );
+
+  // ── NUEVO: diálogo de pago pendiente ──────────────────────────────────────
+  // Mismo patrón exacto que los otros diálogos — solo cambia el ícono y texto.
+  void _showPagoPendienteDialog()        => _showErrorDialog(
+    icono: Icons.money_off_rounded,
+    iconColor: Colors.orange.shade700,
+    bgColor: Colors.orange.shade50,
+    borderColor: Colors.orange.shade200,
+    titulo: 'Pago pendiente',
+    mensaje: 'No puedes ingresar porque tienes un pago pendiente.\n\n'
+        'Comunícate con el administrador de tu carrera '
+        'para regularizar tu situación.',
+    textoColor: const Color(0xFF78350F),
   );
 
   void _showErrorDialog({
@@ -712,13 +739,12 @@ class _LoginScreenState extends State<LoginScreen> {
       return const Scaffold(
           body: Center(child: CircularProgressIndicator()));
     }
- 
+
     final isLandscape  = MediaQuery.of(context).orientation == Orientation.landscape;
     final screenHeight = MediaQuery.of(context).size.height;
- 
+
     return Scaffold(
       body: Stack(children: [
-        // Fondo animado — sin cambios
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 1000),
           child: Container(
@@ -733,7 +759,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
- 
+
         SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -744,7 +770,6 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Logo universidad — sin cambios
                   Image.asset(
                     'assets/images/logo.png',
                     height: isLandscape ? screenHeight * 0.25 : 180,
@@ -755,14 +780,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   SizedBox(height: isLandscape ? 20 : 40),
- 
+
                   ConstrainedBox(
                     constraints: BoxConstraints(
                         maxWidth: isLandscape ? 500 : double.infinity),
                     child: Container(
                       padding: EdgeInsets.all(isLandscape ? 24 : 30),
                       decoration: BoxDecoration(
-                        // Azul oscuro del logo semitransparente
                         color: const Color.fromARGB(255, 78, 94, 123).withOpacity(0.72),
                         borderRadius: BorderRadius.circular(30),
                         border: Border.all(
@@ -788,11 +812,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             keyboardType: TextInputType.emailAddress,
                           ),
                           SizedBox(height: isLandscape ? 15 : 20),
- 
+
                           _buildPasswordField(isLandscape),
                           SizedBox(height: isLandscape ? 20 : 30),
- 
-                          // Botón dorado
+
                           SizedBox(
                             width:  double.infinity,
                             height: isLandscape ? 50 : 55,

@@ -137,13 +137,14 @@ class _InformeEventoCarreraScreenState
 
     try {
       await InformeWordGenerator.generarYCompartir(
-        evento: _eventoSeleccionado!,
-        adminData: {
-          'facultad': _facultad,
-          'carrera': _carrera,
-          'filialNombre': _filialNombre,
-        },
-      );
+  evento: _eventoSeleccionado!,
+  adminData: {
+    'facultad':    _facultad,
+    'carrera':     _carrera,
+    'filialNombre': _filialNombre,
+    'filial':      _filialId,      // ← faltaba, lo usa como filialId
+  },
+);
 
       if (mounted) {
         setState(() {

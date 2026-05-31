@@ -6,11 +6,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '/prefs_helper.dart';
 
-// EmailJS
 const _kEmailJSServiceId  = 'service_cuw8hja';
 const _kEmailJSTemplateId = 'template_bvsuc3e';
 const _kEmailJSPublicKey  = 'sj0VpynB7nsm9tHbV';
-const _kEmailJSPrivateKey = '2sC5rJ6vi8JSgnvJsHIF0';
 
 class SuperAdminAuthService {
   static const String _userTypeSuperAdmin = 'superAdmin';

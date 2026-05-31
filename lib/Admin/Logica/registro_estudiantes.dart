@@ -3,6 +3,7 @@ import '/prefs_helper.dart';
 import '/admin/logica/filiales_service.dart';
 import 'estudiantes_registrados.dart';
 import 'datos_excel.dart';
+import 'importacion_selector_screen.dart';
 
 /// Pantalla de registro de estudiantes para el ADMIN GENERAL.
 /// Permite seleccionar filial, facultad y carrera libremente.
@@ -566,7 +567,7 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                             color: Colors.white, size: 26),
                         onPressed: () => Navigator.push(context,
                             MaterialPageRoute(
-                                builder: (_) => const DatosExcelScreen())),
+                                builder: (_) => const ImportacionSelectorScreen())),
                         tooltip: 'Importar Excel',
                       ),
                       IconButton(

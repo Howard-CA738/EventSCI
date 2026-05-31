@@ -4,6 +4,7 @@ import '/login.dart';
 import 'registro_estudiantes.dart';
 import '/admin/interfaz/crear_eventos_screen.dart';
 import 'gestion_grupos.dart';
+import 'control_pagos.dart';
 import 'configurar_firmas.dart';
 import 'reportes.dart';
 import 'asignar_proyectos.dart';
@@ -130,6 +131,13 @@ class _AdminScreenState extends State<AdminScreen> {
                             ),
                           );
                         },
+                      ),
+                      _buildMenuCard(
+                        imagePath: 'assets/icons/pagos.png', 
+                        title: 'Control de\nPagos',
+                        subtitle: 'Ver pagos por evento',
+                        onTap: () => Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => const ControlPagosScreen())),
                       ),
                       _buildMenuCard(
                         imagePath: 'assets/icons/evento.png',

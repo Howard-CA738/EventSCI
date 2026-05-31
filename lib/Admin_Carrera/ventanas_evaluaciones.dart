@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
-import 'configurar_sellos.dart';
-import 'asistencias_admin_carrera_screen.dart';
-import 'asistencias_personales.dart';
-import 'notas_por_sellos_screen.dart';
+import 'evaluaciones_carrera.dart';
+import 'evaluacion_final_carrera.dart';
 
-class VentanasAsistenciaScreen extends StatelessWidget {
+class VentanasEvaluacionesScreen extends StatelessWidget {
   final String filialId;
   final String filialNombre;
   final String facultad;
   final String carrera;
 
-  const VentanasAsistenciaScreen({
+  const VentanasEvaluacionesScreen({
     super.key,
     required this.filialId,
     required this.filialNombre,
@@ -24,7 +22,7 @@ class VentanasAsistenciaScreen extends StatelessWidget {
       backgroundColor: const Color(0xFF1E3A5F),
       appBar: AppBar(
         title: const Text(
-          'Asistencias',
+          'Evaluaciones',
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
         backgroundColor: const Color(0xFF1E3A5F),
@@ -73,7 +71,7 @@ class VentanasAsistenciaScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // ── Encabezado ───────────────────────────────────────
+                    // ── Encabezado ──────────────────────────────────────
                     _TweenCard(
                       delay: 100,
                       child: Container(
@@ -95,12 +93,11 @@ class VentanasAsistenciaScreen extends StatelessWidget {
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color:
-                                    Colors.white.withValues(alpha: 0.2),
+                                color: Colors.white.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: const Icon(
-                                Icons.how_to_reg_rounded,
+                                Icons.assignment_turned_in_rounded,
                                 size: 30,
                                 color: Colors.white,
                               ),
@@ -112,7 +109,7 @@ class VentanasAsistenciaScreen extends StatelessWidget {
                                     CrossAxisAlignment.start,
                                 children: [
                                   const Text(
-                                    'Gestión de Asistencias',
+                                    'Gestión de Evaluaciones',
                                     style: TextStyle(
                                       fontSize: 19,
                                       fontWeight: FontWeight.bold,
@@ -149,24 +146,20 @@ class VentanasAsistenciaScreen extends StatelessWidget {
 
                     const SizedBox(height: 16),
 
-                    // ── Opción 1: Configurar sellos ──────────────────────
+                    // ── Opción 1: Ver evaluaciones de jurados ───────────
                     _TweenCard(
                       delay: 200,
                       child: _OpcionCard(
-                        icon: Icons.verified_rounded,
-                        iconColor: const Color(0xFF7B61FF),
-                        title: 'Configurar sellos\nde asistencia',
+                        icon: Icons.rate_review_rounded,
+                        iconColor: const Color(0xFF9C27B0),
+                        title: 'Evaluaciones de jurados',
                         subtitle:
-                            'Define cuántos sellos equivalen al 100% (nota 20) para cada evento',
+                            'Revisa y gestiona las evaluaciones realizadas por los jurados en cada evento',
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => ConfigurarSellosScreen(
-                              filialId: filialId,
-                              filialNombre: filialNombre,
-                              facultad: facultad,
-                              carrera: carrera,
-                            ),
+                            builder: (_) =>
+                                const EvaluacionesCarreraScreen(),
                           ),
                         ),
                       ),
@@ -174,64 +167,19 @@ class VentanasAsistenciaScreen extends StatelessWidget {
 
                     const SizedBox(height: 16),
 
-                    // ── Opción 2: Ver asistencias ────────────────────────
+                    // ── Opción 2: Evaluación final ──────────────────────
                     _TweenCard(
                       delay: 320,
                       child: _OpcionCard(
-                        icon: Icons.people_alt_rounded,
-                        iconColor: const Color(0xFF4A90E2),
-                        title: 'Ver asistencias',
+                        icon: Icons.calculate_rounded,
+                        iconColor: const Color(0xFF0F9D58),
+                        title: 'Evaluación final',
                         subtitle:
-                            'Consulta el registro de asistencias de los estudiantes por evento',
+                            'Calcula la nota final de cada estudiante ponderando asistencias, jurados y docentes por porcentaje',
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => AsistenciasAdminCarreraScreen(
-                              filialId: filialId,
-                              filialNombre: filialNombre,
-                              facultad: facultad,
-                              carrera: carrera,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // ── Opción 3: Asistencias personales ─────────────────
-                    _TweenCard(
-                      delay: 440,
-                      child: _OpcionCard(
-                        icon: Icons.assignment_turned_in_rounded,
-                        iconColor: const Color(0xFF0D7377),
-                        title: 'Asistencias personales',
-                        subtitle:
-                            'Crea asistencias como Primera Asistencia o Asistencia Final, genera su QR y configura cuándo funciona',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => AsistenciasPersonalesScreen(),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // ── Opción 4: Notas por sellos ───────────────────────
-                    _TweenCard(
-                      delay: 560,
-                      child: _OpcionCard(
-                        icon: Icons.bar_chart_rounded,
-                        iconColor: const Color(0xFF16A34A),
-                        title: 'Notas por sellos',
-                        subtitle:
-                            'Consulta la nota de cada estudiante calculada según los sellos obtenidos en cada evento',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => NotasPorSellosScreen(
+                            builder: (_) => EvaluacionFinalCarreraScreen(
                               filialId: filialId,
                               filialNombre: filialNombre,
                               facultad: facultad,
@@ -254,7 +202,7 @@ class VentanasAsistenciaScreen extends StatelessWidget {
   }
 }
 
-// ── Tarjeta de opción ──────────────────────────────────────────────
+// ── Tarjeta de opción ──────────────────────────────────────────────────────
 class _OpcionCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
@@ -351,7 +299,7 @@ class _OpcionCard extends StatelessWidget {
   }
 }
 
-// ── Animación de entrada por tarjeta ──────────────────────────────
+// ── Animación de entrada por tarjeta ──────────────────────────────────────
 class _TweenCard extends StatelessWidget {
   final int delay;
   final Widget child;

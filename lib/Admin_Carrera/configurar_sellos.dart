@@ -43,7 +43,6 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
   bool _isLoadingEventos = false;
 
   // ── Config de sellos ───────────────────────────────────────────
-  bool _modoNumero = true;
   int _metaSellos = 10;
   final TextEditingController _metaCtrl = TextEditingController(text: '10');
   bool _isLoadingConfig = false;
@@ -141,15 +140,8 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
 
       if (doc.exists) {
         final meta = doc.data()!['meta'];
-        if (meta == 'libre') {
+        if (meta is int && meta > 0) {
           setState(() {
-            _modoNumero = false;
-            _metaSellos = 10;
-            _metaCtrl.text = '10';
-          });
-        } else if (meta is int && meta > 0) {
-          setState(() {
-            _modoNumero = true;
             _metaSellos = meta;
             _metaCtrl.text = meta.toString();
           });
@@ -167,7 +159,6 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
   }
 
   void _resetConfig() => setState(() {
-        _modoNumero = true;
         _metaSellos = 10;
         _metaCtrl.text = '10';
       });
@@ -178,14 +169,12 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
   Future<void> _guardar() async {
     if (_eventoSeleccionadoId == null) return;
 
-    if (_modoNumero) {
-      final parsed = int.tryParse(_metaCtrl.text.trim());
-      if (parsed == null || parsed < 1 || parsed > 200) {
-        _showSnack('Ingresa un número entre 1 y 200', isError: true);
-        return;
-      }
-      _metaSellos = parsed;
+    final parsed = int.tryParse(_metaCtrl.text.trim());
+    if (parsed == null || parsed < 1 || parsed > 200) {
+      _showSnack('Ingresa un número entre 1 y 200', isError: true);
+      return;
     }
+    _metaSellos = parsed;
 
     setState(() => _isSaving = true);
     try {
@@ -199,7 +188,7 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
         'carreraNombre':  _carreraNombre,
         'eventoId':       _eventoSeleccionadoId,
         'eventoNombre':   _eventoSeleccionadoNombre,
-        'meta':           _modoNumero ? _metaSellos : 'libre',
+        'meta':           _metaSellos,
         'updatedAt':      FieldValue.serverTimestamp(),
       });
       _showSnack('Configuración guardada para "$_eventoSeleccionadoNombre"');
@@ -306,12 +295,7 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
                                         children: [
                                           _buildInfoCard(),
                                           const SizedBox(height: 20),
-                                          _buildModoSelector(),
-                                          const SizedBox(height: 20),
-                                          if (_modoNumero)
-                                            _buildNumeroInput(),
-                                          if (!_modoNumero)
-                                            _buildModoLibreInfo(),
+                                          _buildNumeroInput(),
                                         ],
                                       ),
                               ),
@@ -338,7 +322,7 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha:0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4)),
         ],
@@ -351,7 +335,7 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2563EB).withValues(alpha:0.1),
+                  color: const Color(0xFF2563EB).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.event,
@@ -504,10 +488,10 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
               padding: const EdgeInsets.symmetric(
                   horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFF2563EB).withValues(alpha:0.08),
+                color: const Color(0xFF2563EB).withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                    color: const Color(0xFF2563EB).withValues(alpha:0.2)),
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.2)),
               ),
               child: Row(
                 children: [
@@ -538,17 +522,17 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF7B61FF).withValues(alpha:0.08),
+        color: const Color(0xFF7B61FF).withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
         border:
-            Border.all(color: const Color(0xFF7B61FF).withValues(alpha:0.25)),
+            Border.all(color: const Color(0xFF7B61FF).withValues(alpha: 0.25)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF7B61FF).withValues(alpha:0.15),
+              color: const Color(0xFF7B61FF).withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.info_outline,
@@ -557,116 +541,12 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
           const SizedBox(width: 12),
           const Expanded(
             child: Text(
-              'Define cuántos sellos deben completar los estudiantes para este evento.',
+              'Define cuántos sellos equivalen al 100% (nota 20). La nota se calcula proporcional a los sellos obtenidos.',
               style: TextStyle(
                   fontSize: 12, color: Color(0xFF4A3F8C), height: 1.4),
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // ── Modo selector ──────────────────────────────────────────────
-  Widget _buildModoSelector() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha:0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4)),
-        ],
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Tipo de meta',
-              style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E3A5F))),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _buildModoOpcion(
-                  titulo: 'Número fijo',
-                  descripcion: 'Los estudiantes completan N sellos',
-                  icono: Icons.pin_outlined,
-                  seleccionado: _modoNumero,
-                  onTap: () => setState(() => _modoNumero = true),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildModoOpcion(
-                  titulo: 'Libre',
-                  descripcion: 'Sin límite de sellos',
-                  icono: Icons.all_inclusive,
-                  seleccionado: !_modoNumero,
-                  onTap: () => setState(() => _modoNumero = false),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildModoOpcion({
-    required String titulo,
-    required String descripcion,
-    required IconData icono,
-    required bool seleccionado,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: seleccionado
-              ? const Color(0xFF1E3A5F).withValues(alpha:0.07)
-              : const Color(0xFFF5F7FA),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: seleccionado
-                ? const Color(0xFF1E3A5F)
-                : Colors.grey.shade300,
-            width: seleccionado ? 2 : 1,
-          ),
-        ),
-        child: Column(
-          children: [
-            Icon(icono,
-                color: seleccionado
-                    ? const Color(0xFF1E3A5F)
-                    : Colors.grey.shade500,
-                size: 28),
-            const SizedBox(height: 8),
-            Text(titulo,
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: seleccionado
-                        ? const Color(0xFF1E3A5F)
-                        : Colors.grey.shade600)),
-            const SizedBox(height: 4),
-            Text(descripcion,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 10,
-                    color: seleccionado
-                        ? const Color(0xFF1E3A5F).withValues(alpha:0.7)
-                        : Colors.grey.shade500)),
-          ],
-        ),
       ),
     );
   }
@@ -679,7 +559,7 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha:0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4)),
         ],
@@ -688,13 +568,20 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Cantidad de sellos',
-              style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E3A5F))),
+          Row(
+            children: [
+              const Icon(Icons.workspace_premium,
+                  color: Color(0xFF1E3A5F), size: 20),
+              const SizedBox(width: 8),
+              const Text('Cantidad de sellos (meta)',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E3A5F))),
+            ],
+          ),
           const SizedBox(height: 4),
-          Text('Los estudiantes verán esta cantidad de sellos vacíos',
+          Text('Esta cantidad representa la nota máxima (20)',
               style:
                   TextStyle(fontSize: 12, color: Colors.grey.shade600)),
           const SizedBox(height: 16),
@@ -799,6 +686,33 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
               );
             }).toList(),
           ),
+          const SizedBox(height: 20),
+          // Preview de la nota
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E3A5F).withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: const Color(0xFF1E3A5F).withValues(alpha: 0.15)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.calculate_outlined,
+                    color: Color(0xFF1E3A5F), size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Ejemplo: 1 sello = ${(_metaSellos > 0 ? 20 / _metaSellos : 0).toStringAsFixed(2)} puntos',
+                    style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF1E3A5F),
+                        fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -812,57 +726,12 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-          color: const Color(0xFF1E3A5F).withValues(alpha:0.08),
+          color: const Color(0xFF1E3A5F).withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: const Color(0xFF1E3A5F).withValues(alpha:0.2)),
+              color: const Color(0xFF1E3A5F).withValues(alpha: 0.2)),
         ),
         child: Icon(icono, color: const Color(0xFF1E3A5F)),
-      ),
-    );
-  }
-
-  Widget _buildModoLibreInfo() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.green.shade50,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.green.shade200),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.green.shade100,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.all_inclusive,
-                color: Colors.green.shade700, size: 28),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Modo libre activado',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green.shade800)),
-                const SizedBox(height: 4),
-                Text(
-                  'Los estudiantes podrán acumular sellos sin límite. Solo se mostrarán los sellos ganados.',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.green.shade700,
-                      height: 1.4),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -875,7 +744,7 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha:0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 12,
               offset: const Offset(0, -4)),
         ],

@@ -1,14 +1,6 @@
-// gestion_rubricas.dart
-// Pantallas UI actualizadas para usar sistema de filiales
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'gestion_criterios.dart';
-import 'filiales_service.dart';
-
-// ============================================================================
-// PANTALLA PRINCIPAL - CON FILTROS DE FILIAL
-// ============================================================================
 
 class GestionCriteriosScreen extends StatefulWidget {
   const GestionCriteriosScreen({super.key});

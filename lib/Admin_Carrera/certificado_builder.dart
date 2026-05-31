@@ -36,10 +36,26 @@ Future<Uint8List> _removeWhiteBackground(
   return png!.buffer.asUint8List();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Elimina fondo negro — firma02
-// ─────────────────────────────────────────────────────────────────────────────
-Future<Uint8List> _processF2BlackBackground(Uint8List srcBytes) async {
+Future<bool> _fondoEsOscuro(Uint8List srcBytes) async {
+  final codec    = await ui.instantiateImageCodec(srcBytes,
+      targetWidth: 50, targetHeight: 50);
+  final frame    = await codec.getNextFrame();
+  final byteData = await frame.image
+      .toByteData(format: ui.ImageByteFormat.rawRgba);
+  final pixels   = byteData!.buffer.asUint8List();
+
+  int oscuros = 0, total = pixels.length ~/ 4;
+  for (int i = 0; i < pixels.length; i += 4) {
+    final brightness = (pixels[i] + pixels[i+1] + pixels[i+2]) ~/ 3;
+    if (brightness < 80) oscuros++;
+  }
+  return oscuros / total > 0.40;
+}
+
+Future<Uint8List> _removeBlackBackgroundAndBoost(
+  Uint8List srcBytes, {
+  int bgThreshold = 55,
+}) async {
   final codec    = await ui.instantiateImageCodec(srcBytes);
   final frame    = await codec.getNextFrame();
   final uiImage  = frame.image;
@@ -49,20 +65,18 @@ Future<Uint8List> _processF2BlackBackground(Uint8List srcBytes) async {
   final pixels   = byteData!.buffer.asUint8List();
   final out      = Uint8List.fromList(pixels);
 
-  const bgThresh = 4;
-  final visited  = List<bool>.filled(w * h, false);
-  final queue    = Queue<int>();
+  final visited = List<bool>.filled(w * h, false);
+  final queue   = Queue<int>();
 
-  bool isBg(int idx) =>
-      out[idx] < bgThresh &&
-      out[idx + 1] < bgThresh &&
-      out[idx + 2] < bgThresh;
+  bool isBg(int idx) {
+    final r = out[idx*4], g = out[idx*4+1], b = out[idx*4+2];
+    return (r + g + b) ~/ 3 < bgThreshold;
+  }
 
   void enqueue(int x, int y) {
     if (x < 0 || x >= w || y < 0 || y >= h) return;
     final p = y * w + x;
-    if (visited[p]) return;
-    if (!isBg(p * 4)) return;
+    if (visited[p] || !isBg(p)) return;
     visited[p] = true;
     queue.add(p);
   }
@@ -73,23 +87,21 @@ Future<Uint8List> _processF2BlackBackground(Uint8List srcBytes) async {
   while (queue.isNotEmpty) {
     final p = queue.removeFirst();
     out[p * 4 + 3] = 0;
-    final x = p % w;
-    final y = p ~/ w;
-    enqueue(x + 1, y);
-    enqueue(x - 1, y);
-    enqueue(x, y + 1);
-    enqueue(x, y - 1);
+    final x = p % w, y = p ~/ w;
+    enqueue(x+1, y); enqueue(x-1, y);
+    enqueue(x, y+1); enqueue(x, y-1);
   }
 
   for (int i = 0; i < out.length; i += 4) {
-    if (out[i + 3] == 0) continue;
-    final r = out[i], g = out[i + 1], b = out[i + 2];
-    final isBlue = b > r + 15 && b > g + 8;
-    if (isBlue) {
-      out[i]     = (27 * (1.0 - (b / 128.0) * 0.5)).clamp(0, 255).toInt();
-      out[i + 1] = (42 * (1.0 - (b / 128.0) * 0.5)).clamp(0, 255).toInt();
-      out[i + 2] = (b * 1.5).clamp(100, 255).toInt();
-      out[i + 3] = (100 + b * 1.5).clamp(0, 255).toInt();
+    if (out[i+3] == 0) continue;
+    final brightness = (out[i] + out[i+1] + out[i+2]) ~/ 3;
+    if (brightness < 15) {
+      out[i + 3] = 0;
+    } else {
+      out[i]     = 13;
+      out[i + 1] = 37;
+      out[i + 2] = 74;
+      out[i + 3] = 255;
     }
   }
 
@@ -101,9 +113,134 @@ Future<Uint8List> _processF2BlackBackground(Uint8List srcBytes) async {
   return png!.buffer.asUint8List();
 }
 
+Future<Uint8List> _removeBlackBackground(
+  Uint8List srcBytes, {
+  int threshold = 60,
+}) async {
+  final codec    = await ui.instantiateImageCodec(srcBytes);
+  final frame    = await codec.getNextFrame();
+  final uiImage  = frame.image;
+  final w        = uiImage.width;
+  final h        = uiImage.height;
+  final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+  final pixels   = byteData!.buffer.asUint8List();
+  final out      = Uint8List.fromList(pixels);
+
+  final visited = List<bool>.filled(w * h, false);
+  final queue   = Queue<int>();
+
+  bool isBg(int idx) {
+    final r = out[idx*4], g = out[idx*4+1], b = out[idx*4+2];
+    return (r + g + b) ~/ 3 < threshold;
+  }
+
+  void enqueue(int x, int y) {
+    if (x < 0 || x >= w || y < 0 || y >= h) return;
+    final p = y * w + x;
+    if (visited[p] || !isBg(p)) return;
+    visited[p] = true;
+    queue.add(p);
+  }
+
+  for (int x = 0; x < w; x++) { enqueue(x, 0); enqueue(x, h - 1); }
+  for (int y = 0; y < h; y++) { enqueue(0, y); enqueue(w - 1, y); }
+
+  while (queue.isNotEmpty) {
+    final p = queue.removeFirst();
+    out[p * 4 + 3] = 0;
+    final x = p % w, y = p ~/ w;
+    enqueue(x+1, y); enqueue(x-1, y);
+    enqueue(x, y+1); enqueue(x, y-1);
+  }
+
+  for (int i = 0; i < out.length; i += 4) {
+    if (out[i+3] == 0) continue;
+    final brightness = (out[i] + out[i+1] + out[i+2]) ~/ 3;
+    if (brightness < threshold) out[i+3] = 0;
+  }
+
+  final completer = Completer<ui.Image>();
+  ui.decodeImageFromPixels(out, w, h, ui.PixelFormat.rgba8888,
+      (img) => completer.complete(img));
+  final newImg = await completer.future;
+  final png    = await newImg.toByteData(format: ui.ImageByteFormat.png);
+  return png!.buffer.asUint8List();
+}
+
+Future<bool> _trazoDebil(Uint8List srcBytes) async {
+  final codec    = await ui.instantiateImageCodec(srcBytes,
+      targetWidth: 100, targetHeight: 100);
+  final frame    = await codec.getNextFrame();
+  final byteData = await frame.image
+      .toByteData(format: ui.ImageByteFormat.rawRgba);
+  final pixels   = byteData!.buffer.asUint8List();
+
+  int grises = 0, noNegros = 0;
+  for (int i = 0; i < pixels.length; i += 4) {
+    final brightness = (pixels[i] + pixels[i+1] + pixels[i+2]) ~/ 3;
+    if (brightness > 55) noNegros++;
+    if (brightness > 40 && brightness < 200) grises++;
+  }
+  if (noNegros == 0) return false;
+  return (grises / noNegros) > 0.60;
+}
+
+Future<Uint8List> _invertirYRemover(Uint8List srcBytes) async {
+  final codec    = await ui.instantiateImageCodec(srcBytes);
+  final frame    = await codec.getNextFrame();
+  final uiImage  = frame.image;
+  final w        = uiImage.width;
+  final h        = uiImage.height;
+  final byteData = await uiImage
+      .toByteData(format: ui.ImageByteFormat.rawRgba);
+  final pixels   = byteData!.buffer.asUint8List();
+  final out      = Uint8List.fromList(pixels);
+
+  for (int i = 0; i < out.length; i += 4) {
+    final r = 255 - pixels[i];
+    final g = 255 - pixels[i + 1];
+    final b = 255 - pixels[i + 2];
+    final brightness = (r + g + b) ~/ 3;
+
+    if (brightness < 30) {
+      out[i + 3] = 0;
+    } else {
+      out[i]     = 13;
+      out[i + 1] = 37;
+      out[i + 2] = 74;
+      out[i + 3] = ((brightness / 255.0) * 255 * 2)
+          .clamp(0, 255).toInt();
+    }
+  }
+
+  final completer = Completer<ui.Image>();
+  ui.decodeImageFromPixels(out, w, h, ui.PixelFormat.rgba8888,
+      (img) => completer.complete(img));
+  final newImg = await completer.future;
+  final png    = await newImg.toByteData(format: ui.ImageByteFormat.png);
+  return png!.buffer.asUint8List();
+}
+
+Future<Uint8List?> _procesarFirma(Uint8List? srcBytes) async {
+  if (srcBytes == null) return null;
+  final esOscuro = await _fondoEsOscuro(srcBytes);
+  if (esOscuro) {
+    final trazoDebil = await _trazoDebil(srcBytes);
+    if (trazoDebil) {
+      return _removeBlackBackgroundAndBoost(srcBytes);
+    }
+    return _removeBlackBackground(srcBytes, threshold: 55);
+  } else {
+    return _removeWhiteBackground(srcBytes, threshold: 55);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODELO ESTUDIANTE — incluye codigoCertificado
 // ─────────────────────────────────────────────────────────────────────────────
 class Estudiante {
   final String id, nombre, dni, codigo, email;
+  final String codigoCertificado; // ← campo para mostrar en el PDF
   final bool   pagado;
   bool         seleccionado;
 
@@ -112,9 +249,10 @@ class Estudiante {
     required this.nombre,
     required this.dni,
     required this.codigo,
-    this.email        = '',
-    this.pagado       = false,
-    this.seleccionado = false,
+    this.email               = '',
+    this.codigoCertificado   = '',
+    this.pagado              = false,
+    this.seleccionado        = false,
   });
 }
 
@@ -150,12 +288,15 @@ class _AssetCache {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DATOS DEL CERTIFICADO — incluye codigoCertificado
+// ─────────────────────────────────────────────────────────────────────────────
 class DatosCertificado {
   final String evento, rol, fecha, horas, carrera, facultad, campus, motivo;
   final String director1, cargo1;
   final String director2, cargo2;
   final String director3, cargo3;
   final String urlFirma1, urlFirma2, urlFirma3;
+  final String codigoCertificado; // ← campo para mostrar en el PDF
 
   // Bytes procesados (en memoria, no se guardan en Firestore)
   final Uint8List? bytesFirma1;
@@ -169,9 +310,10 @@ class DatosCertificado {
     required this.director1, required this.cargo1,
     required this.director2, required this.cargo2,
     required this.director3, required this.cargo3,
-    this.urlFirma1 = '',
-    this.urlFirma2 = '',
-    this.urlFirma3 = '',
+    this.urlFirma1          = '',
+    this.urlFirma2          = '',
+    this.urlFirma3          = '',
+    this.codigoCertificado  = '',
     this.bytesFirma1,
     this.bytesFirma2,
     this.bytesFirma3,
@@ -186,24 +328,28 @@ class DatosCertificado {
     'urlFirma1': urlFirma1,
     'urlFirma2': urlFirma2,
     'urlFirma3': urlFirma3,
+    'codigoCertificado': codigoCertificado,
     // bytesFirma no se guardan — son solo para memoria
   };
 
   factory DatosCertificado.fromMap(Map<String, dynamic> d) =>
       DatosCertificado(
-        evento: d['evento'] ?? '', rol: d['rol'] ?? 'ASISTENTE',
-        fecha: d['fecha'] ?? '', horas: d['horas'] ?? '',
-        carrera: d['carrera'] ?? '', facultad: d['facultad'] ?? '',
-        campus: d['campus'] ?? '', motivo: d['motivo'] ?? '',
+        evento:    d['evento']    ?? '', rol:    d['rol']    ?? 'ASISTENTE',
+        fecha:     d['fecha']     ?? '', horas:  d['horas']  ?? '',
+        carrera:   d['carrera']   ?? '', facultad: d['facultad'] ?? '',
+        campus:    d['campus']    ?? '', motivo: d['motivo']  ?? '',
         director1: d['director1'] ?? '', cargo1: d['cargo1'] ?? '',
         director2: d['director2'] ?? '', cargo2: d['cargo2'] ?? '',
         director3: d['director3'] ?? '', cargo3: d['cargo3'] ?? '',
         urlFirma1: d['urlFirma1'] ?? '',
         urlFirma2: d['urlFirma2'] ?? '',
         urlFirma3: d['urlFirma3'] ?? '',
+        codigoCertificado: d['codigoCertificado'] as String? ?? '',
       );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BUILDER DEL PDF
 // ─────────────────────────────────────────────────────────────────────────────
 class CertificadoBuilder {
   final DatosCertificado datos;
@@ -217,15 +363,9 @@ class CertificadoBuilder {
     pw.MemoryImage? f1Image, f2Image, f3Image;
 
     final results = await Future.wait([
-      datos.bytesFirma1 != null
-          ? _removeWhiteBackground(datos.bytesFirma1!)
-          : Future.value(null),
-      datos.bytesFirma2 != null
-          ? _processF2BlackBackground(datos.bytesFirma2!)
-          : Future.value(null),
-      datos.bytesFirma3 != null
-          ? _removeWhiteBackground(datos.bytesFirma3!)
-          : Future.value(null),
+      _procesarFirma(datos.bytesFirma1),
+      _procesarFirma(datos.bytesFirma2),
+      _procesarFirma(datos.bytesFirma3),
     ]);
 
     if (results[0] != null) f1Image = pw.MemoryImage(results[0]!);
@@ -264,12 +404,19 @@ class CertificadoBuilder {
     final pdf = pw.Document();
 
     for (final est in estudiantes) {
+      // Código del certificado: primero tomar el del Estudiante (asignado
+      // por el admin), si está vacío usar el de DatosCertificado como fallback.
+      final codigoFinal = est.codigoCertificado.isNotEmpty
+          ? est.codigoCertificado
+          : datos.codigoCertificado;
+
       pdf.addPage(pw.Page(
         pageTheme: pageTheme,
         build: (_) => pw.FullPage(
           ignoreMargins: true,
           child: pw.Stack(children: [
 
+            // ── FACULTAD ────────────────────────────────────────────────────
             pw.Positioned(
               left: 0, right: 0, top: H * 0.280,
               child: pw.Center(child: pw.Text(
@@ -279,6 +426,7 @@ class CertificadoBuilder {
               )),
             ),
 
+            // ── CAMPUS ──────────────────────────────────────────────────────
             pw.Positioned(
               left: 0, right: 0, top: H * 0.330,
               child: pw.Center(child: pw.Text(
@@ -289,6 +437,7 @@ class CertificadoBuilder {
               )),
             ),
 
+            // ── NOMBRE ──────────────────────────────────────────────────────
             pw.Positioned(
               left: W * 0.07, right: W * 0.07, top: H * 0.410,
               child: pw.Center(child: pw.Text(
@@ -299,6 +448,7 @@ class CertificadoBuilder {
               )),
             ),
 
+            // ── MOTIVO ──────────────────────────────────────────────────────
             pw.Positioned(
               left: W * 0.10, right: W * 0.10, top: H * 0.470,
               child: pw.RichText(
@@ -307,6 +457,7 @@ class CertificadoBuilder {
               ),
             ),
 
+            // ── FECHA Y CIUDAD ──────────────────────────────────────────────
             pw.Positioned(
               right: W * 0.080, top: H * 0.600,
               child: pw.Text(
@@ -315,6 +466,7 @@ class CertificadoBuilder {
               ),
             ),
 
+            // ── FIRMAS ──────────────────────────────────────────────────────
             if (f1Image != null)
               pw.Positioned(
                 left: W * 0.190 - firmaAncho / 2, top: firmaTop,
@@ -356,8 +508,47 @@ class CertificadoBuilder {
                     firmaAncho, bold, reg, cAzul, cGris),
               ),
 
-            // ── CÓDIGO ELIMINADO DEL PDF ──
-            // El código único ahora se guarda solo en Firestore (campo 'codigoCertificado')
+            // ── CÓDIGO DEL CERTIFICADO (solo si fue asignado) ──────────────
+            if (codigoFinal.isNotEmpty)
+              pw.Positioned(
+                right:  W * 0.040,
+                bottom: H * 0.030,
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  decoration: pw.BoxDecoration(
+                    color: const PdfColor(0.051, 0.145, 0.290, 0.05),
+                    border: pw.Border.all(
+                      color: const PdfColor(0.051, 0.145, 0.290, 0.20),
+                      width: 0.5,
+                    ),
+                    borderRadius: const pw.BorderRadius.all(
+                        pw.Radius.circular(4)),
+                  ),
+                  child: pw.Row(
+                    mainAxisSize: pw.MainAxisSize.min,
+                    children: [
+                      pw.Text(
+                        'Código: ',
+                        style: pw.TextStyle(
+                          font:     reg,
+                          fontSize: 7,
+                          color:    cGris,
+                        ),
+                      ),
+                      pw.Text(
+                        codigoFinal,
+                        style: pw.TextStyle(
+                          font:         bold,
+                          fontSize:     7,
+                          color:        cAzul,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
           ]),
         ),
@@ -367,6 +558,9 @@ class CertificadoBuilder {
     return pdf.save();
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // HELPERS DE FIRMA
+  // ─────────────────────────────────────────────────────────────────────────
   pw.Widget _firmaBloque(
     pw.MemoryImage img, String nombre, String cargo,
     double ancho, double imgH,
@@ -442,6 +636,9 @@ class CertificadoBuilder {
     return cargo;
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // HELPERS DE TEXTO
+  // ─────────────────────────────────────────────────────────────────────────
   String _facultadFmt(String raw) {
     final sin = raw.replaceFirst(
         RegExp(r'^FACULTAD\s+DE\s+', caseSensitive: false), '');

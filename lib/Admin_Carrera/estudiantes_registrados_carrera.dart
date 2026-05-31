@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
-import '/encryption_helper.dart';
+import '/student_security_service.dart';
+import 'package:flutter/services.dart';
 
 class EstudiantesRegistradosCarreraScreen extends StatefulWidget {
   const EstudiantesRegistradosCarreraScreen({super.key});
@@ -13,34 +14,31 @@ class EstudiantesRegistradosCarreraScreen extends StatefulWidget {
 class _EstudiantesRegistradosCarreraScreenState
     extends State<EstudiantesRegistradosCarreraScreen>
     with TickerProviderStateMixin {
-  // ── Datos del admin (desde prefs locales, sin Firebase) ─────────
-  String _carreraPath = '';
-  String _carreraNombre = '';
+  // ── Datos del admin ──────────────────────────────────────────────
+  String _carreraPath    = '';
+  String _carreraNombre  = '';
   String _facultadNombre = '';
-  String _sedeNombre = '';
-String _decryptDni(Map<String, dynamic> student) {
-  final encrypted = student['dniEncrypted'] as String?;
-  if (encrypted != null && encrypted.isNotEmpty) {
-    return EncryptionHelper.decryptDni(encrypted);
-  }
-  return 'Sin DNI';
-}
+  String _sedeNombre     = '';
+
   bool _isLoading = true;
 
-  List<Map<String, dynamic>> _allStudents = [];
+  List<Map<String, dynamic>> _allStudents      = [];
   List<Map<String, dynamic>> _filteredStudents = [];
 
   final _searchController = TextEditingController();
-  Set<String> _expandedStudents = {};
+  final Set<String> _expandedStudents = {};
+
+  // ── Caché de DNIs descifrados (studentId → dni) ──────────────────
+  // Evita llamadas repetidas a Cloud Functions para el mismo estudiante.
+  final Map<String, String> _dniCache = {};
 
   // Controladores de edición
-  final TextEditingController _editNombreController = TextEditingController();
-  final TextEditingController _editEmailController = TextEditingController();
-  final TextEditingController _editCodigoController = TextEditingController();
-  final TextEditingController _editDniController = TextEditingController();
-  final TextEditingController _editCelularController = TextEditingController();
-  final TextEditingController _editCorreoInstitucionalController =
-      TextEditingController();
+  final _editNombreController              = TextEditingController();
+  final _editEmailController               = TextEditingController();
+  final _editCodigoController              = TextEditingController();
+  final _editDniController                 = TextEditingController();
+  final _editCelularController             = TextEditingController();
+  final _editCorreoInstitucionalController = TextEditingController();
 
   late AnimationController _filterAnimController;
 
@@ -52,7 +50,6 @@ String _decryptDni(Map<String, dynamic> student) {
       duration: const Duration(milliseconds: 400),
       vsync: this,
     )..forward();
-
     _initSession();
   }
 
@@ -75,16 +72,14 @@ String _decryptDni(Map<String, dynamic> student) {
       final adminData = await PrefsHelper.getAdminCarreraData();
       if (adminData != null) {
         final filialNombre = adminData['filialNombre'] ?? adminData['filial'] ?? '';
-        final carrera = adminData['carrera'] ?? '';
-        final path = '${filialNombre}_$carrera';
-
+        final carrera      = adminData['carrera'] ?? '';
+        final path         = '${filialNombre}_$carrera';
         setState(() {
-          _carreraPath = path;
-          _carreraNombre = carrera;
+          _carreraPath    = path;
+          _carreraNombre  = carrera;
           _facultadNombre = adminData['facultad'] ?? '';
-          _sedeNombre = filialNombre;
+          _sedeNombre     = filialNombre;
         });
-
         await _loadStudents();
       } else {
         setState(() => _isLoading = false);
@@ -98,182 +93,404 @@ String _decryptDni(Map<String, dynamic> student) {
 
   // ── Carga y filtros ──────────────────────────────────────────────
   Future<void> _loadStudents() async {
-    if (_carreraPath.isEmpty) return;
-    setState(() => _isLoading = true);
-    try {
-      final students = await PrefsHelper.getStudentsByCarrera(_carreraPath);
-      setState(() {
-        _allStudents = students;
-        _filteredStudents = students;
-      });
-      if (_searchController.text.isNotEmpty) _applySearch();
-    } catch (e) {
-      _showMessage('Error cargando estudiantes: $e');
+  if (_carreraPath.isEmpty) return;
+  setState(() => _isLoading = true);
+  _dniCache.clear();
+  try {
+    final students = await PrefsHelper.getStudentsByCarrera(_carreraPath);
+    setState(() {
+      _allStudents      = students;
+      _filteredStudents = students;
+    });
+
+    // Precargar todos los DNIs en paralelo antes de mostrar
+    await _precargarTodosDnis(students);
+
+    if (_searchController.text.isNotEmpty) _applySearch();
+  } catch (e) {
+    _showMessage('Error cargando estudiantes: $e');
+  }
+  setState(() => _isLoading = false);
+}
+// FUNCIÓN NUEVA — pegar justo después de _loadStudents()
+Future<void> _precargarTodosDnis(List<Map<String, dynamic>> students) async {
+  if (students.isEmpty) return;
+  try {
+    // Llama a todos los DNIs en paralelo (Cloud Functions)
+    await Future.wait(
+      students.map((s) => _decryptDni(s)),
+      eagerError: false, // Si uno falla, los demás continúan
+    );
+    // Redibujar con el caché completo
+    if (mounted) setState(() {});
+  } catch (e) {
+    debugPrint('⚠️ Error precargando DNIs: $e');
+  }
+}
+  void _applySearch() {
+    final term = _searchController.text.toLowerCase().trim();
+    if (term.isEmpty) {
+      setState(() => _filteredStudents = List.from(_allStudents));
+      return;
     }
-    setState(() => _isLoading = false);
+    setState(() {
+      _filteredStudents = _allStudents.where((s) {
+        final name   = (s['name']                ?? '').toString().toLowerCase();
+        final codigo = (s['codigoUniversitario'] ?? '').toString().toLowerCase();
+        // Buscar en el DNI del caché si ya fue descifrado
+        final studentId = s['id'] as String? ?? '';
+        final dniCached = (_dniCache[studentId] ?? '').toLowerCase();
+        return name.contains(term) || codigo.contains(term) || dniCached.contains(term);
+      }).toList();
+    });
   }
 
- void _applySearch() {
-  final term = _searchController.text.toLowerCase().trim();
-  if (term.isEmpty) {
-    setState(() => _filteredStudents = List.from(_allStudents));
-    return;
-  }
-  setState(() {
-    _filteredStudents = _allStudents.where((s) {
-      final name   = (s['name'] ?? '').toString().toLowerCase();
-      final codigo = (s['codigoUniversitario'] ?? '').toString().toLowerCase();
-      final dni    = _decryptDni(s).toLowerCase(); // ← descifrado, no el hash
-      return name.contains(term) || codigo.contains(term) || dni.contains(term);
-    }).toList();
-  });
+ Future<String> _decryptDni(Map<String, dynamic> student) async {
+  final studentId = student['id'] as String? ?? '';
+  if (studentId.isEmpty) return 'Sin DNI';
+
+  if (_dniCache.containsKey(studentId)) return _dniCache[studentId]!;
+
+  final dni = await StudentSecurityService.decryptDni(
+    carreraPath: _carreraPath,
+    studentId:   studentId,
+    studentData: student, // ← pasa los datos para descifrado local
+  );
+
+  final result = dni.isNotEmpty ? dni : 'Sin DNI';
+  _dniCache[studentId] = result;
+  return result;
 }
 
   // ── Edición ──────────────────────────────────────────────────────
-  Future<void> _showEditDialog(Map<String, dynamic> student, String studentId) async {
-    _editNombreController.text = student['name'] ?? '';
-    _editEmailController.text = student['email'] ?? '';
-    _editCodigoController.text = student['codigoUniversitario'] ?? '';
-    _editDniController.text = _decryptDni(student);
-    _editCelularController.text = student['celular'] ?? '';
+  Future<void> _showEditDialog(
+      Map<String, dynamic> student, String studentId) async {
+    // Descifrar el DNI actual via Cloud Functions antes de abrir el diálogo
+    final dniActual = await _decryptDni(student);
+
+    _editNombreController.text              = student['name']                ?? '';
+    _editEmailController.text               = student['email']               ?? '';
+    _editCodigoController.text              = student['codigoUniversitario'] ?? '';
+    _editDniController.text                 = dniActual == 'Sin DNI' ? '' : dniActual;
+    _editCelularController.text             = student['celular']             ?? '';
     _editCorreoInstitucionalController.text = student['correoInstitucional'] ?? '';
 
-    final modoContratoOptions = ['Regular', 'Convenio', 'Especial'];
-    final modalidadEstudioOptions = ['Presencial', 'Semipresencial', 'Virtual'];
-    final cicloOptions = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
-    final grupoOptions = ['Único', '1', '2', '3', '4'];
+    final cicloOptions = ['1','2','3','4','5','6','7','8','9','10'];
+    final grupoOptions = ['Único','1','2','3','4'];
 
-    String? selectedModoContrato = _safeOption(student['modoContrato'], modoContratoOptions);
-    String? selectedModalidad = _safeOption(student['modalidadEstudio'], modalidadEstudioOptions);
     String? selectedCiclo = _safeOption(student['ciclo'], cicloOptions);
     String? selectedGrupo = _safeOption(student['grupo'], grupoOptions);
 
-    final formKey = GlobalKey<FormState>();
+    bool obscureDni = true;
+    final formKey   = GlobalKey<FormState>();
+
+    if (!mounted) return;
 
     await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
+        builder: (context, setDialogState) => Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
-                  borderRadius: BorderRadius.circular(10),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.85,
+              maxWidth: 560,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Título fijo
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.edit, color: Color(0xFF1E3A5F)),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Editar Estudiante',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E3A5F),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
                 ),
-                child: const Icon(Icons.edit, color: Color(0xFF1E3A5F)),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text('Editar Estudiante', style: TextStyle(fontSize: 18)),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Form(
-              key: formKey,
-              child: SizedBox(
-                width: MediaQuery.of(context).size.width * 0.9,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _editField(_editNombreController, 'Nombre completo', Icons.person,
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'El nombre es requerido'
-                            : null),
-                    const SizedBox(height: 16),
-                    _editField(_editEmailController, 'Email', Icons.email,
-                        keyboardType: TextInputType.emailAddress),
-                    const SizedBox(height: 16),
-                    _editField(_editCodigoController, 'Código universitario', Icons.badge),
-                    const SizedBox(height: 16),
-                    _editField(_editDniController, 'DNI', Icons.credit_card,
-                        keyboardType: TextInputType.number),
-                    const SizedBox(height: 16),
-                    _editField(_editCelularController, 'Celular', Icons.phone,
-                        keyboardType: TextInputType.phone),
-                    const SizedBox(height: 16),
-                    _editField(_editCorreoInstitucionalController,
-                        'Correo institucional', Icons.email_outlined,
-                        keyboardType: TextInputType.emailAddress),
-                    const SizedBox(height: 16),
-                    _dropdownField(
-                      label: 'Modo Contrato',
-                      icon: Icons.description,
-                      value: selectedModoContrato,
-                      options: modoContratoOptions,
-                      onChanged: (v) => setDialogState(() => selectedModoContrato = v),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                // Contenido scrolleable
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                    child: Form(
+                      key: formKey,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _editField(
+                            _editNombreController,
+                            'Nombre completo',
+                            Icons.person,
+                            maxLines: 1,
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'El nombre es requerido'
+                                : null,
+                          ),
+                          const SizedBox(height: 14),
+                          _editField(
+                            _editEmailController,
+                            'Email',
+                            Icons.email,
+                            maxLines: 1,
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+                          const SizedBox(height: 14),
+                          _editField(
+                            _editCodigoController,
+                            'Código universitario',
+                            Icons.badge,
+                            maxLines: 1,
+                          ),
+                          const SizedBox(height: 14),
+                          // ── Campo DNI con aviso + ver/ocultar + copiar ──
+                          _buildDniField(
+                            obscure:    obscureDni,
+                            dniActual:  dniActual,
+                            onToggle:   () => setDialogState(
+                                () => obscureDni = !obscureDni),
+                          ),
+                          const SizedBox(height: 14),
+                          _editField(
+                            _editCelularController,
+                            'Celular',
+                            Icons.phone,
+                            maxLines: 1,
+                            keyboardType: TextInputType.phone,
+                          ),
+                          const SizedBox(height: 14),
+                          _editField(
+                            _editCorreoInstitucionalController,
+                            'Correo institucional',
+                            Icons.email_outlined,
+                            maxLines: 1,
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _dropdownField(
+                                  label: 'Ciclo',
+                                  icon: Icons.layers,
+                                  value: selectedCiclo,
+                                  options: cicloOptions,
+                                  itemLabel: (v) => 'Ciclo $v',
+                                  onChanged: (v) =>
+                                      setDialogState(() => selectedCiclo = v),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _dropdownField(
+                                  label: 'Grupo',
+                                  icon: Icons.groups,
+                                  value: selectedGrupo,
+                                  options: grupoOptions,
+                                  itemLabel: (v) => 'Grupo $v',
+                                  onChanged: (v) =>
+                                      setDialogState(() => selectedGrupo = v),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    _dropdownField(
-                      label: 'Modalidad Estudio',
-                      icon: Icons.school,
-                      value: selectedModalidad,
-                      options: modalidadEstudioOptions,
-                      onChanged: (v) => setDialogState(() => selectedModalidad = v),
-                    ),
-                    const SizedBox(height: 16),
-                    _dropdownField(
-                      label: 'Ciclo',
-                      icon: Icons.layers,
-                      value: selectedCiclo,
-                      options: cicloOptions,
-                      itemLabel: (v) => 'Ciclo $v',
-                      onChanged: (v) => setDialogState(() => selectedCiclo = v),
-                    ),
-                    const SizedBox(height: 16),
-                    _dropdownField(
-                      label: 'Grupo',
-                      icon: Icons.groups,
-                      value: selectedGrupo,
-                      options: grupoOptions,
-                      itemLabel: (v) => 'Grupo $v',
-                      onChanged: (v) => setDialogState(() => selectedGrupo = v),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                const Divider(height: 1),
+                // Botones fijos abajo
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF64748B),
+                            side: BorderSide(color: Colors.grey.shade300),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: const Text('Cancelar'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            if (formKey.currentState!.validate()) {
+                              final nuevoDni = _editDniController.text.trim();
+                              // Solo pasar el DNI si cambió respecto al actual
+                              final dniParaActualizar = (nuevoDni.isNotEmpty &&
+                                      nuevoDni != dniActual &&
+                                      nuevoDni != 'Sin DNI')
+                                  ? nuevoDni
+                                  : null;
+
+                              Navigator.of(context).pop();
+
+                              await _updateStudent(
+                                studentId:           studentId,
+                                name:                _editNombreController.text.trim(),
+                                email:               _editEmailController.text.trim(),
+                                codigoUniversitario: _editCodigoController.text.trim(),
+                                dni:                 dniParaActualizar,
+                                celular:             _editCelularController.text.trim(),
+                                correoInstitucional:
+                                    _editCorreoInstitucionalController.text.trim(),
+                                ciclo: selectedCiclo,
+                                grupo: selectedGrupo,
+                              );
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1E3A5F),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: const Text('Guardar'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (formKey.currentState!.validate()) {
-                  Navigator.of(context).pop();
-                  await _updateStudent(
-                    studentId: studentId,
-                    name: _editNombreController.text.trim(),
-                    email: _editEmailController.text.trim(),
-                    codigoUniversitario: _editCodigoController.text.trim(),
-                    dni: _editDniController.text.trim(),
-                    celular: _editCelularController.text.trim(),
-                    correoInstitucional:
-                        _editCorreoInstitucionalController.text.trim(),
-                    modoContrato: selectedModoContrato,
-                    modalidadEstudio: selectedModalidad,
-                    ciclo: selectedCiclo,
-                    grupo: selectedGrupo,
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1E3A5F),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('Guardar'),
-            ),
-          ],
         ),
       ),
     );
   }
+
+  // ── Campo DNI con aviso + ver/ocultar + copiar ───────────────────
+  // Igual al campo de contraseña de jurados en GestionJuradosCarreraScreen.
+  Widget _buildDniField({
+    required bool   obscure,
+    required String dniActual,
+    required VoidCallback onToggle,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color:        const Color(0xFFFFF8E1),
+            borderRadius: BorderRadius.circular(10),
+            border:       Border.all(color: const Color(0xFFFFE082)),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.info_outline_rounded,
+                  color: Color(0xFFD4863B), size: 15),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Este es el DNI actual del estudiante. '
+                  'Puedes copiarlo o escribir uno nuevo.',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF7D5A00)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller:  _editDniController,
+          obscureText: obscure,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: 'DNI actual',
+            labelStyle:
+                const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            prefixIcon: const Icon(Icons.credit_card,
+                color: Color(0xFF1E3A5F), size: 20),
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Botón copiar
+                IconButton(
+                  icon: const Icon(Icons.copy_rounded,
+                      color: Color(0xFF3B6FD4), size: 19),
+                  tooltip: 'Copiar DNI',
+                  onPressed: () {
+                    if (_editDniController.text.isNotEmpty) {
+                      _copyToClipboard(_editDniController.text);
+                    }
+                  },
+                ),
+                // Ver/ocultar
+                IconButton(
+                  icon: Icon(
+                    obscure
+                        ? Icons.visibility_off_rounded
+                        : Icons.visibility_rounded,
+                    color: Colors.grey[400],
+                    size: 20,
+                  ),
+                  onPressed: onToggle,
+                ),
+              ],
+            ),
+            helperText:  'Dejar vacío para no cambiar el DNI',
+            helperStyle: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide:
+                  const BorderSide(color: Color(0xFF1E3A5F), width: 1.5),
+            ),
+            filled:         true,
+            fillColor:      const Color(0xFFF8FAFC),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _copyToClipboard(String text) {
+  Clipboard.setData(ClipboardData(text: text));
+  _showMessage('✅ DNI copiado al portapapeles');
+}
 
   String? _safeOption(dynamic value, List<String> options) {
     if (value == null) return null;
@@ -287,15 +504,32 @@ String _decryptDni(Map<String, dynamic> student) {
     IconData icon, {
     TextInputType? keyboardType,
     String? Function(String?)? validator,
+    int maxLines = 1,
   }) {
     return TextFormField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
+      controller:   controller,
+      maxLines:     maxLines,
       keyboardType: keyboardType,
+      decoration: InputDecoration(
+        labelText:  label,
+        prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
+        border:         OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder:  OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF1E3A5F), width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.red),
+        ),
+        filled:     true,
+        fillColor:  Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
       validator: validator,
     );
   }
@@ -309,18 +543,41 @@ String _decryptDni(Map<String, dynamic> student) {
     String Function(String)? itemLabel,
   }) {
     return DropdownButtonFormField<String>(
-      value: value,
+      value:      value,
+      isExpanded: true,
       decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        labelText:  label,
+        prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
+        border:        OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF1E3A5F), width: 2),
+        ),
+        filled:         true,
+        fillColor:      Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       items: [
-        const DropdownMenuItem<String>(value: null, child: Text('Sin seleccionar')),
+        const DropdownMenuItem<String>(
+          value: null,
+          child: Text('Sin seleccionar', overflow: TextOverflow.ellipsis),
+        ),
         ...options.map((o) => DropdownMenuItem(
-            value: o, child: Text(itemLabel != null ? itemLabel(o) : o))),
+              value: o,
+              child: Text(
+                itemLabel != null ? itemLabel(o) : o,
+                overflow: TextOverflow.ellipsis,
+              ),
+            )),
       ],
-      onChanged: onChanged,
+      onChanged:     onChanged,
+      dropdownColor: Colors.white,
+      menuMaxHeight: 260,
+      icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF1E3A5F)),
     );
   }
 
@@ -332,30 +589,37 @@ String _decryptDni(Map<String, dynamic> student) {
     String? dni,
     String? celular,
     String? correoInstitucional,
-    String? modoContrato,
-    String? modalidadEstudio,
     String? ciclo,
     String? grupo,
   }) async {
     setState(() => _isLoading = true);
     try {
       final success = await PrefsHelper.updateStudent(
-        carreraPath: _carreraPath,
-        studentId: studentId,
-        name: name?.isNotEmpty == true ? name : null,
-        email: email?.isNotEmpty == true ? email : null,
-        codigoUniversitario:
-            codigoUniversitario?.isNotEmpty == true ? codigoUniversitario : null,
-        dni: dni?.isNotEmpty == true ? dni : null,
-        celular: celular?.isNotEmpty == true ? celular : null,
-        correoInstitucional:
-            correoInstitucional?.isNotEmpty == true ? correoInstitucional : null,
-        modoContrato: modoContrato,
-        modalidadEstudio: modalidadEstudio,
-        ciclo: ciclo,
-        grupo: grupo,
+        carreraPath:         _carreraPath,
+        studentId:           studentId,
+        name:                name?.isNotEmpty               == true ? name                : null,
+        email:               email?.isNotEmpty              == true ? email               : null,
+        codigoUniversitario: codigoUniversitario?.isNotEmpty== true ? codigoUniversitario : null,
+        // Si hay nuevo DNI, updateStudent seguirá hasheándolo en Firestore
+        // y luego llamamos encryptAndSaveDni para actualizar dniEncrypted
+        dni:                 dni?.isNotEmpty                == true ? dni                 : null,
+        celular:             celular?.isNotEmpty            == true ? celular             : null,
+        correoInstitucional: correoInstitucional?.isNotEmpty== true ? correoInstitucional : null,
+        ciclo:               ciclo,
+        grupo:               grupo,
       );
+
       if (success) {
+        // Si el DNI cambió, actualizar también el campo cifrado via Cloud Functions
+        if (dni != null && dni.isNotEmpty) {
+          await StudentSecurityService.encryptAndSaveDni(
+            carreraPath: _carreraPath,
+            studentId:   studentId,
+            dni:         dni,
+          );
+          // Invalidar caché para este estudiante
+          _dniCache.remove(studentId);
+        }
         _showMessage('✅ Estudiante actualizado exitosamente');
         await _loadStudents();
       } else {
@@ -373,11 +637,15 @@ String _decryptDni(Map<String, dynamic> student) {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Confirmar eliminación'),
+        title: const Text(
+          'Confirmar eliminación',
+          style: TextStyle(color: Color(0xFF1E3A5F), fontWeight: FontWeight.bold),
+        ),
         content: Text('¿Estás seguro de que quieres eliminar a $studentName?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFF64748B)),
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
@@ -398,13 +666,14 @@ String _decryptDni(Map<String, dynamic> student) {
       try {
         final success = await PrefsHelper.deleteStudent(_carreraPath, studentId);
         if (success) {
-          _showMessage('Estudiante eliminado exitosamente');
+          _dniCache.remove(studentId);
+          _showMessage('✅ Estudiante eliminado exitosamente');
           await _loadStudents();
         } else {
-          _showMessage('Error eliminando estudiante');
+          _showMessage('❌ Error eliminando estudiante');
         }
       } catch (e) {
-        _showMessage('Error: $e');
+        _showMessage('❌ Error: $e');
       }
       setState(() => _isLoading = false);
     }
@@ -424,58 +693,72 @@ String _decryptDni(Map<String, dynamic> student) {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Row(
           children: [
-            Icon(Icons.warning_rounded, color: Colors.red, size: 32),
+            Icon(Icons.warning_rounded, color: Colors.red, size: 28),
             SizedBox(width: 8),
-            Text('ADVERTENCIA'),
+            Expanded(
+              child: Text(
+                'ADVERTENCIA',
+                style: TextStyle(
+                    color: Colors.red, fontWeight: FontWeight.bold, fontSize: 18),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Estás a punto de eliminar TODOS los estudiantes de $_carreraNombre.',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.shade300),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Estás a punto de eliminar TODOS los estudiantes de $_carreraNombre.',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.delete_forever, color: Colors.red.shade700),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Total a eliminar: ${_filteredStudents.length} estudiantes',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.red.shade700),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color:  Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.shade300),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.delete_forever,
+                            color: Colors.red.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Total a eliminar: ${_filteredStudents.length} estudiantes',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red.shade700,
+                                fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '• Esta acción NO se puede deshacer\n'
-                    '• Los estudiantes no podrán iniciar sesión',
-                    style: TextStyle(fontSize: 13, color: Colors.red.shade900),
-                  ),
-                ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '• Esta acción NO se puede deshacer\n'
+                      '• Los estudiantes no podrán iniciar sesión',
+                      style: TextStyle(fontSize: 12, color: Colors.red.shade900),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFF64748B)),
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
@@ -496,34 +779,42 @@ String _decryptDni(Map<String, dynamic> student) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Eliminando estudiantes...',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            SizedBox(height: 8),
-            Text('Esto puede tomar unos segundos',
-                style: TextStyle(fontSize: 12, color: Colors.grey)),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              CircularProgressIndicator(color: Color(0xFF1E3A5F)),
+              SizedBox(height: 16),
+              Text('Eliminando estudiantes...',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  textAlign: TextAlign.center),
+              SizedBox(height: 8),
+              Text('Esto puede tomar unos segundos',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  textAlign: TextAlign.center),
+            ],
+          ),
         ),
       ),
     );
 
     try {
       final studentsToDelete = _filteredStudents
-          .map((s) => {'carreraPath': _carreraPath, 'studentId': s['id'] as String})
+          .map((s) => {
+                'carreraPath': _carreraPath,
+                'studentId':   s['id'] as String,
+              })
           .toList();
 
       final result = await PrefsHelper.deleteMultipleStudents(studentsToDelete);
-      Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop();
       await _showDeleteResultsDialog(result['success'] ?? 0, result['errors'] ?? 0);
       await _loadStudents();
     } catch (e) {
-      Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop();
       _showMessage('Error durante la eliminación: $e');
     }
   }
@@ -538,9 +829,12 @@ String _decryptDni(Map<String, dynamic> student) {
             Icon(
               success > 0 && errors == 0 ? Icons.check_circle : Icons.info,
               color: success > 0 && errors == 0 ? Colors.green : Colors.orange,
+              size: 24,
             ),
             const SizedBox(width: 8),
-            const Text('Resultados'),
+            const Text('Resultados',
+                style: TextStyle(
+                    color: Color(0xFF1E3A5F), fontWeight: FontWeight.bold)),
           ],
         ),
         content: Column(
@@ -548,7 +842,7 @@ String _decryptDni(Map<String, dynamic> student) {
           children: [
             _resultRow('Eliminados:', '$success', Icons.check_circle, Colors.green),
             const SizedBox(height: 8),
-            _resultRow('Errores:', '$errors', Icons.error, Colors.red),
+            _resultRow('Errores:',    '$errors',  Icons.error,         Colors.red),
           ],
         ),
         actions: [
@@ -571,262 +865,363 @@ String _decryptDni(Map<String, dynamic> student) {
       children: [
         Icon(icon, size: 20, color: color),
         const SizedBox(width: 8),
-        Expanded(child: Text(label)),
+        Expanded(child: Text(label, style: const TextStyle(fontSize: 14))),
         Text(value,
-            style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 16)),
+            style: TextStyle(
+                fontWeight: FontWeight.bold, color: color, fontSize: 16)),
       ],
     );
   }
 
-  // ── Utilidades ───────────────────────────────────────────────────
+  // ── Snackbar ─────────────────────────────────────────────────────
   void _showMessage(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(message),
+        content:  Text(message, overflow: TextOverflow.ellipsis, maxLines: 2),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape:    RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin:   const EdgeInsets.all(16),
       ));
     }
   }
 
   // ── Card de estudiante ───────────────────────────────────────────
+  // El DNI se muestra como "••••••••" por defecto y se descifra
+  // on-demand al expandir la tarjeta, igual que la contraseña del jurado.
   Widget _buildEstudianteCard(Map<String, dynamic> student, int index) {
-    final studentId = student['id'];
+    final studentId  = student['id'] as String? ?? '';
     final isExpanded = _expandedStudents.contains(studentId);
 
+    final animDuration = Duration(
+      milliseconds: 200 + (index * 30).clamp(0, 400),
+    );
+
     return TweenAnimationBuilder<double>(
-      duration: Duration(milliseconds: 300 + (index * 50)),
-      tween: Tween(begin: 0.0, end: 1.0),
+      duration: animDuration,
+      tween:    Tween(begin: 0.0, end: 1.0),
       builder: (context, value, child) => Transform.translate(
-        offset: Offset(0, 50 * (1 - value)),
-        child: Opacity(opacity: value, child: child),
+        offset: Offset(0, 30 * (1 - value)),
+        child:  Opacity(opacity: value, child: child),
       ),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        margin: const EdgeInsets.only(bottom: 16),
+        duration: const Duration(milliseconds: 250),
+        margin: const EdgeInsets.only(bottom: 14),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha:0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+              color:      Colors.black.withValues(alpha: 0.05),
+              blurRadius: 8,
+              offset:     const Offset(0, 3),
             ),
           ],
         ),
-        child: Column(
-          children: [
-            InkWell(
-              onTap: () => setState(() {
-                if (isExpanded) {
-                  _expandedStudents.remove(studentId);
-                } else {
-                  _expandedStudents.add(studentId);
-                }
-              }),
-              borderRadius: BorderRadius.circular(20),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    // Avatar con inicial
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF1E3A5F), Color(0xFF2E4A6F)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Column(
+            children: [
+              InkWell(
+                onTap: () => setState(() {
+                  if (isExpanded) {
+                    _expandedStudents.remove(studentId);
+                  } else {
+                    _expandedStudents.add(studentId);
+                  }
+                }),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      // Avatar
+                      Container(
+                        width:  50,
+                        height: 50,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1E3A5F),
+                          shape: BoxShape.circle,
                         ),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF1E3A5F).withValues(alpha:0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Text(
-                          student['name']
-                                  ?.toString()
-                                  .substring(0, 1)
-                                  .toUpperCase() ??
-                              'E',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 24),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    // Nombre y badges
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            student['name'] ?? 'Sin nombre',
+                        child: Center(
+                          child: Text(
+                            (student['name']?.toString() ?? 'E')
+                                .substring(0, 1)
+                                .toUpperCase(),
                             style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E3A5F)),
+                              color:      Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize:   20,
+                            ),
                           ),
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 4,
-                            children: [
-                              _badge(
-                                student['codigoUniversitario'] ?? 'Sin código',
-                                Icons.badge,
-                                Colors.blue,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              student['name'] ?? 'Sin nombre',
+                              style: const TextStyle(
+                                fontSize:   15,
+                                fontWeight: FontWeight.bold,
+                                color:      Color(0xFF1E3A5F),
                               ),
-                              _badge(
-                                _decryptDni(student),
-                                Icons.credit_card,
-                                Colors.green,
-                              ),
-                              if (student['ciclo'] != null)
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing:    6,
+                              runSpacing: 4,
+                              children: [
                                 _badge(
-                                  'Ciclo ${student['ciclo']}',
-                                  Icons.layers,
-                                  Colors.purple,
+                                  student['codigoUniversitario'] ?? 'Sin código',
+                                  Icons.badge,
+                                  Colors.blue,
                                 ),
+                                // DNI ocultado por defecto en la vista compacta
+                                FutureBuilder<String>(
+  future: _decryptDni(student),
+  builder: (context, snapshot) {
+    final dni = snapshot.connectionState == ConnectionState.waiting
+        ? '...'
+        : (snapshot.data?.isNotEmpty == true ? snapshot.data! : 'Sin DNI');
+    return _badge(dni, Icons.credit_card, Colors.green);
+  },
+),
+                                if (student['ciclo'] != null)
+                                  _badge(
+                                    'Ciclo ${student['ciclo']}',
+                                    Icons.layers,
+                                    Colors.purple,
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          PopupMenuButton<String>(
+                            icon: const Icon(Icons.more_vert,
+                                color: Color(0xFF64748B), size: 20),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: 'edit',
+                                child: Row(children: [
+                                  Icon(Icons.edit, color: Color(0xFF1E3A5F), size: 18),
+                                  SizedBox(width: 8),
+                                  Text('Editar', style: TextStyle(fontSize: 14)),
+                                ]),
+                              ),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Row(children: [
+                                  Icon(Icons.delete, color: Colors.red, size: 18),
+                                  SizedBox(width: 8),
+                                  Text('Eliminar', style: TextStyle(fontSize: 14)),
+                                ]),
+                              ),
                             ],
+                            onSelected: (value) {
+                              if (value == 'edit') {
+                                _showEditDialog(student, studentId);
+                              } else if (value == 'delete') {
+                                _deleteStudent(
+                                    studentId, student['name'] ?? 'Estudiante');
+                              }
+                            },
+                          ),
+                          AnimatedRotation(
+                            turns:    isExpanded ? 0.5 : 0,
+                            duration: const Duration(milliseconds: 250),
+                            child: const Icon(Icons.expand_more,
+                                color: Color(0xFF64748B), size: 20),
                           ),
                         ],
                       ),
-                    ),
-                    // Menú de acciones
-                    PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_vert, color: Color(0xFF64748B)),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'edit',
-                          child: Row(children: [
-                            Icon(Icons.edit, color: Color(0xFF1E3A5F)),
-                            SizedBox(width: 8),
-                            Text('Editar'),
-                          ]),
-                        ),
-                        const PopupMenuItem(
-                          value: 'delete',
-                          child: Row(children: [
-                            Icon(Icons.delete, color: Colors.red),
-                            SizedBox(width: 8),
-                            Text('Eliminar'),
-                          ]),
-                        ),
-                      ],
-                      onSelected: (value) {
-                        if (value == 'edit') {
-                          _showEditDialog(student, studentId);
-                        } else if (value == 'delete') {
-                          _deleteStudent(studentId, student['name'] ?? 'Estudiante');
-                        }
-                      },
-                    ),
-                    AnimatedRotation(
-                      turns: isExpanded ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 300),
-                      child: const Icon(Icons.expand_more, color: Color(0xFF64748B)),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-            // Detalle expandido
-            AnimatedSize(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              child: isExpanded
-                  ? Column(
-                      children: [
-                        Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 16),
-                          height: 1,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(colors: [
-                              Colors.transparent,
-                              Colors.grey.shade300,
-                              Colors.transparent,
-                            ]),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 12),
-                              _infoRow('Usuario:',
-                                  student['username'] ?? 'Sin usuario', Icons.person),
-                              const SizedBox(height: 12),
-                              _infoRow(
-                                      'DNI:',
-                                      _decryptDni(student),
-                                      Icons.credit_card,
-                                    ),
-                                    const SizedBox(height: 12),
+
+              // ── Detalle expandido con DNI descifrado on-demand ──
+              AnimatedSize(
+                duration: const Duration(milliseconds: 250),
+                curve:    Curves.easeInOut,
+                child: isExpanded
+                    ? Column(
+                        children: [
+                          Divider(height: 1, color: Colors.grey.shade200,
+                              indent: 16, endIndent: 16),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _infoRow('Usuario:',
+                                    student['username'] ?? 'Sin usuario',
+                                    Icons.person),
+                                const SizedBox(height: 10),
+                                // DNI con FutureBuilder: descifra al expandir
+                                _dniInfoRow(student),
+                                const SizedBox(height: 10),
                                 _infoRow('Celular:',
-                                  student['celular'] ?? 'Sin celular', Icons.phone),
-                              if (student['modoContrato'] != null) ...[
-                                const SizedBox(height: 12),
-                                _infoRow('Contrato:', student['modoContrato'],
-                                    Icons.description),
+                                    student['celular'] ?? 'Sin celular',
+                                    Icons.phone),
+                                if (student['email'] != null &&
+                                    (student['email'] as String).isNotEmpty) ...[
+                                  const SizedBox(height: 10),
+                                  _infoRow('Email:', student['email'], Icons.email),
+                                ],
+                                if (student['grupo'] != null) ...[
+                                  const SizedBox(height: 10),
+                                  _infoRow('Grupo:',
+                                      'Grupo ${student['grupo']}', Icons.groups),
+                                ],
+                                if (student['pago'] != null) ...[
+                                  const SizedBox(height: 10),
+                                  _infoRow('Pago:', student['pago'], Icons.payment),
+                                ],
                               ],
-                              if (student['modalidadEstudio'] != null) ...[
-                                const SizedBox(height: 12),
-                                _infoRow('Modalidad:', student['modalidadEstudio'],
-                                    Icons.school),
-                              ],
-                              if (student['grupo'] != null) ...[
-                                const SizedBox(height: 12),
-                                _infoRow('Grupo:', 'Grupo ${student['grupo']}',
-                                    Icons.groups),
-                              ],
-                              if (student['pago'] != null) ...[
-                                const SizedBox(height: 12),
-                                _infoRow('Pago:', student['pago'], Icons.payment),
-                              ],
-                            ],
+                            ),
                           ),
-                        ),
-                      ],
-                    )
-                  : const SizedBox.shrink(),
-            ),
-          ],
+                        ],
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
+  // ── Fila de DNI con FutureBuilder (descifra al expandir) ─────────
+  Widget _dniInfoRow(Map<String, dynamic> student) {
+  final studentId = student['id'] as String? ?? '';
+  final dni       = _dniCache[studentId];
+
+  // Si por alguna razón no está en caché aún, lo carga en el momento
+  if (dni == null) {
+    return FutureBuilder<String>(
+      future: _decryptDni(student),
+      builder: (context, snapshot) {
+        final isLoading = snapshot.connectionState == ConnectionState.waiting;
+        final dniText   = isLoading
+            ? 'Descifrando...'
+            : (snapshot.hasError ? '(error)' : (snapshot.data ?? 'Sin DNI'));
+        return _infoRowWithCopy(
+          'DNI:',
+          dniText,
+          Icons.credit_card,
+          isLoading: isLoading,
+          onCopy: !isLoading && dniText != 'Sin DNI' && dniText != '(error)'
+              ? () => _copyToClipboard(dniText)
+              : null,
+        );
+      },
+    );
+  }
+
+  // Camino rápido — ya está en caché, render directo sin Future
+  return _infoRowWithCopy(
+    'DNI:',
+    dni,
+    Icons.credit_card,
+    onCopy: dni != 'Sin DNI' ? () => _copyToClipboard(dni) : null,
+  );
+}
+
+  Widget _infoRowWithCopy(
+    String label,
+    String value,
+    IconData icon, {
+    bool isLoading = false,
+    VoidCallback? onCopy,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color:        const Color(0xFF1E3A5F).withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 16, color: const Color(0xFF1E3A5F)),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize:   12,
+                      color:      Color(0xFF64748B))),
+              const SizedBox(height: 2),
+              isLoading
+                  ? const SizedBox(
+                      height: 16,
+                      width:  80,
+                      child: LinearProgressIndicator(
+                        backgroundColor: Color(0xFFE2E8F0),
+                        color:           Color(0xFF1E3A5F),
+                      ),
+                    )
+                  : Text(value,
+                      style: const TextStyle(
+                          fontSize:   13,
+                          color:      Color(0xFF1E3A5F),
+                          fontWeight: FontWeight.w500),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+            ],
+          ),
+        ),
+        if (onCopy != null)
+          IconButton(
+            icon:    const Icon(Icons.copy_rounded,
+                color: Color(0xFF3B6FD4), size: 17),
+            tooltip: 'Copiar DNI',
+            onPressed: onCopy,
+            padding:    EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+      ],
+    );
+  }
+
   Widget _badge(String text, IconData icon, MaterialColor color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [color.shade100, color.shade50]),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: color.shade700),
-          const SizedBox(width: 4),
-          Text(text,
-              style: TextStyle(
-                  fontSize: 11,
-                  color: color.shade700,
-                  fontWeight: FontWeight.w600)),
-        ],
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 180),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color:        color.shade100,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: color.shade700),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(text,
+                  style: TextStyle(
+                      fontSize:   11,
+                      color:      color.shade700,
+                      fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines:  1),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -836,14 +1231,14 @@ String _decryptDni(Map<String, dynamic> student) {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
+            color:        const Color(0xFF1E3A5F).withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, size: 18, color: const Color(0xFF1E3A5F)),
+          child: Icon(icon, size: 16, color: const Color(0xFF1E3A5F)),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -851,14 +1246,16 @@ String _decryptDni(Map<String, dynamic> student) {
               Text(label,
                   style: const TextStyle(
                       fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      color: Color(0xFF64748B))),
+                      fontSize:   12,
+                      color:      Color(0xFF64748B))),
               const SizedBox(height: 2),
               Text(value,
                   style: const TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF1E3A5F),
-                      fontWeight: FontWeight.w500)),
+                      fontSize:   13,
+                      color:      Color(0xFF1E3A5F),
+                      fontWeight: FontWeight.w500),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
             ],
           ),
         ),
@@ -869,46 +1266,40 @@ String _decryptDni(Map<String, dynamic> student) {
   // ── Empty state ──────────────────────────────────────────────────
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          TweenAnimationBuilder<double>(
-            duration: const Duration(milliseconds: 800),
-            tween: Tween(begin: 0.0, end: 1.0),
-            builder: (context, value, child) => Transform.scale(
-              scale: value,
-              child: Opacity(opacity: value, child: child),
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(24),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
+                color: const Color(0xFF1E3A5F).withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.search_off,
-                  size: 80, color: Color(0xFF1E3A5F)),
+                  size: 64, color: Color(0xFF1E3A5F)),
             ),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'No se encontraron estudiantes',
-            style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1E3A5F)),
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
+            const SizedBox(height: 20),
+            const Text('No se encontraron estudiantes',
+                style: TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3A5F)),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 8),
+            Text(
               _searchController.text.isNotEmpty
                   ? 'No hay resultados para "${_searchController.text}"'
                   : 'No hay estudiantes registrados en esta carrera',
-              style: const TextStyle(fontSize: 14, color: Color(0xFF64748B)),
+              style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
               textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -923,14 +1314,7 @@ String _decryptDni(Map<String, dynamic> student) {
           children: [
             // ── Header ──────────────────────────────────────────────
             Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF1E3A5F), Color(0xFF2E4A6F)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
+              padding: const EdgeInsets.fromLTRB(8, 12, 16, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -939,50 +1323,40 @@ String _decryptDni(Map<String, dynamic> student) {
                       IconButton(
                         icon: const Icon(Icons.arrow_back, color: Colors.white),
                         onPressed: () => Navigator.of(context).pop(),
+                        tooltip: 'Volver',
                       ),
                       const SizedBox(width: 4),
                       const Expanded(
                         child: Text(
                           'Estudiantes Registrados',
                           style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 18, fontWeight: FontWeight.bold,
                               color: Colors.white),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       ),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha:0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: IconButton(
-                          onPressed: _allStudents.isEmpty ? null : _deleteAllStudents,
-                          icon: const Icon(Icons.delete_sweep, color: Colors.white),
-                          tooltip: 'Eliminar todos',
-                        ),
+                      _headerIconBtn(
+                        icon:    Icons.delete_sweep,
+                        tooltip: 'Eliminar todos',
+                        onTap:   _allStudents.isEmpty ? null : _deleteAllStudents,
                       ),
-                      const SizedBox(width: 8),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha:0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: IconButton(
-                          onPressed: _loadStudents,
-                          icon: const Icon(Icons.refresh, color: Colors.white),
-                          tooltip: 'Actualizar',
-                        ),
+                      const SizedBox(width: 6),
+                      _headerIconBtn(
+                        icon:    Icons.refresh,
+                        tooltip: 'Actualizar',
+                        onTap:   _loadStudents,
                       ),
                     ],
                   ),
-                  // ── Banner de carrera ──────────────────────────────
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha:0.12),
+                      color:  Colors.white.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withValues(alpha:0.2)),
+                      border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.2)),
                     ),
                     child: Row(
                       children: [
@@ -993,27 +1367,32 @@ String _decryptDni(Map<String, dynamic> student) {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                _carreraNombre,
+                                _carreraNombre.isNotEmpty
+                                    ? _carreraNombre
+                                    : 'Cargando...',
                                 style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600),
                                 overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
                               ),
                               Text(
                                 '$_facultadNombre · $_sedeNombre',
                                 style: const TextStyle(
                                     color: Colors.white70, fontSize: 11),
                                 overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
                               ),
                             ],
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha:0.2),
+                            color:        Colors.white.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -1037,37 +1416,38 @@ String _decryptDni(Map<String, dynamic> student) {
                 decoration: const BoxDecoration(
                   color: Color(0xFFE8EDF2),
                   borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(30),
-                    topRight: Radius.circular(30),
+                    topLeft:  Radius.circular(28),
+                    topRight: Radius.circular(28),
                   ),
                 ),
                 child: _isLoading
                     ? const Center(
-                        child: CircularProgressIndicator(color: Color(0xFF1E3A5F)))
+                        child: CircularProgressIndicator(
+                            color: Color(0xFF1E3A5F)))
                     : Column(
                         children: [
-                          // ── Barra de búsqueda y contador ────────────
+                          // ── Barra de búsqueda ────────────────────
                           SlideTransition(
                             position: Tween<Offset>(
                               begin: const Offset(0, -1),
-                              end: Offset.zero,
+                              end:   Offset.zero,
                             ).animate(CurvedAnimation(
                               parent: _filterAnimController,
-                              curve: Curves.easeOut,
+                              curve:  Curves.easeOut,
                             )),
                             child: FadeTransition(
                               opacity: _filterAnimController,
                               child: Container(
-                                margin: const EdgeInsets.all(20),
-                                padding: const EdgeInsets.all(20),
+                                margin:  const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                                padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(20),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha:0.05),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 4),
+                                      color:      Colors.black.withValues(alpha: 0.04),
+                                      blurRadius: 8,
+                                      offset:     const Offset(0, 3),
                                     ),
                                   ],
                                 ),
@@ -1077,48 +1457,65 @@ String _decryptDni(Map<String, dynamic> student) {
                                       controller: _searchController,
                                       decoration: InputDecoration(
                                         labelText: 'Buscar estudiante',
-                                        labelStyle:
-                                            const TextStyle(color: Color(0xFF64748B)),
+                                        labelStyle: const TextStyle(
+                                            color: Color(0xFF64748B),
+                                            fontSize: 14),
                                         prefixIcon: const Icon(Icons.search,
                                             color: Color(0xFF1E3A5F)),
                                         border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                            borderSide: BorderSide(
-                                                color: Colors.grey.shade300)),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          borderSide: BorderSide(
+                                              color: Colors.grey.shade300),
+                                        ),
                                         enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                            borderSide: BorderSide(
-                                                color: Colors.grey.shade300)),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          borderSide: BorderSide(
+                                              color: Colors.grey.shade300),
+                                        ),
                                         focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                            borderSide: const BorderSide(
-                                                color: Color(0xFF1E3A5F), width: 2)),
-                                        hintText: 'Nombre, código o DNI',
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          borderSide: const BorderSide(
+                                              color: Color(0xFF1E3A5F),
+                                              width: 2),
+                                        ),
+                                        hintText:  'Nombre o código',
                                         hintStyle: const TextStyle(
-                                            color: Color(0xFF64748B)),
-                                        suffixIcon:
-                                            _searchController.text.isNotEmpty
-                                                ? IconButton(
-                                                    onPressed: () {
-                                                      _searchController.clear();
-                                                      _applySearch();
-                                                    },
-                                                    icon: const Icon(Icons.clear,
-                                                        color: Color(0xFF64748B)),
-                                                  )
-                                                : null,
+                                            color:   Color(0xFF64748B),
+                                            fontSize: 14),
+                                        filled:     true,
+                                        fillColor:  Colors.grey.shade50,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 16, vertical: 12),
+                                        suffixIcon: _searchController
+                                                .text.isNotEmpty
+                                            ? IconButton(
+                                                onPressed: () {
+                                                  _searchController.clear();
+                                                  _applySearch();
+                                                },
+                                                icon: const Icon(Icons.clear,
+                                                    color:
+                                                        Color(0xFF64748B),
+                                                    size: 18),
+                                              )
+                                            : null,
                                       ),
                                       onChanged: (_) => _applySearch(),
                                     ),
-                                    const SizedBox(height: 12),
+                                    const SizedBox(height: 10),
                                     Container(
-                                      padding: const EdgeInsets.all(12),
+                                      width:   double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 8),
                                       decoration: BoxDecoration(
-                                        gradient: LinearGradient(colors: [
-                                          const Color(0xFF1E3A5F).withValues(alpha:0.1),
-                                          const Color(0xFF1E3A5F).withValues(alpha:0.05),
-                                        ]),
-                                        borderRadius: BorderRadius.circular(12),
+                                        color: const Color(0xFF1E3A5F)
+                                            .withValues(alpha: 0.07),
+                                        borderRadius:
+                                            BorderRadius.circular(10),
                                       ),
                                       child: Row(
                                         mainAxisAlignment:
@@ -1128,18 +1525,21 @@ String _decryptDni(Map<String, dynamic> student) {
                                             _filteredStudents.isEmpty
                                                 ? Icons.info_outline
                                                 : Icons.check_circle_outline,
-                                            size: 18,
+                                            size:  16,
                                             color: const Color(0xFF1E3A5F),
                                           ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            _filteredStudents.isEmpty
-                                                ? 'No se encontraron estudiantes'
-                                                : 'Mostrando ${_filteredStudents.length} de ${_allStudents.length} estudiante${_allStudents.length != 1 ? 's' : ''}',
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                color: Color(0xFF1E3A5F),
-                                                fontSize: 14),
+                                          const SizedBox(width: 6),
+                                          Flexible(
+                                            child: Text(
+                                              _filteredStudents.isEmpty
+                                                  ? 'No se encontraron estudiantes'
+                                                  : 'Mostrando ${_filteredStudents.length} de ${_allStudents.length} estudiante${_allStudents.length != 1 ? 's' : ''}',
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  color:  Color(0xFF1E3A5F),
+                                                  fontSize: 13),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -1150,12 +1550,13 @@ String _decryptDni(Map<String, dynamic> student) {
                             ),
                           ),
 
-                          // ── Lista de estudiantes ─────────────────────
+                          // ── Lista ────────────────────────────────
                           Expanded(
                             child: _filteredStudents.isEmpty
                                 ? _buildEmptyState()
                                 : ListView.builder(
-                                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                                    padding: const EdgeInsets.fromLTRB(
+                                        16, 4, 16, 20),
                                     itemCount: _filteredStudents.length,
                                     itemBuilder: (context, index) =>
                                         _buildEstudianteCard(
@@ -1167,6 +1568,35 @@ String _decryptDni(Map<String, dynamic> student) {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _headerIconBtn({
+    required IconData icon,
+    required String   tooltip,
+    VoidCallback?     onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap:        onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width:  40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: onTap == null
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.white.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon,
+              color: onTap == null
+                  ? Colors.white.withValues(alpha: 0.4)
+                  : Colors.white,
+              size: 20),
         ),
       ),
     );

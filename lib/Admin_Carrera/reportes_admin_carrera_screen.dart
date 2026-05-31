@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
-import 'ventanas_ganadores.dart'; // ← reemplaza la importación directa de ver_ganadores.dart
+import 'ventanas_ganadores.dart'; 
 import 'ventanas_asistencia.dart';
-import 'evaluaciones_carrera.dart';
 import 'informe_evento_carrera.dart';
+import 'ventanas_evaluaciones.dart';
 import 'package:flutter/foundation.dart';
 
 class ReportesAdminCarreraScreen extends StatefulWidget {
@@ -225,14 +225,18 @@ class _ReportesAdminCarreraScreenState
                                   icon: Icons.assignment_turned_in,
                                   color: const Color(0xFF9C27B0),
                                   onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const EvaluacionesCarreraScreen(),
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => VentanasEvaluacionesScreen(
+                                      filialId: _filialId,
+                                      filialNombre: _sede,
+                                      facultad: _facultad,
+                                      carrera: _carrera,
                                     ),
                                   ),
                                 ),
-                              ),
+                                                                ),
+                                                              ),
 
                               const SizedBox(height: 12),
 

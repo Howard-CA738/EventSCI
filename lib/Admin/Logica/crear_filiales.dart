@@ -464,7 +464,6 @@ class _CrearFilialesScreenState extends State<CrearFilialesScreen> {
   }
 
   Widget _buildFilialCard(String filialId, Map<String, dynamic> filialData) {
-    final isExpanded = _expandedFilial == filialId;
     final facultades = filialData['facultades'] as Map<String, dynamic>;
 
     // Contar total de carreras

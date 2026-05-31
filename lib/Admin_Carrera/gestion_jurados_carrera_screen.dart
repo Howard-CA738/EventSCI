@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 import '/password_helper.dart';
+import '/jurado_security_service.dart';
+import 'package:flutter/services.dart';
 
 class GestionJuradosCarreraScreen extends StatefulWidget {
   const GestionJuradosCarreraScreen({super.key});
@@ -81,53 +83,48 @@ class _GestionJuradosCarreraScreenState
   }
 
   Future<void> _cargarJurados() async {
-    if (_filialId == null || _facultad == null || _carreraNombre == null) return;
-    setState(() => _isLoadingJurados = true);
-    try {
-      final snap = await _firestore
-          .collection('users')
-          .where('userType', isEqualTo: 'jurado')
-          .where('filial', isEqualTo: _filialId)
-          .where('facultad', isEqualTo: _facultad)
-          .where('carrera', isEqualTo: _carreraNombre)
-          .get();
+  if (_filialId == null || _facultad == null || _carreraNombre == null) return;
+  setState(() => _isLoadingJurados = true);
+  try {
+    final snap = await _firestore
+        .collection('users')
+        .where('userType', isEqualTo: 'jurado')
+        .where('filial', isEqualTo: _filialId)
+        .where('facultad', isEqualTo: _facultad)
+        .where('carrera', isEqualTo: _carreraNombre)
+        .get();
 
-      final list = snap.docs.map((doc) {
-        final d = doc.data();
-        List<String> categorias = [];
-        if (d['categorias'] != null) {
-          categorias = List<String>.from(d['categorias']);
-        } else if (d['categoria'] != null) {
-          categorias = [d['categoria']];
-        }
-        return {
-          'id': doc.id,
-          'nombre': d['name'] ?? '',
-          'usuario': d['usuario'] ?? '',
-          // FIX M4 (seguridad): NO incluir el hash de contraseña en el estado de UI.
-          // El campo 'password' no se necesita en el listado.
-          'categorias': categorias,
-          'eventoId': d['eventoId'] ?? '',
-          'eventoNombre': d['eventoNombre'] ?? '',
-        };
-      }).toList();
-
-      if (mounted) {
-        setState(() => _jurados = list);
-        // FIX m1: proteger el AnimationController contra dispose previo
-        if (!_fadeController.isDismissed || _fadeController.isAnimating) {
-          _fadeController.forward(from: 0);
-        } else {
-          _fadeController.forward(from: 0);
-        }
+    final list = snap.docs.map((doc) {
+      final d = doc.data();
+      List<String> categorias = [];
+      if (d['categorias'] != null) {
+        categorias = List<String>.from(d['categorias']);
+      } else if (d['categoria'] != null) {
+        categorias = [d['categoria']];
       }
-    } catch (e) {
-      debugPrint('Error cargando jurados: $e');
-      if (mounted) _showSnackBar('Error al cargar jurados', isError: true);
-    } finally {
-      if (mounted) setState(() => _isLoadingJurados = false);
+      return {
+        'id': doc.id,
+        'nombre': d['name'] ?? '',
+        'usuario': d['usuario'] ?? '',
+        'categorias': categorias,
+        'eventoId': d['eventoId'] ?? '',
+        'eventoNombre': d['eventoNombre'] ?? '',
+      };
+    }).toList();
+
+    if (mounted) {
+      setState(() => _jurados = list);
+      try {
+        _fadeController.forward(from: 0);
+      } catch (_) {}
     }
+  } catch (e) {
+    debugPrint('Error cargando jurados: $e');
+    if (mounted) _showSnackBar('Error al cargar jurados', isError: true);
+  } finally {
+    if (mounted) setState(() => _isLoadingJurados = false);
   }
+}
 
   Future<List<String>> _cargarCategoriasPorEvento(String eventoId) async {
     try {
@@ -184,83 +181,81 @@ class _GestionJuradosCarreraScreenState
     }
   }
 
-  Future<void> _crearJurado({
-    required String nombre,
-    required String usuario,
-    required String password,
-    required List<String> categorias,
-    required String eventoId,
-    required String eventoNombre,
-  }) async {
-    // FIX m3: validar que el usuario no tenga espacios internos ni caracteres inválidos
-    if (usuario.contains(' ')) {
-      _showSnackBar('El usuario no puede contener espacios', isError: true);
-      return;
-    }
-    final usuarioRegex = RegExp(r'^[a-zA-Z0-9._\-]+$');
-    if (!usuarioRegex.hasMatch(usuario)) {
-      _showSnackBar(
-          'El usuario solo puede contener letras, números, puntos, guiones y guiones bajos',
-          isError: true);
-      return;
-    }
-
-    final existing = await _firestore
-        .collection('users')
-        .where('usuario', isEqualTo: usuario.trim())
-        .get();
-    if (existing.docs.isNotEmpty) {
-      _showSnackBar('El usuario "$usuario" ya está registrado', isError: true);
-      return;
-    }
-    final passwordHash = PasswordHelper.hashPassword(password);
-    await _firestore.collection('users').add({
-      'name': nombre.trim(),
-      'usuario': usuario.trim(),
-      'password': passwordHash,
-      'filial': _filialId,
-      'filialNombre': _filialNombre,
-      'facultad': _facultad,
-      'carrera': _carreraNombre,
-      'carreraId': _carreraId,
-      'categorias': categorias,
-      'eventoId': eventoId,
-      'eventoNombre': eventoNombre,
-      'userType': 'jurado',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-    _showSnackBar('Jurado creado exitosamente');
-    await _cargarJurados();
+  Future<String?> _crearJurado({
+  required String nombre,
+  required String usuario,
+  required String password,
+  required List<String> categorias,
+  required String eventoId,
+  required String eventoNombre,
+}) async {
+  if (usuario.contains(' ')) {
+    _showSnackBar('El usuario no puede contener espacios', isError: true);
+    return null;
+  }
+  final usuarioRegex = RegExp(r'^[a-zA-Z0-9._\-]+$');
+  if (!usuarioRegex.hasMatch(usuario)) {
+    _showSnackBar('El usuario solo puede contener letras, números, puntos, guiones y guiones bajos', isError: true);
+    return null;
   }
 
-  Future<void> _actualizarJurado({
-    required String id,
-    required String nombre,
-    required String usuario,
-    required String password, // puede venir vacío
-    required List<String> categorias,
-    required String eventoId,
-    required String eventoNombre,
-  }) async {
-    final Map<String, dynamic> updateData = {
-      'name': nombre.trim(),
-      'usuario': usuario.trim(),
-      'categorias': categorias,
-      'eventoId': eventoId,
-      'eventoNombre': eventoNombre,
-    };
-
-    // Solo actualizar contraseña si el admin escribió una nueva
-    if (password.isNotEmpty) {
-      updateData['password'] = _isSha256(password)
-          ? password
-          : PasswordHelper.hashPassword(password);
-    }
-
-    await _firestore.collection('users').doc(id).update(updateData);
-    _showSnackBar('Jurado actualizado exitosamente');
-    await _cargarJurados();
+  final existing = await _firestore
+      .collection('users')
+      .where('usuario', isEqualTo: usuario.trim())
+      .get();
+  if (existing.docs.isNotEmpty) {
+    _showSnackBar('El usuario "$usuario" ya está registrado', isError: true);
+    return null;
   }
+
+  final passwordHash = PasswordHelper.hashPassword(password);
+  final docRef = await _firestore.collection('users').add({
+    'name': nombre.trim(),
+    'usuario': usuario.trim(),
+    'password': passwordHash,
+    'filial': _filialId,
+    'filialNombre': _filialNombre,
+    'facultad': _facultad,
+    'carrera': _carreraNombre,
+    'carreraId': _carreraId,
+    'categorias': categorias,
+    'eventoId': eventoId,
+    'eventoNombre': eventoNombre,
+    'userType': 'jurado',
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+
+  // Retornar el ID para cifrar DESPUÉS de cerrar el diálogo
+  return docRef.id;
+}
+
+  Future<bool> _actualizarJurado({
+  required String id,
+  required String nombre,
+  required String usuario,
+  required String password,
+  required List<String> categorias,
+  required String eventoId,
+  required String eventoNombre,
+}) async {
+  final Map<String, dynamic> updateData = {
+    'name': nombre.trim(),
+    'usuario': usuario.trim(),
+    'categorias': categorias,
+    'eventoId': eventoId,
+    'eventoNombre': eventoNombre,
+  };
+
+  final needsEncrypt = password.isNotEmpty && !_isSha256(password);
+  if (needsEncrypt) {
+    updateData['password'] = PasswordHelper.hashPassword(password);
+  }
+
+  await _firestore.collection('users').doc(id).update(updateData);
+
+  // Retornar si necesita cifrar para hacerlo DESPUÉS de cerrar el diálogo
+  return needsEncrypt;
+}
 
   // Helper para detectar si ya es hash SHA-256
   bool _isSha256(String value) {
@@ -401,394 +396,408 @@ class _GestionJuradosCarreraScreenState
     }
   }
 
-  // ── Diálogo crear/editar ──────────────────────────────────────────────────
   void _mostrarDialogoJurado({Map<String, dynamic>? jurado}) async {
-    final isEditing = jurado != null;
-    final eventos = await _cargarEventos();
-    if (!mounted) return;
+  final isEditing = jurado != null;
+  final eventos = await _cargarEventos();
+  if (!mounted) return;
 
-    final nombreCtrl = TextEditingController(text: jurado?['nombre'] ?? '');
-    final usuarioCtrl = TextEditingController(text: jurado?['usuario'] ?? '');
-    // FIX M2: contraseña siempre vacía al abrir — se muestra hint explicativo
-    final passwordCtrl = TextEditingController(text: '');
-    List<String> categoriasSeleccionadas =
-        List<String>.from(jurado?['categorias'] ?? []);
+  final nombreCtrl = TextEditingController(text: jurado?['nombre'] ?? '');
+  final usuarioCtrl = TextEditingController(text: jurado?['usuario'] ?? '');
 
-    String? eventoSeleccionado =
-        isEditing && (jurado!['eventoId'] as String).isNotEmpty
-            ? jurado['eventoId'] as String
-            : null;
-    List<String> categorias = [];
-    bool obscurePass = true;
-    bool isLoading = false;
-    bool isLoadingCategorias = false;
+  String passwordActual = '';
+  if (isEditing) {
+    passwordActual = await JuradoSecurityService.decryptPassword(
+      juradoId: jurado!['id'],
+    );
+  }
+  final passwordCtrl = TextEditingController(text: passwordActual);
 
-    if (eventoSeleccionado != null) {
-      categorias = await _cargarCategoriasPorEvento(eventoSeleccionado);
-    }
-    if (!mounted) return;
+  List<String> categoriasSeleccionadas =
+      List<String>.from(jurado?['categorias'] ?? []);
+  String? eventoSeleccionado =
+      isEditing && (jurado!['eventoId'] as String).isNotEmpty
+          ? jurado['eventoId'] as String
+          : null;
+  List<String> categorias = [];
+  bool obscurePass = true;
+  bool isLoading = false;
+  bool isLoadingCategorias = false;
 
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => Dialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.12),
-                  blurRadius: 30,
-                  offset: const Offset(0, 10),
+  if (eventoSeleccionado != null) {
+    categorias = await _cargarCategoriasPorEvento(eventoSeleccionado);
+  }
+  if (!mounted) return;
+
+  await showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDialogState) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Header ──────────────────────────────────────────
+                Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E3A5F),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        isEditing
+                            ? Icons.edit_rounded
+                            : Icons.person_add_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isEditing ? 'Editar Jurado' : 'Nuevo Jurado',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1E3A5F),
+                            ),
+                          ),
+                          const Text(
+                            'Completa los datos del jurado',
+                            style: TextStyle(
+                                fontSize: 11, color: Color(0xFF94A3B8)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close_rounded,
+                          color: Color(0xFF94A3B8), size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+
+                // ── Chip de ubicación ────────────────────────────────
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0F5FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFCBD9F5)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.school_rounded,
+                          color: Color(0xFF3B6FD4), size: 16),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '$_carreraNombre · $_facultad · $_filialNombre',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF1E3A5F),
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+
+                // ── Datos personales ─────────────────────────────────
+                _buildDialogSectionLabel('Datos personales',
+                    Icons.person_rounded, const Color(0xFFD4863B)),
+                const SizedBox(height: 10),
+                _buildDialogTextField(
+                  controller: nombreCtrl,
+                  label: 'Nombre completo',
+                  icon: Icons.person_outline_rounded,
+                ),
+                const SizedBox(height: 12),
+                _buildDialogTextField(
+                  controller: usuarioCtrl,
+                  label: 'Usuario',
+                  icon: Icons.account_circle_outlined,
+                  enabled: !isEditing,
+                ),
+                const SizedBox(height: 12),
+                _buildPasswordField(
+                  controller: passwordCtrl,
+                  obscure: obscurePass,
+                  isEditing: isEditing,
+                  onToggle: () =>
+                      setDialogState(() => obscurePass = !obscurePass),
+                ),
+                const SizedBox(height: 18),
+
+                // ── Evento ───────────────────────────────────────────
+                _buildDialogSectionLabel('Evento asignado',
+                    Icons.event_rounded, const Color(0xFF3B6FD4)),
+                const SizedBox(height: 10),
+                _buildEventoDropdown(
+                  eventos: eventos,
+                  eventoSeleccionado: eventoSeleccionado,
+                  isEditing: isEditing,
+                  jurado: jurado,
+                  onChanged: (value) async {
+                    setDialogState(() {
+                      eventoSeleccionado = value;
+                      categorias = [];
+                      if (!isEditing || value != jurado?['eventoId']) {
+                        categoriasSeleccionadas = [];
+                      }
+                      isLoadingCategorias = true;
+                    });
+                    final cats = await _cargarCategoriasPorEvento(value!);
+                    setDialogState(() {
+                      categorias = cats;
+                      isLoadingCategorias = false;
+                    });
+                  },
+                ),
+                const SizedBox(height: 18),
+
+                // ── Categorías ───────────────────────────────────────
+                if (eventoSeleccionado != null) ...[
+                  _buildDialogSectionLabel('Categorías',
+                      Icons.category_rounded, const Color(0xFF8B4DC7)),
+                  const SizedBox(height: 10),
+                  _buildCategoriasPanel(
+                    categorias: categorias,
+                    seleccionadas: categoriasSeleccionadas,
+                    isLoading: isLoadingCategorias,
+                    onChanged: (cat, selected) => setDialogState(() {
+                      if (selected) {
+                        categoriasSeleccionadas.add(cat);
+                      } else {
+                        categoriasSeleccionadas.remove(cat);
+                      }
+                    }),
+                  ),
+                  if (categoriasSeleccionadas.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: categoriasSeleccionadas.asMap().entries.map((e) {
+                        final color =
+                            _categoryColors[e.key % _categoryColors.length];
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          child: Chip(
+                            label: Text(
+                              e.value,
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                            backgroundColor: color,
+                            deleteIcon: const Icon(Icons.close_rounded,
+                                size: 14, color: Colors.white),
+                            onDeleted: () => setDialogState(() =>
+                                categoriasSeleccionadas.remove(e.value)),
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 4),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            side: BorderSide.none,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 18),
+                ],
+
+                // ── Botones ──────────────────────────────────────────
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                        ),
+                        child: const Text(
+                          'Cancelar',
+                          style: TextStyle(
+                              color: Color(0xFF64748B),
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: isLoading
+                            ? null
+                            : () async {
+                                final nombre = nombreCtrl.text.trim();
+                                final usuario = usuarioCtrl.text.trim();
+                                final password = passwordCtrl.text;
+
+                                if (nombre.isEmpty || usuario.isEmpty) {
+                                  _showSnackBar('Completa todos los campos',
+                                      isWarning: true);
+                                  return;
+                                }
+                                if (!isEditing && password.isEmpty) {
+                                  _showSnackBar(
+                                      'La contraseña es obligatoria',
+                                      isWarning: true);
+                                  return;
+                                }
+                                if (eventoSeleccionado == null) {
+                                  _showSnackBar('Selecciona un evento',
+                                      isWarning: true);
+                                  return;
+                                }
+                                if (categoriasSeleccionadas.isEmpty) {
+                                  _showSnackBar(
+                                      'Selecciona al menos una categoría',
+                                      isWarning: true);
+                                  return;
+                                }
+
+                                final eventoNombre = eventos.firstWhere(
+                                  (e) => e['id'] == eventoSeleccionado,
+                                  orElse: () => {'name': ''},
+                                )['name'] as String;
+
+                                setDialogState(() => isLoading = true);
+
+                                String? juradoIdParaCifrar;
+                                bool necesitaCifrarUpdate = false;
+                                final String passwordParaCifrar = password;
+
+                                try {
+                                  if (isEditing) {
+                                    necesitaCifrarUpdate =
+                                        await _actualizarJurado(
+                                      id: jurado!['id'],
+                                      nombre: nombre,
+                                      usuario: usuario,
+                                      password: password,
+                                      categorias: categoriasSeleccionadas,
+                                      eventoId: eventoSeleccionado!,
+                                      eventoNombre: eventoNombre,
+                                    );
+                                    if (necesitaCifrarUpdate) {
+                                      juradoIdParaCifrar = jurado!['id'];
+                                    }
+                                  } else {
+                                    juradoIdParaCifrar = await _crearJurado(
+                                      nombre: nombre,
+                                      usuario: usuario,
+                                      password: password,
+                                      categorias: categoriasSeleccionadas,
+                                      eventoId: eventoSeleccionado!,
+                                      eventoNombre: eventoNombre,
+                                    );
+                                  }
+                                } catch (e) {
+                                  _showSnackBar('Error: $e', isError: true);
+                                  setDialogState(() => isLoading = false);
+                                  return;
+                                }
+
+                                setDialogState(() => isLoading = false);
+
+                                // Cerrar diálogo ANTES de cifrar y recargar
+                                if (mounted) Navigator.pop(ctx);
+
+                                // Cifrar DESPUÉS de cerrar
+                                if (juradoIdParaCifrar != null) {
+                                  await JuradoSecurityService
+                                      .encryptAndSavePassword(
+                                    juradoId: juradoIdParaCifrar,
+                                    password: passwordParaCifrar,
+                                  );
+                                }
+
+                                // Recargar y notificar
+                                _showSnackBar(isEditing
+                                    ? 'Jurado actualizado exitosamente'
+                                    : 'Jurado creado exitosamente');
+                                await _cargarJurados();
+                              },
+                        icon: isLoading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2),
+                              )
+                            : Icon(
+                                isEditing
+                                    ? Icons.save_rounded
+                                    : Icons.person_add_rounded,
+                                size: 18),
+                        label: Text(
+                          isLoading
+                              ? 'Guardando...'
+                              : isEditing
+                                  ? 'Guardar cambios'
+                                  : 'Crear Jurado',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 14),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1E3A5F),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            ),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(22),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── Header del diálogo ──────────────────────────────
-                  Row(
-                    children: [
-                      Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E3A5F),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          isEditing
-                              ? Icons.edit_rounded
-                              : Icons.person_add_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              isEditing ? 'Editar Jurado' : 'Nuevo Jurado',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF1E3A5F),
-                              ),
-                            ),
-                            const Text(
-                              'Completa los datos del jurado',
-                              style: TextStyle(
-                                  fontSize: 11, color: Color(0xFF94A3B8)),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        icon: const Icon(Icons.close_rounded,
-                            color: Color(0xFF94A3B8), size: 20),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-
-                  // ── Chip de ubicación ────────────────────────────────
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF0F5FF),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFCBD9F5)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.school_rounded,
-                            color: Color(0xFF3B6FD4), size: 16),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            '$_carreraNombre · $_facultad · $_filialNombre',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF1E3A5F),
-                              fontWeight: FontWeight.w500,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-
-                  // ── Sección: Datos personales ────────────────────────
-                  _buildDialogSectionLabel('Datos personales',
-                      Icons.person_rounded, const Color(0xFFD4863B)),
-                  const SizedBox(height: 10),
-                  _buildDialogTextField(
-                    controller: nombreCtrl,
-                    label: 'Nombre completo',
-                    icon: Icons.person_outline_rounded,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildDialogTextField(
-                    controller: usuarioCtrl,
-                    label: 'Usuario',
-                    icon: Icons.account_circle_outlined,
-                    enabled: !isEditing,
-                  ),
-                  const SizedBox(height: 12),
-
-                  // FIX M2: campo contraseña con hint explicativo al editar
-                  _buildPasswordField(
-                    controller: passwordCtrl,
-                    obscure: obscurePass,
-                    isEditing: isEditing,
-                    onToggle: () =>
-                        setDialogState(() => obscurePass = !obscurePass),
-                  ),
-                  const SizedBox(height: 18),
-
-                  // ── Sección: Evento ──────────────────────────────────
-                  _buildDialogSectionLabel('Evento asignado',
-                      Icons.event_rounded, const Color(0xFF3B6FD4)),
-                  const SizedBox(height: 10),
-                  _buildEventoDropdown(
-                    eventos: eventos,
-                    eventoSeleccionado: eventoSeleccionado,
-                    isEditing: isEditing,
-                    jurado: jurado,
-                    onChanged: (value) async {
-                      setDialogState(() {
-                        eventoSeleccionado = value;
-                        categorias = [];
-                        if (!isEditing || value != jurado?['eventoId']) {
-                          categoriasSeleccionadas = [];
-                        }
-                        isLoadingCategorias = true;
-                      });
-                      final cats =
-                          await _cargarCategoriasPorEvento(value!);
-                      setDialogState(() {
-                        categorias = cats;
-                        isLoadingCategorias = false;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 18),
-
-                  // ── Sección: Categorías ──────────────────────────────
-                  if (eventoSeleccionado != null) ...[
-                    _buildDialogSectionLabel('Categorías',
-                        Icons.category_rounded, const Color(0xFF8B4DC7)),
-                    const SizedBox(height: 10),
-                    _buildCategoriasPanel(
-                      categorias: categorias,
-                      seleccionadas: categoriasSeleccionadas,
-                      isLoading: isLoadingCategorias,
-                      onChanged: (cat, selected) => setDialogState(() {
-                        if (selected) {
-                          categoriasSeleccionadas.add(cat);
-                        } else {
-                          categoriasSeleccionadas.remove(cat);
-                        }
-                      }),
-                    ),
-
-                    // Chips de seleccionadas
-                    if (categoriasSeleccionadas.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: categoriasSeleccionadas
-                            .asMap()
-                            .entries
-                            .map((e) {
-                          final color = _categoryColors[
-                              e.key % _categoryColors.length];
-                          return AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            child: Chip(
-                              label: Text(
-                                e.value,
-                                style: const TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600),
-                              ),
-                              backgroundColor: color,
-                              deleteIcon: const Icon(Icons.close_rounded,
-                                  size: 14, color: Colors.white),
-                              onDeleted: () => setDialogState(() =>
-                                  categoriasSeleccionadas.remove(e.value)),
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 4),
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                              side: BorderSide.none,
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                    const SizedBox(height: 18),
-                  ],
-
-                  // ── Botones ──────────────────────────────────────────
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          style: TextButton.styleFrom(
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              side: const BorderSide(
-                                  color: Color(0xFFE2E8F0)),
-                            ),
-                          ),
-                          child: const Text(
-                            'Cancelar',
-                            style: TextStyle(
-                                color: Color(0xFF64748B),
-                                fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton.icon(
-                          onPressed: isLoading
-                              ? null
-                              : () async {
-                                  final nombre = nombreCtrl.text.trim();
-                                  final usuario = usuarioCtrl.text.trim();
-                                  final password = passwordCtrl.text;
-
-                                  if (nombre.isEmpty || usuario.isEmpty) {
-                                    _showSnackBar('Completa todos los campos',
-                                        isWarning: true);
-                                    return;
-                                  }
-
-                                  // Contraseña obligatoria solo al crear
-                                  if (!isEditing && password.isEmpty) {
-                                    _showSnackBar(
-                                        'La contraseña es obligatoria',
-                                        isWarning: true);
-                                    return;
-                                  }
-                                  if (eventoSeleccionado == null) {
-                                    _showSnackBar('Selecciona un evento',
-                                        isWarning: true);
-                                    return;
-                                  }
-                                  if (categoriasSeleccionadas.isEmpty) {
-                                    _showSnackBar(
-                                        'Selecciona al menos una categoría',
-                                        isWarning: true);
-                                    return;
-                                  }
-                                  final eventoNombre = eventos.firstWhere(
-                                    (e) => e['id'] == eventoSeleccionado,
-                                    orElse: () => {'name': ''},
-                                  )['name'] as String;
-
-                                  setDialogState(() => isLoading = true);
-                                  try {
-                                    if (isEditing) {
-                                      await _actualizarJurado(
-                                        id: jurado!['id'],
-                                        nombre: nombre,
-                                        usuario: usuario,
-                                        password: password,
-                                        categorias: categoriasSeleccionadas,
-                                        eventoId: eventoSeleccionado!,
-                                        eventoNombre: eventoNombre,
-                                      );
-                                    } else {
-                                      await _crearJurado(
-                                        nombre: nombre,
-                                        usuario: usuario,
-                                        password: password,
-                                        categorias: categoriasSeleccionadas,
-                                        eventoId: eventoSeleccionado!,
-                                        eventoNombre: eventoNombre,
-                                      );
-                                    }
-                                    if (mounted) Navigator.pop(ctx);
-                                  } catch (e) {
-                                    _showSnackBar('Error: $e', isError: true);
-                                  } finally {
-                                    setDialogState(() => isLoading = false);
-                                  }
-                                },
-                          icon: isLoading
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                      color: Colors.white, strokeWidth: 2),
-                                )
-                              : Icon(
-                                  isEditing
-                                      ? Icons.save_rounded
-                                      : Icons.person_add_rounded,
-                                  size: 18),
-                          label: Text(
-                            isLoading
-                                ? 'Guardando...'
-                                : isEditing
-                                    ? 'Guardar cambios'
-                                    : 'Crear Jurado',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w700, fontSize: 14),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1E3A5F),
-                            foregroundColor: Colors.white,
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 14),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
             ),
           ),
         ),
       ),
-    );
-
-    // Liberar controllers al cerrar el diálogo
-    nombreCtrl.dispose();
-    usuarioCtrl.dispose();
-    passwordCtrl.dispose();
-  }
+    ),
+  );
+}
 
   void _showSnackBar(String msg,
       {bool isError = false, bool isWarning = false}) {
@@ -1274,55 +1283,103 @@ class _GestionJuradosCarreraScreenState
   }
 
   // FIX M2: parámetro isEditing para mostrar hint de contraseña
-  Widget _buildPasswordField({
-    required TextEditingController controller,
-    required bool obscure,
-    required bool isEditing,
-    required VoidCallback onToggle,
-  }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obscure,
-      decoration: InputDecoration(
-        labelText: 'Contraseña',
-        labelStyle:
-            const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-        prefixIcon: const Icon(Icons.lock_outline_rounded,
-            color: Color(0xFF1E3A5F), size: 20),
-        suffixIcon: IconButton(
-          icon: Icon(
-            obscure
-                ? Icons.visibility_off_rounded
-                : Icons.visibility_rounded,
-            color: Colors.grey[400],
-            size: 20,
+ Widget _buildPasswordField({
+  required TextEditingController controller,
+  required bool obscure,
+  required bool isEditing,
+  required VoidCallback onToggle,
+}) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (isEditing) ...[
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8E1),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFFFE082)),
           ),
-          onPressed: onToggle,
+          child: const Row(
+            children: [
+              Icon(Icons.info_outline_rounded,
+                  color: Color(0xFFD4863B), size: 15),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Esta es la contraseña actual del jurado. '
+                  'Puedes copiarla o escribir una nueva.',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF7D5A00)),
+                ),
+              ),
+            ],
+          ),
         ),
-        // FIX M2: hint explicativo cuando se está editando
-        helperText: isEditing
-            ? 'Dejar vacío para no cambiar la contraseña actual'
-            : null,
-        helperStyle:
-            const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-        border:
-            OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        const SizedBox(height: 8),
+      ],
+      TextFormField(
+        controller: controller,
+        obscureText: obscure,
+        decoration: InputDecoration(
+          labelText: isEditing ? 'Contraseña actual' : 'Contraseña',
+          labelStyle:
+              const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+          prefixIcon: const Icon(Icons.lock_outline_rounded,
+              color: Color(0xFF1E3A5F), size: 20),
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Botón copiar
+              IconButton(
+                icon: const Icon(Icons.copy_rounded,
+                    color: Color(0xFF3B6FD4), size: 19),
+                tooltip: 'Copiar contraseña',
+                onPressed: () {
+                  if (controller.text.isNotEmpty) {
+                    Clipboard.setData(
+                        ClipboardData(text: controller.text));
+                    _showSnackBar('Contraseña copiada al portapapeles');
+                  }
+                },
+              ),
+              // Mostrar/ocultar
+              IconButton(
+                icon: Icon(
+                  obscure
+                      ? Icons.visibility_off_rounded
+                      : Icons.visibility_rounded,
+                  color: Colors.grey[400],
+                  size: 20,
+                ),
+                onPressed: onToggle,
+              ),
+            ],
+          ),
+          helperText: isEditing
+              ? 'Dejar vacío para no cambiar la contraseña'
+              : null,
+          helperStyle:
+              const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+          border:
+              OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide:
+                const BorderSide(color: Color(0xFF1E3A5F), width: 1.5),
+          ),
+          filled: true,
+          fillColor: const Color(0xFFF8FAFC),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: Color(0xFF1E3A5F), width: 1.5),
-        ),
-        filled: true,
-        fillColor: const Color(0xFFF8FAFC),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       ),
-    );
-  }
+    ],
+  );
+}
 
   Widget _buildEventoDropdown({
     required List<Map<String, dynamic>> eventos,

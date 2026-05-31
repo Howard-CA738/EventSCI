@@ -12,12 +12,10 @@ class EvaluacionesCarreraExcelService {
   static const _navy        = '#0F2044';
   static const _cobalt      = '#1A3A6E';
   static const _purple      = '#7C3AED';
-  static const _purpleLight = '#EDE9FE';
   static const _purpleSoft  = '#F5F3FF';
   static const _white       = '#FFFFFF';
   static const _gray900     = '#111827';
   static const _gray700     = '#374151';
-  static const _gray400     = '#9CA3AF';
   static const _gray100     = '#F3F4F6';
   static const _greenDark   = '#166534';
   static const _greenLight  = '#DCFCE7';
@@ -25,8 +23,6 @@ class EvaluacionesCarreraExcelService {
   static const _yellowLight = '#FEF9C3';
   static const _redDark     = '#991B1B';
   static const _redLight    = '#FEE2E2';
-  static const _blueDark    = '#1E40AF';
-  static const _blueLight   = '#DBEAFE';
 
   Future<String?> generarReporteEvaluaciones({
     required List<Map<String, dynamic>> evaluaciones,
@@ -130,13 +126,7 @@ class EvaluacionesCarreraExcelService {
       verticalAlign: VerticalAlign.Center,
       textWrapping: TextWrapping.WrapText,
     );
-    final sEncGreen = CellStyle(
-      bold: true, fontSize: 9,
-      fontColorHex: ExcelColor.fromHexString(_white),
-      backgroundColorHex: ExcelColor.fromHexString('#059669'),
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Center,
-    );
+  
     final sDatoIzq = CellStyle(
       fontSize: 9,
       fontColorHex: ExcelColor.fromHexString(_gray900),
@@ -191,7 +181,7 @@ class EvaluacionesCarreraExcelService {
     // ── Banner ────────────────────────────────────────────────────────────────
     _cel(sheet, 0, 0, '  REPORTE DE EVALUACIONES POR PROYECTO', sTitulo);
     _cel(sheet, 1, 0, '  ${eventoNombre.toUpperCase()}', sSubtitulo);
-    const lastCol = 6;
+    const lastCol = 5;
     for (int c = 0; c <= lastCol; c++) _cel(sheet, 2, c, '', sSep);
     sheet.setRowHeight(2, 4);
 
@@ -237,9 +227,8 @@ class EvaluacionesCarreraExcelService {
     _cel(sheet, fEnc, 1, 'CÓDIGO', sEncDim);
     _cel(sheet, fEnc, 2, 'TÍTULO', sEncDim);
     _cel(sheet, fEnc, 3, 'JURADOS\nEVALUADOS', sEncVal);
-    _cel(sheet, fEnc, 4, 'NOTA\nPROMEDIO', sEncGreen);
+  _cel(sheet, fEnc, 4, 'NOTA\nFINAL', sEncDim);
     _cel(sheet, fEnc, 5, 'NOTA\nMÁXIMA', sEncVal);
-    _cel(sheet, fEnc, 6, 'ESTADO', sEncVal);
     sheet.setRowHeight(fEnc, 30);
 
     int idx = 0;
@@ -255,7 +244,6 @@ class EvaluacionesCarreraExcelService {
       final titulo = evs.first['titulo']?.toString() ?? 'Sin título';
       final evaluadasList = evs.where((e) => e['evaluada'] == true).toList();
       final juradosEval = evaluadasList.length;
-      final total = evs.length;
 
       double promedio = 0;
       if (evaluadasList.isNotEmpty) {
@@ -271,9 +259,6 @@ class EvaluacionesCarreraExcelService {
               .reduce((a, b) => a > b ? a : b);
 
       final bloqueadas = evs.where((e) => e['bloqueada'] == true).length;
-      final estado = bloqueadas > 0
-          ? '🔒 $bloqueadas bloqueada(s)'
-          : (juradosEval == total ? '✅ Completo' : '⏳ $juradosEval/$total');
 
       final ratio = notaMax > 0 ? promedio / notaMax : 0.0;
       final sBadge = bloqueadas > 0
@@ -292,7 +277,6 @@ class EvaluacionesCarreraExcelService {
       _celNum(sheet, fila, 3, juradosEval, sC);
       _celDec(sheet, fila, 4, promedio, sBadge);
       _celDec(sheet, fila, 5, notaMaxEv, sC);
-      _cel(sheet, fila, 6, estado, sC);
       sheet.setRowHeight(fila, 18);
       idx++;
     }
@@ -366,13 +350,7 @@ class EvaluacionesCarreraExcelService {
       verticalAlign: VerticalAlign.Center,
       textWrapping: TextWrapping.WrapText,
     );
-    final sEncGreen = CellStyle(
-      bold: true, fontSize: 9,
-      fontColorHex: ExcelColor.fromHexString(_white),
-      backgroundColorHex: ExcelColor.fromHexString('#059669'),
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Center,
-    );
+
     final sIzq  = CellStyle(fontSize: 9, fontColorHex: ExcelColor.fromHexString(_gray900));
     final sCen  = CellStyle(fontSize: 9, fontColorHex: ExcelColor.fromHexString(_gray900), horizontalAlign: HorizontalAlign.Center);
     final sIzqP = CellStyle(fontSize: 9, backgroundColorHex: ExcelColor.fromHexString(_purpleSoft), fontColorHex: ExcelColor.fromHexString(_gray900));
@@ -383,12 +361,14 @@ class EvaluacionesCarreraExcelService {
       fontColorHex: ExcelColor.fromHexString(_greenDark),
       horizontalAlign: HorizontalAlign.Center,
     );
+
     final sBadgeMedio = CellStyle(
       bold: true, fontSize: 9,
       backgroundColorHex: ExcelColor.fromHexString(_yellowLight),
       fontColorHex: ExcelColor.fromHexString(_yellowDark),
       horizontalAlign: HorizontalAlign.Center,
     );
+    
     final sBadgeBajo = CellStyle(
       bold: true, fontSize: 9,
       backgroundColorHex: ExcelColor.fromHexString(_redLight),
@@ -429,7 +409,7 @@ class EvaluacionesCarreraExcelService {
       }
     }
 
-    const colsBase = 7; // N°, Código, Título, Jurado, Rúbrica, Nota Total, Estado
+    const colsBase = 6; // N°, Código, Título, Jurado, Rúbrica, Nota Total, Estado
     final lastCol = colsBase - 1 + criteriosUnicos.length;
 
     // ── Banner ────────────────────────────────────────────────────────────────
@@ -462,8 +442,7 @@ class EvaluacionesCarreraExcelService {
     _cel(sheet, fEnc, 2, 'TÍTULO', sEnc);
     _cel(sheet, fEnc, 3, 'JURADO', sEnc);
     _cel(sheet, fEnc, 4, 'RÚBRICA', sEnc);
-    _cel(sheet, fEnc, 5, 'NOTA\nTOTAL', sEncGreen);
-    _cel(sheet, fEnc, 6, 'ESTADO', sEnc);
+    _cel(sheet, fEnc, 5, 'NOTA\nFINAL', sEnc);
     for (int c = 0; c < criteriosUnicos.length; c++) {
       final crit = criteriosUnicos[c];
       _cel(
@@ -509,19 +488,12 @@ class EvaluacionesCarreraExcelService {
         sBadgeNota = sBadgeBajo;
       }
 
-      final estado = bloqueada
-          ? '🔒 Bloqueada'
-          : evaluada
-              ? '✅ Evaluada'
-              : '⏳ Pendiente';
-
       _celNum(sheet, fila, 0, i + 1, sC);
       _cel(sheet, fila, 1, ev['codigo']?.toString() ?? '—', sC);
       _cel(sheet, fila, 2, ev['titulo']?.toString() ?? 'Sin título', sI);
       _cel(sheet, fila, 3, ev['juradoNombre']?.toString() ?? '—', sI);
       _cel(sheet, fila, 4, rubricaNombre, sI);
       _celDec(sheet, fila, 5, notaTotal, sBadgeNota);
-      _cel(sheet, fila, 6, estado, sC);
 
       for (int c = 0; c < criteriosUnicos.length; c++) {
         final critId = criteriosUnicos[c]['id']!;
@@ -547,7 +519,6 @@ class EvaluacionesCarreraExcelService {
     sheet.setColumnWidth(3, 22);
     sheet.setColumnWidth(4, 18);
     sheet.setColumnWidth(5, 12);
-    sheet.setColumnWidth(6, 14);
     for (int c = 0; c < criteriosUnicos.length; c++) {
       sheet.setColumnWidth(colsBase + c, 18);
     }

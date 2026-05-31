@@ -27,6 +27,29 @@ class EncryptionHelper {
     }
   }
 
+static String encryptPassword(String plainPassword) {
+  try {
+    if (plainPassword.trim().isEmpty) return '';
+    final encrypter = enc.Encrypter(enc.AES(_key, mode: enc.AESMode.cbc));
+    final encrypted = encrypter.encrypt(plainPassword.trim(), iv: _iv);
+    return encrypted.base64;
+  } catch (e) {
+    debugPrint('❌ Error en encryptPassword: $e');
+    return '';
+  }
+}
+
+static String decryptPassword(String encryptedBase64) {
+  try {
+    if (encryptedBase64.trim().isEmpty) return '';
+    final encrypter = enc.Encrypter(enc.AES(_key, mode: enc.AESMode.cbc));
+    final encrypted = enc.Encrypted.fromBase64(encryptedBase64);
+    return encrypter.decrypt(encrypted, iv: _iv);
+  } catch (e) {
+    debugPrint('❌ Error en decryptPassword: $e');
+    return '';
+  }
+}
   static String decryptDni(String encryptedBase64) {
     try {
       if (encryptedBase64.trim().isEmpty) return 'Sin DNI';
