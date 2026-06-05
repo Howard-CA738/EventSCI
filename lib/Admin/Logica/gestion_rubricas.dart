@@ -15,15 +15,15 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
   List<Rubrica> _rubricasFiltradas = [];
   bool _isLoading = true;
 
-  // ✅ NUEVO: Variables de filtros con filiales
   String? _filtroFilial;
   String? _filtroFacultad;
   String? _filtroCarrera;
 
-  // ✅ NUEVO: Listas dinámicas
   List<String> _filialesDisponibles = [];
   List<String> _facultadesDisponibles = [];
   List<Map<String, dynamic>> _carrerasDisponibles = [];
+
+  final Map<String, String> _cacheNombresFiliales = {};
 
   @override
   void initState() {
@@ -33,12 +33,9 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
 
   Future<void> _cargarDatos() async {
     setState(() => _isLoading = true);
-
     try {
-      // Cargar filiales y rúbricas
       final filiales = await _service.getFiliales();
       final rubricas = await _service.obtenerRubricas();
-
       setState(() {
         _filialesDisponibles = filiales;
         _rubricas = rubricas;
@@ -46,12 +43,20 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('❌ Error cargando datos: $e');
+      debugPrint('Error cargando datos: $e');
       setState(() => _isLoading = false);
     }
   }
 
-  // ✅ NUEVO: Cuando cambia la filial
+  Future<String> _getNombreFilialCached(String filialId) async {
+    if (_cacheNombresFiliales.containsKey(filialId)) {
+      return _cacheNombresFiliales[filialId]!;
+    }
+    final nombre = await _service.getNombreFilial(filialId);
+    _cacheNombresFiliales[filialId] = nombre;
+    return nombre;
+  }
+
   Future<void> _onFilialChanged(String? filial) async {
     setState(() {
       _filtroFilial = filial;
@@ -60,35 +65,34 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
       _facultadesDisponibles = [];
       _carrerasDisponibles = [];
     });
-
     if (filial != null) {
       final facultades = await _service.getFacultadesByFilial(filial);
-      setState(() {
-        _facultadesDisponibles = facultades;
-      });
+      if (mounted) {
+        setState(() {
+          _facultadesDisponibles = facultades;
+        });
+      }
     }
-
     _aplicarFiltros();
   }
 
-  // ✅ NUEVO: Cuando cambia la facultad
   Future<void> _onFacultadChanged(String? facultad) async {
     setState(() {
       _filtroFacultad = facultad;
       _filtroCarrera = null;
       _carrerasDisponibles = [];
     });
-
     if (_filtroFilial != null && facultad != null) {
       final carreras = await _service.getCarrerasByFacultad(
         _filtroFilial!,
         facultad,
       );
-      setState(() {
-        _carrerasDisponibles = carreras;
-      });
+      if (mounted) {
+        setState(() {
+          _carrerasDisponibles = carreras;
+        });
+      }
     }
-
     _aplicarFiltros();
   }
 
@@ -140,11 +144,9 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
         ],
       ),
     );
-
     if (confirm == true) {
       final success = await _service.eliminarRubrica(rubricaId);
       if (!mounted) return;
-
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -165,7 +167,6 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
   }
 
   void _navegarACrearRubrica() {
-    // Validar que se haya seleccionado filial y facultad
     if (_filtroFilial == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -175,7 +176,6 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
       );
       return;
     }
-
     if (_filtroFacultad == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -185,7 +185,6 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
       );
       return;
     }
-
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -219,8 +218,8 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : _rubricasFiltradas.isEmpty
-                    ? _buildEmptyState()
-                    : _buildRubricasList(),
+                        ? _buildEmptyState()
+                        : _buildRubricasList(),
               ),
             ),
           ],
@@ -265,178 +264,164 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
       color: const Color(0xFF1E3A5F),
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ✅ Filial
-          Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                isExpanded: true,
-                hint: const Text('Seleccionar Filial'),
-                value: _filtroFilial,
-                items: _filialesDisponibles.map((filialId) {
-                  return DropdownMenuItem(
-                    value: filialId,
-                    child: FutureBuilder<String>(
-                      future: _service.getNombreFilial(filialId),
-                      builder: (context, snapshot) {
-                        return Text(
-                          snapshot.data ?? filialId,
-                          style: const TextStyle(fontSize: 14),
-                        );
-                      },
-                    ),
-                  );
-                }).toList(),
-                onChanged: _onFilialChanged,
-              ),
-            ),
+          _buildDropdownContainer(
+            hint: 'Seleccionar Filial',
+            value: _filtroFilial,
+            items: _filialesDisponibles.map((filialId) {
+              return DropdownMenuItem<String>(
+                value: filialId,
+                child: _FilialDropdownItem(
+                  filialId: filialId,
+                  service: _service,
+                  cache: _cacheNombresFiliales,
+                ),
+              );
+            }).toList(),
+            onChanged: _onFilialChanged,
           ),
-
-          // ✅ Facultad
-          if (_filtroFilial != null)
-            Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  isExpanded: true,
-                  hint: const Text('Seleccionar Facultad'),
-                  value: _filtroFacultad,
-                  items: _facultadesDisponibles.map((facultad) {
-                    return DropdownMenuItem(
-                      value: facultad,
-                      child: Text(
-                        facultad,
-                        style: const TextStyle(fontSize: 14),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: _onFacultadChanged,
-                ),
-              ),
+          if (_filtroFilial != null) ...[
+            const SizedBox(height: 8),
+            _buildDropdownContainer(
+              hint: 'Seleccionar Facultad',
+              value: _filtroFacultad,
+              items: _facultadesDisponibles.map((facultad) {
+                return DropdownMenuItem<String>(
+                  value: facultad,
+                  child: Text(
+                    facultad,
+                    style: const TextStyle(fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                );
+              }).toList(),
+              onChanged: _onFacultadChanged,
             ),
-
-          // ✅ Carrera
-          if (_filtroFacultad != null && _carrerasDisponibles.isNotEmpty)
-            Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  isExpanded: true,
-                  hint: const Text('Seleccionar Carrera (opcional)'),
-                  value: _filtroCarrera,
-                  items: _carrerasDisponibles.map((carrera) {
-                    return DropdownMenuItem(
-                      value: carrera['nombre'] as String,
-                      child: Text(
-                        carrera['nombre'] as String,
-                        style: const TextStyle(fontSize: 14),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: _onCarreraChanged,
-                ),
-              ),
+          ],
+          if (_filtroFacultad != null && _carrerasDisponibles.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildDropdownContainer(
+              hint: 'Seleccionar Carrera (opcional)',
+              value: _filtroCarrera,
+              items: _carrerasDisponibles.map((carrera) {
+                return DropdownMenuItem<String>(
+                  value: carrera['nombre'] as String,
+                  child: Text(
+                    carrera['nombre'] as String,
+                    style: const TextStyle(fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                );
+              }).toList(),
+              onChanged: _onCarreraChanged,
             ),
-
-          // Info y limpiar
-          if (_filtroFilial != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Mostrando ${_rubricasFiltradas.length} de ${_rubricas.length} rúbricas',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
+          ],
+          if (_filtroFilial != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Mostrando ${_rubricasFiltradas.length} de ${_rubricas.length} rúbricas',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
                     ),
                   ),
-                  TextButton.icon(
-                    onPressed: _limpiarFiltros,
-                    icon: const Icon(
-                      Icons.clear,
-                      size: 16,
-                      color: Colors.white,
-                    ),
-                    label: const Text(
-                      'Limpiar',
-                      style: TextStyle(color: Colors.white),
-                    ),
+                ),
+                TextButton.icon(
+                  onPressed: _limpiarFiltros,
+                  icon: const Icon(Icons.clear, size: 16, color: Colors.white),
+                  label: const Text(
+                    'Limpiar',
+                    style: TextStyle(color: Colors.white),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildDropdownContainer({
+    required String hint,
+    required String? value,
+    required List<DropdownMenuItem<String>> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          isExpanded: true,
+          hint: Text(hint, overflow: TextOverflow.ellipsis),
+          value: value,
+          items: items,
+          onChanged: onChanged,
+        ),
       ),
     );
   }
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 100,
-            height: 100,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 100,
+              height: 100,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+              padding: const EdgeInsets.all(20),
+              child: const Icon(
+                Icons.checklist,
+                size: 50,
+                color: Color(0xFF1E3A5F),
+              ),
             ),
-            padding: const EdgeInsets.all(20),
-            child: const Icon(
-              Icons.checklist,
-              size: 50,
-              color: Color(0xFF1E3A5F),
+            const SizedBox(height: 20),
+            Text(
+              _filtroFilial != null
+                  ? 'No hay rúbricas con estos filtros'
+                  : 'No hay rúbricas creadas',
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E3A5F),
+              ),
+              textAlign: TextAlign.center,
             ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            _filtroFilial != null
-                ? 'No hay rúbricas con estos filtros'
-                : 'No hay rúbricas creadas',
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E3A5F),
+            const SizedBox(height: 10),
+            Text(
+              _filtroFilial != null
+                  ? 'Intenta con otros filtros'
+                  : 'Selecciona una filial y facultad para crear tu primera rúbrica',
+              style: const TextStyle(fontSize: 14, color: Color(0xFF64748B)),
+              textAlign: TextAlign.center,
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            _filtroFilial != null
-                ? 'Intenta con otros filtros'
-                : 'Selecciona una filial y facultad para crear tu primera rúbrica',
-            style: const TextStyle(fontSize: 14, color: Color(0xFF64748B)),
-            textAlign: TextAlign.center,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildRubricasList() {
     return ListView.builder(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
       itemCount: _rubricasFiltradas.length,
       itemBuilder: (context, index) {
         final rubrica = _rubricasFiltradas[index];
@@ -451,7 +436,8 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => EditarRubricaScreen(rubrica: rubrica),
+                  builder: (context) =>
+                      EditarRubricaScreen(rubrica: rubrica),
                 ),
               );
               _cargarDatos();
@@ -468,7 +454,7 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1A5490).withValues(alpha:0.1),
+                          color: const Color(0xFF1A5490).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Icon(
@@ -492,9 +478,9 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            // ✅ Mostrar filial, facultad y carrera
                             FutureBuilder<String>(
-                              future: _service.getNombreFilial(rubrica.filial),
+                              future:
+                                  _getNombreFilialCached(rubrica.filial),
                               builder: (context, snapshot) {
                                 final nombreFilial =
                                     snapshot.data ?? rubrica.filial;
@@ -532,14 +518,21 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
                           ],
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: Colors.red,
+                      const SizedBox(width: 4),
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => _eliminarRubrica(rubrica.id),
+                          borderRadius: BorderRadius.circular(22),
+                          child: const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Icon(
+                              Icons.delete_outline,
+                              color: Colors.red,
+                              size: 24,
+                            ),
+                          ),
                         ),
-                        onPressed: () => _eliminarRubrica(rubrica.id),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
                       ),
                     ],
                   ),
@@ -583,7 +576,7 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha:0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -591,12 +584,16 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
         children: [
           Icon(icon, size: 16, color: color),
           const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: color.withValues(alpha:0.9),
-              fontWeight: FontWeight.w500,
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: color.withValues(alpha: 0.9),
+                fontWeight: FontWeight.w500,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ),
         ],
@@ -605,9 +602,52 @@ class _GestionCriteriosScreenState extends State<GestionCriteriosScreen> {
   }
 }
 
-// ============================================================================
-// PANTALLA CREAR RÚBRICA - RECIBE FILIAL, FACULTAD, CARRERA
-// ============================================================================
+class _FilialDropdownItem extends StatefulWidget {
+  final String filialId;
+  final RubricasService service;
+  final Map<String, String> cache;
+
+  const _FilialDropdownItem({
+    required this.filialId,
+    required this.service,
+    required this.cache,
+  });
+
+  @override
+  State<_FilialDropdownItem> createState() => _FilialDropdownItemState();
+}
+
+class _FilialDropdownItemState extends State<_FilialDropdownItem> {
+  late Future<String> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.cache.containsKey(widget.filialId)) {
+      _future = Future.value(widget.cache[widget.filialId]);
+    } else {
+      _future = widget.service.getNombreFilial(widget.filialId).then((nombre) {
+        widget.cache[widget.filialId] = nombre;
+        return nombre;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _future,
+      builder: (context, snapshot) {
+        return Text(
+          snapshot.data ?? widget.filialId,
+          style: const TextStyle(fontSize: 14),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+        );
+      },
+    );
+  }
+}
 
 class CrearRubricaScreen extends StatefulWidget {
   final String filial;
@@ -630,6 +670,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
   final _nombreController = TextEditingController();
   final _descripcionController = TextEditingController();
   final _puntajeMaximoController = TextEditingController(text: '20');
+  final _scrollController = ScrollController();
   final RubricasService _service = RubricasService();
 
   List<SeccionRubrica> _secciones = [];
@@ -645,7 +686,12 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
   }
 
   Future<void> _cargarDatos() async {
-    _nombreFilial = await _service.getNombreFilial(widget.filial);
+    final nombre = await _service.getNombreFilial(widget.filial);
+    if (mounted) {
+      setState(() {
+        _nombreFilial = nombre;
+      });
+    }
     _cargarJurados();
   }
 
@@ -655,7 +701,9 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
       facultad: widget.facultad,
       carrera: widget.carrera,
     );
-    setState(() => _juradosDisponibles = jurados);
+    if (mounted) {
+      setState(() => _juradosDisponibles = jurados);
+    }
   }
 
   void _agregarSeccion() {
@@ -673,7 +721,6 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
 
   Future<void> _guardarRubrica() async {
     if (!_formKey.currentState!.validate()) return;
-
     if (_secciones.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -683,9 +730,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
       );
       return;
     }
-
     setState(() => _isLoading = true);
-
     final rubrica = Rubrica(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       nombre: _nombreController.text.trim(),
@@ -698,12 +743,9 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
       facultad: widget.facultad,
       carrera: widget.carrera,
     );
-
     final success = await _service.crearRubrica(rubrica);
-
     if (!mounted) return;
     setState(() => _isLoading = false);
-
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -740,6 +782,9 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
                   ),
                 ),
                 child: SingleChildScrollView(
+                  controller: _scrollController,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: const EdgeInsets.all(20),
                   child: Form(
                     key: _formKey,
@@ -755,7 +800,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
                         _buildSeccionJurados(),
                         const SizedBox(height: 30),
                         _buildBotonGuardar(),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 40),
                       ],
                     ),
                   ),
@@ -786,6 +831,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -807,12 +853,15 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
               children: [
                 Icon(Icons.info_outline, color: Colors.blue.shade700),
                 const SizedBox(width: 8),
-                Text(
-                  'Ubicación de la Rúbrica',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade900,
+                Expanded(
+                  child: Text(
+                    'Ubicación de la Rúbrica',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade900,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -833,6 +882,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
 
   Widget _buildInfoRow(IconData icon, String label, String value) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, size: 18, color: Colors.blue.shade700),
         const SizedBox(width: 8),
@@ -848,6 +898,8 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
           child: Text(
             value,
             style: TextStyle(fontSize: 13, color: Colors.blue.shade800),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
           ),
         ),
       ],
@@ -874,6 +926,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _nombreController,
+              textInputAction: TextInputAction.next,
               decoration: InputDecoration(
                 labelText: 'Nombre de la Rúbrica',
                 prefixIcon: const Icon(Icons.title),
@@ -888,6 +941,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _descripcionController,
+              textInputAction: TextInputAction.next,
               decoration: InputDecoration(
                 labelText: 'Descripción (opcional)',
                 prefixIcon: const Icon(Icons.description),
@@ -902,6 +956,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _puntajeMaximoController,
+              textInputAction: TextInputAction.done,
               decoration: InputDecoration(
                 labelText: 'Puntaje Máximo',
                 prefixIcon: const Icon(Icons.stars),
@@ -931,7 +986,6 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Expanded(
                   child: Text(
@@ -941,6 +995,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF1E3A5F),
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -972,7 +1027,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
                 },
                 onActualizar: () => setState(() {}),
               );
-            }).toList(),
+            }),
           ],
         ),
       ),
@@ -989,35 +1044,31 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Asignar Jurados',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A5F),
+                const Expanded(
+                  child: Text(
+                    'Asignar Jurados',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E3A5F),
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Row(
-                  children: [
-                    Text(
-                      '${_juradosSeleccionados.length} seleccionados',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.refresh, size: 20),
-                      onPressed: _cargarJurados,
-                      tooltip: 'Recargar jurados',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
+                Text(
+                  '${_juradosSeleccionados.length} seleccionados',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 20),
+                  onPressed: _cargarJurados,
+                  tooltip: 'Recargar jurados',
                 ),
               ],
             ),
@@ -1060,31 +1111,35 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
               )
             else
               ..._juradosDisponibles.map((jurado) {
-                final isSelected = _juradosSeleccionados.contains(jurado['id']);
+                final isSelected =
+                    _juradosSeleccionados.contains(jurado['id']);
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   color: isSelected ? Colors.green.shade50 : Colors.white,
                   child: CheckboxListTile(
                     title: Text(
-                      jurado['nombre'],
+                      jurado['nombre'] as String? ?? '',
                       style: TextStyle(
-                        fontWeight: isSelected
-                            ? FontWeight.bold
-                            : FontWeight.normal,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
                       ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                     subtitle: Text(
                       '${jurado['carrera']}\n${jurado['facultad']}',
                       style: const TextStyle(fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
                     ),
                     secondary: CircleAvatar(
-                      backgroundColor: isSelected ? Colors.green : Colors.grey,
+                      backgroundColor:
+                          isSelected ? Colors.green : Colors.grey,
                       child: Text(
-                        jurado['nombre'].toString().isNotEmpty
-                            ? jurado['nombre']
-                                  .toString()
-                                  .substring(0, 1)
-                                  .toUpperCase()
+                        (jurado['nombre'] as String? ?? '').isNotEmpty
+                            ? (jurado['nombre'] as String)
+                                .substring(0, 1)
+                                .toUpperCase()
                             : '?',
                         style: const TextStyle(color: Colors.white),
                       ),
@@ -1094,15 +1149,16 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
                     onChanged: (selected) {
                       setState(() {
                         if (selected == true) {
-                          _juradosSeleccionados.add(jurado['id']);
+                          _juradosSeleccionados.add(jurado['id'] as String);
                         } else {
-                          _juradosSeleccionados.remove(jurado['id']);
+                          _juradosSeleccionados
+                              .remove(jurado['id'] as String);
                         }
                       });
                     },
                   ),
                 );
-              }).toList(),
+              }),
           ],
         ),
       ),
@@ -1118,6 +1174,7 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
         padding: const EdgeInsets.symmetric(vertical: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         elevation: 4,
+        minimumSize: const Size(double.infinity, 52),
       ),
       child: _isLoading
           ? const SizedBox(
@@ -1140,13 +1197,10 @@ class _CrearRubricaScreenState extends State<CrearRubricaScreen> {
     _nombreController.dispose();
     _descripcionController.dispose();
     _puntajeMaximoController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 }
-
-// ============================================================================
-// WIDGETS REUTILIZABLES (igual que antes)
-// ============================================================================
 
 class _SeccionWidget extends StatefulWidget {
   final SeccionRubrica seccion;
@@ -1194,18 +1248,20 @@ class _SeccionWidgetState extends State<_SeccionWidget> {
         subtitle: Text(
           '${widget.seccion.criterios.length} criterios - ${widget.seccion.pesoTotal} pts',
           style: const TextStyle(fontSize: 12),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         ),
-        trailing: SizedBox(
-          width: 40,
-          child: IconButton(
-            icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-            onPressed: widget.onEliminar,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
+        trailing: InkWell(
+          onTap: widget.onEliminar,
+          borderRadius: BorderRadius.circular(20),
+          child: const Padding(
+            padding: EdgeInsets.all(8),
+            child: Icon(Icons.delete, color: Colors.red, size: 22),
           ),
         ),
         children: [
           Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               TextFormField(
                 initialValue: widget.seccion.nombre,
@@ -1248,7 +1304,7 @@ class _SeccionWidgetState extends State<_SeccionWidget> {
                   },
                   onActualizar: widget.onActualizar,
                 );
-              }).toList(),
+              }),
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
@@ -1290,6 +1346,7 @@ class _CriterioWidget extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextFormField(
               initialValue: criterio.descripcion,
@@ -1327,15 +1384,16 @@ class _CriterioWidget extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
+                Material(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  child: InkWell(
+                    onTap: onEliminar,
                     borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                    onPressed: onEliminar,
-                    tooltip: 'Eliminar',
+                    child: const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Icon(Icons.delete, color: Colors.red, size: 22),
+                    ),
                   ),
                 ),
               ],
@@ -1347,10 +1405,6 @@ class _CriterioWidget extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// PANTALLA EDITAR RÚBRICA (Similar a CrearRubricaScreen)
-// ============================================================================
-
 class EditarRubricaScreen extends StatefulWidget {
   final Rubrica rubrica;
 
@@ -1361,7 +1415,7 @@ class EditarRubricaScreen extends StatefulWidget {
 }
 
 class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
-  late final _formKey = GlobalKey<FormState>();
+  final _formKey = GlobalKey<FormState>();
   late final _nombreController = TextEditingController(
     text: widget.rubrica.nombre,
   );
@@ -1371,6 +1425,7 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
   late final _puntajeMaximoController = TextEditingController(
     text: widget.rubrica.puntajeMaximo.toString(),
   );
+  final _scrollController = ScrollController();
   final RubricasService _service = RubricasService();
 
   late List<SeccionRubrica> _secciones;
@@ -1388,7 +1443,12 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
   }
 
   Future<void> _cargarDatos() async {
-    _nombreFilial = await _service.getNombreFilial(widget.rubrica.filial);
+    final nombre = await _service.getNombreFilial(widget.rubrica.filial);
+    if (mounted) {
+      setState(() {
+        _nombreFilial = nombre;
+      });
+    }
     _cargarJurados();
   }
 
@@ -1398,7 +1458,9 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
       facultad: widget.rubrica.facultad,
       carrera: widget.rubrica.carrera,
     );
-    setState(() => _juradosDisponibles = jurados);
+    if (mounted) {
+      setState(() => _juradosDisponibles = jurados);
+    }
   }
 
   void _agregarSeccion() {
@@ -1416,7 +1478,6 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
 
   Future<void> _actualizarRubrica() async {
     if (!_formKey.currentState!.validate()) return;
-
     if (_secciones.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1426,9 +1487,7 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
       );
       return;
     }
-
     setState(() => _isLoading = true);
-
     final rubricaActualizada = Rubrica(
       id: widget.rubrica.id,
       nombre: _nombreController.text.trim(),
@@ -1441,23 +1500,18 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
       facultad: widget.rubrica.facultad,
       carrera: widget.rubrica.carrera,
     );
-
     final juradosRemovidos = widget.rubrica.juradosAsignados
         .where((id) => !_juradosSeleccionados.contains(id))
         .toList();
-
     if (juradosRemovidos.isNotEmpty) {
       await _service.eliminarEvaluacionesDeJurados(
         rubricaId: widget.rubrica.id,
         juradosIds: juradosRemovidos,
       );
     }
-
     final success = await _service.actualizarRubrica(rubricaActualizada);
-
     if (!mounted) return;
     setState(() => _isLoading = false);
-
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1498,6 +1552,9 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
                   ),
                 ),
                 child: SingleChildScrollView(
+                  controller: _scrollController,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: const EdgeInsets.all(20),
                   child: Form(
                     key: _formKey,
@@ -1513,7 +1570,7 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
                         _buildSeccionJurados(),
                         const SizedBox(height: 30),
                         _buildBotonGuardar(),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 40),
                       ],
                     ),
                   ),
@@ -1544,6 +1601,7 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -1565,12 +1623,15 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
               children: [
                 Icon(Icons.lock_outline, color: Colors.amber.shade700),
                 const SizedBox(width: 8),
-                Text(
-                  'Ubicación (No editable)',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.amber.shade900,
+                Expanded(
+                  child: Text(
+                    'Ubicación (No editable)',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber.shade900,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -1611,6 +1672,7 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
     MaterialColor color,
   ) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, size: 18, color: color.shade700),
         const SizedBox(width: 8),
@@ -1626,6 +1688,8 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
           child: Text(
             value,
             style: TextStyle(fontSize: 13, color: color.shade800),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
           ),
         ),
       ],
@@ -1652,6 +1716,7 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _nombreController,
+              textInputAction: TextInputAction.next,
               decoration: InputDecoration(
                 labelText: 'Nombre de la Rúbrica',
                 prefixIcon: const Icon(Icons.title),
@@ -1666,6 +1731,7 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _descripcionController,
+              textInputAction: TextInputAction.next,
               decoration: InputDecoration(
                 labelText: 'Descripción (opcional)',
                 prefixIcon: const Icon(Icons.description),
@@ -1680,6 +1746,7 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _puntajeMaximoController,
+              textInputAction: TextInputAction.done,
               decoration: InputDecoration(
                 labelText: 'Puntaje Máximo',
                 prefixIcon: const Icon(Icons.stars),
@@ -1709,7 +1776,6 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Expanded(
                   child: Text(
@@ -1719,6 +1785,7 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF1E3A5F),
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1750,7 +1817,7 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
                 },
                 onActualizar: () => setState(() {}),
               );
-            }).toList(),
+            }),
           ],
         ),
       ),
@@ -1766,13 +1833,34 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Asignar Jurados',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1E3A5F),
-              ),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Asignar Jurados',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E3A5F),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  '${_juradosSeleccionados.length} seleccionados',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 20),
+                  onPressed: _cargarJurados,
+                  tooltip: 'Recargar jurados',
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             if (_juradosDisponibles.isEmpty)
@@ -1804,31 +1892,35 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
               )
             else
               ..._juradosDisponibles.map((jurado) {
-                final isSelected = _juradosSeleccionados.contains(jurado['id']);
+                final isSelected =
+                    _juradosSeleccionados.contains(jurado['id']);
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   color: isSelected ? Colors.green.shade50 : Colors.white,
                   child: CheckboxListTile(
                     title: Text(
-                      jurado['nombre'],
+                      jurado['nombre'] as String? ?? '',
                       style: TextStyle(
-                        fontWeight: isSelected
-                            ? FontWeight.bold
-                            : FontWeight.normal,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
                       ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                     subtitle: Text(
                       '${jurado['carrera']}\n${jurado['facultad']}',
                       style: const TextStyle(fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
                     ),
                     secondary: CircleAvatar(
-                      backgroundColor: isSelected ? Colors.green : Colors.grey,
+                      backgroundColor:
+                          isSelected ? Colors.green : Colors.grey,
                       child: Text(
-                        jurado['nombre'].toString().isNotEmpty
-                            ? jurado['nombre']
-                                  .toString()
-                                  .substring(0, 1)
-                                  .toUpperCase()
+                        (jurado['nombre'] as String? ?? '').isNotEmpty
+                            ? (jurado['nombre'] as String)
+                                .substring(0, 1)
+                                .toUpperCase()
                             : '?',
                         style: const TextStyle(color: Colors.white),
                       ),
@@ -1838,15 +1930,16 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
                     onChanged: (selected) {
                       setState(() {
                         if (selected == true) {
-                          _juradosSeleccionados.add(jurado['id']);
+                          _juradosSeleccionados.add(jurado['id'] as String);
                         } else {
-                          _juradosSeleccionados.remove(jurado['id']);
+                          _juradosSeleccionados
+                              .remove(jurado['id'] as String);
                         }
                       });
                     },
                   ),
                 );
-              }).toList(),
+              }),
           ],
         ),
       ),
@@ -1862,6 +1955,7 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
         padding: const EdgeInsets.symmetric(vertical: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         elevation: 4,
+        minimumSize: const Size(double.infinity, 52),
       ),
       child: _isLoading
           ? const SizedBox(
@@ -1884,6 +1978,7 @@ class _EditarRubricaScreenState extends State<EditarRubricaScreen> {
     _nombreController.dispose();
     _descripcionController.dispose();
     _puntajeMaximoController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 }

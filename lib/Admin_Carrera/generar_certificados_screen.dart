@@ -9,9 +9,6 @@ import 'asignar_codigos_screen.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CONSTANTES DE COLOR
-// ─────────────────────────────────────────────────────────────────────────────
 const _kPrimario       = Color(0xFF1E3A5F);
 const _kPrimario10     = Color(0x1A1E3A5F);
 const _kPrimario40     = Color(0x661E3A5F);
@@ -23,13 +20,6 @@ const _kFondo          = Color(0xFFE8EDF2);
 const _kCampoFondo     = Color(0xFFF8FAFC);
 const _kCampoFondo2    = Color(0xFFF1F5F9);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MODELO UNIFICADO PARA PERSONA (estudiante o jurado)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Representa a cualquier persona que puede recibir un certificado.
-/// Para estudiantes: [id] es el doc en la subcolección students.
-/// Para jurados:     [id] es el doc en la colección raíz users, [esJurado] = true.
 class PersonaCertificado {
   final String id;
   final String nombre;
@@ -50,9 +40,6 @@ class PersonaCertificado {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
 String _fechaActual(String ciudad) {
   final now = DateTime.now();
   const meses = [
@@ -127,9 +114,6 @@ class _Firmante {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PANTALLA PRINCIPAL
-// ─────────────────────────────────────────────────────────────────────────────
 class GenerarCertificadosScreen extends StatefulWidget {
   const GenerarCertificadosScreen({super.key});
 
@@ -140,7 +124,6 @@ class GenerarCertificadosScreen extends StatefulWidget {
 
 class _GenerarCertificadosScreenState
     extends State<GenerarCertificadosScreen> {
-  // ── Datos del admin ──────────────────────────────────────────────────────
   String _carrera  = '';
   String _facultad = '';
   String _sede     = '';
@@ -148,7 +131,6 @@ class _GenerarCertificadosScreenState
   String _filialId  = '';
   String _carreraId = '';
 
-  // ── Firmantes cargados de Firestore ──────────────────────────────────────
   _Firmante _firma1 = const _Firmante();
   _Firmante _firma2 = const _Firmante();
   _Firmante _firma3 = const _Firmante();
@@ -156,7 +138,7 @@ class _GenerarCertificadosScreenState
   List<Map<String, dynamic>> _eventos = [];
   Map<String, dynamic>? _eventoSeleccionado;
   bool _isLoadingEventos = false;
-  // ── Formulario ───────────────────────────────────────────────────────────
+
   late final TextEditingController _fechaController;
   final _horasController          = TextEditingController(text: '16');
   final _eventoController         = TextEditingController(
@@ -167,13 +149,9 @@ class _GenerarCertificadosScreenState
   String _modalidadPonencia = 'ORAL';
   String _rolParticipante   = 'ASISTENTE';
 
-  // ── Lista unificada de personas ──────────────────────────────────────────
-  /// Estudiantes cargados (usados para roles ASISTENTE, PONENTE, ORGANIZADOR)
   List<PersonaCertificado> _estudiantes = [];
-  /// Jurados cargados (usados para rol JURADO)
   List<PersonaCertificado> _jurados = [];
 
-  /// Lista activa según el rol seleccionado
   List<PersonaCertificado> get _personasActivas =>
       _rolParticipante == 'JURADO' ? _jurados : _estudiantes;
 
@@ -197,7 +175,6 @@ class _GenerarCertificadosScreenState
 
   bool _seccionConfig = true;
 
-  // ─────────────────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
@@ -226,70 +203,69 @@ class _GenerarCertificadosScreenState
     _searchController.dispose();
     super.dispose();
   }
-Future<void> _cargarEventos() async {
-  if (_filialId.isEmpty || _facultad.isEmpty || _carreraId.isEmpty) return;
-  setState(() => _isLoadingEventos = true);
-  try {
-    final snap = await FirebaseFirestore.instance
-        .collection('events')
-        .where('filialId',  isEqualTo: _filialId)
-        .where('facultad',  isEqualTo: _facultad)
-        .where('carreraId', isEqualTo: _carreraId)
-        .orderBy('createdAt', descending: true)
-        .get();
 
-    if (mounted) {
-      setState(() {
-        _eventos = snap.docs.map((doc) => {
-          'id':           doc.id,
-          'name':         doc.data()['name']         ?? 'Sin nombre',
-          'periodoNombre':doc.data()['periodoNombre'] ?? '',
-          'createdAt':    doc.data()['createdAt'],
-        }).toList();
-      });
+  Future<void> _cargarEventos() async {
+    if (_filialId.isEmpty || _facultad.isEmpty || _carreraId.isEmpty) return;
+    setState(() => _isLoadingEventos = true);
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('events')
+          .where('filialId',  isEqualTo: _filialId)
+          .where('facultad',  isEqualTo: _facultad)
+          .where('carreraId', isEqualTo: _carreraId)
+          .orderBy('createdAt', descending: true)
+          .get();
+
+      if (mounted) {
+        setState(() {
+          _eventos = snap.docs.map((doc) => {
+            'id':           doc.id,
+            'name':         doc.data()['name']         ?? 'Sin nombre',
+            'periodoNombre':doc.data()['periodoNombre'] ?? '',
+            'createdAt':    doc.data()['createdAt'],
+          }).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error cargando eventos: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingEventos = false);
     }
-  } catch (e) {
-    debugPrint('Error cargando eventos: $e');
-  } finally {
-    if (mounted) setState(() => _isLoadingEventos = false);
   }
-}
-  // ─────────────────────────────────────────────────────────────────────────
+
   Future<void> _init() async {
-  setState(() => _isLoading = true);
-  final data = await PrefsHelper.getAdminCarreraData();
-  if (data != null) {
-    setState(() {
-      _carrera   = data['carrera']      ?? '';
-      _facultad  = data['facultad']     ?? '';
-      _sede      = data['filialNombre'] ?? '';
-      _filial    = data['filialNombre'] ?? '';
-      _filialId  = data['filial']       ?? '';
-      _carreraId = data['carreraId']    ?? data['carrera'] ?? '';
-      _fechaController.text = _fechaActual(_sede);
-    });
-    _actualizarMotivo();
-    await Future.wait([
-      _cargarFirmantes(),
-      _cargarEventos(),
-      _cargarTitulosProyectos(),
-    ]);
+    setState(() => _isLoading = true);
+    final data = await PrefsHelper.getAdminCarreraData();
+    if (data != null) {
+      setState(() {
+        _carrera   = data['carrera']      ?? '';
+        _facultad  = data['facultad']     ?? '';
+        _sede      = data['filialNombre'] ?? '';
+        _filial    = data['filialNombre'] ?? '';
+        _filialId  = data['filial']       ?? '';
+        _carreraId = data['carreraId']    ?? data['carrera'] ?? '';
+        _fechaController.text = _fechaActual(_sede);
+      });
+      _actualizarMotivo();
+      await Future.wait([
+        _cargarFirmantes(),
+        _cargarEventos(),
+        _cargarTitulosProyectos(),
+      ]);
+    }
+    if (mounted) setState(() => _isLoading = false);
   }
-  if (mounted) setState(() => _isLoading = false);
-}
-void _seleccionarEvento(Map<String, dynamic> evento) {
-  setState(() {
-    _eventoSeleccionado    = evento;
-    _eventoController.text = evento['name'] as String;
-    _actualizarMotivo();
-  });
-  // Cargar estudiantes y jurados recién aquí
-  _cargarEstudiantes();
-  _cargarJurados();
-}
-  // ─────────────────────────────────────────────────────────────────────────
-  // CARGAR JURADOS desde la colección raíz `users`
-  // ─────────────────────────────────────────────────────────────────────────
+
+  void _seleccionarEvento(Map<String, dynamic> evento) {
+    setState(() {
+      _eventoSeleccionado    = evento;
+      _eventoController.text = evento['name'] as String;
+      _actualizarMotivo();
+    });
+    _cargarEstudiantes();
+    _cargarJurados();
+  }
+
   Future<void> _cargarJurados() async {
     if (_filialId.isEmpty || _facultad.isEmpty) return;
     setState(() => _isLoadingJurados = true);
@@ -329,9 +305,6 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // CARGAR TÍTULOS DE PROYECTOS POR CÓDIGO DE INTEGRANTE
-  // ─────────────────────────────────────────────────────────────────────────
   Future<void> _cargarTitulosProyectos() async {
     try {
       final eventosSnap = await FirebaseFirestore.instance
@@ -375,9 +348,6 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // CARGAR FIRMANTES DESDE FIRESTORE
-  // ─────────────────────────────────────────────────────────────────────────
   Future<void> _cargarFirmantes() async {
     try {
       final db = FirebaseFirestore.instance;
@@ -418,7 +388,6 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
   void _actualizarMotivo() {
     _motivoController.text = _motivoPorRol(
       rol:               _rolParticipante,
@@ -431,7 +400,6 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
   Future<void> _cargarEstudiantes() async {
     try {
       final docKey = '${_filial}_$_carrera';
@@ -464,7 +432,6 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
   void _actualizarFiltros({bool notify = true}) {
     final q = _searchQuery.toLowerCase();
     final fuente = _personasActivas;
@@ -512,10 +479,8 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
     });
   }
 
-  /// Cuando cambia el rol, limpiamos selecciones y recalculamos el filtro
   void _cambiarRol(String nuevoRol) {
     setState(() {
-      // Limpiar selecciones anteriores en ambas listas
       for (final e in _estudiantes) {
         e.seleccionado = false;
       }
@@ -531,7 +496,6 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
   DatosCertificado get _datosCertificado => DatosCertificado(
         facultad:  _facultad,
         carrera:   _carrera,
@@ -574,15 +538,12 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
           .timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) return response.bodyBytes;
     } catch (e) {
-      debugPrint('❌ Error refrescando URL: $e');
+      debugPrint('Error refrescando URL: $e');
     }
 
     return null;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // GENERAR PDF
-  // ─────────────────────────────────────────────────────────────────────────
   Future<void> _generarCertificados() async {
     final seleccionados = _personasActivas.where((e) => e.seleccionado).toList();
     if (seleccionados.isEmpty) {
@@ -598,9 +559,11 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
           title: const Row(children: [
             Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 26),
             SizedBox(width: 10),
-            Text('Sin firmantes configurados',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold,
-                    color: _kPrimario)),
+            Flexible(
+              child: Text('Sin firmantes configurados',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold,
+                      color: _kPrimario)),
+            ),
           ]),
           content: const Text(
             'No hay firmantes configurados. El certificado se generará '
@@ -654,7 +617,6 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
         bytesFirma3: bytes3,
       );
 
-      // Convertir PersonaCertificado → Estudiante para el builder
       final personasParaPdf = seleccionados.map((p) => Estudiante(
         id:     p.id,
         nombre: p.nombre,
@@ -683,11 +645,6 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
     if (mounted) setState(() => _generando = false);
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // ENVIAR CERTIFICADOS
-  // Para estudiantes: guarda en users/{docKey}/students/{id}/certificados
-  // Para jurados:     guarda en users/{juradoId}/certificados
-  // ─────────────────────────────────────────────────────────────────────────
   Future<void> _enviarCertificados() async {
     final seleccionados = _personasActivas.where((e) => e.seleccionado).toList();
     if (seleccionados.isEmpty) {
@@ -709,9 +666,11 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
             color: _kPrimario, size: 26,
           ),
           const SizedBox(width: 10),
-          Text('Enviar certificados',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
-                  color: _kPrimario)),
+          const Flexible(
+            child: Text('Enviar certificados',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
+                    color: _kPrimario)),
+          ),
         ]),
         content: Text(
           'Se enviarán ${seleccionados.length} certificado(s) a los $labelPersona '
@@ -773,15 +732,12 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
           DocumentReference ref;
 
           if (esParaJurados) {
-            // Los jurados tienen su colección de certificados directamente
-            // en users/{juradoId}/certificados
             ref = FirebaseFirestore.instance
                 .collection('users')
                 .doc(persona.id)
                 .collection('certificados')
                 .doc('${datos['rol']}_${DateTime.now().millisecondsSinceEpoch}');
           } else {
-            // Estudiantes: users/{docKey}/students/{studentId}/certificados
             ref = FirebaseFirestore.instance
                 .collection('users')
                 .doc(docKeyEstudiantes)
@@ -794,7 +750,7 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
           batch.set(ref, {
             ...datos,
             'creadoEn':          ahora,
-            'nombreEstudiante':  persona.nombre, // campo unificado
+            'nombreEstudiante':  persona.nombre,
             'codigoCertificado': codigoUnico,
           });
         }
@@ -821,95 +777,6 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
     if (mounted) setState(() => _enviando = false);
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // ELIMINAR CERTIFICADOS
-  // ─────────────────────────────────────────────────────────────────────────
-  Future<void> _eliminarCertificados() async {
-    final seleccionados = _personasActivas.where((e) => e.seleccionado).toList();
-    if (seleccionados.isEmpty) {
-      _snack('Selecciona al menos una persona');
-      return;
-    }
-
-    final esParaJurados    = _rolParticipante == 'JURADO';
-    final docKeyEstudiantes = '${_filial}_$_carrera';
-
-    final confirmar = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(children: [
-          Icon(Icons.delete_forever, color: Colors.red, size: 26),
-          SizedBox(width: 10),
-          Text('Eliminar certificados',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
-                  color: Colors.red)),
-        ]),
-        content: Text(
-          'Se eliminarán TODOS los certificados enviados de '
-          '${seleccionados.length} ${esParaJurados ? 'jurado(s)' : 'estudiante(s)'}. '
-          'Esta acción no se puede deshacer.',
-          style: const TextStyle(fontSize: 14, color: _kTextoGris),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar', style: TextStyle(color: _kTextoGris)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red, foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmar != true) return;
-
-    setState(() => _enviando = true);
-
-    try {
-      int eliminados = 0;
-
-      for (final persona in seleccionados) {
-        if (_cancelarEnvio) break;
-
-        CollectionReference colRef;
-
-        if (esParaJurados) {
-          colRef = FirebaseFirestore.instance
-              .collection('users')
-              .doc(persona.id)
-              .collection('certificados');
-        } else {
-          colRef = FirebaseFirestore.instance
-              .collection('users')
-              .doc(docKeyEstudiantes)
-              .collection('students')
-              .doc(persona.id)
-              .collection('certificados');
-        }
-
-        final snap  = await colRef.get();
-        final batch = FirebaseFirestore.instance.batch();
-        for (final doc in snap.docs) batch.delete(doc.reference);
-        await batch.commit();
-        eliminados++;
-      }
-
-      if (mounted) _snack('🗑️ Certificados eliminados de $eliminados persona(s)');
-    } catch (e) {
-      if (mounted) _snack('Error al eliminar: $e');
-    }
-
-    if (mounted) setState(() => _enviando = false);
-  }
-
   void _snack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -920,9 +787,6 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
     ));
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // BUILD
-  // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -950,255 +814,270 @@ void _seleccionarEvento(Map<String, dynamic> evento) {
   }
 
   Widget _buildHeader() => Padding(
-    padding: const EdgeInsets.all(20),
+    padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
     child: Row(children: [
       Container(
-        width: 50, height: 50,
+        width: 44, height: 44,
         decoration: BoxDecoration(color: Colors.white,
             borderRadius: BorderRadius.circular(12)),
         child: Image.asset('assets/logo.png', fit: BoxFit.contain,
             errorBuilder: (_, __, ___) => const Icon(
-                Icons.workspace_premium, color: _kPrimario, size: 28)),
+                Icons.workspace_premium, color: _kPrimario, size: 26)),
       ),
-      const SizedBox(width: 16),
+      const SizedBox(width: 12),
       const Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Generar Certificados',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold,
-                  color: Colors.white)),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
+                  color: Colors.white),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1),
           Text('Selecciona personas y personaliza',
-              style: TextStyle(fontSize: 12, color: Colors.white70)),
+              style: TextStyle(fontSize: 11, color: Colors.white70),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1),
         ]),
       ),
-      IconButton(
-        icon: const Icon(Icons.close, color: Colors.white, size: 26),
-        onPressed: () => Navigator.pop(context),
+      SizedBox(
+        width: 44, height: 44,
+        child: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white, size: 24),
+          onPressed: () => Navigator.pop(context),
+          padding: EdgeInsets.zero,
+        ),
       ),
     ]),
   );
 
   Widget _buildBody() {
-  // Fase 1: elegir evento
-  if (_eventoSeleccionado == null) {
-    return _buildSelectorEventos();
-  }
-  // Fase 2: configurar y generar
-  return ListView(
-    padding: const EdgeInsets.all(16),
-    children: [
-      _buildEventoSeleccionadoBanner(),
-      const SizedBox(height: 12),
-      _buildCardFirmantes(),
-      const SizedBox(height: 12),
-      _buildCardConfig(),
-      const SizedBox(height: 12),
-      _buildCardPersonas(),
-      const SizedBox(height: 20),
-      _buildBotonesAccion(),
-      const SizedBox(height: 20),
-    ],
-  );
-}
-Widget _buildSelectorEventos() {
-  if (_isLoadingEventos) {
-    return const Center(
-      child: CircularProgressIndicator(color: _kPrimario),
+    if (_eventoSeleccionado == null) {
+      return _buildSelectorEventos();
+    }
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      children: [
+        _buildEventoSeleccionadoBanner(),
+        const SizedBox(height: 12),
+        _buildCardFirmantes(),
+        const SizedBox(height: 12),
+        _buildCardConfig(),
+        const SizedBox(height: 12),
+        _buildCardPersonas(),
+        const SizedBox(height: 20),
+        _buildBotonesAccion(),
+        const SizedBox(height: 20),
+      ],
     );
   }
 
-  return ListView(
-    padding: const EdgeInsets.all(16),
-    children: [
-      // Info banner
-      Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: _kPrimario10,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _kPrimario40),
+  Widget _buildSelectorEventos() {
+    if (_isLoadingEventos) {
+      return const Center(
+        child: CircularProgressIndicator(color: _kPrimario),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      children: [
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: _kPrimario10,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _kPrimario40),
+          ),
+          child: const Row(children: [
+            Icon(Icons.info_outline, size: 16, color: _kPrimario),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Selecciona el evento para el que deseas generar certificados',
+                style: TextStyle(fontSize: 12, color: _kPrimario),
+              ),
+            ),
+          ]),
         ),
-        child: const Row(children: [
-          Icon(Icons.info_outline, size: 16, color: _kPrimario),
-          SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Selecciona el evento para el que deseas generar certificados',
-              style: TextStyle(fontSize: 12, color: _kPrimario),
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 12),
+          child: Row(children: [
+            const Flexible(
+              child: Text('Eventos de tu carrera',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600,
+                      color: _kPrimario),
+                  overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: _kPrimario10,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text('${_eventos.length}',
+                  style: const TextStyle(fontSize: 12, color: _kPrimario,
+                      fontWeight: FontWeight.w600)),
+            ),
+          ]),
+        ),
+        if (_eventos.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFFF3E0), shape: BoxShape.circle),
+                child: const Icon(Icons.event_busy_rounded,
+                    size: 48, color: Color(0xFFFF9800)),
+              ),
+              const SizedBox(height: 16),
+              const Text('No hay eventos disponibles',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
+                      color: _kPrimario),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 8),
+              Text(
+                'Crea un evento primero desde\nGestión de Eventos.',
+                style: TextStyle(fontSize: 13, color: Colors.grey[500],
+                    height: 1.5),
+                textAlign: TextAlign.center,
+              ),
+            ]),
+          ),
+        ..._eventos.map((evento) => _buildEventoCard(evento)),
+      ],
+    );
+  }
+
+  Widget _buildEventoCard(Map<String, dynamic> evento) {
+    final name    = evento['name']          as String;
+    final periodo = evento['periodoNombre'] as String;
+    final ts      = evento['createdAt']     as Timestamp?;
+
+    return GestureDetector(
+      onTap: () => _seleccionarEvento(evento),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05),
+                blurRadius: 8, offset: const Offset(0, 2)),
+          ],
+        ),
+        child: Row(children: [
+          Container(
+            width: 46, height: 46,
+            decoration: BoxDecoration(
+              color: _kPrimario,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                  style: const TextStyle(color: Colors.white,
+                      fontWeight: FontWeight.bold, fontSize: 18)),
             ),
           ),
-        ]),
-      ),
-
-      // Encabezado con contador
-      Padding(
-        padding: const EdgeInsets.only(left: 4, bottom: 12),
-        child: Row(children: [
-          const Text('Eventos de tu carrera',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600,
-                  color: _kPrimario)),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(name,
+                  style: const TextStyle(fontWeight: FontWeight.w600,
+                      fontSize: 14, color: _kPrimario),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2),
+              if (periodo.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Row(children: [
+                  const Icon(Icons.calendar_today,
+                      size: 11, color: _kTextoGris),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(periodo,
+                        style: const TextStyle(fontSize: 12,
+                            color: _kTextoGris),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                ]),
+              ],
+              if (ts != null) ...[
+                const SizedBox(height: 2),
+                Row(children: [
+                  Icon(Icons.access_time, size: 11, color: Colors.blue[400]),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${ts.toDate().day}/${ts.toDate().month}/${ts.toDate().year}',
+                    style: TextStyle(fontSize: 11, color: Colors.blue[400]),
+                  ),
+                ]),
+              ],
+            ]),
+          ),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            width: 32, height: 32,
             decoration: BoxDecoration(
-              color: _kPrimario10,
-              borderRadius: BorderRadius.circular(20),
+              color: _kCampoFondo2,
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Text('${_eventos.length}',
-                style: const TextStyle(fontSize: 12, color: _kPrimario,
-                    fontWeight: FontWeight.w600)),
+            child: const Icon(Icons.arrow_forward_ios_rounded,
+                color: _kPrimario, size: 14),
           ),
         ]),
       ),
+    );
+  }
 
-      // Estado vacío
-      if (_eventos.isEmpty)
-        Container(
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: Color(0xFFFFF3E0), shape: BoxShape.circle),
-              child: const Icon(Icons.event_busy_rounded,
-                  size: 48, color: Color(0xFFFF9800)),
-            ),
-            const SizedBox(height: 16),
-            const Text('No hay eventos disponibles',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
-                    color: _kPrimario)),
-            const SizedBox(height: 8),
-            Text(
-              'Crea un evento primero desde\nGestión de Eventos.',
-              style: TextStyle(fontSize: 13, color: Colors.grey[500],
-                  height: 1.5),
-              textAlign: TextAlign.center,
-            ),
-          ]),
-        ),
-
-      // Tarjetas de eventos
-      ..._eventos.map((evento) => _buildEventoCard(evento)),
-    ],
-  );
-}
-Widget _buildEventoCard(Map<String, dynamic> evento) {
-  final name    = evento['name']          as String;
-  final periodo = evento['periodoNombre'] as String;
-  final ts      = evento['createdAt']     as Timestamp?;
-
-  return GestureDetector(
-    onTap: () => _seleccionarEvento(evento),
-    child: Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
+  Widget _buildEventoSeleccionadoBanner() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _kPrimario,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05),
-              blurRadius: 8, offset: const Offset(0, 2)),
-        ],
       ),
       child: Row(children: [
-        Container(
-          width: 46, height: 46,
-          decoration: BoxDecoration(
-            color: _kPrimario,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Center(
-            child: Text(name[0].toUpperCase(),
-                style: const TextStyle(color: Colors.white,
-                    fontWeight: FontWeight.bold, fontSize: 18)),
-          ),
-        ),
-        const SizedBox(width: 14),
+        const Icon(Icons.event, color: Colors.white, size: 20),
+        const SizedBox(width: 10),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(name,
-                style: const TextStyle(fontWeight: FontWeight.w600,
-                    fontSize: 14, color: _kPrimario)),
-            if (periodo.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Row(children: [
-                const Icon(Icons.calendar_today,
-                    size: 11, color: _kTextoGris),
-                const SizedBox(width: 4),
-                Text(periodo,
-                    style: const TextStyle(fontSize: 12,
-                        color: _kTextoGris)),
-              ]),
-            ],
-            if (ts != null) ...[
-              const SizedBox(height: 2),
-              Row(children: [
-                Icon(Icons.access_time, size: 11, color: Colors.blue[400]),
-                const SizedBox(width: 4),
-                Text(
-                  '${ts.toDate().day}/${ts.toDate().month}/${ts.toDate().year}',
-                  style: TextStyle(fontSize: 11, color: Colors.blue[400]),
-                ),
-              ]),
-            ],
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+            const Text('Evento seleccionado',
+                style: TextStyle(color: Colors.white70, fontSize: 10)),
+            Text(_eventoSeleccionado!['name'] as String,
+                style: const TextStyle(color: Colors.white,
+                    fontWeight: FontWeight.w600, fontSize: 13),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2),
           ]),
         ),
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: _kCampoFondo2,
-            borderRadius: BorderRadius.circular(8),
+        TextButton(
+          onPressed: () => setState(() {
+            _eventoSeleccionado = null;
+            for (final e in _estudiantes) e.seleccionado = false;
+            for (final j in _jurados)     j.seleccionado = false;
+            _seleccionadosCount = 0;
+          }),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.white70,
+            minimumSize: const Size(60, 44),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
           ),
-          child: const Icon(Icons.arrow_forward_ios_rounded,
-              color: _kPrimario, size: 14),
+          child: const Text('Cambiar', style: TextStyle(fontSize: 12)),
         ),
       ]),
-    ),
-  );
-}
-Widget _buildEventoSeleccionadoBanner() {
-  return Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: _kPrimario,
-      borderRadius: BorderRadius.circular(14),
-    ),
-    child: Row(children: [
-      const Icon(Icons.event, color: Colors.white, size: 20),
-      const SizedBox(width: 10),
-      Expanded(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-          const Text('Evento seleccionado',
-              style: TextStyle(color: Colors.white70, fontSize: 10)),
-          Text(_eventoSeleccionado!['name'] as String,
-              style: const TextStyle(color: Colors.white,
-                  fontWeight: FontWeight.w600, fontSize: 13)),
-        ]),
-      ),
-      TextButton(
-        onPressed: () => setState(() {
-          _eventoSeleccionado = null;
-          // Limpiar selecciones
-          for (final e in _estudiantes) e.seleccionado = false;
-          for (final j in _jurados)     j.seleccionado = false;
-          _seleccionadosCount = 0;
-        }),
-        style: TextButton.styleFrom(foregroundColor: Colors.white70),
-        child: const Text('Cambiar', style: TextStyle(fontSize: 12)),
-      ),
-    ]),
-  );
-}
-  // ─────────────────────────────────────────────────────────────────────────
-  // CARD FIRMANTES
-  // ─────────────────────────────────────────────────────────────────────────
+    );
+  }
+
   Widget _buildCardFirmantes() {
     return _Card(
       child: Column(
@@ -1206,7 +1085,7 @@ Widget _buildEventoSeleccionadoBanner() {
         children: [
           Row(children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              width: 36, height: 36,
               decoration: BoxDecoration(
                 color: _kPrimario10, borderRadius: BorderRadius.circular(10)),
               child: const Icon(Icons.draw_outlined, color: _kPrimario, size: 20),
@@ -1215,24 +1094,29 @@ Widget _buildEventoSeleccionadoBanner() {
             const Expanded(
               child: Text('Firmantes del Certificado',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold,
-                      color: _kPrimario)),
+                      color: _kPrimario),
+                  overflow: TextOverflow.ellipsis),
             ),
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded,
-                  color: _kTextoGrisClaro, size: 20),
-              onPressed: () async {
-                await _cargarFirmantes();
-                _snack('Firmantes actualizados');
-              },
-              tooltip: 'Recargar firmantes',
+            SizedBox(
+              width: 44, height: 44,
+              child: IconButton(
+                icon: const Icon(Icons.refresh_rounded,
+                    color: _kTextoGrisClaro, size: 20),
+                onPressed: () async {
+                  await _cargarFirmantes();
+                  _snack('Firmantes actualizados');
+                },
+                tooltip: 'Recargar firmantes',
+                padding: EdgeInsets.zero,
+              ),
             ),
           ]),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(child: _buildFirmanteChip('Firma 1', 'Vicerrector', _firma1)),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Expanded(child: _buildFirmanteChip('Firma 2', 'Decano', _firma2)),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Expanded(child: _buildFirmanteChip('Firma 3', 'Dir. Inv.', _firma3)),
           ]),
           if (!_firmasConfiguradas) ...[
@@ -1272,39 +1156,46 @@ Widget _buildEventoSeleccionadoBanner() {
             : const Color(0xFFEF4444);
 
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
       decoration: BoxDecoration(
         color: color.withOpacity(0.08),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color.withOpacity(0.3)),
       ),
-      child: Column(children: [
-        Text(etiqueta,
-            style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold,
-                color: color)),
-        const SizedBox(height: 2),
-        Icon(
-          ok && tieneImg
-              ? Icons.check_circle
-              : ok
-                  ? Icons.warning_amber
-                  : Icons.error_outline,
-          color: color, size: 18,
-        ),
-        const SizedBox(height: 2),
-        Text(rol, style: const TextStyle(fontSize: 9, color: _kTextoGris)),
-        Text(
-          ok && tieneImg ? 'Listo' : ok ? 'Sin imagen' : 'Pendiente',
-          style: TextStyle(fontSize: 9, color: color,
-              fontWeight: FontWeight.bold),
-        ),
-      ]),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(etiqueta,
+              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold,
+                  color: color),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1),
+          const SizedBox(height: 2),
+          Icon(
+            ok && tieneImg
+                ? Icons.check_circle
+                : ok
+                    ? Icons.warning_amber
+                    : Icons.error_outline,
+            color: color, size: 18,
+          ),
+          const SizedBox(height: 2),
+          Text(rol,
+              style: const TextStyle(fontSize: 9, color: _kTextoGris),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1),
+          Text(
+            ok && tieneImg ? 'Listo' : ok ? 'Sin imagen' : 'Pendiente',
+            style: TextStyle(fontSize: 9, color: color,
+                fontWeight: FontWeight.bold),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        ],
+      ),
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // CARD CONFIGURACIÓN
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildCardConfig() {
     return _Card(
       child: Column(
@@ -1340,7 +1231,6 @@ Widget _buildEventoSeleccionadoBanner() {
                       ))
                   .toList(),
             ),
-            // Banner informativo cuando el rol es JURADO
             if (_rolParticipante == 'JURADO') ...[
               const SizedBox(height: 12),
               Container(
@@ -1352,11 +1242,11 @@ Widget _buildEventoSeleccionadoBanner() {
                   border: Border.all(
                       color: const Color(0xFF0F6E56).withOpacity(0.3)),
                 ),
-                child: Row(children: [
-                  const Icon(Icons.gavel_rounded,
+                child: const Row(children: [
+                  Icon(Icons.gavel_rounded,
                       color: Color(0xFF0F6E56), size: 16),
-                  const SizedBox(width: 8),
-                  const Expanded(
+                  SizedBox(width: 8),
+                  Expanded(
                     child: Text(
                       'Modo Jurado: se muestran los jurados registrados '
                       'de esta carrera. El certificado se enviará a su '
@@ -1369,30 +1259,33 @@ Widget _buildEventoSeleccionadoBanner() {
               ),
             ],
             const SizedBox(height: 14),
-Container(
-  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-  decoration: BoxDecoration(
-    color: _kPrimario10,
-    borderRadius: BorderRadius.circular(12),
-    border: Border.all(color: _kPrimario40),
-  ),
-  child: Row(children: [
-    const Icon(Icons.event, size: 16, color: _kPrimario),
-    const SizedBox(width: 8),
-    Expanded(
-      child: Text(
-        _eventoController.text,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: _kPrimario,
-        ),
-      ),
-    ),
-    const Icon(Icons.lock_outline, size: 14, color: _kTextoGrisClaro),
-  ]),
-),
-const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: _kPrimario10,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _kPrimario40),
+              ),
+              child: Row(children: [
+                const Icon(Icons.event, size: 16, color: _kPrimario),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _eventoController.text,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _kPrimario,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.lock_outline, size: 14, color: _kTextoGrisClaro),
+              ]),
+            ),
+            const SizedBox(height: 12),
             if (_rolParticipante == 'ASISTENTE') ...[
               _Campo(
                 controller: _horasController,
@@ -1415,24 +1308,22 @@ const SizedBox(height: 12),
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
                       color: _kPrimario)),
               const SizedBox(height: 8),
-              Row(
+              Wrap(
+                spacing: 10, runSpacing: 8,
                 children: ['ORAL', 'POSTER']
-                    .map((m) => Padding(
-                          padding: const EdgeInsets.only(right: 10),
-                          child: ChoiceChip(
-                            label: Text(m,
-                                style: TextStyle(fontSize: 11,
-                                    color: _modalidadPonencia == m
-                                        ? Colors.white
-                                        : _kPrimario)),
-                            selected: _modalidadPonencia == m,
-                            selectedColor: _kPrimario,
-                            backgroundColor: Colors.grey.shade100,
-                            onSelected: (_) => setState(() {
-                              _modalidadPonencia = m;
-                              _actualizarMotivo();
-                            }),
-                          ),
+                    .map((m) => ChoiceChip(
+                          label: Text(m,
+                              style: TextStyle(fontSize: 11,
+                                  color: _modalidadPonencia == m
+                                      ? Colors.white
+                                      : _kPrimario)),
+                          selected: _modalidadPonencia == m,
+                          selectedColor: _kPrimario,
+                          backgroundColor: Colors.grey.shade100,
+                          onSelected: (_) => setState(() {
+                            _modalidadPonencia = m;
+                            _actualizarMotivo();
+                          }),
                         ))
                     .toList(),
               ),
@@ -1463,6 +1354,7 @@ const SizedBox(height: 12),
                 label: const Text('Regenerar automáticamente',
                     style: TextStyle(fontSize: 11, color: _kPrimario)),
                 style: TextButton.styleFrom(
+                    minimumSize: const Size(44, 44),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 4)),
               ),
@@ -1473,9 +1365,6 @@ const SizedBox(height: 12),
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // CARD PERSONAS (Estudiantes o Jurados según el rol)
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildCardPersonas() {
     final esJuradoRol = _rolParticipante == 'JURADO';
     final totalPersonas = esJuradoRol ? _jurados.length : _estudiantes.length;
@@ -1490,7 +1379,7 @@ const SizedBox(height: 12),
         children: [
           Row(children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              width: 36, height: 36,
               decoration: BoxDecoration(
                   color: esJuradoRol
                       ? const Color(0xFF0F6E56).withOpacity(0.1)
@@ -1512,6 +1401,7 @@ const SizedBox(height: 12),
                   esJuradoRol ? 'Seleccionar Jurados' : 'Seleccionar Estudiantes',
                   style: const TextStyle(fontSize: 14,
                       fontWeight: FontWeight.bold, color: _kPrimario),
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   '$_seleccionadosCount de $totalPersonas seleccionados',
@@ -1520,11 +1410,15 @@ const SizedBox(height: 12),
               ]),
             ),
             if (esJuradoRol)
-              IconButton(
-                icon: const Icon(Icons.refresh_rounded,
-                    color: _kTextoGrisClaro, size: 18),
-                onPressed: _cargarJurados,
-                tooltip: 'Recargar jurados',
+              SizedBox(
+                width: 44, height: 44,
+                child: IconButton(
+                  icon: const Icon(Icons.refresh_rounded,
+                      color: _kTextoGrisClaro, size: 20),
+                  onPressed: _cargarJurados,
+                  tooltip: 'Recargar jurados',
+                  padding: EdgeInsets.zero,
+                ),
               ),
           ]),
           const SizedBox(height: 12),
@@ -1561,17 +1455,19 @@ const SizedBox(height: 12),
               border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
             ),
           ),
           const SizedBox(height: 12),
           Row(children: [
-            Text(
-              esJuradoRol ? 'Todos los jurados' : 'Todos los estudiantes',
-              style: const TextStyle(fontSize: 13,
-                  fontWeight: FontWeight.bold, color: _kPrimario),
+            Expanded(
+              child: Text(
+                esJuradoRol ? 'Todos los jurados' : 'Todos los estudiantes',
+                style: const TextStyle(fontSize: 13,
+                    fontWeight: FontWeight.bold, color: _kPrimario),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            const Spacer(),
             const Text('Todos',
                 style: TextStyle(fontSize: 11, color: _kTextoGris)),
             Checkbox(
@@ -1582,6 +1478,7 @@ const SizedBox(height: 12),
                   : _kPrimario,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(4)),
+              materialTapTargetSize: MaterialTapTargetSize.padded,
             ),
           ]),
           const SizedBox(height: 6),
@@ -1607,6 +1504,7 @@ const SizedBox(height: 12),
                       color: _kTextoGrisClaro,
                       fontSize: 12,
                       fontStyle: FontStyle.italic),
+                  textAlign: TextAlign.center,
                 ),
               ),
             )
@@ -1620,8 +1518,8 @@ const SizedBox(height: 12),
   Widget _buildListaPersonas(List<PersonaCertificado> lista) {
     final esJuradoRol = _rolParticipante == 'JURADO';
     final itemH       = (!esJuradoRol && _rolParticipante == 'PONENTE')
-        ? 70.0
-        : 57.0;
+        ? 72.0
+        : 60.0;
     const maxVisible = 8;
     final height = (lista.length > maxVisible
             ? maxVisible * itemH
@@ -1631,6 +1529,7 @@ const SizedBox(height: 12),
     return SizedBox(
       height: height,
       child: ListView.separated(
+        physics: const ClampingScrollPhysics(),
         itemCount: lista.length,
         separatorBuilder: (_, __) =>
             Divider(height: 1, color: Colors.grey.shade200),
@@ -1683,7 +1582,9 @@ const SizedBox(height: 12),
                   style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: persona.seleccionado ? accentColor : _kTextoOscuro)),
+                      color: persona.seleccionado ? accentColor : _kTextoOscuro),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1),
               if (persona.codigo.isNotEmpty)
                 Row(children: [
                   Icon(
@@ -1693,9 +1594,12 @@ const SizedBox(height: 12),
                     size: 11, color: _kTextoGrisClaro,
                   ),
                   const SizedBox(width: 4),
-                  Text(persona.codigo,
-                      style: const TextStyle(
-                          fontSize: 11, color: _kTextoGrisClaro)),
+                  Flexible(
+                    child: Text(persona.codigo,
+                        style: const TextStyle(
+                            fontSize: 11, color: _kTextoGrisClaro),
+                        overflow: TextOverflow.ellipsis),
+                  ),
                 ]),
               if (tituloProyecto != null) ...[
                 const SizedBox(height: 2),
@@ -1724,22 +1628,22 @@ const SizedBox(height: 12),
             activeColor: accentColor,
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(4)),
+            materialTapTargetSize: MaterialTapTargetSize.padded,
           ),
         ]),
       ),
     );
   }
 
-   Widget _buildBotonesAccion() {
+  Widget _buildBotonesAccion() {
     final count       = _seleccionadosCount;
     final ocupado     = _generando || _enviando;
     final esJuradoRol = _rolParticipante == 'JURADO';
-    final labelPersona = esJuradoRol ? 'jurado(s)' : 'certificados';
- 
+
     return Column(children: [
-      // ── GENERAR PDF ────────────────────────────────────────────────────────
       SizedBox(
-        width: double.infinity, height: 56,
+        width: double.infinity,
+        height: 56,
         child: ElevatedButton(
           onPressed: ocupado ? null : _generarCertificados,
           style: ElevatedButton.styleFrom(
@@ -1757,8 +1661,11 @@ const SizedBox(height: 12),
                         child: CircularProgressIndicator(
                             color: Colors.white, strokeWidth: 2)),
                     SizedBox(width: 12),
-                    Text('Generando PDF...',
-                        style: TextStyle(fontSize: 15)),
+                    Flexible(
+                      child: Text('Generando PDF...',
+                          style: TextStyle(fontSize: 15),
+                          overflow: TextOverflow.ellipsis),
+                    ),
                   ])
               : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   Icon(
@@ -1767,24 +1674,27 @@ const SizedBox(height: 12),
                         : Icons.workspace_premium,
                     size: 22,
                   ),
-                  const SizedBox(width: 10),
-                  Text(
-                    count == 0
-                        ? 'Selecciona personas'
-                        : count == 1
-                            ? 'Generar certificado (previsualizar)'
-                            : 'Generar $count $labelPersona (PDF)',
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.bold),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      count == 0
+                          ? 'Selecciona personas'
+                          : count == 1
+                              ? 'Generar certificado (previsualizar)'
+                              : 'Generar $count ${esJuradoRol ? 'jurado(s)' : 'certificados'} (PDF)',
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
                   ),
                 ]),
         ),
       ),
       const SizedBox(height: 12),
- 
-      // ── ENVIAR CERTIFICADOS ────────────────────────────────────────────────
       SizedBox(
-        width: double.infinity, height: 56,
+        width: double.infinity,
+        height: _enviando ? 72 : 56,
         child: OutlinedButton(
           onPressed: (ocupado || count == 0) ? null : _enviarCertificados,
           style: OutlinedButton.styleFrom(
@@ -1804,12 +1714,15 @@ const SizedBox(height: 12),
                               child: CircularProgressIndicator(
                                   color: _kPrimario, strokeWidth: 2)),
                           const SizedBox(width: 10),
-                          Text('Enviando... $_enviados / $_totalEnviar',
-                              style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold)),
+                          Flexible(
+                            child: Text('Enviando... $_enviados / $_totalEnviar',
+                                style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold),
+                                overflow: TextOverflow.ellipsis),
+                          ),
                         ]),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     LinearProgressIndicator(
                       value: _totalEnviar > 0
                           ? _enviados / _totalEnviar
@@ -1825,22 +1738,24 @@ const SizedBox(height: 12),
                         : Icons.send_rounded,
                     size: 20,
                   ),
-                  const SizedBox(width: 10),
-                  Text(
-                    count == 0
-                        ? 'Selecciona personas para enviar'
-                        : esJuradoRol
-                            ? 'Enviar $count certificado(s) a jurados'
-                            : 'Enviar $count certificado(s) a estudiantes',
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.bold),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      count == 0
+                          ? 'Selecciona personas para enviar'
+                          : esJuradoRol
+                              ? 'Enviar $count certificado(s) a jurados'
+                              : 'Enviar $count certificado(s) a estudiantes',
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
                   ),
                 ]),
         ),
       ),
       const SizedBox(height: 12),
- 
-      // ── IR A GESTIÓN DE CÓDIGOS Y CERTIFICADOS ────────────────────────────
       SizedBox(
         width: double.infinity, height: 56,
         child: OutlinedButton(
@@ -1869,16 +1784,19 @@ const SizedBox(height: 12),
             children: [
               Icon(Icons.qr_code_2_rounded, size: 20),
               SizedBox(width: 10),
-              Text(
-                'Gestionar códigos y certificados',
-                style: TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.bold),
+              Flexible(
+                child: Text(
+                  'Gestionar códigos y certificados',
+                  style: TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
               ),
             ],
           ),
         ),
       ),
- 
       if (count > 0) ...[
         const SizedBox(height: 8),
         Text(
@@ -1896,9 +1814,6 @@ const SizedBox(height: 12),
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// WIDGETS HELPER
-// ─────────────────────────────────────────────────────────────────────────────
 class _Card extends StatelessWidget {
   final Widget child;
   const _Card({required this.child});
@@ -1920,25 +1835,30 @@ class _CardHeader extends StatelessWidget {
       required this.expanded, required this.onToggle});
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
+  Widget build(BuildContext context) => InkWell(
     onTap: onToggle,
-    child: Row(children: [
-      Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-            color: _kPrimario10,
-            borderRadius: BorderRadius.circular(10)),
-        child: Icon(icon, color: _kPrimario, size: 20),
-      ),
-      const SizedBox(width: 10),
-      Expanded(child: Text(title,
-          style: const TextStyle(fontSize: 14,
-              fontWeight: FontWeight.bold, color: _kPrimario))),
-      Icon(expanded
-          ? Icons.keyboard_arrow_up
-          : Icons.keyboard_arrow_down,
-          color: _kTextoGrisClaro),
-    ]),
+    borderRadius: BorderRadius.circular(8),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(children: [
+        Container(
+          width: 36, height: 36,
+          decoration: BoxDecoration(
+              color: _kPrimario10,
+              borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, color: _kPrimario, size: 20),
+        ),
+        const SizedBox(width: 10),
+        Expanded(child: Text(title,
+            style: const TextStyle(fontSize: 14,
+                fontWeight: FontWeight.bold, color: _kPrimario),
+            overflow: TextOverflow.ellipsis)),
+        Icon(expanded
+            ? Icons.keyboard_arrow_up
+            : Icons.keyboard_arrow_down,
+            color: _kTextoGrisClaro),
+      ]),
+    ),
   );
 }
 
@@ -1975,7 +1895,7 @@ class _Campo extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: _kPrimario, width: 1.5)),
       contentPadding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     ),
   );
 }

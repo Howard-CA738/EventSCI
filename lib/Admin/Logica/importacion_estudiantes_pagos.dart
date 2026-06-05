@@ -15,28 +15,23 @@ class ImportacionPagosScreen extends StatefulWidget {
 class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     with SingleTickerProviderStateMixin {
 
-  // ── Servicios ──────────────────────────────────────────────────────
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FilialesService _filialesService = FilialesService();
 
-  // ── Estructura de filiales ─────────────────────────────────────────
   Map<String, dynamic> _estructuraFiliales = {};
   bool _estructuraCargada = false;
 
-  // ── Selección de destino ───────────────────────────────────────────
   String? _selectedFilialId;
   String? _selectedFilialNombre;
   String? _selectedFacultad;
   String? _selectedCarrera;
   String? _selectedCarreraId;
 
-  // ── Eventos de la carrera seleccionada ────────────────────────────
   List<Map<String, dynamic>> _eventos = [];
   bool _loadingEventos = false;
   String? _selectedEventoId;
   String? _selectedEventoNombre;
 
-  // ── Estado de importación ──────────────────────────────────────────
   bool _isLoading = false;
   bool _fileSelected = false;
   String? _fileName;
@@ -48,12 +43,10 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
   int _currentProgress = 0;
   List<String> _notFoundList = [];
 
-  // ── Animaciones ────────────────────────────────────────────────────
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
-  // ── Columnas del Excel (mismo formato que importación completa) ────
   final Map<String, String> _columnMapping = {
     'Ciclo'             : 'ciclo',
     'Grupo'             : 'grupo',
@@ -69,7 +62,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     'Sede'              : 'filial',
   };
 
-  // ── Getters de destino ─────────────────────────────────────────────
   bool get _destinoListo =>
       _selectedFilialNombre != null &&
       _selectedFacultad != null &&
@@ -103,23 +95,25 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     super.dispose();
   }
 
-  // ── Inicializar estructura ─────────────────────────────────────────
   Future<void> _initEstructura() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       await _filialesService.inicializarSiEsNecesario();
       final estructura = await _filialesService.getEstructuraCompleta();
+      if (!mounted) return;
       setState(() {
         _estructuraFiliales = estructura;
         _estructuraCargada  = true;
       });
     } catch (e) {
+      if (!mounted) return;
       _showMessage('Error cargando estructura: $e');
     }
+    if (!mounted) return;
     setState(() => _isLoading = false);
   }
 
-  // ── Helpers de estructura ──────────────────────────────────────────
   List<String> get _filialesDisponibles => _estructuraFiliales.keys.toList();
 
   List<String> _getFacultades(String filialId) {
@@ -140,12 +134,12 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
   String _getNombreFilial(String filialId) =>
       _estructuraFiliales[filialId]?['nombre'] ?? filialId;
 
-  // ── Cargar eventos de la carrera seleccionada ──────────────────────
   Future<void> _cargarEventos() async {
     if (_selectedFilialId == null ||
         _selectedFacultad == null ||
         _selectedCarreraId == null) return;
 
+    if (!mounted) return;
     setState(() {
       _loadingEventos    = true;
       _eventos           = [];
@@ -162,6 +156,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
           .orderBy('createdAt', descending: true)
           .get();
 
+      if (!mounted) return;
       setState(() {
         _eventos = snapshot.docs.map((doc) {
           final data = doc.data();
@@ -177,13 +172,14 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
         _showMessage('⚠️ No hay eventos para esta carrera');
       }
     } catch (e) {
+      if (!mounted) return;
       _showMessage('Error cargando eventos: $e');
     }
 
+    if (!mounted) return;
     setState(() => _loadingEventos = false);
   }
 
-  // ── Cambios de selección ───────────────────────────────────────────
   void _onFilialChanged(String? filialId) {
     setState(() {
       _selectedFilialId     = filialId;
@@ -224,11 +220,13 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
 
   void _onEventoChanged(String? eventoId) {
     if (eventoId == null) return;
-    final evento = _eventos.firstWhere((e) => e['id'] == eventoId,
-        orElse: () => {});
+    final eventoList = List<Map<String, dynamic>>.from(_eventos);
+    final idx = eventoList.indexWhere((e) => e['id'] == eventoId);
+    if (idx == -1) return;
+    final evento = eventoList[idx];
     setState(() {
       _selectedEventoId    = eventoId;
-      _selectedEventoNombre = evento['nombre'] ?? '';
+      _selectedEventoNombre = evento['nombre']?.toString() ?? '';
       _resetFile();
     });
   }
@@ -245,7 +243,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     _notFoundList    = [];
   }
 
-  // ── Selectores bottom sheet ────────────────────────────────────────
   void _showFilialSelector() {
     _showSelectorSheet(
       title: 'Seleccionar Sede',
@@ -253,7 +250,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
       items: _filialesDisponibles.map((id) => _SheetItem(
         value: id,
         label: _getNombreFilial(id),
-        subtitle: _estructuraFiliales[id]?['ubicacion'] ?? '',
+        subtitle: _estructuraFiliales[id]?['ubicacion']?.toString() ?? '',
         isSelected: _selectedFilialId == id,
       )).toList(),
       onSelected: (v, [_]) { _onFilialChanged(v); Navigator.pop(context); },
@@ -310,7 +307,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
       items: _eventos.map((e) => _SheetItem(
         value: e['id'] as String,
         label: e['nombre'] as String,
-        subtitle: e['periodo'] as String? ?? '',
+        subtitle: e['periodo']?.toString() ?? '',
         isSelected: _selectedEventoId == e['id'],
       )).toList(),
       onSelected: (v, [_]) { _onEventoChanged(v); Navigator.pop(context); },
@@ -337,108 +334,130 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
           maxChildSize: 0.9,
           minChildSize: 0.4,
           expand: false,
-          builder: (context, scrollController) => Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                Container(
-                  width: 50, height: 5,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                Row(
+          builder: (context, scrollController) => Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      width: 50, height: 5,
+                      margin: const EdgeInsets.only(bottom: 20),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(icon, color: const Color(0xFF1E3A5F), size: 24),
                     ),
-                    const SizedBox(width: 12),
-                    Text(title,
-                        style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E3A5F))),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(icon, color: const Color(0xFF1E3A5F), size: 24),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1E3A5F),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
                   ],
                 ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: items.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.inbox, size: 48, color: Colors.grey[300]),
-                              const SizedBox(height: 12),
-                              Text('No hay opciones disponibles',
-                                  style: TextStyle(color: Colors.grey[500])),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          controller: scrollController,
-                          itemCount: items.length,
-                          itemBuilder: (context, index) {
-                            final item = items[index];
-                            return AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              margin: const EdgeInsets.only(bottom: 10),
-                              decoration: BoxDecoration(
+              ),
+              Expanded(
+                child: items.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.inbox, size: 48, color: Colors.grey[300]),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No hay opciones disponibles',
+                              style: TextStyle(color: Colors.grey[500]),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: scrollController,
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                        itemCount: items.length,
+                        itemBuilder: (context, index) {
+                          final item = items[index];
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            margin: const EdgeInsets.only(bottom: 10),
+                            decoration: BoxDecoration(
+                              color: item.isSelected
+                                  ? const Color(0xFF1E3A5F).withValues(alpha: 0.08)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
                                 color: item.isSelected
-                                    ? const Color(0xFF1E3A5F).withValues(alpha: 0.08)
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
+                                    ? const Color(0xFF1E3A5F)
+                                    : Colors.grey.shade300,
+                                width: item.isSelected ? 2 : 1,
+                              ),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 6),
+                              title: Text(
+                                item.label,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
                                   color: item.isSelected
                                       ? const Color(0xFF1E3A5F)
-                                      : Colors.grey.shade300,
-                                  width: item.isSelected ? 2 : 1,
+                                      : Colors.black87,
+                                  fontSize: 14,
                                 ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 2,
                               ),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 6),
-                                title: Text(item.label,
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w600,
+                              subtitle: item.subtitle.isNotEmpty
+                                  ? Text(
+                                      item.subtitle,
+                                      style: TextStyle(
+                                        fontSize: 12,
                                         color: item.isSelected
-                                            ? const Color(0xFF1E3A5F)
-                                            : Colors.black87,
-                                        fontSize: 14)),
-                                subtitle: item.subtitle.isNotEmpty
-                                    ? Text(item.subtitle,
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            color: item.isSelected
-                                                ? const Color(0xFF1E3A5F).withValues(alpha: 0.7)
-                                                : Colors.grey))
-                                    : null,
-                                trailing: item.isSelected
-                                    ? const Icon(Icons.check_circle,
-                                        color: Color(0xFF1E3A5F))
-                                    : const Icon(Icons.arrow_forward_ios,
-                                        size: 14, color: Colors.grey),
-                                onTap: () => onSelected(item.value, item.extra),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
+                                            ? const Color(0xFF1E3A5F).withValues(alpha: 0.7)
+                                            : Colors.grey,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    )
+                                  : null,
+                              trailing: item.isSelected
+                                  ? const Icon(Icons.check_circle,
+                                      color: Color(0xFF1E3A5F))
+                                  : const Icon(Icons.arrow_forward_ios,
+                                      size: 14, color: Colors.grey),
+                              onTap: () => onSelected(item.value, item.extra),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // ── Selección de archivo ───────────────────────────────────────────
   Future<void> _pickExcelFile() async {
     if (!_todoListo) {
       _showMessage('⚠️ Completa la selección de carrera y evento primero');
@@ -449,7 +468,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
         type: FileType.custom,
         allowedExtensions: ['xlsx', 'xls'],
       );
-      if (result != null) {
+      if (result != null && mounted) {
         setState(() {
           _isLoading       = true;
           _fileName        = result.files.single.name;
@@ -460,18 +479,19 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
         });
         final file = File(result.files.single.path!);
         await _readExcelFile(file);
+        if (!mounted) return;
         setState(() {
           _fileSelected = true;
           _isLoading    = false;
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
       _showMessage('Error al seleccionar archivo: $e');
     }
   }
 
-  // ── Leer Excel ─────────────────────────────────────────────────────
   Future<void> _readExcelFile(File file) async {
     try {
       final bytes     = file.readAsBytesSync();
@@ -518,13 +538,11 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
           }
         }
 
-        // Para pagos solo necesitamos código universitario (o nombre como fallback)
         if (hasAnyData && rowData.containsKey('codigoUniversitario')) {
           _allData.add(rowData);
         }
       }
 
-      // Eliminar duplicados de código en el mismo Excel
       final Map<String, Map<String, dynamic>> uniqueMap = {};
       for (var row in _allData) {
         final codigo = row['codigoUniversitario']?.toString().trim() ?? '';
@@ -554,7 +572,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     return true;
   }
 
-  // ── Confirmar e importar ───────────────────────────────────────────
   Future<void> _importarPagos() async {
     if (_allData.isEmpty) {
       _showMessage('No hay datos para importar');
@@ -566,6 +583,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
               padding: const EdgeInsets.all(8),
@@ -577,57 +595,67 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
             ),
             const SizedBox(width: 12),
             const Expanded(
-              child: Text('Confirmar Importación de Pagos',
-                  style: TextStyle(
-                      color: Color(0xFF1E3A5F),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16)),
+              child: Text(
+                'Confirmar Importación de Pagos',
+                style: TextStyle(
+                  color: Color(0xFF1E3A5F),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _infoBox(
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _miniInfoRow(Icons.location_city, _selectedFilialNombre!),
-                const SizedBox(height: 4),
-                _miniInfoRow(Icons.school, _selectedCarrera!),
-                const SizedBox(height: 4),
-                _miniInfoRow(Icons.event, _selectedEventoNombre!),
+                _infoBox(
+                  children: [
+                    _miniInfoRow(Icons.location_city, _selectedFilialNombre!),
+                    const SizedBox(height: 4),
+                    _miniInfoRow(Icons.school, _selectedCarrera!),
+                    const SizedBox(height: 4),
+                    _miniInfoRow(Icons.event, _selectedEventoNombre!),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  '¿Marcar $_totalRows estudiantes como pagados?',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E3A5F),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.green.shade700, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Se buscará por código universitario y se actualizará '
+                          'el campo de pago en el evento seleccionado.',
+                          style: TextStyle(fontSize: 12, color: Colors.green.shade800),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 14),
-            Text(
-              '¿Marcar $_totalRows estudiantes como pagados?',
-              style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1E3A5F)),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: Colors.green.shade700, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Se buscará por código universitario y se actualizará '
-                      'el campo de pago en el evento seleccionado.',
-                      style: TextStyle(fontSize: 12, color: Colors.green.shade800),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
         actions: [
           TextButton(
@@ -651,6 +679,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     );
 
     if (confirm != true) return;
+    if (!mounted) return;
 
     setState(() {
       _isLoading       = true;
@@ -661,11 +690,12 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     });
 
     await _procesarPagos();
+
+    if (!mounted) return;
     setState(() => _isLoading = false);
     _showResultsDialog();
   }
 
-  // ── Procesar pagos ─────────────────────────────────────────────────
   Future<void> _procesarPagos() async {
     final carreraPath = _carreraPath;
     final eventoId    = _selectedEventoId!;
@@ -673,18 +703,19 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     debugPrint('💳 Importando pagos → carrera: "$carreraPath" | evento: "$eventoId"');
 
     for (int i = 0; i < _allData.length; i++) {
+      if (!mounted) break;
+
       final row    = _allData[i];
       final codigo = (row['codigoUniversitario'] ?? '').toString().trim();
 
       if (codigo.isEmpty) {
         _notFoundCount++;
         _notFoundList.add('Fila ${i + 2}: sin código universitario');
-        setState(() => _currentProgress++);
+        if (mounted) setState(() => _currentProgress++);
         continue;
       }
 
       try {
-        // Buscar estudiante por codigoUniversitario (texto plano)
         final query = await _firestore
             .collection('users')
             .doc(carreraPath)
@@ -693,15 +724,16 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
             .limit(1)
             .get();
 
+        if (!mounted) break;
+
         if (query.docs.isNotEmpty) {
           final studentRef = query.docs.first.reference;
-          // Actualizar campo pagos.{eventoId} = true
           await studentRef.update({'pagos.$eventoId': true});
           _successCount++;
           debugPrint('  ✅ Código $codigo → pago marcado');
         } else {
           _notFoundCount++;
-          final nombre = row['name'] ?? codigo;
+          final nombre = row['name']?.toString() ?? codigo;
           _notFoundList.add('$nombre ($codigo) — no encontrado');
           debugPrint('  ⚠️ Código $codigo → no encontrado en "$carreraPath"');
         }
@@ -711,14 +743,19 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
         debugPrint('  ❌ Error con código $codigo: $e');
       }
 
-      setState(() => _currentProgress++);
+      if (mounted) setState(() => _currentProgress++);
     }
 
     debugPrint('✅ Pagos procesados: $_successCount exitosos, $_notFoundCount no encontrados');
   }
 
-  // ── Diálogo de resultados ──────────────────────────────────────────
   void _showResultsDialog() {
+    if (!mounted) return;
+    final notFoundDisplay = _notFoundList.length > 20
+        ? _notFoundList.sublist(0, 20)
+        : _notFoundList;
+    final extraCount = _notFoundList.length - notFoundDisplay.length;
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -744,98 +781,112 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
             ),
             const SizedBox(width: 12),
             const Expanded(
-              child: Text('Resultados de Pagos',
-                  style: TextStyle(
-                      color: Color(0xFF1E3A5F),
-                      fontWeight: FontWeight.bold)),
+              child: Text(
+                'Resultados de Pagos',
+                style: TextStyle(
+                  color: Color(0xFF1E3A5F),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ],
         ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _infoBox(
-                children: [
-                  _miniInfoRow(Icons.location_city, _selectedFilialNombre!),
-                  const SizedBox(height: 4),
-                  _miniInfoRow(Icons.school, _selectedCarrera!),
-                  const SizedBox(height: 4),
-                  _miniInfoRow(Icons.event, _selectedEventoNombre!),
-                ],
-              ),
-              const SizedBox(height: 14),
-              _buildResultCard('Total en Excel', '$_totalRows',
-                  Icons.list_alt, Colors.blue.shade600, Colors.blue.shade50),
-              const SizedBox(height: 10),
-              _buildResultCard('Pagos registrados', '$_successCount',
-                  Icons.payments, Colors.green.shade600, Colors.green.shade50),
-              const SizedBox(height: 10),
-              _buildResultCard('No encontrados', '$_notFoundCount',
-                  Icons.person_search, Colors.orange.shade600, Colors.orange.shade50),
-              if (_notFoundList.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                const Divider(),
-                const SizedBox(height: 8),
-                const Text('Estudiantes no encontrados:',
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _infoBox(
+                  children: [
+                    _miniInfoRow(Icons.location_city, _selectedFilialNombre!),
+                    const SizedBox(height: 4),
+                    _miniInfoRow(Icons.school, _selectedCarrera!),
+                    const SizedBox(height: 4),
+                    _miniInfoRow(Icons.event, _selectedEventoNombre!),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _buildResultCard('Total en Excel', '$_totalRows',
+                    Icons.list_alt, Colors.blue.shade600, Colors.blue.shade50),
+                const SizedBox(height: 10),
+                _buildResultCard('Pagos registrados', '$_successCount',
+                    Icons.payments, Colors.green.shade600, Colors.green.shade50),
+                const SizedBox(height: 10),
+                _buildResultCard('No encontrados', '$_notFoundCount',
+                    Icons.person_search, Colors.orange.shade600, Colors.orange.shade50),
+                if (_notFoundList.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Estudiantes no encontrados:',
                     style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E3A5F),
-                        fontSize: 13)),
-                const SizedBox(height: 8),
-                Container(
-                  constraints: const BoxConstraints(maxHeight: 180),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(10),
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E3A5F),
+                      fontSize: 13,
+                    ),
                   ),
-                  padding: const EdgeInsets.all(10),
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _notFoundList.take(20).length,
-                    itemBuilder: (context, index) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            margin: const EdgeInsets.only(top: 5),
-                            width: 4, height: 4,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade400,
-                              shape: BoxShape.circle,
+                  const SizedBox(height: 8),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.all(10),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: notFoundDisplay.length,
+                      itemBuilder: (context, index) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              margin: const EdgeInsets.only(top: 5),
+                              width: 4, height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade400,
+                                shape: BoxShape.circle,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(_notFoundList[index],
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                notFoundDisplay[index],
                                 style: const TextStyle(
-                                    fontSize: 12, color: Color(0xFF64748B))),
-                          ),
-                        ],
+                                    fontSize: 12, color: Color(0xFF64748B)),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                if (_notFoundList.length > 20)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text('... y ${_notFoundList.length - 20} más',
+                  if (extraCount > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        '... y $extraCount más',
                         style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF64748B),
-                            fontStyle: FontStyle.italic)),
-                  ),
+                          fontSize: 12,
+                          color: Color(0xFF64748B),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
         actions: [
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
+              Navigator.of(context).pop();
+              if (mounted) Navigator.of(context).pop();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF1E3A5F),
@@ -851,7 +902,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     );
   }
 
-  // ── Widgets helpers ────────────────────────────────────────────────
   Widget _infoBox({required List<Widget> children}) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -873,12 +923,16 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
         Icon(icon, size: 14, color: const Color(0xFF1E3A5F)),
         const SizedBox(width: 6),
         Expanded(
-          child: Text(text,
-              style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF1E3A5F),
-                  fontWeight: FontWeight.w500),
-              overflow: TextOverflow.ellipsis),
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF1E3A5F),
+              fontWeight: FontWeight.w500,
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+          ),
         ),
       ],
     );
@@ -898,11 +952,21 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
           Icon(icon, size: 22, color: iconColor),
           const SizedBox(width: 12),
           Expanded(
-              child: Text(label,
-                  style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)))),
-          Text(value,
-              style: TextStyle(
-                  fontWeight: FontWeight.bold, color: iconColor, fontSize: 18)),
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: iconColor,
+              fontSize: 18,
+            ),
+          ),
         ],
       ),
     );
@@ -948,33 +1012,42 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
           ),
           child: Row(
             children: [
-              Icon(icon,
-                  color: enabled ? const Color(0xFF1E3A5F) : Colors.grey.shade400,
-                  size: 18),
+              Icon(
+                icon,
+                color: enabled ? const Color(0xFF1E3A5F) : Colors.grey.shade400,
+                size: 18,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(label,
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                    Text(
+                      label,
+                      style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       value ?? 'Seleccionar',
                       style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: isSelected && enabled
-                              ? const Color(0xFF1E3A5F)
-                              : enabled ? Colors.grey : Colors.grey.shade400),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: isSelected && enabled
+                            ? const Color(0xFF1E3A5F)
+                            : enabled ? Colors.grey : Colors.grey.shade400,
+                      ),
                       overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.arrow_drop_down,
-                  color: enabled ? const Color(0xFF1E3A5F) : Colors.grey.shade400,
-                  size: 18),
+              Icon(
+                Icons.arrow_drop_down,
+                color: enabled ? const Color(0xFF1E3A5F) : Colors.grey.shade400,
+                size: 18,
+              ),
             ],
           ),
         ),
@@ -982,7 +1055,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     );
   }
 
-  // ── BUILD ──────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -990,7 +1062,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
       body: SafeArea(
         child: Column(
           children: [
-            // Header
             Padding(
               padding: const EdgeInsets.all(20.0),
               child: Row(
@@ -1009,13 +1080,19 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Importar Pagos',
-                            style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white)),
-                        Text('Marcar estudiantes pagados por evento',
-                            style: TextStyle(fontSize: 12, color: Colors.white70)),
+                        Text(
+                          'Importar Pagos',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          'Marcar estudiantes pagados por evento',
+                          style: TextStyle(fontSize: 12, color: Colors.white70),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ],
                     ),
                   ),
@@ -1028,7 +1105,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
               ),
             ),
 
-            // Body
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -1040,7 +1116,8 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                 ),
                 child: !_estructuraCargada && _isLoading
                     ? const Center(
-                        child: CircularProgressIndicator(color: Color(0xFF1E3A5F)))
+                        child: CircularProgressIndicator(
+                            color: Color(0xFF1E3A5F)))
                     : _isLoading && _fileSelected
                         ? _buildLoadingView()
                         : FadeTransition(
@@ -1058,9 +1135,9 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     );
   }
 
-  // ── Loading view ───────────────────────────────────────────────────
   Widget _buildLoadingView() {
-    return Center(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -1071,9 +1148,10 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10))
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
               ],
             ),
             child: const CircularProgressIndicator(
@@ -1082,54 +1160,61 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
             ),
           ),
           const SizedBox(height: 32),
-          const Text('Procesando pagos...',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E3A5F))),
-          const SizedBox(height: 8),
-          Text('$_currentProgress / $_totalRows registros',
-              style: const TextStyle(fontSize: 16, color: Color(0xFF64748B))),
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40),
-            child: Column(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: LinearProgressIndicator(
-                    value: _totalRows > 0 ? _currentProgress / _totalRows : 0,
-                    backgroundColor: Colors.grey[200],
-                    valueColor:
-                        const AlwaysStoppedAnimation<Color>(Color(0xFF1E3A5F)),
-                    minHeight: 12,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '${(_totalRows > 0 ? (_currentProgress / _totalRows * 100) : 0).toStringAsFixed(1)}%',
-                  style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E3A5F)),
-                ),
-              ],
+          const Text(
+            'Procesando pagos...',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E3A5F),
             ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$_currentProgress / $_totalRows registros',
+            style: const TextStyle(fontSize: 16, color: Color(0xFF64748B)),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: _totalRows > 0 ? _currentProgress / _totalRows : 0,
+              backgroundColor: Colors.grey[200],
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(Color(0xFF1E3A5F)),
+              minHeight: 12,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '${(_totalRows > 0 ? (_currentProgress / _totalRows * 100) : 0).toStringAsFixed(1)}%',
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E3A5F),
+            ),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
           Container(
-            margin: const EdgeInsets.symmetric(horizontal: 40),
             padding: const EdgeInsets.all(16),
-            decoration:
-                BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _statCol('$_successCount', 'Marcados',
-                    Icons.check_circle, Colors.green),
+                Expanded(
+                  child: _statCol('$_successCount', 'Marcados',
+                      Icons.check_circle, Colors.green),
+                ),
                 Container(width: 1, height: 40, color: Colors.grey.shade300),
-                _statCol('$_notFoundCount', 'No encontrados',
-                    Icons.person_search, Colors.orange),
+                Expanded(
+                  child: _statCol('$_notFoundCount', 'No encontrados',
+                      Icons.person_search, Colors.orange),
+                ),
               ],
             ),
           ),
@@ -1140,19 +1225,28 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
 
   Widget _statCol(String value, String label, IconData icon, Color color) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, color: color, size: 24),
         const SizedBox(height: 4),
-        Text(value,
-            style: TextStyle(
-                fontWeight: FontWeight.bold, color: color, fontSize: 16)),
-        Text(label,
-            style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: color,
+            fontSize: 16,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+        ),
       ],
     );
   }
 
-  // ── Contenido principal ────────────────────────────────────────────
   Widget _buildMainContent() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
@@ -1160,11 +1254,9 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
 
-          // ── Card de filtros ────────────────────────────────────────
           _buildFiltrosCard(),
           const SizedBox(height: 16),
 
-          // ── Card principal de carga ────────────────────────────────
           Card(
             elevation: 4,
             shadowColor: Colors.black26,
@@ -1182,11 +1274,13 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                           : Colors.grey.shade100,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.payments,
-                        size: 40,
-                        color: _todoListo
-                            ? Colors.green.shade700
-                            : Colors.grey.shade400),
+                    child: Icon(
+                      Icons.payments,
+                      size: 40,
+                      color: _todoListo
+                          ? Colors.green.shade700
+                          : Colors.grey.shade400,
+                    ),
                   ),
                   const SizedBox(height: 20),
                   Text(
@@ -1203,10 +1297,11 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                         ? 'Selecciona el archivo Excel con los estudiantes que pagaron'
                         : 'Completa la selección de carrera y evento primero',
                     style: TextStyle(
-                        fontSize: 13,
-                        color: _todoListo
-                            ? const Color(0xFF64748B)
-                            : Colors.orange.shade700),
+                      fontSize: 13,
+                      color: _todoListo
+                          ? const Color(0xFF64748B)
+                          : Colors.orange.shade700,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
@@ -1216,18 +1311,21 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                   const SizedBox(height: 6),
                   _buildFeatureRow(Icons.warning_amber, 'Reporta códigos no encontrados'),
                   const SizedBox(height: 20),
-                  ElevatedButton.icon(
-                    onPressed: _todoListo ? _pickExcelFile : null,
-                    icon: const Icon(Icons.file_open),
-                    label: const Text('Seleccionar Archivo Excel'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade700,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: Colors.grey.shade300,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 32, vertical: 16),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _todoListo ? _pickExcelFile : null,
+                      icon: const Icon(Icons.file_open),
+                      label: const Text('Seleccionar Archivo Excel'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade700,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: Colors.grey.shade300,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 16),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
                     ),
                   ),
                   if (_fileName != null) ...[
@@ -1255,17 +1353,22 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Archivo seleccionado',
-                                    style: TextStyle(
-                                        fontSize: 11, color: Color(0xFF64748B))),
+                                const Text(
+                                  'Archivo seleccionado',
+                                  style: TextStyle(
+                                      fontSize: 11, color: Color(0xFF64748B)),
+                                ),
                                 const SizedBox(height: 2),
-                                Text(_fileName!,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF1E3A5F),
-                                        fontSize: 13),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis),
+                                Text(
+                                  _fileName!,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1E3A5F),
+                                    fontSize: 13,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ],
                             ),
                           ),
@@ -1278,7 +1381,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
             ),
           ),
 
-          // ── Vista previa ───────────────────────────────────────────
           if (_fileSelected && _previewData.isNotEmpty) ...[
             const SizedBox(height: 20),
             _buildPreviewCard(),
@@ -1294,6 +1396,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
                       padding: const EdgeInsets.all(10),
@@ -1309,7 +1412,8 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                       child: Text(
                         'No se encontraron registros con "Código estudiante". '
                         'Verifica que el archivo tenga esa columna.',
-                        style: TextStyle(color: Color(0xFF1E3A5F), fontSize: 14),
+                        style: TextStyle(
+                            color: Color(0xFF1E3A5F), fontSize: 14),
                       ),
                     ),
                   ],
@@ -1322,7 +1426,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     );
   }
 
-  // ── Card de filtros ────────────────────────────────────────────────
   Widget _buildFiltrosCard() {
     return Card(
       elevation: 3,
@@ -1346,15 +1449,21 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                       color: Colors.green.shade700, size: 20),
                 ),
                 const SizedBox(width: 10),
-                const Text('Destino del pago',
+                const Expanded(
+                  child: Text(
+                    'Destino del pago',
                     style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E3A5F))),
-                const Spacer(),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E3A5F),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
                 if (_todoListo)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.green.shade50,
                       borderRadius: BorderRadius.circular(20),
@@ -1363,13 +1472,17 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.check_circle, size: 14, color: Colors.green.shade600),
+                        Icon(Icons.check_circle,
+                            size: 14, color: Colors.green.shade600),
                         const SizedBox(width: 4),
-                        Text('Listo',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.green.shade700,
-                                fontWeight: FontWeight.w600)),
+                        Text(
+                          'Listo',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green.shade700,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1377,7 +1490,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
             ),
             const SizedBox(height: 14),
 
-            // Sede
             _filterBtn(
               label: 'Sede',
               value: _selectedFilialNombre,
@@ -1387,7 +1499,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
             ),
             const SizedBox(height: 10),
 
-            // Facultad
             _filterBtn(
               label: 'Facultad',
               value: _selectedFacultad != null
@@ -1399,7 +1510,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
             ),
             const SizedBox(height: 10),
 
-            // Carrera
             _filterBtn(
               label: 'Carrera',
               value: _selectedCarrera,
@@ -1409,7 +1519,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
             ),
             const SizedBox(height: 10),
 
-            // Evento
             _loadingEventos
                 ? Container(
                     padding: const EdgeInsets.all(14),
@@ -1427,8 +1536,13 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                               color: Colors.green.shade700),
                         ),
                         const SizedBox(width: 12),
-                        const Text('Cargando eventos...',
-                            style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+                        const Expanded(
+                          child: Text(
+                            'Cargando eventos...',
+                            style: TextStyle(
+                                fontSize: 13, color: Color(0xFF64748B)),
+                          ),
+                        ),
                       ],
                     ),
                   )
@@ -1442,7 +1556,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                     enabled: _destinoListo && _eventos.isNotEmpty,
                   ),
 
-            // Aviso sin eventos
             if (_destinoListo && !_loadingEventos && _eventos.isEmpty) ...[
               const SizedBox(height: 10),
               Container(
@@ -1453,13 +1566,16 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                   border: Border.all(color: Colors.orange.shade200),
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.warning_amber, color: Colors.orange.shade700, size: 18),
+                    Icon(Icons.warning_amber,
+                        color: Colors.orange.shade700, size: 18),
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
                         'No hay eventos para esta carrera. El admin de carrera debe crear uno primero.',
-                        style: TextStyle(fontSize: 12, color: Color(0xFF1E3A5F)),
+                        style:
+                            TextStyle(fontSize: 12, color: Color(0xFF1E3A5F)),
                       ),
                     ),
                   ],
@@ -1467,7 +1583,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
               ),
             ],
 
-            // Path resumen
             if (_todoListo) ...[
               const SizedBox(height: 14),
               Container(
@@ -1479,7 +1594,8 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.folder_open, size: 16, color: Colors.green.shade700),
+                    Icon(Icons.folder_open,
+                        size: 16, color: Colors.green.shade700),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -1491,6 +1607,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                           fontWeight: FontWeight.w500,
                         ),
                         overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
                       ),
                     ),
                   ],
@@ -1503,7 +1620,6 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     );
   }
 
-  // ── Vista previa ───────────────────────────────────────────────────
   Widget _buildPreviewCard() {
     return Card(
       elevation: 4,
@@ -1527,28 +1643,36 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                 ),
                 const SizedBox(width: 12),
                 const Expanded(
-                  child: Text('Vista Previa',
-                      style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E3A5F))),
+                  child: Text(
+                    'Vista Previa',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E3A5F),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.green.shade700,
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Text('$_totalRows estudiantes',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13)),
+                  child: Text(
+                    '$_totalRows est.',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
               ],
             ),
 
-            // Banner destino + evento
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1565,10 +1689,12 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                     child: Text(
                       '$_selectedCarrera › $_selectedEventoNombre',
                       style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.green.shade800,
-                          fontWeight: FontWeight.w600),
+                        fontSize: 12,
+                        color: Colors.green.shade800,
+                        fontWeight: FontWeight.w600,
+                      ),
                       overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
                     ),
                   ),
                 ],
@@ -1582,8 +1708,8 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
               itemCount: _previewData.length,
               itemBuilder: (context, index) {
                 final student = _previewData[index];
-                final codigo = student['codigoUniversitario'] ?? '—';
-                final nombre = student['name'] ?? 'Sin nombre';
+                final codigo = student['codigoUniversitario']?.toString() ?? '—';
+                final nombre = student['name']?.toString() ?? 'Sin nombre';
                 return Container(
                   margin: const EdgeInsets.only(bottom: 10),
                   decoration: BoxDecoration(
@@ -1601,27 +1727,41 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Center(
-                        child: Text('${index + 1}',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15)),
+                        child: Text(
+                          '${index + 1}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
                       ),
                     ),
-                    title: Text(nombre,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E3A5F),
-                            fontSize: 14)),
+                    title: Text(
+                      nombre,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E3A5F),
+                        fontSize: 14,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
                     subtitle: Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Row(
                         children: [
-                          Icon(Icons.badge, size: 13, color: Colors.grey.shade600),
+                          Icon(Icons.badge,
+                              size: 13, color: Colors.grey.shade600),
                           const SizedBox(width: 4),
-                          Text('Código: $codigo',
+                          Expanded(
+                            child: Text(
+                              'Código: $codigo',
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade600)),
+                                  fontSize: 12, color: Colors.grey.shade600),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -1635,8 +1775,8 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
               const SizedBox(height: 10),
               Center(
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 18, vertical: 8),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(20),
@@ -1644,9 +1784,10 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                   child: Text(
                     'Y ${_totalRows - 5} más...',
                     style: const TextStyle(
-                        color: Color(0xFF64748B),
-                        fontStyle: FontStyle.italic,
-                        fontSize: 12),
+                      color: Color(0xFF64748B),
+                      fontStyle: FontStyle.italic,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ),
@@ -1657,8 +1798,11 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
               child: ElevatedButton.icon(
                 onPressed: _importarPagos,
                 icon: const Icon(Icons.payments, size: 22),
-                label: const Text('Marcar como Pagados',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                label: const Text(
+                  'Marcar como Pagados',
+                  style: TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.bold),
+                ),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   backgroundColor: Colors.green.shade700,
@@ -1682,21 +1826,25 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
         children: [
           Icon(icon, size: 18, color: Colors.green.shade700),
           const SizedBox(width: 10),
-          Text(text,
-              style: const TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-// ── Helper para items del bottom sheet ─────────────────────────────────
 class _SheetItem {
   final String  value;
   final String  label;
   final String  subtitle;
   final bool    isSelected;
-  final String? extra; // para carreraId
+  final String? extra;
 
   const _SheetItem({
     required this.value,

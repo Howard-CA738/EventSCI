@@ -26,7 +26,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
     with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ── Config editable ───────────────────────────────────────────────────────
   bool _qrActivo = true;
   bool _tiempoLimiteActivo = false;
   int _tiempoLimiteMinutos = 30;
@@ -35,20 +34,16 @@ class _ConfiguracionAsistenciaPersonalScreenState
   DateTime? _ventanaFin;
   DateTime? _activadoEn;
 
-  // ── Estado ────────────────────────────────────────────────────────────────
   bool _guardandoConfig = false;
   bool _cargandoDoc = true;
 
-  // ── Countdown ─────────────────────────────────────────────────────────────
   Timer? _tickTimer;
+  StreamSubscription? _asistenciaSub;
 
-  // ── Animaciones ───────────────────────────────────────────────────────────
   late AnimationController _fadeCtrl;
 
-  // ── Opciones de tiempo ────────────────────────────────────────────────────
   static const List<int> _opcionesMinutos = [5, 10, 15, 20, 30, 45, 60, 90, 120];
 
-  // ── Colores ───────────────────────────────────────────────────────────────
   static const Color _primary = Color(0xFF1E3A5F);
   static const Color _danger = Color(0xFFE53935);
   static const Color _success = Color(0xFF43A047);
@@ -64,7 +59,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
     _initDesdeAsistencia(widget.asistencia);
     _tickTimer =
         Timer.periodic(const Duration(seconds: 1), (_) { if (mounted) setState(() {}); });
-    // Escuchar cambios en tiempo real
     _escucharAsistencia();
   }
 
@@ -72,6 +66,7 @@ class _ConfiguracionAsistenciaPersonalScreenState
   void dispose() {
     _fadeCtrl.dispose();
     _tickTimer?.cancel();
+    _asistenciaSub?.cancel();
     super.dispose();
   }
 
@@ -81,7 +76,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
     _tiempoLimiteMinutos = (data['tiempoLimiteMinutos'] as num?)?.toInt() ?? 30;
     _ventanaHorariaActiva = data['ventanaHorariaActiva'] == true;
 
-    // Ventana inicio
     final vi = data['ventanaInicio'];
     if (vi is Timestamp) {
       _ventanaInicio = vi.toDate();
@@ -89,7 +83,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
       _ventanaInicio = DateTime.tryParse(vi);
     }
 
-    // Ventana fin
     final vf = data['ventanaFin'];
     if (vf is Timestamp) {
       _ventanaFin = vf.toDate();
@@ -97,7 +90,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
       _ventanaFin = DateTime.tryParse(vf);
     }
 
-    // Activado en
     final ae = data['activadoEn'];
     if (ae is Timestamp) {
       _activadoEn = ae.toDate();
@@ -109,7 +101,7 @@ class _ConfiguracionAsistenciaPersonalScreenState
   }
 
   void _escucharAsistencia() {
-    _firestore
+    _asistenciaSub = _firestore
         .collection('events')
         .doc(widget.eventId)
         .collection('asistencias_personales')
@@ -121,10 +113,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
       setState(() => _initDesdeAsistencia(data));
     });
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // ESTADO EFECTIVO
-  // ══════════════════════════════════════════════════════════════════════════
 
   String get _estadoEfectivo {
     if (!_qrActivo) return 'inactivo';
@@ -162,10 +150,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
     }
     return '${d.inSeconds}s';
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // GUARDAR CONFIGURACIÓN
-  // ══════════════════════════════════════════════════════════════════════════
 
   Future<void> _guardarConfiguracion() async {
     if (_ventanaHorariaActiva) {
@@ -221,7 +205,7 @@ class _ConfiguracionAsistenciaPersonalScreenState
     } catch (e) {
       _snack('Error al guardar: $e', error: true);
     } finally {
-      setState(() => _guardandoConfig = false);
+      if (mounted) setState(() => _guardandoConfig = false);
     }
   }
 
@@ -246,10 +230,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // BUILD
-  // ══════════════════════════════════════════════════════════════════════════
-
   @override
   Widget build(BuildContext context) {
     final nombre = widget.asistencia['nombre'] ?? 'Asistencia';
@@ -265,17 +245,21 @@ class _ConfiguracionAsistenciaPersonalScreenState
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(nombre.toString(),
-              style: const TextStyle(
-                  fontWeight: FontWeight.w700, fontSize: 16),
-              overflow: TextOverflow.ellipsis),
-          Text(eventName.toString(),
-              style: const TextStyle(fontSize: 11, color: Colors.white60),
-              overflow: TextOverflow.ellipsis),
-        ]),
+        title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(nombre.toString(),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 16),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+              Text(eventName.toString(),
+                  style: const TextStyle(fontSize: 11, color: Colors.white60),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            ]),
         actions: [
-          // Botón guardar rápido en AppBar
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: _guardandoConfig
@@ -312,22 +296,12 @@ class _ConfiguracionAsistenciaPersonalScreenState
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // ── Info de la asistencia ──────────────────────────
                         _buildInfoCard(),
-
                         const SizedBox(height: 16),
-
-                        // ── Estado badge en tiempo real ────────────────────
                         _buildEstadoRealtime(),
-
                         const SizedBox(height: 16),
-
-                        // ── Configuración ──────────────────────────────────
                         _buildSeccionConfig(),
-
                         const SizedBox(height: 20),
-
-                        // ── Botón guardar principal ────────────────────────
                         ElevatedButton.icon(
                           onPressed:
                               _guardandoConfig ? null : _guardarConfiguracion,
@@ -342,6 +316,8 @@ class _ConfiguracionAsistenciaPersonalScreenState
                             _guardandoConfig
                                 ? 'Guardando...'
                                 : 'Guardar configuración',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                                 fontSize: 15, fontWeight: FontWeight.bold),
                           ),
@@ -354,7 +330,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
                             elevation: 0,
                           ),
                         ),
-
                         const SizedBox(height: 24),
                       ]),
                 ),
@@ -363,14 +338,14 @@ class _ConfiguracionAsistenciaPersonalScreenState
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // SECCIÓN: INFO CARD
-  // ══════════════════════════════════════════════════════════════════════════
-
   Widget _buildInfoCard() {
     final nombre = widget.asistencia['nombre'] ?? 'Sin nombre';
     final eventName = widget.asistencia['eventName'] ?? '';
     final descripcion = widget.asistencia['descripcion'] ?? '';
+
+    final nombreStr = nombre.toString();
+    final inicial =
+        nombreStr.isNotEmpty ? nombreStr.substring(0, 1).toUpperCase() : '?';
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -397,7 +372,7 @@ class _ConfiguracionAsistenciaPersonalScreenState
           ),
           child: Center(
             child: Text(
-              nombre.toString().substring(0, 1).toUpperCase(),
+              inicial,
               style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -410,11 +385,13 @@ class _ConfiguracionAsistenciaPersonalScreenState
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(nombre.toString(),
+                Text(nombreStr,
                     style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 15,
-                        color: _primary)),
+                        color: _primary),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 4),
                 Row(children: [
                   const Icon(Icons.event_rounded,
@@ -424,6 +401,7 @@ class _ConfiguracionAsistenciaPersonalScreenState
                     child: Text(eventName.toString(),
                         style: const TextStyle(
                             fontSize: 12, color: Color(0xFF64748B)),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis),
                   ),
                 ]),
@@ -440,10 +418,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
       ]),
     );
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // SECCIÓN: ESTADO EN TIEMPO REAL
-  // ══════════════════════════════════════════════════════════════════════════
 
   Widget _buildEstadoRealtime() {
     final estado = _estadoEfectivo;
@@ -489,22 +463,23 @@ class _ConfiguracionAsistenciaPersonalScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Estado actual',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                           fontSize: 11,
                           color: colorEstado.withValues(alpha: 0.7))),
                   Text(labelEstado,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: colorEstado)),
                 ]),
           ),
-          // Indicador pulsante si activo
           if (estado == 'activo')
             _buildPulsingDot(colorEstado),
         ]),
-
-        // Countdowns
         if (estado == 'activo' && restante != null && restante > Duration.zero) ...[
           const SizedBox(height: 12),
           _buildCountdownRow(restante, '⏱ Expira en', Colors.orange.shade700),
@@ -563,9 +538,15 @@ class _ConfiguracionAsistenciaPersonalScreenState
       child: Row(children: [
         Icon(Icons.hourglass_bottom_rounded, size: 15, color: c),
         const SizedBox(width: 8),
-        Text('$prefijo  ',
-            style: TextStyle(fontSize: 12, color: c)),
+        Flexible(
+          child: Text('$prefijo  ',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: c)),
+        ),
         Text(_formatDur(d),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
@@ -596,10 +577,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // SECCIÓN: CONFIGURACIÓN
-  // ══════════════════════════════════════════════════════════════════════════
-
   Widget _buildSeccionConfig() {
     return Container(
       decoration: BoxDecoration(
@@ -613,7 +590,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
         ],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Header
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
@@ -631,20 +607,22 @@ class _ConfiguracionAsistenciaPersonalScreenState
                   color: _primary, size: 20),
             ),
             const SizedBox(width: 12),
-            const Text('Configuración del QR',
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: _primary)),
+            const Expanded(
+              child: Text('Configuración del QR',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: _primary)),
+            ),
           ]),
         ),
-
         Padding(
           padding: const EdgeInsets.all(18),
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ── 1. ESTADO BASE ─────────────────────────────────────────
                 _buildConfigBloque(
                   titulo: 'Estado del QR',
                   icono: Icons.qr_code_2_rounded,
@@ -664,10 +642,7 @@ class _ConfiguracionAsistenciaPersonalScreenState
                     onChanged: (v) => setState(() => _qrActivo = v),
                   ),
                 ),
-
                 const SizedBox(height: 14),
-
-                // ── 2. LÍMITE DE TIEMPO ────────────────────────────────────
                 _buildConfigBloque(
                   titulo: 'Límite de tiempo',
                   icono: Icons.timer_rounded,
@@ -689,7 +664,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
                     ),
                     if (_tiempoLimiteActivo) ...[
                       const SizedBox(height: 16),
-                      // Chips rápidos
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -735,7 +709,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
                         }).toList(),
                       ),
                       const SizedBox(height: 14),
-                      // Slider
                       Row(children: [
                         const Icon(Icons.remove, size: 18, color: _primary),
                         Expanded(
@@ -751,7 +724,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
                         ),
                         const Icon(Icons.add, size: 18, color: _primary),
                       ]),
-                      // Valor grande
                       Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(
@@ -764,6 +736,8 @@ class _ConfiguracionAsistenciaPersonalScreenState
                             _tiempoLimiteMinutos >= 60
                                 ? '${_tiempoLimiteMinutos ~/ 60}h ${_tiempoLimiteMinutos % 60 > 0 ? '${_tiempoLimiteMinutos % 60}min' : ''}'
                                 : '$_tiempoLimiteMinutos minutos',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
@@ -781,10 +755,7 @@ class _ConfiguracionAsistenciaPersonalScreenState
                     ],
                   ]),
                 ),
-
                 const SizedBox(height: 14),
-
-                // ── 3. VENTANA HORARIA ─────────────────────────────────────
                 _buildConfigBloque(
                   titulo: 'Ventana horaria',
                   icono: Icons.access_time_rounded,
@@ -905,12 +876,16 @@ class _ConfiguracionAsistenciaPersonalScreenState
                                 const Icon(Icons.schedule_rounded,
                                     size: 16, color: Colors.blue),
                                 const SizedBox(width: 8),
-                                Text(
-                                  'Activo de ${_ventanaInicio!.hour.toString().padLeft(2, '0')}:${_ventanaInicio!.minute.toString().padLeft(2, '0')} a ${_ventanaFin!.hour.toString().padLeft(2, '0')}:${_ventanaFin!.minute.toString().padLeft(2, '0')}',
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.blue),
+                                Flexible(
+                                  child: Text(
+                                    'Activo de ${_ventanaInicio!.hour.toString().padLeft(2, '0')}:${_ventanaInicio!.minute.toString().padLeft(2, '0')} a ${_ventanaFin!.hour.toString().padLeft(2, '0')}:${_ventanaFin!.minute.toString().padLeft(2, '0')}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blue),
+                                  ),
                                 ),
                               ]),
                         ),
@@ -930,8 +905,6 @@ class _ConfiguracionAsistenciaPersonalScreenState
       ]),
     );
   }
-
-  // ── Helpers de UI ─────────────────────────────────────────────────────────
 
   Widget _buildConfigBloque({
     required String titulo,
@@ -956,11 +929,15 @@ class _ConfiguracionAsistenciaPersonalScreenState
           child: Row(children: [
             Icon(icono, size: 16, color: color),
             const SizedBox(width: 8),
-            Text(titulo,
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: color)),
+            Expanded(
+              child: Text(titulo,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: color)),
+            ),
           ]),
         ),
         Padding(padding: const EdgeInsets.all(14), child: child),
@@ -1024,6 +1001,8 @@ class _ConfiguracionAsistenciaPersonalScreenState
         ),
         child: Column(children: [
           Text(label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                   fontSize: 10,
                   color: color,
@@ -1032,17 +1011,24 @@ class _ConfiguracionAsistenciaPersonalScreenState
           const SizedBox(height: 8),
           Icon(Icons.access_time_rounded, size: 20, color: color),
           const SizedBox(height: 6),
-          Text(
-            hora != null
-                ? '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}'
-                : '--:--',
-            style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: hora != null ? color : Colors.grey.shade400),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              hora != null
+                  ? '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}'
+                  : '--:--',
+              maxLines: 1,
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: hora != null ? color : Colors.grey.shade400),
+            ),
           ),
           const SizedBox(height: 4),
           Text('Toca para cambiar',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: TextStyle(
                   fontSize: 9, color: color.withValues(alpha: 0.6))),
         ]),

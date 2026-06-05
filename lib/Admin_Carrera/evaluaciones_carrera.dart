@@ -4,8 +4,6 @@ import '/admin/logica/gestion_criterios.dart';
 import '/prefs_helper.dart';
 import 'detalle_evaluaciones_carrera.dart';
 
-// Archivo: lib/admin/interfaz/evaluaciones_carrera.dart
-
 class EvaluacionesCarreraScreen extends StatefulWidget {
   const EvaluacionesCarreraScreen({super.key});
 
@@ -19,9 +17,6 @@ class _EvaluacionesCarreraScreenState
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final RubricasService _rubricasService = RubricasService();
 
-  // ═══════════════════════════════════════════════════════════════
-  // DATOS DE SESIÓN
-  // ═══════════════════════════════════════════════════════════════
   String? _filialId;
   String? _filialNombre;
   String? _facultad;
@@ -31,7 +26,7 @@ class _EvaluacionesCarreraScreenState
   List<Map<String, dynamic>> _eventosFiltrados = [];
   bool _isLoadingInit = true;
   bool _isLoadingEventos = false;
-  bool _isNavigating = false;
+  String? _navigatingEventoId;
 
   @override
   void initState() {
@@ -39,9 +34,6 @@ class _EvaluacionesCarreraScreenState
     _init();
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // INICIALIZAR
-  // ═══════════════════════════════════════════════════════════════
   Future<void> _init() async {
     setState(() => _isLoadingInit = true);
     try {
@@ -68,18 +60,17 @@ class _EvaluacionesCarreraScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Error al iniciar: $e'),
-              backgroundColor: Colors.red),
+            content: Text('Error al iniciar: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
-    setState(() => _isLoadingInit = false);
+    if (mounted) setState(() => _isLoadingInit = false);
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // CARGAR EVENTOS
-  // ═══════════════════════════════════════════════════════════════
   Future<void> _cargarEventos() async {
+    if (!mounted) return;
     setState(() => _isLoadingEventos = true);
     try {
       final snapshot = await _firestore
@@ -111,46 +102,46 @@ class _EvaluacionesCarreraScreenState
         setState(() => _isLoadingEventos = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Error al cargar eventos: $e'),
-              backgroundColor: Colors.red),
+            content: Text('Error al cargar eventos: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // AL TOCAR EVENTO: cargar evaluaciones y navegar
-  // ═══════════════════════════════════════════════════════════════
   Future<void> _abrirEvento(Map<String, dynamic> evento) async {
-    setState(() => _isNavigating = true);
+    final eventoId = evento['id'] as String;
+    if (_navigatingEventoId != null) return;
+    setState(() => _navigatingEventoId = eventoId);
     try {
-      final evaluaciones =
-          await _cargarEvaluacionesDeEvento(evento['id'] as String);
+      final evaluaciones = await _cargarEvaluacionesDeEvento(eventoId);
       if (mounted) {
         await Navigator.push(
-  context,
-  MaterialPageRoute(
-    builder: (_) => DetalleEvaluacionesCarreraScreen(
-      eventoId: evento['id'] as String,
-      eventoNombre: evento['name'] as String,
-      evaluaciones: evaluaciones,
-      filialNombre: _filialNombre ?? '',
-      facultad: _facultad ?? '',
-      carrera: _carrera ?? '',
-    ),
-  ),
-);
+          context,
+          MaterialPageRoute(
+            builder: (_) => DetalleEvaluacionesCarreraScreen(
+              eventoId: eventoId,
+              eventoNombre: evento['name'] as String,
+              evaluaciones: evaluaciones,
+              filialNombre: _filialNombre ?? '',
+              facultad: _facultad ?? '',
+              carrera: _carrera ?? '',
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Error al abrir evento: $e'),
-              backgroundColor: Colors.red),
+            content: Text('Error al abrir evento: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
-    if (mounted) setState(() => _isNavigating = false);
+    if (mounted) setState(() => _navigatingEventoId = null);
   }
 
   Future<List<Map<String, dynamic>>> _cargarEvaluacionesDeEvento(
@@ -197,8 +188,7 @@ class _EvaluacionesCarreraScreenState
             'titulo': proyectoData['Título'] ?? 'Sin título',
             'integrantes': proyectoData['Integrantes'] ?? '',
             'sala': proyectoData['Sala'] ?? '',
-            'clasificacion':
-                proyectoData['Clasificación'] ?? 'Sin categoría',
+            'clasificacion': proyectoData['Clasificación'] ?? 'Sin categoría',
             'juradoId': evalDoc.id,
             'juradoNombre': evalData['juradoNombre'] ?? 'Jurado',
             'rubricaId': rubricaId,
@@ -213,7 +203,7 @@ class _EvaluacionesCarreraScreenState
           };
         }).toList();
       } catch (e) {
-        debugPrint('❌ Error procesando proyecto ${proyectoDoc.id}: $e');
+        debugPrint('Error procesando proyecto ${proyectoDoc.id}: $e');
         return <Map<String, dynamic>>[];
       }
     }).toList();
@@ -223,13 +213,10 @@ class _EvaluacionesCarreraScreenState
     for (var r in resultados) {
       lista.addAll(r);
     }
-    lista.sort((a, b) => a['codigo'].compareTo(b['codigo']));
+    lista.sort((a, b) => (a['codigo'] as String).compareTo(b['codigo'] as String));
     return lista;
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // BUILD
-  // ═══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -237,37 +224,44 @@ class _EvaluacionesCarreraScreenState
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ──────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.all(20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
               child: Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back,
-                        color: Colors.white, size: 28),
-                    onPressed: () => Navigator.of(context).pop(),
+                  Semantics(
+                    label: 'Volver',
+                    button: true,
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back,
+                          color: Colors.white, size: 28),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   const Expanded(
                     child: Text(
                       'Evaluaciones',
                       style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white),
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.refresh,
-                        color: Colors.white, size: 26),
-                    onPressed: _isLoadingEventos ? null : _cargarEventos,
-                    tooltip: 'Actualizar',
+                  Semantics(
+                    label: 'Actualizar eventos',
+                    button: true,
+                    child: IconButton(
+                      icon: const Icon(Icons.refresh,
+                          color: Colors.white, size: 26),
+                      onPressed: _isLoadingEventos ? null : _cargarEventos,
+                      tooltip: 'Actualizar',
+                    ),
                   ),
                 ],
               ),
             ),
-
-            // ── Content ─────────────────────────────────────────
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -285,10 +279,13 @@ class _EvaluacionesCarreraScreenState
                             CircularProgressIndicator(
                                 color: Color(0xFF1E3A5F)),
                             SizedBox(height: 16),
-                            Text('Cargando datos...',
-                                style: TextStyle(
-                                    color: Color(0xFF1E3A5F),
-                                    fontSize: 16)),
+                            Text(
+                              'Cargando datos...',
+                              style: TextStyle(
+                                color: Color(0xFF1E3A5F),
+                                fontSize: 16,
+                              ),
+                            ),
                           ],
                         ),
                       )
@@ -311,9 +308,6 @@ class _EvaluacionesCarreraScreenState
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // CARD: Info del admin de carrera
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildInfoAdminCard() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -322,11 +316,12 @@ class _EvaluacionesCarreraScreenState
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha:0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.admin_panel_settings,
@@ -340,224 +335,241 @@ class _EvaluacionesCarreraScreenState
                 Text(
                   _carrera ?? '—',
                   style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15),
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
                 ),
                 const SizedBox(height: 3),
-                Text(_facultad ?? '—',
-                    style: const TextStyle(
-                        color: Colors.white70, fontSize: 12)),
+                Text(
+                  _facultad ?? '—',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
                 const SizedBox(height: 2),
                 Row(
                   children: [
                     const Icon(Icons.location_on,
                         color: Colors.white54, size: 12),
                     const SizedBox(width: 4),
-                    Text(_filialNombre ?? '—',
+                    Expanded(
+                      child: Text(
+                        _filialNombre ?? '—',
                         style: const TextStyle(
-                            color: Colors.white54, fontSize: 11)),
+                            color: Colors.white54, fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
                   ],
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha:0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.white30),
             ),
-            child: const Text('Tu carrera',
-                style:
-                    TextStyle(color: Colors.white70, fontSize: 11)),
+            child: const Text(
+              'Tu carrera',
+              style: TextStyle(color: Colors.white70, fontSize: 11),
+            ),
           ),
         ],
       ),
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // SECCIÓN: Lista de eventos
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildEventosSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Encabezado con contador
         Row(
           children: [
-            const Text(
-              'Eventos disponibles',
-              style: TextStyle(
+            const Flexible(
+              child: Text(
+                'Eventos disponibles',
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E3A5F)),
+                  color: Color(0xFF1E3A5F),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
+                color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
                 '${_eventosFiltrados.length}',
                 style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF1E3A5F),
-                    fontWeight: FontWeight.bold),
+                  fontSize: 12,
+                  color: Color(0xFF1E3A5F),
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 8),
-
-        // Aviso
         Container(
           margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.symmetric(
-              horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.blue.withValues(alpha:0.08),
+            color: Colors.blue.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
-            border:
-                Border.all(color: Colors.blue.withValues(alpha:0.25)),
+            border: Border.all(color: Colors.blue.withValues(alpha: 0.25)),
           ),
           child: Row(
             children: [
-              Icon(Icons.info_outline,
-                  size: 16, color: Colors.blue[700]),
+              Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   'Toca un evento para ver y gestionar sus evaluaciones',
-                  style:
-                      TextStyle(fontSize: 12, color: Colors.blue[700]),
+                  style: TextStyle(fontSize: 12, color: Colors.blue[700]),
                 ),
               ),
             ],
           ),
         ),
-
-        // Lista
         if (_isLoadingEventos)
           const Center(
             child: Padding(
               padding: EdgeInsets.all(40),
-              child:
-                  CircularProgressIndicator(color: Color(0xFF1E3A5F)),
+              child: CircularProgressIndicator(color: Color(0xFF1E3A5F)),
             ),
           )
         else if (_eventosFiltrados.isEmpty)
           _buildEmptyState()
         else
-          ...(_eventosFiltrados
-              .map((e) => _buildEventoCard(e))
-              .toList()),
+          ...(_eventosFiltrados.map((e) => _buildEventoCard(e)).toList()),
       ],
     );
   }
 
   Widget _buildEventoCard(Map<String, dynamic> evento) {
     final nombre = evento['name'] as String;
-    return GestureDetector(
-      onTap: _isNavigating ? null : () => _abrirEvento(evento),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha:0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            // Avatar
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF9C27B0), Color(0xFF7B1FA2)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(14),
+    final eventoId = evento['id'] as String;
+    final isThisNavigating = _navigatingEventoId == eventoId;
+    final isAnyNavigating = _navigatingEventoId != null;
+
+    final String inicial =
+        nombre.trim().isNotEmpty ? nombre.trim()[0].toUpperCase() : '?';
+
+    return Semantics(
+      label: 'Evento: $nombre. Toca para ver evaluaciones.',
+      button: true,
+      child: GestureDetector(
+        onTap: isAnyNavigating ? null : () => _abrirEvento(evento),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
-              child: Center(
-                child: Text(
-                  nombre.substring(0, 1).toUpperCase(),
-                  style: const TextStyle(
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF9C27B0), Color(0xFF7B1FA2)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Center(
+                  child: Text(
+                    inicial,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 20),
+                      fontSize: 20,
+                    ),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 14),
-
-            // Nombre y subtítulo
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    nombre,
-                    style: const TextStyle(
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      nombre,
+                      style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
-                        color: Color(0xFF1E3A5F)),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(Icons.assessment,
-                          size: 13, color: Colors.purple[400]),
-                      const SizedBox(width: 4),
-                      Text('Ver evaluaciones',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.purple[400])),
-                    ],
-                  ),
-                ],
+                        color: Color(0xFF1E3A5F),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.assessment,
+                            size: 13, color: Colors.purple[400]),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            'Ver evaluaciones',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.purple[400]),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-
-            // Flecha o spinner
-            _isNavigating
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
+              const SizedBox(width: 8),
+              isThisNavigating
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Color(0xFF9C27B0)),
-                  )
-                : Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color:
-                          const Color(0xFF9C27B0).withValues(alpha:0.1),
-                      borderRadius: BorderRadius.circular(8),
+                        color: Color(0xFF9C27B0),
+                      ),
+                    )
+                  : Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF9C27B0).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        color: Color(0xFF9C27B0),
+                        size: 14,
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      color: Color(0xFF9C27B0),
-                      size: 14,
-                    ),
-                  ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -565,6 +577,7 @@ class _EvaluacionesCarreraScreenState
 
   Widget _buildEmptyState() {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -585,15 +598,20 @@ class _EvaluacionesCarreraScreenState
           const Text(
             'No hay eventos disponibles',
             style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1E3A5F)),
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E3A5F),
+            ),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           Text(
             'No se encontraron eventos para tu carrera.',
             style: TextStyle(
-                fontSize: 13, color: Colors.grey[500], height: 1.5),
+              fontSize: 13,
+              color: Colors.grey[500],
+              height: 1.5,
+            ),
             textAlign: TextAlign.center,
           ),
         ],

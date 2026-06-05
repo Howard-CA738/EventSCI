@@ -19,7 +19,6 @@ class EventosDetallesScreen extends StatefulWidget {
 class _EventosDetallesScreenState extends State<EventosDetallesScreen>
     with TickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
   final TextEditingController _nameController = TextEditingController();
 
   bool _isLoading = false;
@@ -167,7 +166,11 @@ class _EventosDetallesScreenState extends State<EventosDetallesScreen>
 
   @override
   Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).viewInsets.bottom +
+        MediaQuery.of(context).viewPadding.bottom;
+
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: const Color(0xFFE8EDF2),
       appBar: AppBar(
         title: const Text(
@@ -181,23 +184,32 @@ class _EventosDetallesScreenState extends State<EventosDetallesScreen>
         actions: [
           if (_hasChanges)
             Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: TextButton.icon(
-                onPressed: _isLoading ? null : _saveChanges,
-                icon: _isLoading
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : const Icon(Icons.check, color: Colors.white, size: 20),
-                label: const Text('Guardar',
+              padding: const EdgeInsets.only(right: 4),
+              child: SizedBox(
+                height: 44,
+                child: TextButton.icon(
+                  onPressed: _isLoading ? null : _saveChanges,
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(44, 44),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(Icons.check, color: Colors.white, size: 20),
+                  label: const Text(
+                    'Guardar',
                     style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w600)),
+                        color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                ),
               ),
             ),
         ],
@@ -207,7 +219,8 @@ class _EventosDetallesScreenState extends State<EventosDetallesScreen>
         child: SlideTransition(
           position: _slideAnimation,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomPadding),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -259,16 +272,20 @@ class _EventosDetallesScreenState extends State<EventosDetallesScreen>
               ].where((s) => s.isNotEmpty).join(' · '),
               style: const TextStyle(color: Colors.white70, fontSize: 12),
               overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ),
+          const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Text('Editando',
-                style: TextStyle(color: Colors.white70, fontSize: 10)),
+            child: const Text(
+              'Editando',
+              style: TextStyle(color: Colors.white70, fontSize: 10),
+            ),
           ),
         ],
       ),
@@ -308,12 +325,16 @@ class _EventosDetallesScreenState extends State<EventosDetallesScreen>
                 child: Icon(icon, color: iconColor, size: 20),
               ),
               const SizedBox(width: 10),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E293B),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -333,6 +354,7 @@ class _EventosDetallesScreenState extends State<EventosDetallesScreen>
   }) {
     return TextField(
       controller: controller,
+      maxLines: 1,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
@@ -455,6 +477,8 @@ class _EventosDetallesScreenState extends State<EventosDetallesScreen>
           _isLoading ? 'Guardando…' : 'Guardar cambios',
           style: const TextStyle(
               fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.3),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ),
     );

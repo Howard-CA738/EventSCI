@@ -18,7 +18,6 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
   bool _isLoading = false;
   bool _isLoadingData = true;
 
-  // Selecciones actuales
   String? _selectedFilialId;
   String? _selectedFilialNombre;
   String? _selectedFacultad;
@@ -27,7 +26,6 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
   String? _selectedPeriodoId;
   String? _selectedPeriodoNombre;
 
-  // Datos dinámicos
   List<Map<String, String>> _filiales = [];
   List<String> _facultades = [];
   List<Map<String, dynamic>> _carreras = [];
@@ -65,7 +63,6 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
     setState(() => _isLoadingData = true);
 
     try {
-      // Cargar filiales y períodos en paralelo
       final results = await Future.wait([
         _eventosService.getFiliales(),
         PeriodosHelper.getPeriodosActivos(),
@@ -74,11 +71,12 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
       final filiales = results[0] as List<Map<String, String>>;
       final periodos = results[1] as List<Map<String, dynamic>>;
 
+      if (!mounted) return;
+
       setState(() {
         _filiales = filiales;
         _periodos = periodos;
 
-        // Seleccionar valores por defecto
         if (_filiales.isNotEmpty) {
           _selectedFilialId = _filiales.first['id'];
           _selectedFilialNombre = _filiales.first['nombre'];
@@ -94,6 +92,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
       });
     } catch (e) {
       debugPrint('Error cargando datos iniciales: $e');
+      if (!mounted) return;
       setState(() => _isLoadingData = false);
       _showSnackBar('Error al cargar datos', isError: true);
     }
@@ -102,6 +101,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
   Future<void> _loadFacultades(String filialId) async {
     try {
       final facultades = await _eventosService.getFacultadesByFilial(filialId);
+      if (!mounted) return;
       setState(() {
         _facultades = facultades;
         _selectedFacultad = null;
@@ -111,6 +111,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
       });
     } catch (e) {
       debugPrint('Error cargando facultades: $e');
+      if (!mounted) return;
       _showSnackBar('Error al cargar facultades', isError: true);
     }
   }
@@ -121,6 +122,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
         filialId,
         facultadNombre,
       );
+      if (!mounted) return;
       setState(() {
         _carreras = carreras;
         _selectedCarreraId = null;
@@ -128,31 +130,9 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
       });
     } catch (e) {
       debugPrint('Error cargando carreras: $e');
+      if (!mounted) return;
       _showSnackBar('Error al cargar carreras', isError: true);
     }
-  }
-
-  void _navigateToEventDetails(String eventId, Map<String, dynamic> eventData) {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            EventosDetallesScreen(eventId: eventId, eventData: eventData),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(1.0, 0.0);
-          const end = Offset.zero;
-          const curve = Curves.easeInOut;
-          var tween = Tween(
-            begin: begin,
-            end: end,
-          ).chain(CurveTween(curve: curve));
-          return SlideTransition(
-            position: animation.drive(tween),
-            child: child,
-          );
-        },
-      ),
-    );
   }
 
   void _navigateToEventsList() {
@@ -165,7 +145,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
           const begin = Offset(1.0, 0.0);
           const end = Offset.zero;
           const curve = Curves.easeInOut;
-          var tween = Tween(
+          final tween = Tween(
             begin: begin,
             end: end,
           ).chain(CurveTween(curve: curve));
@@ -179,7 +159,6 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
   }
 
   Future<void> _createEvent() async {
-    // Validaciones
     final nameError = _eventosService.validateEventName(
       _eventNameController.text,
     );
@@ -214,6 +193,8 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
 
     setState(() => _isLoading = true);
 
+    final carreraNameSnapshot = _selectedCarreraNombre ?? '';
+
     try {
       await _eventosService.createEvent(
         name: _eventNameController.text.trim(),
@@ -234,15 +215,18 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
         _carreras = [];
       });
 
-      _showSnackBar('Evento creado exitosamente para $_selectedCarreraNombre');
+      if (!mounted) return;
+      _showSnackBar('Evento creado exitosamente para $carreraNameSnapshot');
     } catch (e) {
+      if (!mounted) return;
       _showSnackBar('Error al crear evento: $e', isError: true);
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -279,326 +263,332 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
         elevation: 0,
         centerTitle: true,
       ),
-      body: _isLoadingData
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: Color(0xFF1E3A5F)),
-                  SizedBox(height: 16),
-                  Text('Cargando datos...'),
-                ],
-              ),
-            )
-          : FadeTransition(
-              opacity: _fadeAnimation,
-              child: SingleChildScrollView(
+      body: SafeArea(
+        child: _isLoadingData
+            ? const Center(
                 child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const SizedBox(height: 20),
-                    Container(
-                      padding: const EdgeInsets.all(20.0),
-                      margin: const EdgeInsets.symmetric(horizontal: 16.0),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Colors.white, Color(0xFFF5F7FA)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF1E3A5F).withValues(alpha: 0.15),
-                            spreadRadius: 0,
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
+                    CircularProgressIndicator(color: Color(0xFF1E3A5F)),
+                    SizedBox(height: 16),
+                    Text('Cargando datos...'),
+                  ],
+                ),
+              )
+            : FadeTransition(
+                opacity: _fadeAnimation,
+                child: SingleChildScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(20.0),
+                        margin: const EdgeInsets.symmetric(horizontal: 16.0),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Colors.white, Color(0xFFF5F7FA)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            children: [
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF1E3A5F)
+                                  .withValues(alpha: 0.15),
+                              spreadRadius: 0,
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1E3A5F)
+                                        .withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.event_available,
+                                    color: Color(0xFF1E3A5F),
+                                    size: 28,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Crear Nuevo Evento',
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF1E3A5F),
+                                        ),
+                                      ),
+                                      Text(
+                                        'Completa los datos del evento',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 24),
+
+                            _buildTextField(
+                              controller: _eventNameController,
+                              label: 'Nombre del evento',
+                              hint: 'Ej: Conferencia de Tecnología',
+                              icon: Icons.event,
+                            ),
+                            const SizedBox(height: 16),
+
+                            _buildDropdown(
+                              value: _selectedFilialId,
+                              label: 'Filial / Campus',
+                              icon: Icons.location_city,
+                              items:
+                                  _filiales.map((f) => f['id']!).toList(),
+                              itemLabels: _filiales.map((f) {
+                                return '${f['nombre']} - ${f['ubicacion']}';
+                              }).toList(),
+                              onChanged: (String? newValue) {
+                                if (newValue != null) {
+                                  final filial = _filiales.firstWhere(
+                                    (f) => f['id'] == newValue,
+                                  );
+                                  setState(() {
+                                    _selectedFilialId = newValue;
+                                    _selectedFilialNombre = filial['nombre'];
+                                  });
+                                  _loadFacultades(newValue);
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 16),
+
+                            _buildDropdown(
+                              value: _selectedFacultad,
+                              label: 'Facultad',
+                              icon: Icons.school,
+                              items: _facultades,
+                              onChanged: _selectedFilialId != null
+                                  ? (String? newValue) {
+                                      if (newValue != null) {
+                                        setState(
+                                          () => _selectedFacultad = newValue,
+                                        );
+                                        _loadCarreras(
+                                          _selectedFilialId!,
+                                          newValue,
+                                        );
+                                      }
+                                    }
+                                  : null,
+                            ),
+                            const SizedBox(height: 16),
+
+                            _buildDropdown(
+                              value: _selectedCarreraId,
+                              label: 'Carrera / Escuela Profesional',
+                              icon: Icons.book,
+                              items: _carreras
+                                  .map((c) => c['id'] as String)
+                                  .toList(),
+                              itemLabels: _carreras
+                                  .map((c) => c['nombre'] as String)
+                                  .toList(),
+                              onChanged: _selectedFacultad != null
+                                  ? (String? newValue) {
+                                      if (newValue != null) {
+                                        final carrera =
+                                            _carreras.firstWhere(
+                                          (c) => c['id'] == newValue,
+                                        );
+                                        setState(() {
+                                          _selectedCarreraId = newValue;
+                                          _selectedCarreraNombre =
+                                              carrera['nombre'] as String?;
+                                        });
+                                      }
+                                    }
+                                  : null,
+                            ),
+                            const SizedBox(height: 16),
+
+                            _buildDropdown(
+                              value: _selectedPeriodoId,
+                              label: 'Período Académico',
+                              icon: Icons.calendar_month,
+                              items: _periodos
+                                  .map((p) => p['id'] as String)
+                                  .toList(),
+                              itemLabels: _periodos
+                                  .map((p) => p['nombre'] as String)
+                                  .toList(),
+                              onChanged: (String? newValue) {
+                                if (newValue != null) {
+                                  final periodo = _periodos.firstWhere(
+                                    (p) => p['id'] == newValue,
+                                  );
+                                  setState(() {
+                                    _selectedPeriodoId = newValue;
+                                    _selectedPeriodoNombre =
+                                        periodo['nombre'] as String?;
+                                  });
+                                }
+                              },
+                            ),
+
+                            if (_periodos.isEmpty)
                               Container(
+                                margin: const EdgeInsets.only(top: 12),
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: const Color(
-                                    0xFF1E3A5F,
-                                  ).withValues(alpha:0.1),
+                                  color: const Color(0xFFFFEBEE),
                                   borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: const Color(0xFFE53935),
+                                  ),
                                 ),
-                                child: const Icon(
-                                  Icons.event_available,
-                                  color: Color(0xFF1E3A5F),
-                                  size: 28,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              const Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                child: Row(
                                   children: [
-                                    Text(
-                                      'Crear Nuevo Evento',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF1E3A5F),
-                                      ),
+                                    const Icon(
+                                      Icons.warning_amber,
+                                      size: 20,
+                                      color: Color(0xFFE53935),
                                     ),
-                                    Text(
-                                      'Completa los datos del evento',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.grey,
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        'No hay períodos activos. Activa un período primero.',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.red.shade900,
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
 
-                          _buildTextField(
-                            controller: _eventNameController,
-                            label: 'Nombre del evento',
-                            hint: 'Ej: Conferencia de Tecnología',
-                            icon: Icons.event,
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Dropdown de Filial
-                          _buildDropdown(
-                            value: _selectedFilialId,
-                            label: 'Filial / Campus',
-                            icon: Icons.location_city,
-                            items: _filiales.map((f) => f['id']!).toList(),
-                            itemLabels: _filiales.map((f) {
-                              return '${f['nombre']} - ${f['ubicacion']}';
-                            }).toList(),
-                            onChanged: (String? newValue) {
-                              if (newValue != null) {
-                                final filial = _filiales.firstWhere(
-                                  (f) => f['id'] == newValue,
-                                );
-                                setState(() {
-                                  _selectedFilialId = newValue;
-                                  _selectedFilialNombre = filial['nombre'];
-                                });
-                                _loadFacultades(newValue);
-                              }
-                            },
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Dropdown de Facultad
-                          _buildDropdown(
-                            value: _selectedFacultad,
-                            label: 'Facultad',
-                            icon: Icons.school,
-                            items: _facultades,
-                            onChanged: _selectedFilialId != null
-                                ? (String? newValue) {
-                                    if (newValue != null) {
-                                      setState(
-                                        () => _selectedFacultad = newValue,
-                                      );
-                                      _loadCarreras(
-                                        _selectedFilialId!,
-                                        newValue,
-                                      );
-                                    }
-                                  }
-                                : null,
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Dropdown de Carrera
-                          _buildDropdown(
-                            value: _selectedCarreraId,
-                            label: 'Carrera / Escuela Profesional',
-                            icon: Icons.book,
-                            items: _carreras
-                                .map((c) => c['id'] as String)
-                                .toList(),
-                            itemLabels: _carreras
-                                .map((c) => c['nombre'] as String)
-                                .toList(),
-                            onChanged: _selectedFacultad != null
-                                ? (String? newValue) {
-                                    if (newValue != null) {
-                                      final carrera = _carreras.firstWhere(
-                                        (c) => c['id'] == newValue,
-                                      );
-                                      setState(() {
-                                        _selectedCarreraId = newValue;
-                                        _selectedCarreraNombre =
-                                            carrera['nombre'];
-                                      });
-                                    }
-                                  }
-                                : null,
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Dropdown de Período
-                          _buildDropdown(
-                            value: _selectedPeriodoId,
-                            label: 'Período Académico',
-                            icon: Icons.calendar_month,
-                            items: _periodos
-                                .map((p) => p['id'] as String)
-                                .toList(),
-                            itemLabels: _periodos
-                                .map((p) => p['nombre'] as String)
-                                .toList(),
-                            onChanged: (String? newValue) {
-                              if (newValue != null) {
-                                final periodo = _periodos.firstWhere(
-                                  (p) => p['id'] == newValue,
-                                );
-                                setState(() {
-                                  _selectedPeriodoId = newValue;
-                                  _selectedPeriodoNombre = periodo['nombre'];
-                                });
-                              }
-                            },
-                          ),
-
-                          if (_periodos.isEmpty)
-                            Container(
-                              margin: const EdgeInsets.only(top: 12),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFEBEE),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: const Color(0xFFE53935),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.warning_amber,
-                                    size: 20,
-                                    color: Color(0xFFE53935),
+                            if (_selectedFilialId != null &&
+                                _facultades.isEmpty)
+                              Container(
+                                margin: const EdgeInsets.only(top: 12),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF3E0),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: const Color(0xFFFFB74D),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      'No hay períodos activos. Activa un período primero.',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.red.shade900,
-                                        fontWeight: FontWeight.w500,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.info_outline,
+                                      size: 20,
+                                      color: Colors.orange.shade700,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        'No hay facultades disponibles para esta filial',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.orange.shade900,
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                          if (_selectedFilialId != null && _facultades.isEmpty)
-                            Container(
-                              margin: const EdgeInsets.only(top: 12),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFF3E0),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: const Color(0xFFFFB74D),
+                                  ],
                                 ),
                               ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.info_outline,
-                                    size: 20,
-                                    color: Colors.orange.shade700,
+
+                            if (_selectedFacultad != null && _carreras.isEmpty)
+                              Container(
+                                margin: const EdgeInsets.only(top: 12),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF3E0),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: const Color(0xFFFFB74D),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      'No hay facultades disponibles para esta filial',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.orange.shade900,
-                                        fontWeight: FontWeight.w500,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.info_outline,
+                                      size: 20,
+                                      color: Colors.orange.shade700,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        'No hay carreras disponibles para esta facultad',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.orange.shade900,
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                          if (_selectedFacultad != null && _carreras.isEmpty)
-                            Container(
-                              margin: const EdgeInsets.only(top: 12),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFF3E0),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: const Color(0xFFFFB74D),
+                                  ],
                                 ),
                               ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.info_outline,
-                                    size: 20,
-                                    color: Colors.orange.shade700,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      'No hay carreras disponibles para esta facultad',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.orange.shade900,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+
+                            const SizedBox(height: 24),
+
+                            _buildPrimaryButton(
+                              onPressed: _isLoading ? null : _createEvent,
+                              text: 'Crear Evento',
+                              icon: Icons.add_circle_outline,
+                              isLoading: _isLoading,
                             ),
-
-                          const SizedBox(height: 24),
-
-                          _buildPrimaryButton(
-                            onPressed: _isLoading ? null : _createEvent,
-                            text: 'Crear Evento',
-                            icon: Icons.add_circle_outline,
-                            isLoading: _isLoading,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: StreamBuilder<QuerySnapshot>(
-                        stream: _eventosService.getEventsCountStream(),
-                        builder: (context, snapshot) {
-                          final eventCount = snapshot.data?.docs.length ?? 0;
-                          return _buildSecondaryButton(
-                            onPressed: _navigateToEventsList,
-                            text: 'Ver Todos los Eventos',
-                            count: eventCount,
-                            icon: Icons.list_alt,
-                          );
-                        },
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: StreamBuilder<QuerySnapshot>(
+                          stream: _eventosService.getEventsCountStream(),
+                          builder: (context, snapshot) {
+                            final eventCount =
+                                snapshot.data?.docs.length ?? 0;
+                            return _buildSecondaryButton(
+                              onPressed: _navigateToEventsList,
+                              text: 'Ver Todos los Eventos',
+                              count: eventCount,
+                              icon: Icons.list_alt,
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
+                      const SizedBox(height: 20),
+                    ],
+                  ),
                 ),
               ),
-            ),
+      ),
     );
   }
 
@@ -614,7 +604,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -622,6 +612,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
       ),
       child: TextField(
         controller: controller,
+        textInputAction: TextInputAction.done,
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
@@ -655,7 +646,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -685,6 +676,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
               itemLabels != null ? itemLabels[index] : items[index],
               style: const TextStyle(fontSize: 14),
               overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           );
         }),
@@ -705,50 +697,58 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1E3A5F).withValues(alpha:0.5),
+            color: const Color(0xFF1E3A5F).withValues(alpha: 0.5),
             spreadRadius: 0,
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),
         ],
       ),
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF1E3A5F),
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: Colors.grey.shade300,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+      child: Semantics(
+        label: isLoading ? 'Creando evento, por favor espere' : text,
+        button: true,
+        child: ElevatedButton(
+          onPressed: onPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF1E3A5F),
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: Colors.grey.shade300,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-        ),
-        child: isLoading
-            ? const SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, size: 24, color: Colors.white),
-                  const SizedBox(width: 12),
-                  Text(
-                    text,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 0.5,
-                    ),
+          child: isLoading
+              ? const SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
-                ],
-              ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 24, color: Colors.white),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        text,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
       ),
     );
   }
@@ -765,46 +765,52 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2E7D32).withValues(alpha:0.5),
+            color: const Color(0xFF2E7D32).withValues(alpha: 0.5),
             spreadRadius: 0,
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),
         ],
       ),
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF2E7D32),
-          foregroundColor: Colors.white,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 24, color: Colors.white),
-            const SizedBox(width: 12),
-            Text(
-              '$text ($count)',
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                letterSpacing: 0.5,
-              ),
+      child: Semantics(
+        label: '$text, $count eventos',
+        button: true,
+        child: ElevatedButton(
+          onPressed: onPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF2E7D32),
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
             ),
-          ],
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 24, color: Colors.white),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Text(
+                  '$text ($count)',
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// LISTA DE EVENTOS
 class ListaEventosScreen extends StatefulWidget {
   const ListaEventosScreen({super.key});
 
@@ -853,13 +859,15 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
         PeriodosHelper.getPeriodosActivos(),
       ]);
 
+      if (!mounted) return;
+
       setState(() {
         _filiales = results[0] as List<Map<String, String>>;
-        _periodos = results[1] as List<Map<String, dynamic>>;
         _isLoadingFilters = false;
       });
     } catch (e) {
       debugPrint('Error cargando datos de filtros: $e');
+      if (!mounted) return;
       setState(() => _isLoadingFilters = false);
     }
   }
@@ -867,6 +875,7 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
   Future<void> _loadFacultadesForFilter(String filialId) async {
     try {
       final facultades = await _eventosService.getFacultadesByFilial(filialId);
+      if (!mounted) return;
       setState(() {
         _facultades = facultades;
         _filtroFacultad = null;
@@ -887,6 +896,7 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
         filialId,
         facultadNombre,
       );
+      if (!mounted) return;
       setState(() {
         _carreras = carreras;
         _filtroCarreraId = null;
@@ -896,7 +906,8 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
     }
   }
 
-  void _navigateToEventDetails(String eventId, Map<String, dynamic> eventData) {
+  void _navigateToEventDetails(
+      String eventId, Map<String, dynamic> eventData) {
     Navigator.push(
       context,
       PageRouteBuilder(
@@ -913,37 +924,35 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
     String eventId,
     Map<String, dynamic> eventData,
   ) async {
-    // Similar al anterior pero con los nuevos campos
-    TextEditingController editNameController = TextEditingController(
-      text: eventData['name'] ?? '',
+    final TextEditingController editNameController = TextEditingController(
+      text: eventData['name'] as String? ?? '',
     );
-    String? editFilialId = eventData['filialId'];
-    String? editFilialNombre = eventData['filialNombre'];
-    String? editFacultad = eventData['facultad'];
-    String? editCarreraId = eventData['carreraId'];
-    String? editCarreraNombre = eventData['carreraNombre'];
+    String? editFilialId = eventData['filialId'] as String?;
+    String? editFilialNombre = eventData['filialNombre'] as String?;
+    String? editFacultad = eventData['facultad'] as String?;
+    String? editCarreraId = eventData['carreraId'] as String?;
+    String? editCarreraNombre = eventData['carreraNombre'] as String?;
 
     List<String> editFacultades = [];
     List<Map<String, dynamic>> editCarreras = [];
 
     if (editFilialId != null) {
-  editFacultades = await _eventosService.getFacultadesByFilial(
-    editFilialId,
-  );
-  if (editFacultad != null) {
-    editCarreras = await _eventosService.getCarrerasByFacultad(
-      editFilialId,
-      editFacultad,
-    );
-  }
-}
+      editFacultades =
+          await _eventosService.getFacultadesByFilial(editFilialId);
+      if (editFacultad != null) {
+        editCarreras = await _eventosService.getCarrerasByFacultad(
+          editFilialId,
+          editFacultad,
+        );
+      }
+    }
 
-if (!mounted) return; // ✅ AGREGAR ESTA LÍNEA
+    if (!mounted) return;
 
-showDialog(
-  context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
@@ -952,23 +961,32 @@ showDialog(
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
+                  color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.edit, color: Color(0xFF1E3A5F)),
               ),
               const SizedBox(width: 12),
-              const Text('Editar Evento'),
+              const Flexible(
+                child: Text(
+                  'Editar Evento',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
-          content: SizedBox(
-            width: double.maxFinite,
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(dialogContext).size.height * 0.55,
+              maxWidth: MediaQuery.of(dialogContext).size.width * 0.9,
+            ),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextField(
                     controller: editNameController,
+                    textInputAction: TextInputAction.done,
                     decoration: InputDecoration(
                       labelText: 'Nombre del evento',
                       border: OutlineInputBorder(
@@ -996,6 +1014,7 @@ showDialog(
                           '${filial['nombre']} - ${filial['ubicacion']}',
                           style: const TextStyle(fontSize: 14),
                           overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       );
                     }).toList(),
@@ -1036,17 +1055,18 @@ showDialog(
                           facultad,
                           style: const TextStyle(fontSize: 14),
                           overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       );
                     }).toList(),
                     onChanged: editFilialId != null
                         ? (String? newValue) async {
                             if (newValue != null) {
-                              final nuevasCarreras = await _eventosService
-                                  .getCarrerasByFacultad(
-                                    editFilialId!,
-                                    newValue,
-                                  );
+                              final nuevasCarreras =
+                                  await _eventosService.getCarrerasByFacultad(
+                                editFilialId!,
+                                newValue,
+                              );
                               setDialogState(() {
                                 editFacultad = newValue;
                                 editCarreras = nuevasCarreras;
@@ -1070,11 +1090,12 @@ showDialog(
                     ),
                     items: editCarreras.map((carrera) {
                       return DropdownMenuItem<String>(
-                        value: carrera['id'],
+                        value: carrera['id'] as String?,
                         child: Text(
-                          carrera['nombre'],
+                          (carrera['nombre'] as String?) ?? '',
                           style: const TextStyle(fontSize: 14),
                           overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       );
                     }).toList(),
@@ -1086,7 +1107,8 @@ showDialog(
                               );
                               setDialogState(() {
                                 editCarreraId = newValue;
-                                editCarreraNombre = carrera['nombre'];
+                                editCarreraNombre =
+                                    carrera['nombre'] as String?;
                               });
                             }
                           }
@@ -1098,7 +1120,7 @@ showDialog(
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cancelar'),
             ),
             ElevatedButton(
@@ -1114,31 +1136,28 @@ showDialog(
                   editNameController.text,
                 );
                 if (nameError != null) {
-                  _showSnackBar(nameError, isError: true);
+                  if (mounted) _showSnackBar(nameError, isError: true);
                   return;
                 }
 
-                final filialError = _eventosService.validateFilial(
-                  editFilialId,
-                );
+                final filialError =
+                    _eventosService.validateFilial(editFilialId);
                 if (filialError != null) {
-                  _showSnackBar(filialError, isError: true);
+                  if (mounted) _showSnackBar(filialError, isError: true);
                   return;
                 }
 
-                final facultadError = _eventosService.validateFacultad(
-                  editFacultad,
-                );
+                final facultadError =
+                    _eventosService.validateFacultad(editFacultad);
                 if (facultadError != null) {
-                  _showSnackBar(facultadError, isError: true);
+                  if (mounted) _showSnackBar(facultadError, isError: true);
                   return;
                 }
 
-                final carreraError = _eventosService.validateCarrera(
-                  editCarreraId,
-                );
+                final carreraError =
+                    _eventosService.validateCarrera(editCarreraId);
                 if (carreraError != null) {
-                  _showSnackBar(carreraError, isError: true);
+                  if (mounted) _showSnackBar(carreraError, isError: true);
                   return;
                 }
 
@@ -1153,13 +1172,16 @@ showDialog(
                     carreraNombre: editCarreraNombre!,
                   );
 
-                  Navigator.pop(context);
-                  _showSnackBar('Evento actualizado exitosamente');
+                  if (!dialogContext.mounted) return;
+                  Navigator.pop(dialogContext);
+                  if (mounted) _showSnackBar('Evento actualizado exitosamente');
                 } catch (e) {
-                  _showSnackBar(
-                    'Error al actualizar evento: $e',
-                    isError: true,
-                  );
+                  if (mounted) {
+                    _showSnackBar(
+                      'Error al actualizar evento: $e',
+                      isError: true,
+                    );
+                  }
                 }
               },
               child: const Text('Guardar'),
@@ -1171,28 +1193,37 @@ showDialog(
   }
 
   Future<void> _deleteEvent(String eventId, String eventName) async {
+    if (!mounted) return;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      builder: (dialogContext) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha:0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(Icons.delete_outline, color: Colors.red),
             ),
             const SizedBox(width: 12),
-            const Text('Eliminar Evento'),
+            const Flexible(
+              child: Text(
+                'Eliminar Evento',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
-        content: Text('¿Estás seguro de que quieres eliminar "$eventName"?'),
+        content: Text(
+          '¿Estás seguro de que quieres eliminar "$eventName"?',
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
@@ -1206,10 +1237,16 @@ showDialog(
             onPressed: () async {
               try {
                 await _eventosService.deleteEvent(eventId);
-                Navigator.pop(context);
-                _showSnackBar('Evento eliminado exitosamente');
+                if (!dialogContext.mounted) return;
+                Navigator.pop(dialogContext);
+                if (mounted) _showSnackBar('Evento eliminado exitosamente');
               } catch (e) {
-                _showSnackBar('Error al eliminar evento: $e', isError: true);
+                if (mounted) {
+                  _showSnackBar(
+                    'Error al eliminar evento: $e',
+                    isError: true,
+                  );
+                }
               }
             },
             child: const Text('Eliminar'),
@@ -1220,6 +1257,7 @@ showDialog(
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -1236,7 +1274,8 @@ showDialog(
             ? const Color(0xFFE53935)
             : const Color(0xFF43A047),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -1256,661 +1295,695 @@ showDialog(
         elevation: 0,
         centerTitle: true,
       ),
-      body: Column(
-        children: [
-          // Filtros
-          Container(
-            padding: const EdgeInsets.all(16.0),
-            margin: const EdgeInsets.all(16.0),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Colors.white, Color(0xFFF5F7FA)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16.0),
+              margin: const EdgeInsets.all(16.0),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Colors.white, Color(0xFFF5F7FA)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
               ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
-                  blurRadius: 15,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.filter_list,
-                        color: Color(0xFF1E3A5F),
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'Filtros',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E3A5F),
-                      ),
-                    ),
-                    const Spacer(),
-                    if (_filtroFilialId != null ||
-                        _filtroFacultad != null ||
-                        _filtroCarreraId != null ||
-                        _filtroPeriodo != null)
-                      TextButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            _filtroFilialId = null;
-                            _filtroFacultad = null;
-                            _filtroCarreraId = null;
-                            _filtroPeriodo = null;
-                            _facultades = [];
-                            _carreras = [];
-                          });
-                        },
-                        icon: const Icon(Icons.clear, size: 16),
-                        label: const Text('Limpiar'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFFE53935),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Filtro Filial
-                DropdownButtonFormField<String>(
-                  value: _filtroFilialId,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: 'Filial',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    prefixIcon: const Icon(Icons.location_city),
-                  ),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: null,
-                      child: Text('Todas'),
-                    ),
-                    ..._filiales.map((filial) {
-                      return DropdownMenuItem<String>(
-                        value: filial['id'],
-                        child: Text(
-                          '${filial['nombre']} - ${filial['ubicacion']}',
-                          style: const TextStyle(fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    }),
-                  ],
-                  onChanged: (String? newValue) {
-                    setState(() {
-                      _filtroFilialId = newValue;
-                      _filtroFacultad = null;
-                      _filtroCarreraId = null;
-                      _facultades = [];
-                      _carreras = [];
-                    });
-                    if (newValue != null) {
-                      _loadFacultadesForFilter(newValue);
-                    }
-                  },
-                ),
-                const SizedBox(height: 12),
-
-                // Filtro Facultad
-                DropdownButtonFormField<String>(
-                  value: _filtroFacultad,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: 'Facultad',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    prefixIcon: const Icon(Icons.school),
-                  ),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: null,
-                      child: Text('Todas'),
-                    ),
-                    ..._facultades.map((String facultad) {
-                      return DropdownMenuItem<String>(
-                        value: facultad,
-                        child: Text(
-                          facultad,
-                          style: const TextStyle(fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    }),
-                  ],
-                  onChanged: _filtroFilialId != null
-                      ? (String? newValue) {
-                          setState(() {
-                            _filtroFacultad = newValue;
-                            _filtroCarreraId = null;
-                            _carreras = [];
-                          });
-                          if (newValue != null && _filtroFilialId != null) {
-                            _loadCarrerasForFilter(_filtroFilialId!, newValue);
-                          }
-                        }
-                      : null,
-                ),
-                const SizedBox(height: 12),
-
-                // Filtro Carrera
-                DropdownButtonFormField<String>(
-                  value: _filtroCarreraId,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: 'Carrera',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    prefixIcon: const Icon(Icons.book),
-                  ),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: null,
-                      child: Text('Todas'),
-                    ),
-                    ..._carreras.map((carrera) {
-                      return DropdownMenuItem<String>(
-                        value: carrera['id'],
-                        child: Text(
-                          carrera['nombre'],
-                          style: const TextStyle(fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    }),
-                  ],
-                  onChanged: _filtroFacultad != null
-                      ? (String? newValue) {
-                          setState(() => _filtroCarreraId = newValue);
-                        }
-                      : null,
-                ),
-                const SizedBox(height: 12),
-
-                // Filtro Período
-                DropdownButtonFormField<String>(
-                  value: _filtroPeriodo,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: 'Período Académico',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    prefixIcon: const Icon(Icons.calendar_month),
-                  ),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: null,
-                      child: Text('Todos'),
-                    ),
-                    ..._periodos.map((periodo) {
-                      return DropdownMenuItem<String>(
-                        value: periodo['id'],
-                        child: Text(
-                          periodo['nombre'],
-                          style: const TextStyle(fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    }),
-                  ],
-                  onChanged: (String? newValue) {
-                    setState(() => _filtroPeriodo = newValue);
-                  },
-                ),
-              ],
-            ),
-          ),
-
-          // Lista de eventos
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: _eventosService.getEventsStream(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF1E3A5F)),
-                  );
-                }
-
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withValues(alpha:0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Icon(
-                            Icons.error_outline,
-                            size: 64,
-                            color: Colors.red,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Error: ${snapshot.error}',
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                var events = snapshot.data?.docs ?? [];
-
-                // Aplicar filtros
-                events = _eventosService.filterByFilial(
-                  events,
-                  _filtroFilialId,
-                );
-                events = _eventosService.filterByFacultad(
-                  events,
-                  _filtroFacultad,
-                );
-                events = _eventosService.filterByCarrera(
-                  events,
-                  _filtroCarreraId,
-                );
-                events = _eventosService.filterByPeriodo(
-                  events,
-                  _filtroPeriodo,
-                );
-
-                if (events.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.withValues(alpha:0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Icon(
-                            Icons.event_busy,
-                            size: 64,
-                            color: Colors.grey.shade400,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          _filtroFilialId != null ||
-                                  _filtroFacultad != null ||
-                                  _filtroCarreraId != null ||
-                                  _filtroPeriodo != null
-                              ? 'No hay eventos con estos filtros'
-                              : 'No hay eventos creados',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  itemCount: events.length,
-                  itemBuilder: (context, index) {
-                    final event = events[index];
-                    final eventData = event.data() as Map<String, dynamic>;
-                    final eventName = eventData['name'] ?? 'Sin nombre';
-                    final filialNombre =
-                        eventData['filialNombre'] ?? 'Sin filial';
-                    final carreraNombre =
-                        eventData['carreraNombre'] ?? 'Sin carrera';
-                    final eventId = event.id;
-
-                    return FadeTransition(
-                      opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
-                        CurvedAnimation(
-                          parent: _animationController,
-                          curve: Interval(
-                            (index / events.length) * 0.5,
-                            ((index + 1) / events.length) * 0.5 + 0.5,
-                            curve: Curves.easeOut,
-                          ),
-                        ),
-                      ),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 12.0),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Colors.white, Color(0xFFFAFAFA)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF1E3A5F).withValues(alpha:0.08),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
+                          color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
+                        child: const Icon(
+                          Icons.filter_list,
+                          color: Color(0xFF1E3A5F),
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Filtros',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E3A5F),
+                        ),
+                      ),
+                      const Spacer(),
+                      if (_filtroFilialId != null ||
+                          _filtroFacultad != null ||
+                          _filtroCarreraId != null ||
+                          _filtroPeriodo != null)
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _filtroFilialId = null;
+                              _filtroFacultad = null;
+                              _filtroCarreraId = null;
+                              _filtroPeriodo = null;
+                              _facultades = [];
+                              _carreras = [];
+                            });
+                          },
+                          icon: const Icon(Icons.clear, size: 16),
+                          label: const Text('Limpiar'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFFE53935),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  DropdownButtonFormField<String>(
+                    value: _filtroFilialId,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Filial',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      prefixIcon: const Icon(Icons.location_city),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String>(
+                        value: null,
+                        child: Text('Todas'),
+                      ),
+                      ..._filiales.map((filial) {
+                        return DropdownMenuItem<String>(
+                          value: filial['id'],
+                          child: Text(
+                            '${filial['nombre']} - ${filial['ubicacion']}',
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        );
+                      }),
+                    ],
+                    onChanged: (String? newValue) {
+                      setState(() {
+                        _filtroFilialId = newValue;
+                        _filtroFacultad = null;
+                        _filtroCarreraId = null;
+                        _facultades = [];
+                        _carreras = [];
+                      });
+                      if (newValue != null) {
+                        _loadFacultadesForFilter(newValue);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+
+                  DropdownButtonFormField<String>(
+                    value: _filtroFacultad,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Facultad',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      prefixIcon: const Icon(Icons.school),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String>(
+                        value: null,
+                        child: Text('Todas'),
+                      ),
+                      ..._facultades.map((String facultad) {
+                        return DropdownMenuItem<String>(
+                          value: facultad,
+                          child: Text(
+                            facultad,
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        );
+                      }),
+                    ],
+                    onChanged: _filtroFilialId != null
+                        ? (String? newValue) {
+                            setState(() {
+                              _filtroFacultad = newValue;
+                              _filtroCarreraId = null;
+                              _carreras = [];
+                            });
+                            if (newValue != null && _filtroFilialId != null) {
+                              _loadCarrerasForFilter(
+                                  _filtroFilialId!, newValue);
+                            }
+                          }
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+
+                  DropdownButtonFormField<String>(
+                    value: _filtroCarreraId,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Carrera',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      prefixIcon: const Icon(Icons.book),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String>(
+                        value: null,
+                        child: Text('Todas'),
+                      ),
+                      ..._carreras.map((carrera) {
+                        return DropdownMenuItem<String>(
+                          value: carrera['id'] as String?,
+                          child: Text(
+                            (carrera['nombre'] as String?) ?? '',
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        );
+                      }),
+                    ],
+                    onChanged: _filtroFacultad != null
+                        ? (String? newValue) {
+                            setState(() => _filtroCarreraId = newValue);
+                          }
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+
+                  DropdownButtonFormField<String>(
+                    value: _filtroPeriodo,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Período Académico',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      prefixIcon: const Icon(Icons.calendar_month),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String>(
+                        value: null,
+                        child: Text('Todos'),
+                      ),
+                      ..._periodos.map((periodo) {
+                        return DropdownMenuItem<String>(
+                          value: periodo['id'] as String?,
+                          child: Text(
+                            (periodo['nombre'] as String?) ?? '',
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        );
+                      }),
+                    ],
+                    onChanged: (String? newValue) {
+                      setState(() => _filtroPeriodo = newValue);
+                    },
+                  ),
+                ],
+              ),
+            ),
+
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: _eventosService.getEventsStream(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                          color: Color(0xFF1E3A5F)),
+                    );
+                  }
+
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Icon(
+                              Icons.error_outline,
+                              size: 64,
+                              color: Colors.red,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 24),
+                            child: Text(
+                              'Error: ${snapshot.error}',
+                              style: const TextStyle(color: Colors.red),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  var events = snapshot.data?.docs ?? [];
+
+                  events =
+                      _eventosService.filterByFilial(events, _filtroFilialId);
+                  events = _eventosService.filterByFacultad(
+                      events, _filtroFacultad);
+                  events = _eventosService.filterByCarrera(
+                      events, _filtroCarreraId);
+                  events =
+                      _eventosService.filterByPeriodo(events, _filtroPeriodo);
+
+                  if (events.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Icon(
+                              Icons.event_busy,
+                              size: 64,
+                              color: Colors.grey.shade400,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 24),
+                            child: Text(
+                              _filtroFilialId != null ||
+                                      _filtroFacultad != null ||
+                                      _filtroCarreraId != null ||
+                                      _filtroPeriodo != null
+                                  ? 'No hay eventos con estos filtros'
+                                  : 'No hay eventos creados',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  final totalEvents = events.length;
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    itemCount: totalEvents,
+                    itemBuilder: (context, index) {
+                      final event = events[index];
+                      final eventData =
+                          event.data() as Map<String, dynamic>;
+                      final eventName =
+                          (eventData['name'] as String?) ?? 'Sin nombre';
+                      final filialNombre =
+                          (eventData['filialNombre'] as String?) ??
+                              'Sin filial';
+                      final carreraNombre =
+                          (eventData['carreraNombre'] as String?) ??
+                              'Sin carrera';
+                      final eventId = event.id;
+
+                      final double intervalStart =
+                          totalEvents > 1 ? (index / totalEvents) * 0.5 : 0.0;
+                      final double intervalEnd = totalEvents > 1
+                          ? ((index + 1) / totalEvents) * 0.5 + 0.5
+                          : 1.0;
+
+                      return FadeTransition(
+                        opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
+                          CurvedAnimation(
+                            parent: _animationController,
+                            curve: Interval(
+                              intervalStart.clamp(0.0, 1.0),
+                              intervalEnd.clamp(0.0, 1.0),
+                              curve: Curves.easeOut,
+                            ),
+                          ),
+                        ),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 12.0),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Colors.white, Color(0xFFFAFAFA)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
                             borderRadius: BorderRadius.circular(16),
-                            onTap: () =>
-                                _navigateToEventDetails(eventId, eventData),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 50,
-                                    height: 50,
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          Color(0xFF1E3A5F),
-                                          Color(0xFF2E5A8F),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF1E3A5F)
+                                    .withValues(alpha: 0.08),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () => _navigateToEventDetails(
+                                  eventId, eventData),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 50,
+                                      height: 50,
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          colors: [
+                                            Color(0xFF1E3A5F),
+                                            Color(0xFF2E5A8F),
+                                          ],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFF1E3A5F)
+                                                .withValues(alpha: 0.3),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 3),
+                                          ),
                                         ],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
                                       ),
-                                      borderRadius: BorderRadius.circular(12),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(
-                                            0xFF1E3A5F,
-                                          ).withValues(alpha:0.3),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 3),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        eventName.substring(0, 1).toUpperCase(),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 20,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          eventName,
+                                      child: Center(
+                                        child: Text(
+                                          eventName.isNotEmpty
+                                              ? eventName
+                                                  .substring(0, 1)
+                                                  .toUpperCase()
+                                              : '?',
                                           style: const TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 15,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 20,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            eventName,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 15,
+                                              color: Color(0xFF1E3A5F),
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 2,
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                colors: [
+                                                  const Color(0xFF43A047)
+                                                      .withValues(alpha: 0.15),
+                                                  const Color(0xFF66BB6A)
+                                                      .withValues(alpha: 0.15),
+                                                ],
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: const Color(0xFF43A047)
+                                                    .withValues(alpha: 0.3),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              carreraNombre,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: Color(0xFF2E7D32),
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 1,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              ExcludeSemantics(
+                                                child: Icon(
+                                                  Icons.location_city,
+                                                  size: 12,
+                                                  color: Colors.grey[600],
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Expanded(
+                                                child: Text(
+                                                  filialNombre,
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey[700],
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  maxLines: 1,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          if (eventData['fecha'] != null ||
+                                              (eventData['lugar'] != null &&
+                                                  eventData['lugar'] != ''))
+                                            Container(
+                                              margin: const EdgeInsets.only(
+                                                  top: 6),
+                                              child: Row(
+                                                children: [
+                                                  if (eventData['fecha'] !=
+                                                      null) ...[
+                                                    ExcludeSemantics(
+                                                      child: Icon(
+                                                        Icons.calendar_today,
+                                                        size: 12,
+                                                        color: Colors
+                                                            .blue.shade600,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      _eventosService.formatDate(
+                                                        (eventData['fecha']
+                                                                as Timestamp)
+                                                            .toDate(),
+                                                      ),
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: Colors
+                                                            .blue.shade700,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                  if (eventData['fecha'] !=
+                                                          null &&
+                                                      eventData['lugar'] !=
+                                                          null &&
+                                                      eventData['lugar'] != '')
+                                                    const Text(
+                                                      ' • ',
+                                                      style: TextStyle(
+                                                          fontSize: 10),
+                                                    ),
+                                                  if (eventData['lugar'] !=
+                                                          null &&
+                                                      eventData['lugar'] !=
+                                                          '') ...[
+                                                    ExcludeSemantics(
+                                                      child: Icon(
+                                                        Icons.location_on,
+                                                        size: 12,
+                                                        color: Colors
+                                                            .orange.shade600,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Expanded(
+                                                      child: Text(
+                                                        eventData['lugar']
+                                                            as String,
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          color: Colors
+                                                              .orange.shade700,
+                                                          fontWeight:
+                                                              FontWeight.w500,
+                                                        ),
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        maxLines: 1,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    Semantics(
+                                      label: 'Opciones para $eventName',
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey
+                                              .withValues(alpha: 0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                        child: PopupMenuButton<String>(
+                                          icon: const Icon(
+                                            Icons.more_vert,
                                             color: Color(0xFF1E3A5F),
                                           ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 4,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              colors: [
-                                                const Color(
-                                                  0xFF43A047,
-                                                ).withValues(alpha:0.15),
-                                                const Color(
-                                                  0xFF66BB6A,
-                                                ).withValues(alpha:0.15),
-                                              ],
+                                          onSelected: (value) {
+                                            switch (value) {
+                                              case 'details':
+                                                _navigateToEventDetails(
+                                                    eventId, eventData);
+                                                break;
+                                              case 'edit':
+                                                _editEvent(eventId, eventData);
+                                                break;
+                                              case 'delete':
+                                                _deleteEvent(
+                                                    eventId, eventName);
+                                                break;
+                                            }
+                                          },
+                                          itemBuilder: (context) => [
+                                            const PopupMenuItem(
+                                              value: 'details',
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.visibility,
+                                                    color: Color(0xFF43A047),
+                                                    size: 20,
+                                                  ),
+                                                  SizedBox(width: 12),
+                                                  Text('Ver Detalles'),
+                                                ],
+                                              ),
                                             ),
-                                            borderRadius: BorderRadius.circular(
-                                              8,
+                                            const PopupMenuItem(
+                                              value: 'edit',
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.edit,
+                                                    color: Color(0xFF1E88E5),
+                                                    size: 20,
+                                                  ),
+                                                  SizedBox(width: 12),
+                                                  Text('Editar'),
+                                                ],
+                                              ),
                                             ),
-                                            border: Border.all(
-                                              color: const Color(
-                                                0xFF43A047,
-                                              ).withValues(alpha:0.3),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            carreraNombre,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: Color(0xFF2E7D32),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Row(
-                                          children: [
-                                            Icon(
-                                              Icons.location_city,
-                                              size: 12,
-                                              color: Colors.grey[600],
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Expanded(
-                                              child: Text(
-                                                filialNombre,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey[600],
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
+                                            const PopupMenuItem(
+                                              value: 'delete',
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.delete,
+                                                    color: Color(0xFFE53935),
+                                                    size: 20,
+                                                  ),
+                                                  SizedBox(width: 12),
+                                                  Text('Eliminar'),
+                                                ],
                                               ),
                                             ),
                                           ],
                                         ),
-                                        if (eventData['fecha'] != null ||
-                                            eventData['lugar'] != null)
-                                          Container(
-                                            margin: const EdgeInsets.only(
-                                              top: 6,
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                if (eventData['fecha'] !=
-                                                    null) ...[
-                                                  Icon(
-                                                    Icons.calendar_today,
-                                                    size: 12,
-                                                    color: Colors.blue.shade600,
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    _eventosService.formatDate(
-                                                      (eventData['fecha']
-                                                              as Timestamp)
-                                                          .toDate(),
-                                                    ),
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      color:
-                                                          Colors.blue.shade600,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                    ),
-                                                  ),
-                                                ],
-                                                if (eventData['fecha'] !=
-                                                        null &&
-                                                    eventData['lugar'] !=
-                                                        null &&
-                                                    eventData['lugar'] != '')
-                                                  const Text(
-                                                    ' • ',
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                    ),
-                                                  ),
-                                                if (eventData['lugar'] !=
-                                                        null &&
-                                                    eventData['lugar'] !=
-                                                        '') ...[
-                                                  Icon(
-                                                    Icons.location_on,
-                                                    size: 12,
-                                                    color:
-                                                        Colors.orange.shade600,
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Expanded(
-                                                    child: Text(
-                                                      eventData['lugar'],
-                                                      style: TextStyle(
-                                                        fontSize: 10,
-                                                        color: Colors
-                                                            .orange
-                                                            .shade600,
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                      ),
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ],
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.withValues(alpha:0.1),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: PopupMenuButton<String>(
-                                      icon: const Icon(
-                                        Icons.more_vert,
-                                        color: Color(0xFF1E3A5F),
                                       ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      onSelected: (value) {
-                                        switch (value) {
-                                          case 'details':
-                                            _navigateToEventDetails(
-                                              eventId,
-                                              eventData,
-                                            );
-                                            break;
-                                          case 'edit':
-                                            _editEvent(eventId, eventData);
-                                            break;
-                                          case 'delete':
-                                            _deleteEvent(eventId, eventName);
-                                            break;
-                                        }
-                                      },
-                                      itemBuilder: (context) => [
-                                        const PopupMenuItem(
-                                          value: 'details',
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                Icons.visibility,
-                                                color: Color(0xFF43A047),
-                                                size: 20,
-                                              ),
-                                              SizedBox(width: 12),
-                                              Text('Ver Detalles'),
-                                            ],
-                                          ),
-                                        ),
-                                        const PopupMenuItem(
-                                          value: 'edit',
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                Icons.edit,
-                                                color: Color(0xFF1E88E5),
-                                                size: 20,
-                                              ),
-                                              SizedBox(width: 12),
-                                              Text('Editar'),
-                                            ],
-                                          ),
-                                        ),
-                                        const PopupMenuItem(
-                                          value: 'delete',
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                Icons.delete,
-                                                color: Color(0xFFE53935),
-                                                size: 20,
-                                              ),
-                                              SizedBox(width: 12),
-                                              Text('Eliminar'),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  },
-                );
-              },
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

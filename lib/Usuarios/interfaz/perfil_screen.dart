@@ -59,8 +59,6 @@ class _PerfilScreenState extends State<PerfilScreen>
     _controller.loadUserData();
   }
 
-  // ─── Widgets de construcción ──────────────────────────────────────────────
-
   Widget _buildInfoCard({
     required String title,
     required String value,
@@ -78,50 +76,59 @@ class _PerfilScreenState extends State<PerfilScreen>
           child: Opacity(opacity: animValue, child: child),
         );
       },
-      child: Card(
-        elevation: 3,
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Colors.white, Colors.grey.shade50],
+      child: Semantics(
+        label: '$title: $value',
+        child: Card(
+          elevation: 3,
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Colors.white, Colors.grey.shade50],
+              ),
             ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                _buildCardIcon(icon, iconColor),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF64748B),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  _buildCardIcon(icon, iconColor),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF64748B),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        value,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1E3A5F),
+                        const SizedBox(height: 4),
+                        Text(
+                          value,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1E3A5F),
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -130,17 +137,19 @@ class _PerfilScreenState extends State<PerfilScreen>
   }
 
   Widget _buildCardIcon(IconData icon, Color? iconColor) {
-    return Container(
+    return SizedBox(
       width: 48,
       height: 48,
-      decoration: BoxDecoration(
-        color: (iconColor ?? const Color(0xFF1E3A5F)).withValues(alpha:0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(
-        icon,
-        color: iconColor ?? const Color(0xFF1E3A5F),
-        size: 24,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: (iconColor ?? const Color(0xFF1E3A5F)).withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(
+          icon,
+          color: iconColor ?? const Color(0xFF1E3A5F),
+          size: 24,
+        ),
       ),
     );
   }
@@ -149,22 +158,30 @@ class _PerfilScreenState extends State<PerfilScreen>
     return Padding(
       padding: const EdgeInsets.only(top: 24, bottom: 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
-              borderRadius: BorderRadius.circular(8),
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 20, color: const Color(0xFF1E3A5F)),
             ),
-            child: Icon(icon, size: 20, color: const Color(0xFF1E3A5F)),
           ),
           const SizedBox(width: 12),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E3A5F),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E3A5F),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -176,6 +193,7 @@ class _PerfilScreenState extends State<PerfilScreen>
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      constraints: const BoxConstraints(maxWidth: 280),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF1565C0), Color(0xFF1976D2)],
@@ -183,7 +201,7 @@ class _PerfilScreenState extends State<PerfilScreen>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1565C0).withValues(alpha:0.3),
+            color: const Color(0xFF1565C0).withValues(alpha: 0.3),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -194,20 +212,22 @@ class _PerfilScreenState extends State<PerfilScreen>
         children: [
           const Icon(Icons.location_city, color: Colors.white, size: 14),
           const SizedBox(width: 6),
-          Text(
-            sede,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
+          Flexible(
+            child: Text(
+              sede,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
       ),
     );
   }
-
-  // ─── Build principal ──────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -222,7 +242,7 @@ class _PerfilScreenState extends State<PerfilScreen>
                 decoration: const BoxDecoration(
                   color: Color(0xFFE8EDF2),
                   borderRadius: BorderRadius.only(
-                    topLeft:  Radius.circular(30),
+                    topLeft: Radius.circular(30),
                     topRight: Radius.circular(30),
                   ),
                 ),
@@ -237,12 +257,18 @@ class _PerfilScreenState extends State<PerfilScreen>
 
   Widget _buildAppBar() {
     return Padding(
-      padding: const EdgeInsets.all(20.0),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
-            onPressed: () => Navigator.of(context).pop(),
+          Semantics(
+            label: 'Volver',
+            button: true,
+            child: IconButton(
+              icon:
+                  const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+              onPressed: () => Navigator.of(context).pop(),
+              tooltip: 'Volver',
+            ),
           ),
           const Expanded(
             child: Text(
@@ -252,12 +278,18 @@ class _PerfilScreenState extends State<PerfilScreen>
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white, size: 28),
-            onPressed: _refresh,
-            tooltip: 'Actualizar',
+          Semantics(
+            label: 'Actualizar perfil',
+            button: true,
+            child: IconButton(
+              icon: const Icon(Icons.refresh, color: Colors.white, size: 28),
+              onPressed: _refresh,
+              tooltip: 'Actualizar',
+            ),
           ),
         ],
       ),
@@ -265,9 +297,9 @@ class _PerfilScreenState extends State<PerfilScreen>
   }
 
   Widget _buildBodyContent() {
-    if (_controller.isLoading)           return _buildLoading();
+    if (_controller.isLoading) return _buildLoading();
     if (_controller.errorMessage != null) return _buildError();
-    if (_controller.userData != null)    return _buildProfile();
+    if (_controller.userData != null) return _buildProfile();
     return _buildNoData();
   }
 
@@ -289,38 +321,49 @@ class _PerfilScreenState extends State<PerfilScreen>
 
   Widget _buildError() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.error_outline, size: 64, color: Colors.red),
-          const SizedBox(height: 16),
-          Text(
-            _controller.errorMessage!,
-            style: const TextStyle(fontSize: 16, color: Colors.red),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: _controller.loadUserData,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1E3A5F),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(
+              _controller.errorMessage!,
+              style: const TextStyle(fontSize: 16, color: Colors.red),
+              textAlign: TextAlign.center,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
             ),
-            child: const Text('Reintentar'),
-          ),
-        ],
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _controller.loadUserData,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1E3A5F),
+                foregroundColor: Colors.white,
+                minimumSize: const Size(44, 44),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Reintentar'),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildNoData() {
     return const Center(
-      child: Text(
-        'No hay datos disponibles',
-        style: TextStyle(fontSize: 16, color: Color(0xFF64748B)),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 24),
+        child: Text(
+          'No hay datos disponibles',
+          style: TextStyle(fontSize: 16, color: Color(0xFF64748B)),
+          textAlign: TextAlign.center,
+        ),
       ),
     );
   }
@@ -332,14 +375,19 @@ class _PerfilScreenState extends State<PerfilScreen>
         position: _slideAnimation,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildAvatarSection(),
-              _buildSeccionPersonal(),
-              _buildSeccionAcademica(),
-              const SizedBox(height: 20),
-            ],
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 680),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildAvatarSection(),
+                  _buildSeccionPersonal(),
+                  _buildSeccionAcademica(),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -353,14 +401,19 @@ class _PerfilScreenState extends State<PerfilScreen>
         children: [
           _buildAvatar(),
           const SizedBox(height: 16),
-          Text(
-            _controller.userData!['name'] ?? 'Sin nombre',
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E3A5F),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              _controller.userData!['name'] ?? 'Sin nombre',
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E3A5F),
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
             ),
-            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           _buildEstudianteBadge(),
@@ -385,7 +438,7 @@ class _PerfilScreenState extends State<PerfilScreen>
           ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF1E3A5F).withValues(alpha:0.3),
+              color: const Color(0xFF1E3A5F).withValues(alpha: 0.3),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -398,6 +451,7 @@ class _PerfilScreenState extends State<PerfilScreen>
 
   Widget _buildEstudianteBadge() {
     return Container(
+      constraints: const BoxConstraints(maxWidth: 200),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -406,7 +460,7 @@ class _PerfilScreenState extends State<PerfilScreen>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF4CAF50).withValues(alpha:0.3),
+            color: const Color(0xFF4CAF50).withValues(alpha: 0.3),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -419,6 +473,9 @@ class _PerfilScreenState extends State<PerfilScreen>
           fontWeight: FontWeight.w600,
           fontSize: 14,
         ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
       ),
     );
   }

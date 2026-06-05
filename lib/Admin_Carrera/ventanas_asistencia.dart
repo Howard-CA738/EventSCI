@@ -40,14 +40,12 @@ class VentanasAsistenciaScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Row(
               children: [
-                const Icon(Icons.location_city,
-                    color: Colors.white60, size: 13),
+                const Icon(Icons.location_city, color: Colors.white60, size: 13),
                 const SizedBox(width: 5),
                 Flexible(
                   child: Text(
                     '$filialNombre › $facultad › $carrera',
-                    style: const TextStyle(
-                        color: Colors.white60, fontSize: 12),
+                    style: const TextStyle(color: Colors.white60, fontSize: 12),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -56,205 +54,188 @@ class VentanasAsistenciaScreen extends StatelessWidget {
           ),
         ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.only(top: 16),
-              decoration: const BoxDecoration(
-                color: Color(0xFFF5F7FA),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(30),
-                  topRight: Radius.circular(30),
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.only(top: 16),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF5F7FA),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
+                  ),
                 ),
-              ),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // ── Encabezado ───────────────────────────────────────
-                    _TweenCard(
-                      delay: 100,
-                      child: Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E3A5F),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF1E3A5F)
-                                  .withValues(alpha: 0.3),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color:
-                                    Colors.white.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(12),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _TweenCard(
+                        delay: 100,
+                        child: Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E3A5F),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF1E3A5F).withValues(alpha: 0.3),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
                               ),
-                              child: const Icon(
-                                Icons.how_to_reg_rounded,
-                                size: 30,
-                                color: Colors.white,
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.how_to_reg_rounded,
+                                  size: 30,
+                                  color: Colors.white,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Gestión de Asistencias',
-                                    style: TextStyle(
-                                      fontSize: 19,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Gestión de Asistencias',
+                                      style: TextStyle(
+                                        fontSize: 19,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    carrera,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.white70,
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      carrera,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.white70,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      const Text(
+                        '¿Qué deseas hacer?',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1E3A5F),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _TweenCard(
+                        delay: 200,
+                        child: _OpcionCard(
+                          icon: Icons.verified_rounded,
+                          iconColor: const Color(0xFF7B61FF),
+                          title: 'Configurar sellos\nde asistencia',
+                          subtitle:
+                              'Define cuántos sellos equivalen al 100% (nota 20) para cada evento',
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ConfigurarSellosScreen(
+                                filialId: filialId,
+                                filialNombre: filialNombre,
+                                facultad: facultad,
+                                carrera: carrera,
                               ),
                             ),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    const Text(
-                      '¿Qué deseas hacer?',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1E3A5F),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // ── Opción 1: Configurar sellos ──────────────────────
-                    _TweenCard(
-                      delay: 200,
-                      child: _OpcionCard(
-                        icon: Icons.verified_rounded,
-                        iconColor: const Color(0xFF7B61FF),
-                        title: 'Configurar sellos\nde asistencia',
-                        subtitle:
-                            'Define cuántos sellos equivalen al 100% (nota 20) para cada evento',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ConfigurarSellosScreen(
-                              filialId: filialId,
-                              filialNombre: filialNombre,
-                              facultad: facultad,
-                              carrera: carrera,
+                      const SizedBox(height: 16),
+                      _TweenCard(
+                        delay: 320,
+                        child: _OpcionCard(
+                          icon: Icons.people_alt_rounded,
+                          iconColor: const Color(0xFF4A90E2),
+                          title: 'Ver asistencias',
+                          subtitle:
+                              'Consulta el registro de asistencias de los estudiantes por evento',
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AsistenciasAdminCarreraScreen(
+                                filialId: filialId,
+                                filialNombre: filialNombre,
+                                facultad: facultad,
+                                carrera: carrera,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // ── Opción 2: Ver asistencias ────────────────────────
-                    _TweenCard(
-                      delay: 320,
-                      child: _OpcionCard(
-                        icon: Icons.people_alt_rounded,
-                        iconColor: const Color(0xFF4A90E2),
-                        title: 'Ver asistencias',
-                        subtitle:
-                            'Consulta el registro de asistencias de los estudiantes por evento',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => AsistenciasAdminCarreraScreen(
-                              filialId: filialId,
-                              filialNombre: filialNombre,
-                              facultad: facultad,
-                              carrera: carrera,
+                      const SizedBox(height: 16),
+                      _TweenCard(
+                        delay: 440,
+                        child: _OpcionCard(
+                          icon: Icons.assignment_turned_in_rounded,
+                          iconColor: const Color(0xFF0D7377),
+                          title: 'Asistencias personales',
+                          subtitle:
+                              'Crea asistencias como Primera Asistencia o Asistencia Final, genera su QR y configura cuándo funciona',
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AsistenciasPersonalesScreen(),
                             ),
                           ),
                         ),
                       ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // ── Opción 3: Asistencias personales ─────────────────
-                    _TweenCard(
-                      delay: 440,
-                      child: _OpcionCard(
-                        icon: Icons.assignment_turned_in_rounded,
-                        iconColor: const Color(0xFF0D7377),
-                        title: 'Asistencias personales',
-                        subtitle:
-                            'Crea asistencias como Primera Asistencia o Asistencia Final, genera su QR y configura cuándo funciona',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => AsistenciasPersonalesScreen(),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // ── Opción 4: Notas por sellos ───────────────────────
-                    _TweenCard(
-                      delay: 560,
-                      child: _OpcionCard(
-                        icon: Icons.bar_chart_rounded,
-                        iconColor: const Color(0xFF16A34A),
-                        title: 'Notas por sellos',
-                        subtitle:
-                            'Consulta la nota de cada estudiante calculada según los sellos obtenidos en cada evento',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => NotasPorSellosScreen(
-                              filialId: filialId,
-                              filialNombre: filialNombre,
-                              facultad: facultad,
-                              carrera: carrera,
+                      const SizedBox(height: 16),
+                      _TweenCard(
+                        delay: 560,
+                        child: _OpcionCard(
+                          icon: Icons.bar_chart_rounded,
+                          iconColor: const Color(0xFF16A34A),
+                          title: 'Notas por sellos',
+                          subtitle:
+                              'Consulta la nota de cada estudiante calculada según los sellos obtenidos en cada evento',
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => NotasPorSellosScreen(
+                                filialId: filialId,
+                                filialNombre: filialNombre,
+                                facultad: facultad,
+                                carrera: carrera,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-
-                    const SizedBox(height: 8),
-                  ],
+                      const SizedBox(height: 8),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-// ── Tarjeta de opción ──────────────────────────────────────────────
 class _OpcionCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
@@ -272,77 +253,91 @@ class _OpcionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.07),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(icon, size: 32, color: iconColor),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E3A5F),
-                          height: 1.2,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                          height: 1.4,
-                        ),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.arrow_forward_ios,
-                    size: 14,
-                    color: iconColor,
-                  ),
+    return Semantics(
+      button: true,
+      label: title,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Ink(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.07),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
                 ),
               ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  ExcludeSemantics(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: iconColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(icon, size: 32, color: iconColor),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E3A5F),
+                            height: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                            height: 1.4,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ExcludeSemantics(
+                    child: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: iconColor.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.arrow_forward_ios,
+                            size: 14,
+                            color: iconColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -351,7 +346,6 @@ class _OpcionCard extends StatelessWidget {
   }
 }
 
-// ── Animación de entrada por tarjeta ──────────────────────────────
 class _TweenCard extends StatelessWidget {
   final int delay;
   final Widget child;

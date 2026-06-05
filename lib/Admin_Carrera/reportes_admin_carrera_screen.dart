@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
-import 'ventanas_ganadores.dart'; 
+import 'ventanas_ganadores.dart';
 import 'ventanas_asistencia.dart';
 import 'informe_evento_carrera.dart';
 import 'ventanas_evaluaciones.dart';
-import 'package:flutter/foundation.dart';
 
 class ReportesAdminCarreraScreen extends StatefulWidget {
   const ReportesAdminCarreraScreen({super.key});
@@ -101,260 +100,275 @@ class _ReportesAdminCarreraScreenState
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: SlideTransition(
-          position: _slideAnimation,
-          child: Column(
-            children: [
-              Expanded(
-                child: Container(
-                  margin: const EdgeInsets.only(top: 16),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF5F7FA),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(30),
-                      topRight: Radius.circular(30),
+      body: SafeArea(
+        top: false,
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: SlideTransition(
+            position: _slideAnimation,
+            child: Column(
+              children: [
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 16),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF5F7FA),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(30),
+                        topRight: Radius.circular(30),
+                      ),
                     ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // ── Tarjeta de contexto ────────────────────────
-                        _buildAnimatedCard(
-                          delay: 100,
-                          child: Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1E3A5F),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFF1E3A5F)
-                                      .withValues(alpha: 0.3),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 8),
+                    child: SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildAnimatedCard(
+                              delay: 100,
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1E3A5F),
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF1E3A5F)
+                                          .withValues(alpha: 0.3),
+                                      blurRadius: 20,
+                                      offset: const Offset(0, 8),
+                                    ),
+                                  ],
                                 ),
-                              ],
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            Colors.white.withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Icon(
+                                        Icons.bar_chart_rounded,
+                                        size: 28,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Text(
+                                            'Reportes de Carrera',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                          const SizedBox(height: 6),
+                                          _buildInfoChip(
+                                              Icons.location_city, _sede),
+                                          const SizedBox(height: 3),
+                                          _buildInfoChip(
+                                              Icons.business, _facultad),
+                                          const SizedBox(height: 3),
+                                          _buildInfoChip(
+                                              Icons.school, _carrera),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.2),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(
-                                    Icons.bar_chart_rounded,
-                                    size: 30,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Reportes de Carrera',
-                                        style: TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
+
+                            const SizedBox(height: 20),
+
+                            Expanded(
+                              child: ListView(
+                                padding: EdgeInsets.zero,
+                                physics: const ClampingScrollPhysics(),
+                                children: [
+                                  _buildAnimatedCard(
+                                    delay: 200,
+                                    child: _buildReportOption(
+                                      title: 'Asistencias',
+                                      subtitle:
+                                          'Registro de asistencias de tu carrera',
+                                      icon: Icons.people,
+                                      color: const Color(0xFF4A90E2),
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              VentanasAsistenciaScreen(
+                                            filialId: _filialId,
+                                            filialNombre: _sede,
+                                            facultad: _facultad,
+                                            carrera: _carrera,
+                                          ),
                                         ),
                                       ),
-                                      const SizedBox(height: 6),
-                                      _buildInfoChip(
-                                          Icons.location_city, _sede),
-                                      const SizedBox(height: 4),
-                                      _buildInfoChip(
-                                          Icons.business, _facultad),
-                                      const SizedBox(height: 4),
-                                      _buildInfoChip(
-                                          Icons.school, _carrera),
-                                    ],
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
 
-                        const SizedBox(height: 24),
+                                  const SizedBox(height: 12),
 
-                        // ── Opciones de reportes ───────────────────────
-                        Expanded(
-                          child: ListView(
-                            children: [
-                              // Asistencias
-                              _buildAnimatedCard(
-                                delay: 200,
-                                child: _buildReportOption(
-                                  title: 'Asistencias',
-                                  subtitle:
-                                      'Registro de asistencias de tu carrera',
-                                  icon: Icons.people,
-                                  color: const Color(0xFF4A90E2),
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => VentanasAsistenciaScreen(
-                                        filialId: _filialId,
-                                        filialNombre: _sede,
-                                        facultad: _facultad,
-                                        carrera: _carrera,
+                                  _buildAnimatedCard(
+                                    delay: 300,
+                                    child: _buildReportOption(
+                                      title: 'Evaluaciones',
+                                      subtitle:
+                                          'Revisa y gestiona las evaluaciones de tu carrera',
+                                      icon: Icons.assignment_turned_in,
+                                      color: const Color(0xFF9C27B0),
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              VentanasEvaluacionesScreen(
+                                            filialId: _filialId,
+                                            filialNombre: _sede,
+                                            facultad: _facultad,
+                                            carrera: _carrera,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ),
 
-                              const SizedBox(height: 12),
+                                  const SizedBox(height: 12),
 
-                              // Evaluaciones
-                              _buildAnimatedCard(
-                                delay: 300,
-                                child: _buildReportOption(
-                                  title: 'Evaluaciones',
-                                  subtitle:
-                                      'Revisa y gestiona las evaluaciones de tu carrera',
-                                  icon: Icons.assignment_turned_in,
-                                  color: const Color(0xFF9C27B0),
-                                  onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => VentanasEvaluacionesScreen(
-                                      filialId: _filialId,
-                                      filialNombre: _sede,
-                                      facultad: _facultad,
-                                      carrera: _carrera,
-                                    ),
-                                  ),
-                                ),
-                                                                ),
-                                                              ),
-
-                              const SizedBox(height: 12),
-
-                              // Informe Completo
-                              _buildAnimatedCard(
-                                delay: 350,
-                                child: _buildReportOption(
-                                  title: 'Informe Completo',
-                                  subtitle:
-                                      'Genera el informe completo del evento',
-                                  icon: Icons.description_rounded,
-                                  color: const Color(0xFF009688),
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const InformeEventoCarreraScreen(),
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                              const SizedBox(height: 12),
-
-                              // Ganadores → ahora va a VentanasGanadoresScreen
-                              _buildAnimatedCard(
-                                delay: 400,
-                                child: _buildReportOption(
-                                  title: 'Ganadores',
-                                  subtitle:
-                                      'Gestión de Ganadores',
-                                  icon: Icons.emoji_events,
-                                  color: const Color(0xFFF59E0B),
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => VentanasGanadoresScreen(
-                                        filialId: _filialId,
-                                        filialNombre: _sede,
-                                        facultad: _facultad,
-                                        carrera: _carrera,
+                                  _buildAnimatedCard(
+                                    delay: 350,
+                                    child: _buildReportOption(
+                                      title: 'Informe Completo',
+                                      subtitle:
+                                          'Genera el informe completo del evento',
+                                      icon: Icons.description_rounded,
+                                      color: const Color(0xFF009688),
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const InformeEventoCarreraScreen(),
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
 
-                        // ── Footer informativo ─────────────────────────
-                        _buildAnimatedCard(
-                          delay: 500,
-                          child: Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: const Color(0xFF1E3A5F)
-                                    .withValues(alpha: 0.15),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(7),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF1E3A5F)
-                                        .withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(
-                                    Icons.info_outline,
-                                    color: Color(0xFF1E3A5F),
-                                    size: 18,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                const Expanded(
-                                  child: Text(
-                                    'Los reportes se filtran automáticamente según tu carrera asignada.',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Color(0xFF1E3A5F),
-                                      fontWeight: FontWeight.w500,
+                                  const SizedBox(height: 12),
+
+                                  _buildAnimatedCard(
+                                    delay: 400,
+                                    child: _buildReportOption(
+                                      title: 'Ganadores',
+                                      subtitle: 'Gestión de Ganadores',
+                                      icon: Icons.emoji_events,
+                                      color: const Color(0xFFF59E0B),
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              VentanasGanadoresScreen(
+                                            filialId: _filialId,
+                                            filialNombre: _sede,
+                                            facultad: _facultad,
+                                            carrera: _carrera,
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
+
+                                  const SizedBox(height: 20),
+
+                                  _buildAnimatedCard(
+                                    delay: 500,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(14),
+                                        border: Border.all(
+                                          color: const Color(0xFF1E3A5F)
+                                              .withValues(alpha: 0.15),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(7),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF1E3A5F)
+                                                  .withValues(alpha: 0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            child: const Icon(
+                                              Icons.info_outline,
+                                              color: Color(0xFF1E3A5F),
+                                              size: 18,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          const Expanded(
+                                            child: Text(
+                                              'Los reportes se filtran automáticamente según tu carrera asignada.',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Color(0xFF1E3A5F),
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 24),
+                                ],
+                              ),
                             ),
-                          ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // ── Helpers de UI ──────────────────────────────────────────────
-
   Widget _buildInfoChip(IconData icon, String label) {
     if (label.isEmpty) return const SizedBox.shrink();
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Icon(icon, color: Colors.white60, size: 13),
         const SizedBox(width: 5),
-        Expanded(
+        Flexible(
           child: Text(
             label,
             style: const TextStyle(color: Colors.white70, fontSize: 12),
             overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
         ),
       ],
@@ -399,29 +413,33 @@ class _ReportesAdminCarreraScreenState
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(icon, size: 30, color: color),
+                  child: Icon(icon, size: 28, color: color),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         title,
                         style: const TextStyle(
-                          fontSize: 17,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF1E3A5F),
                         ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -446,7 +464,7 @@ class _ReportesAdminCarreraScreenState
                   ),
                   child: Icon(
                     Icons.arrow_forward_ios,
-                    size: 15,
+                    size: 14,
                     color: color,
                   ),
                 ),

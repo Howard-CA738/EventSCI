@@ -52,23 +52,25 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
   }
 
   @override
-void didChangeAppLifecycleState(AppLifecycleState state) {
-  switch (state) {
-    case AppLifecycleState.resumed:
-  _barcodeSub?.cancel();
-  _barcodeSub = cameraController.barcodes.listen((capture) {
-    for (final barcode in capture.barcodes) {
-      if (barcode.rawValue != null && !_hasScanned && !_isProcessing) {
-        _procesarQR(barcode.rawValue!);
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        unawaited(_barcodeSub?.cancel());
+        _barcodeSub = cameraController.barcodes.listen((capture) {
+          for (final barcode in capture.barcodes) {
+            if (barcode.rawValue != null && !_hasScanned && !_isProcessing) {
+              _procesarQR(barcode.rawValue!);
+              break;
+            }
+          }
+        });
+        unawaited(cameraController.start());
         break;
-      }
-    }
-  });
-  unawaited(cameraController.start());
       case AppLifecycleState.inactive:
         unawaited(_barcodeSub?.cancel());
         _barcodeSub = null;
         unawaited(cameraController.stop());
+        break;
       default:
         break;
     }
@@ -155,10 +157,6 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // HELPERS DE NORMALIZACIÓN
-  // ═══════════════════════════════════════════════════════════════
-
   String _normalizar(String? valor) {
     if (valor == null) return '';
     const Map<String, String> tildes = {
@@ -199,10 +197,6 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     final studentFilial = _normalizar(_studentFilial);
     return studentFilial.isEmpty || studentFilial == qrFilial;
   }
-
-  // ═══════════════════════════════════════════════════════════════
-  // PROCESAR QR PRINCIPAL
-  // ═══════════════════════════════════════════════════════════════
 
   Future<void> _procesarQR(String qrData) async {
     if (_isProcessing || _hasScanned) return;
@@ -291,12 +285,9 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
       final qrType = (qrDocData['type'] ?? qrInfo['type'] ?? '').toString();
 
       if (qrType == 'asistencia_personal') {
-        // Delegamos completamente — este método maneja su propio ciclo de vida
         await _procesarQRAsistenciaPersonal(qrInfo, qrDocData);
         return;
       }
-
-      // ── Flujo normal de proyectos ────────────────────────────────
 
       const requiredFields = [
         'eventId',
@@ -318,43 +309,43 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
       final esUniversitario = _esEventoUniversitario(qrInfo);
 
       if (!esUniversitario) {
-  if (!_filialCoincide(qrInfo)) {
-    final qrFilial = qrInfo['filialNombre']?.toString() ?? 'Sin filial';
-    _showResult(
-      success: false,
-      message:
-          '🏛️ Este evento es de otra filial.\n\n'
-          '📌 EVENTO:\n'
-          'Filial: "$qrFilial"\n\n'
-          '👤 TU FILIAL:\n'
-          '"${_studentFilial ?? 'No registrada'}"',
-    );
-    return;
-  }
+        if (!_filialCoincide(qrInfo)) {
+          final qrFilial = qrInfo['filialNombre']?.toString() ?? 'Sin filial';
+          _showResult(
+            success: false,
+            message:
+                '🏛️ Este evento es de otra filial.\n\n'
+                '📌 EVENTO:\n'
+                'Filial: "$qrFilial"\n\n'
+                '👤 TU FILIAL:\n'
+                '"${_studentFilial ?? 'No registrada'}"',
+          );
+          return;
+        }
 
-  final userFacultad = _normalizar(_cachedUserData!['facultad']);
-  final userCarrera = _normalizarCarrera(_cachedUserData!['carrera']);
-  final eventFacultad = _normalizar(qrInfo['facultad']);
-  final eventCarrera = _normalizarCarrera(qrInfo['carrera']);
-  final esDeSede = _esEventoDeSede(qrInfo);
+        final userFacultad = _normalizar(_cachedUserData!['facultad']);
+        final userCarrera = _normalizarCarrera(_cachedUserData!['carrera']);
+        final eventFacultad = _normalizar(qrInfo['facultad']);
+        final eventCarrera = _normalizarCarrera(qrInfo['carrera']);
+        final esDeSede = _esEventoDeSede(qrInfo);
 
-  if (!esDeSede) {
-    if (userFacultad != eventFacultad || userCarrera != eventCarrera) {
-      _showResult(
-        success: false,
-        message:
-            '🚫 Este evento no corresponde a tu facultad/carrera.\n\n'
-            '📌 EVENTO:\n'
-            'Facultad: "${qrInfo['facultad']}"\n'
-            'Carrera: "${qrInfo['carrera']}"\n\n'
-            '👤 TU PERFIL:\n'
-            'Facultad: "${_cachedUserData!['facultad']}"\n'
-            'Carrera: "${_cachedUserData!['carrera']}"',
-      );
-      return;
-    }
-  }
-}
+        if (!esDeSede) {
+          if (userFacultad != eventFacultad || userCarrera != eventCarrera) {
+            _showResult(
+              success: false,
+              message:
+                  '🚫 Este evento no corresponde a tu facultad/carrera.\n\n'
+                  '📌 EVENTO:\n'
+                  'Facultad: "${qrInfo['facultad']}"\n'
+                  'Carrera: "${qrInfo['carrera']}"\n\n'
+                  '👤 TU PERFIL:\n'
+                  'Facultad: "${_cachedUserData!['facultad']}"\n'
+                  'Carrera: "${_cachedUserData!['carrera']}"',
+            );
+            return;
+          }
+        }
+      }
 
       final codigoProyecto = qrInfo['codigoProyecto']?.toString().trim();
       final tituloProyecto = qrInfo['tituloProyecto']?.toString().trim();
@@ -467,29 +458,15 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
         message: 'Error al registrar asistencia: $e',
       );
     } finally {
-      // Solo reseteamos _isProcessing aquí.
-      // _hasScanned se maneja en _showResult / _resetScanner para
-      // evitar que el escáner se reactive antes de que el usuario
-      // cierre el diálogo.
       if (mounted) setState(() => _isProcessing = false);
     }
   }
-
-  // ═══════════════════════════════════════════════════════════════
-  // PROCESAR QR ASISTENCIA PERSONAL
-  // ═══════════════════════════════════════════════════════════════
 
   Future<void> _procesarQRAsistenciaPersonal(
     Map<String, dynamic> qrInfo,
     Map<String, dynamic> qrDocData,
   ) async {
-    // NOTA: _isProcessing y _hasScanned ya están en true (set por _procesarQR).
-    // Este método NO tiene su propio finally — el finally de _procesarQR
-    // es el único punto de reset de _isProcessing.
-    // _hasScanned se resetea solo cuando el usuario toca "Reintentar" o cierra.
-
     try {
-      // ── 1. Campos obligatorios ──────────────────────────────────────────
       for (final field in [
         'eventId',
         'eventName',
@@ -507,7 +484,6 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
         }
       }
 
-      // ── 2. Validación de filial ─────────────────────────────────────────
       if (!_filialCoincide(qrInfo)) {
         final qrFilial = qrInfo['filialNombre']?.toString() ?? 'Sin filial';
         _showResult(
@@ -520,34 +496,31 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
         return;
       }
 
-      // ── 3. Validación de facultad/carrera ───────────────────────────────
-      // ── 3. Validación de facultad/carrera ───────────────────────────────────────
-final userFacultad = _normalizar(_cachedUserData!['facultad']);
-final userCarrera = _normalizarCarrera(_cachedUserData!['carrera']);
-final eventFacultad = _normalizar(qrInfo['facultad']);
-final eventCarrera = _normalizarCarrera(qrInfo['carrera']);
+      final userFacultad = _normalizar(_cachedUserData!['facultad']);
+      final userCarrera = _normalizarCarrera(_cachedUserData!['carrera']);
+      final eventFacultad = _normalizar(qrInfo['facultad']);
+      final eventCarrera = _normalizarCarrera(qrInfo['carrera']);
 
-final esUniversitarioPersonal = _esEventoUniversitario(qrInfo);
-final esDeSedePersonal = _esEventoDeSede(qrInfo);
+      final esUniversitarioPersonal = _esEventoUniversitario(qrInfo);
+      final esDeSedePersonal = _esEventoDeSede(qrInfo);
 
-if (!esUniversitarioPersonal && !esDeSedePersonal) {
-  if (userFacultad != eventFacultad || userCarrera != eventCarrera) {
-    _showResult(
-      success: false,
-      message:
-          '🚫 Este evento no corresponde a tu facultad/carrera.\n\n'
-          '📌 EVENTO:\nFacultad: "${qrInfo['facultad']}"\nCarrera: "${qrInfo['carrera']}"\n\n'
-          '👤 TU PERFIL:\nFacultad: "${_cachedUserData!['facultad']}"\nCarrera: "${_cachedUserData!['carrera']}"',
-    );
-    return;
-  }
-}
+      if (!esUniversitarioPersonal && !esDeSedePersonal) {
+        if (userFacultad != eventFacultad || userCarrera != eventCarrera) {
+          _showResult(
+            success: false,
+            message:
+                '🚫 Este evento no corresponde a tu facultad/carrera.\n\n'
+                '📌 EVENTO:\nFacultad: "${qrInfo['facultad']}"\nCarrera: "${qrInfo['carrera']}"\n\n'
+                '👤 TU PERFIL:\nFacultad: "${_cachedUserData!['facultad']}"\nCarrera: "${_cachedUserData!['carrera']}"',
+          );
+          return;
+        }
+      }
 
       final eventId = qrInfo['eventId'] as String;
       final asistenciaId = qrInfo['asistenciaId'] as String;
       final qrId = qrInfo['qrId'] as String;
 
-      // ── 4. Leer documento live de asistencia_personal ───────────────────
       final asistenciaDoc = await _firestore
           .collection('events')
           .doc(eventId)
@@ -566,7 +539,6 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
       final aData = asistenciaDoc.data()!;
       final ahora = DateTime.now();
 
-      // ── 4a. ¿Está activo el QR? ─────────────────────────────────────────
       final activoBase = aData['activo'] as bool? ?? false;
       if (!activoBase) {
         _showResult(
@@ -576,7 +548,6 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
         return;
       }
 
-      // ── 4b. Ventana horaria ─────────────────────────────────────────────
       final ventanaActiva = aData['ventanaHorariaActiva'] as bool? ?? false;
       if (ventanaActiva) {
         final inicioTs = aData['ventanaInicio'] as Timestamp?;
@@ -619,7 +590,6 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
         }
       }
 
-      // ── 4c. Tiempo límite ───────────────────────────────────────────────
       final tiempoLimiteActivo = aData['tiempoLimiteActivo'] as bool? ?? false;
       if (tiempoLimiteActivo) {
         final activadoTs = aData['activadoEn'] as Timestamp?;
@@ -628,7 +598,6 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
         if (activadoTs != null) {
           final expira = activadoTs.toDate().add(Duration(minutes: minutos));
           if (ahora.isAfter(expira)) {
-            // Auto-desactivar en Firestore (best-effort, no bloqueante)
             _firestore
                 .collection('events')
                 .doc(eventId)
@@ -664,7 +633,6 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
         }
       }
 
-      // ── 5. Verificar si ya registró esta asistencia ─────────────────────
       final parts = _currentUserId!.split('/');
       final studentId = parts.length > 1 ? parts[1] : _currentUserId!;
 
@@ -695,16 +663,12 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
         return;
       }
 
-      // ── 6. Verificar cooldown ───────────────────────────────────────────
       final cooldownOk = await _verificarYGuardarCooldown();
       if (!cooldownOk) {
-        // Reseteamos _hasScanned para que el usuario pueda reintentar
-        // después de que expire el cooldown sin salir de la pantalla.
         if (mounted) setState(() => _hasScanned = false);
         return;
       }
 
-      // ── 7. Guardar registro ─────────────────────────────────────────────
       final batch = _firestore.batch();
 
       final registroRef = _firestore
@@ -765,7 +729,6 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
         message: 'Error al procesar asistencia personal: $e',
       );
     }
-    // SIN finally aquí — el finally de _procesarQR maneja _isProcessing.
   }
 
   bool _esBlancoONulo(String? valor) {
@@ -778,10 +741,6 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
         v == 'sin titulo' ||
         v == 'sin grupo';
   }
-
-  // ═══════════════════════════════════════════════════════════════
-  // DIÁLOGO DE RESULTADO
-  // ═══════════════════════════════════════════════════════════════
 
   void _showResult({
     required bool success,
@@ -863,14 +822,12 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Flexible(
-                    child: Text(
-                      message,
-                      style: const TextStyle(
-                          fontSize: 15, color: Color(0xFF64748B)),
-                      textAlign: TextAlign.center,
-                      softWrap: true,
-                    ),
+                  Text(
+                    message,
+                    style: const TextStyle(
+                        fontSize: 15, color: Color(0xFF64748B)),
+                    textAlign: TextAlign.center,
+                    softWrap: true,
                   ),
 
                   if (success && eventName != null) ...[
@@ -1174,7 +1131,6 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
                 child: CircularProgressIndicator(color: Colors.white))
             : Column(
                 children: [
-                  // ── Header ─────────────────────────────────────
                   Padding(
                     padding: const EdgeInsets.all(20.0),
                     child: Row(
@@ -1243,7 +1199,6 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
                     ),
                   ),
 
-                  // ── Content ─────────────────────────────────────
                   Expanded(
                     child: Container(
                       decoration: const BoxDecoration(
@@ -1255,7 +1210,6 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
                       ),
                       child: Column(
                         children: [
-                          // Tarjeta del estudiante
                           Container(
                             margin:
                                 const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -1342,7 +1296,6 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
                             ),
                           ),
 
-                          // Cámara
                           Expanded(
                             child: Container(
                               margin: const EdgeInsets.all(20),
@@ -1380,7 +1333,6 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
                                     ),
                                   ),
 
-                                  // Indicador de zoom
                                   if (_currentZoom > 0.0)
                                     Positioned(
                                       top: 16,
@@ -1417,7 +1369,6 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
                                       ),
                                     ),
 
-                                  // Marco de escaneo
                                   Center(
                                     child: SizedBox(
                                       width: 250,
@@ -1509,7 +1460,6 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
                                     ),
                                   ),
 
-                                  // Overlay de procesamiento
                                   if (_isProcessing)
                                     Container(
                                       color: Colors.black87,
@@ -1545,7 +1495,6 @@ if (!esUniversitarioPersonal && !esDeSedePersonal) {
                             ),
                           ),
 
-                          // Pie
                           Container(
                             margin:
                                 const EdgeInsets.fromLTRB(20, 0, 20, 20),

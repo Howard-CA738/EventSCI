@@ -30,12 +30,18 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
   bool _isLoading = true;
   String? _qrDataGenerado;
   Map<String, dynamic>? _proyectoSeleccionado;
-  String? _qrId; // ID único del QR generado
-  bool _qrFinalizado = false; // Estado de finalización del QR
-  bool _finalizando = false; // Indicador de proceso de finalización
+  String? _qrId;
+  bool _qrFinalizado = false;
+  bool _finalizando = false;
 
   late AnimationController _fadeController;
   late AnimationController _scaleController;
+
+  static const Color _primaryColor = Color(0xFF1E3A5F);
+  static const Color _backgroundColor = Color(0xFFE8EFF5);
+  static const Color _borderColor = Color(0xFFE0E7ED);
+  static const Color _textSecondary = Color(0xFF4A5568);
+  static const Color _surfaceColor = Color(0xFFF5F8FA);
 
   @override
   void initState() {
@@ -76,6 +82,8 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
         return data;
       }).toList();
 
+      if (!mounted) return;
+
       setState(() {
         _proyectos = proyectos;
         _isLoading = false;
@@ -83,26 +91,18 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
 
       _fadeController.forward();
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
       _showSnackBar('Error al cargar proyectos: $e', isError: true);
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // MÉTODO MEJORADO: Genera QR con ID único y registro en Firestore
-  // ═══════════════════════════════════════════════════════════════
   Future<void> _generarQRParaProyecto(Map<String, dynamic> proyecto) async {
-    debugPrint('🎯 GENERANDO QR PARA PROYECTO:');
-    debugPrint('   Código: ${proyecto['Código']}');
-    debugPrint('   Título: ${proyecto['Título']}');
-    debugPrint('   Sala: ${proyecto['Sala']}');
-
-    // Generar ID único para este QR
     final qrDocRef = FirebaseFirestore.instance
         .collection('events')
         .doc(widget.eventId)
         .collection('qr_codes')
-        .doc(); // Genera ID automático
+        .doc();
 
     final qrId = qrDocRef.id;
 
@@ -112,27 +112,18 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
       'facultad': widget.facultad,
       'carrera': widget.carrera,
       'categoria': widget.categoria,
-
-      // Campos del proyecto
       'codigoProyecto': proyecto['Código'] ?? 'Sin código',
       'tituloProyecto': proyecto['Título'] ?? 'Sin título',
       'grupo': proyecto['Sala'],
-
-      // Campos de control
-      'qrId': qrId, // ✅ ID único del QR
+      'qrId': qrId,
       'timestamp': DateTime.now().toIso8601String(),
       'type': 'asistencia_categoria',
-      'activo': true, // ✅ Estado del QR
+      'activo': true,
     };
 
-    debugPrint('📦 QR INFO CREADO:');
-    debugPrint('   qrId: $qrId');
-    debugPrint('   codigoProyecto: ${qrInfo['codigoProyecto']}');
-    debugPrint('   tituloProyecto: ${qrInfo['tituloProyecto']}');
-    debugPrint('   activo: true');
-
     try {
-      // Guardar registro del QR en Firestore
+      final qrJson = jsonEncode(qrInfo);
+
       await qrDocRef.set({
         'eventId': widget.eventId,
         'codigoProyecto': proyecto['Código'] ?? 'Sin código',
@@ -144,9 +135,7 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
         'finalizadoAt': null,
       });
 
-      final qrJson = jsonEncode(qrInfo);
-      debugPrint('📄 QR JSON: $qrJson');
-      debugPrint('✅ QR registrado en Firestore');
+      if (!mounted) return;
 
       setState(() {
         _qrDataGenerado = qrJson;
@@ -158,21 +147,17 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
       _scaleController.forward(from: 0);
       _showSnackBar('¡Código QR generado y activo!');
     } catch (e) {
-      debugPrint('❌ Error al registrar QR: $e');
+      if (!mounted) return;
       _showSnackBar('Error al generar QR: $e', isError: true);
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // MÉTODO NUEVO: Finalizar QR (marcar como inactivo)
-  // ═══════════════════════════════════════════════════════════════
   Future<void> _finalizarQR() async {
     if (_qrId == null || _qrFinalizado) return;
 
     setState(() => _finalizando = true);
 
     try {
-      // Actualizar el documento del QR en Firestore
       await FirebaseFirestore.instance
           .collection('events')
           .doc(widget.eventId)
@@ -183,25 +168,22 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
             'finalizadoAt': FieldValue.serverTimestamp(),
           });
 
-      debugPrint('🔒 QR FINALIZADO:');
-      debugPrint('   qrId: $_qrId');
-      debugPrint('   activo: false');
+      if (!mounted) return;
 
       setState(() {
         _qrFinalizado = true;
         _finalizando = false;
       });
 
-      _showSnackBar('¡QR finalizado! Ya no se podrá escanear', isError: false);
+      _showSnackBar('¡QR finalizado! Ya no se podrá escanear');
 
-      // Esperar un momento para que el usuario vea el mensaje
       await Future.delayed(const Duration(seconds: 2));
 
       if (mounted) {
         Navigator.pop(context);
       }
     } catch (e) {
-      debugPrint('❌ Error al finalizar QR: $e');
+      if (!mounted) return;
       setState(() => _finalizando = false);
       _showSnackBar('Error al finalizar QR: $e', isError: true);
     }
@@ -217,13 +199,20 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red.shade600 : Colors.green.shade600,
+        content: Text(
+          message,
+          style: const TextStyle(fontSize: 14),
+        ),
+        backgroundColor:
+            isError ? Colors.red.shade600 : Colors.green.shade600,
         duration: const Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
       ),
     );
   }
@@ -231,58 +220,77 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE8EFF5),
+      backgroundColor: _backgroundColor,
       appBar: AppBar(
         elevation: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
               'Proyectos por Categoría',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 17,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
             Text(
               widget.categoria,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w400),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ],
         ),
-        backgroundColor: const Color(0xFF1E3A5F),
+        backgroundColor: _primaryColor,
         foregroundColor: Colors.white,
+        toolbarHeight: 60,
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1E3A5F)),
-              ),
-            )
-          : _qrDataGenerado != null
-          ? _buildQRView()
-          : _buildProyectosList(),
+      body: SafeArea(
+        child: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(_primaryColor),
+                ),
+              )
+            : _qrDataGenerado != null
+                ? _buildQRView()
+                : _buildProyectosList(),
+      ),
     );
   }
 
   Widget _buildProyectosList() {
     if (_proyectos.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.folder_off_rounded,
-              size: 80,
-              color: Colors.grey.shade400,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No hay proyectos en esta categoría',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w500,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.folder_off_rounded,
+                size: 72,
+                color: Colors.grey.shade400,
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              Text(
+                'No hay proyectos en esta categoría',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -291,37 +299,49 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
       opacity: _fadeController,
       child: Column(
         children: [
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.shade200),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.blue.shade700),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Selecciona un proyecto para generar su código QR',
-                    style: TextStyle(color: Colors.blue.shade900, fontSize: 13),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.blue.shade700,
+                    size: 20,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Selecciona un proyecto para generar su código QR',
+                      style: TextStyle(
+                        color: Colors.blue.shade900,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               itemCount: _proyectos.length,
               itemBuilder: (context, index) {
                 final proyecto = _proyectos[index];
-                return TweenAnimationBuilder(
-                  duration: Duration(milliseconds: 300 + (index * 50)),
+                final delay = (index * 50).clamp(0, 500);
+                return TweenAnimationBuilder<double>(
+                  duration: Duration(milliseconds: 300 + delay),
                   tween: Tween<double>(begin: 0, end: 1),
-                  builder: (context, double value, child) {
+                  builder: (context, value, child) {
                     return Transform.translate(
                       offset: Offset(0, 20 * (1 - value)),
                       child: Opacity(opacity: value, child: child),
@@ -338,15 +358,20 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
   }
 
   Widget _buildProyectoCard(Map<String, dynamic> proyecto) {
+    final String codigo = proyecto['Código'] ?? 'Sin código';
+    final String titulo = proyecto['Título'] ?? 'Sin título';
+    final String? integrantes = proyecto['Integrantes']?.toString();
+    final String? sala = proyecto['Sala']?.toString();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE0E7ED)),
+        border: Border.all(color: _borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -363,45 +388,54 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E3A5F),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        proyecto['Código'] ?? 'Sin código',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _primaryColor,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          codigo,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 8),
                     Icon(
                       Icons.qr_code_rounded,
-                      color: const Color(0xFF1E3A5F).withValues(alpha:0.5),
+                      color: _primaryColor.withOpacity(0.5),
+                      size: 22,
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  proyecto['Título'] ?? 'Sin título',
+                  titulo,
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF1E3A5F),
+                    color: _primaryColor,
                     height: 1.3,
                   ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                if (proyecto['Integrantes'] != null) ...[
+                if (integrantes != null && integrantes.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(
                         Icons.people_rounded,
@@ -411,10 +445,11 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          proyecto['Integrantes'],
+                          integrantes,
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey.shade600,
+                            height: 1.4,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -423,7 +458,7 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
                     ],
                   ),
                 ],
-                if (proyecto['Sala'] != null) ...[
+                if (sala != null && sala.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Row(
                     children: [
@@ -433,44 +468,51 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
                         color: Colors.grey.shade600,
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        'Sala: ${proyecto['Sala']}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
+                      Expanded(
+                        child: Text(
+                          'Sala: $sala',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       ),
                     ],
                   ),
                 ],
                 const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.touch_app_rounded,
-                        size: 16,
-                        color: Colors.green.shade700,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Toca para generar QR',
-                        style: TextStyle(
-                          fontSize: 12,
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.touch_app_rounded,
+                          size: 16,
                           color: Colors.green.shade700,
-                          fontWeight: FontWeight.w600,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 6),
+                        Text(
+                          'Toca para generar QR',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green.shade700,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -482,83 +524,94 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
   }
 
   Widget _buildQRView() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final qrSize = (screenWidth - 96).clamp(180.0, 260.0);
+
     return ScaleTransition(
       scale: Tween<double>(begin: 0.8, end: 1.0).animate(
-        CurvedAnimation(parent: _scaleController, curve: Curves.easeOutBack),
+        CurvedAnimation(
+          parent: _scaleController,
+          curve: Curves.easeOutBack,
+        ),
       ),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Container(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Container(
+              width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF1E3A5F).withValues(alpha:0.15),
+                    color: _primaryColor.withOpacity(0.15),
                     blurRadius: 20,
                     offset: const Offset(0, 4),
                   ),
                 ],
               ),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // ═══════════════════════════════════════════════════
-                  // BADGE DE ESTADO DEL QR
-                  // ═══════════════════════════════════════════════════
                   Container(
+                    width: double.infinity,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
-                      vertical: 8,
+                      vertical: 10,
                     ),
                     decoration: BoxDecoration(
                       color: _qrFinalizado
                           ? Colors.red.shade600
-                          : const Color(0xFF1E3A5F),
+                          : _primaryColor,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          _qrFinalizado ? Icons.block : Icons.check_circle,
+                          _qrFinalizado
+                              ? Icons.block
+                              : Icons.check_circle,
                           color: Colors.white,
                           size: 18,
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          _qrFinalizado
-                              ? 'QR FINALIZADO'
-                              : _proyectoSeleccionado!['Código'] ??
-                                    'Sin código',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                        Flexible(
+                          child: Text(
+                            _qrFinalizado
+                                ? 'QR FINALIZADO'
+                                : (_proyectoSeleccionado!['Código'] ??
+                                    'Sin código'),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            textAlign: TextAlign.center,
                           ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // ═══════════════════════════════════════════════════
-                  // QR CODE CON OVERLAY SI ESTÁ FINALIZADO
-                  // ═══════════════════════════════════════════════════
                   Stack(
                     alignment: Alignment.center,
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(20),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
                             color: _qrFinalizado
                                 ? Colors.red.shade300
-                                : const Color(0xFFE0E7ED),
+                                : _borderColor,
                             width: 2,
                           ),
                         ),
@@ -567,14 +620,17 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
                           child: QrImageView(
                             data: _qrDataGenerado!,
                             version: QrVersions.auto,
-                            size: 250.0,
+                            size: qrSize,
                             backgroundColor: Colors.white,
                           ),
                         ),
                       ),
                       if (_qrFinalizado)
                         Container(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.red.shade600,
                             borderRadius: BorderRadius.circular(12),
@@ -582,14 +638,18 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
                           child: const Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.block, color: Colors.white, size: 48),
+                              Icon(
+                                Icons.block,
+                                color: Colors.white,
+                                size: 44,
+                              ),
                               SizedBox(height: 8),
                               Text(
                                 'QR INACTIVO',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 16,
+                                  fontSize: 15,
                                 ),
                               ),
                             ],
@@ -598,14 +658,11 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
                     ],
                   ),
                   const SizedBox(height: 20),
-
-                  // ═══════════════════════════════════════════════════
-                  // INFORMACIÓN DEL QR
-                  // ═══════════════════════════════════════════════════
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF5F8FA),
+                      color: _surfaceColor,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
@@ -624,7 +681,7 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
                         if (_proyectoSeleccionado!['Sala'] != null)
                           _buildInfoRow(
                             'Sala:',
-                            _proyectoSeleccionado!['Sala'],
+                            _proyectoSeleccionado!['Sala'].toString(),
                           ),
                         _buildInfoRow('ID QR:', _qrId ?? 'N/A'),
                         _buildInfoRow(
@@ -639,71 +696,85 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // ═══════════════════════════════════════════════════
-                  // BOTONES DE ACCIÓN
-                  // ═══════════════════════════════════════════════════
                   Row(
                     children: [
                       Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _qrFinalizado ? null : _limpiarQR,
-                          icon: const Icon(Icons.arrow_back_rounded, size: 20),
-                          label: const Text('Volver'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            side: BorderSide(
-                              color: _qrFinalizado
-                                  ? Colors.grey.shade300
-                                  : const Color(0xFF1E3A5F),
-                              width: 1.5,
+                        child: SizedBox(
+                          height: 50,
+                          child: OutlinedButton.icon(
+                            onPressed: _qrFinalizado ? null : _limpiarQR,
+                            icon: const Icon(
+                              Icons.arrow_back_rounded,
+                              size: 18,
                             ),
-                            foregroundColor: _qrFinalizado
-                                ? Colors.grey.shade400
-                                : const Color(0xFF1E3A5F),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                            label: const Text(
+                              'Volver',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                              side: BorderSide(
+                                color: _qrFinalizado
+                                    ? Colors.grey.shade300
+                                    : _primaryColor,
+                                width: 1.5,
+                              ),
+                              foregroundColor: _qrFinalizado
+                                  ? Colors.grey.shade400
+                                  : _primaryColor,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _qrFinalizado || _finalizando
-                              ? null
-                              : _finalizarQR,
-                          icon: _finalizando
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
+                        child: SizedBox(
+                          height: 50,
+                          child: ElevatedButton.icon(
+                            onPressed: _qrFinalizado || _finalizando
+                                ? null
+                                : _finalizarQR,
+                            icon: _finalizando
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Icon(
+                                    _qrFinalizado
+                                        ? Icons.check_circle
+                                        : Icons.lock_outline,
+                                    size: 18,
                                   ),
-                                )
-                              : Icon(
-                                  _qrFinalizado
-                                      ? Icons.check_circle
-                                      : Icons.lock_outline,
-                                  size: 20,
-                                ),
-                          label: Text(
-                            _finalizando
-                                ? 'Finalizando...'
-                                : (_qrFinalizado ? 'Finalizado' : 'Finalizar'),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            backgroundColor: _qrFinalizado
-                                ? Colors.grey.shade400
-                                : (_finalizando
+                            label: Text(
+                              _finalizando
+                                  ? 'Finalizando...'
+                                  : (_qrFinalizado
+                                      ? 'Finalizado'
+                                      : 'Finalizar'),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                              backgroundColor: _qrFinalizado
+                                  ? Colors.grey.shade400
+                                  : (_finalizando
                                       ? Colors.orange.shade600
                                       : Colors.red.shade600),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                           ),
                         ),
@@ -713,7 +784,7 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
                 ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -726,22 +797,27 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 90,
+            width: 80,
             child: Text(
               label,
               style: const TextStyle(
                 fontWeight: FontWeight.w600,
-                fontSize: 13,
-                color: Color(0xFF1E3A5F),
+                fontSize: 12,
+                color: _primaryColor,
               ),
             ),
           ),
+          const SizedBox(width: 4),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(color: Color(0xFF4A5568), fontSize: 13),
-              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _textSecondary,
+                fontSize: 12,
+                height: 1.4,
+              ),
               maxLines: 3,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

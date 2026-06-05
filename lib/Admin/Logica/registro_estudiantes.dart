@@ -5,8 +5,6 @@ import 'estudiantes_registrados.dart';
 import 'datos_excel.dart';
 import 'importacion_selector_screen.dart';
 
-/// Pantalla de registro de estudiantes para el ADMIN GENERAL.
-/// Permite seleccionar filial, facultad y carrera libremente.
 class RegistroEstudiantesScreen extends StatefulWidget {
   const RegistroEstudiantesScreen({super.key});
 
@@ -19,7 +17,6 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
 
-  // Controladores de texto
   final _nombresController = TextEditingController();
   final _apellidosController = TextEditingController();
   final _codigoEstudianteController = TextEditingController();
@@ -28,18 +25,15 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
   final _celularController = TextEditingController();
   final _usernameController = TextEditingController();
 
-  // Animaciones
   late AnimationController _headerAnimController;
   late AnimationController _formAnimController;
   late Animation<double> _headerFade;
   late Animation<Offset> _headerSlide;
   late Animation<double> _formFade;
 
-  // Estado
   bool _isLoading = false;
   bool _isLoadingFiliales = true;
 
-  // Dropdowns académicos
   String? _selectedModoContrato;
   String? _selectedModalidadEstudio;
   String? _selectedFilial;
@@ -51,22 +45,36 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
   String? _selectedPago;
 
   final List<String> _modosContrato = ['Regular', 'Convenio', 'Especial'];
-  final List<String> _modalidadesEstudio = ['Presencial', 'Semipresencial', 'Virtual'];
-  final List<String> _ciclos = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+  final List<String> _modalidadesEstudio = [
+    'Presencial',
+    'Semipresencial',
+    'Virtual'
+  ];
+  final List<String> _ciclos = [
+    '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'
+  ];
   final List<String> _grupos = ['Único', '1', '2', '3', '4'];
   final List<Map<String, dynamic>> _opcionesPago = [
-    {'valor': 'Si',       'label': 'Pagado',   'icon': Icons.check_circle, 'color': Color(0xFF16A34A)},
-    {'valor': 'Pendiente','label': 'Pendiente','icon': Icons.schedule,     'color': Color(0xFFD97706)},
+    {
+      'valor': 'Si',
+      'label': 'Pagado',
+      'icon': Icons.check_circle,
+      'color': const Color(0xFF16A34A)
+    },
+    {
+      'valor': 'Pendiente',
+      'label': 'Pendiente',
+      'icon': Icons.schedule,
+      'color': const Color(0xFFD97706)
+    },
   ];
 
-  // Estructura de filiales
   final FilialesService _filialesService = FilialesService();
   Map<String, dynamic> _estructuraFiliales = {};
   List<String> _filiales = [];
   List<String> _facultadesDisponibles = [];
   List<Map<String, dynamic>> _carrerasDisponibles = [];
 
-  // ── Lifecycle ────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
@@ -110,7 +118,6 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     super.dispose();
   }
 
-  // ── Filiales ─────────────────────────────────────────────────────
   Future<void> _loadFiliales() async {
     setState(() => _isLoadingFiliales = true);
     try {
@@ -135,7 +142,9 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
       if (filial != null && _estructuraFiliales.containsKey(filial)) {
         final facultades =
             _estructuraFiliales[filial]['facultades'] as Map<String, dynamic>?;
-        if (facultades != null) _facultadesDisponibles = facultades.keys.toList();
+        if (facultades != null) {
+          _facultadesDisponibles = facultades.keys.toList();
+        }
       }
     });
   }
@@ -160,7 +169,6 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     });
   }
 
-  // ── Username helpers ─────────────────────────────────────────────
   void _extractUsernameFromEmail() {
     final correo = _correoController.text.trim();
     if (correo.contains('@upeu.edu.pe') && _usernameController.text.isEmpty) {
@@ -179,8 +187,10 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
 
   String _buildUsername(String nombres, String apellidos) {
     if (nombres.isEmpty && apellidos.isEmpty) return '';
-    final n = nombres.toLowerCase().split(' ').where((s) => s.isNotEmpty).toList();
-    final a = apellidos.toLowerCase().split(' ').where((s) => s.isNotEmpty).toList();
+    final n =
+        nombres.toLowerCase().split(' ').where((s) => s.isNotEmpty).toList();
+    final a =
+        apellidos.toLowerCase().split(' ').where((s) => s.isNotEmpty).toList();
     String u = n.isNotEmpty ? n[0] : '';
     if (a.isNotEmpty) u += u.isNotEmpty ? '.${a[0]}' : a[0];
     return _cleanUsername(u);
@@ -200,7 +210,6 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     return c.replaceAll(RegExp(r'[^a-z0-9.]'), '');
   }
 
-  // ── Crear estudiante ─────────────────────────────────────────────
   Future<void> _createStudent() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -224,7 +233,6 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     final fullName =
         '${_nombresController.text.trim()} ${_apellidosController.text.trim()}';
     final username = _usernameController.text.trim().toLowerCase();
-    // Nombre legible de la filial (Ej: "Lima")
     final filialNombre = _filialesService.getNombreFilial(_selectedFilial!);
 
     setState(() => _isLoading = true);
@@ -237,7 +245,7 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
         dni: _documentoController.text.trim(),
         facultad: _selectedFacultad!,
         carrera: _selectedCarrera!,
-        filial: filialNombre,               // ← nombre legible, igual que Excel
+        filial: filialNombre,
         modoContrato: _selectedModoContrato,
         modalidadEstudio: _selectedModalidadEstudio,
         ciclo: _selectedCiclo,
@@ -291,7 +299,6 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     ));
   }
 
-  // ── Widgets reutilizables ────────────────────────────────────────
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -304,6 +311,7 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
+      maxLines: 1,
       onChanged: onChanged,
       decoration: InputDecoration(
         labelText: label,
@@ -387,17 +395,24 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
+                    color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(icon, color: const Color(0xFF1E3A5F), size: 24),
+                  child:
+                      Icon(icon, color: const Color(0xFF1E3A5F), size: 24),
                 ),
                 const SizedBox(width: 12),
-                Text(title,
+                Expanded(
+                  child: Text(
+                    title,
                     style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E3A5F))),
+                        color: Color(0xFF1E3A5F)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 20),
@@ -421,14 +436,19 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
           ? ElevatedButton.icon(
               onPressed: onPressed,
               icon: Icon(icon, size: 22),
-              label: Text(label,
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600)),
+              label: Text(
+                label,
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1E3A5F),
                 foregroundColor: Colors.white,
                 elevation: 3,
-                shadowColor: const Color(0xFF1E3A5F).withValues(alpha:0.4),
+                shadowColor:
+                    const Color(0xFF1E3A5F).withValues(alpha: 0.4),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16)),
               ),
@@ -436,9 +456,13 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
           : OutlinedButton.icon(
               onPressed: onPressed,
               icon: Icon(icon, size: 22),
-              label: Text(label,
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600)),
+              label: Text(
+                label,
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFF1E3A5F),
                 side: const BorderSide(color: Color(0xFF1E3A5F), width: 2),
@@ -455,73 +479,100 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
       children: [
         Row(
           children: [
-            Icon(Icons.payment, color: const Color(0xFF1E3A5F), size: 20),
+            const Icon(Icons.payment, color: Color(0xFF1E3A5F), size: 20),
             const SizedBox(width: 8),
-            const Text('Estado de pago *',
+            const Flexible(
+              child: Text(
+                'Estado de pago *',
                 style: TextStyle(
                     fontSize: 14,
                     color: Color(0xFF1E3A5F),
-                    fontWeight: FontWeight.w500)),
+                    fontWeight: FontWeight.w500),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 10),
         Row(
-          children: _opcionesPago.map((opcion) {
-            final isSelected = _selectedPago == opcion['valor'];
-            final color = opcion['color'] as Color;
-            return Expanded(
-              child: GestureDetector(
-                onTap: () =>
-                    setState(() => _selectedPago = opcion['valor'] as String),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  margin: EdgeInsets.only(
-                      right: opcion == _opcionesPago.first ? 10 : 0),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: isSelected ? color.withValues(alpha:0.12) : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isSelected ? color : Colors.grey.shade300,
-                      width: isSelected ? 2 : 1,
+          children: [
+            for (int i = 0; i < _opcionesPago.length; i++) ...[
+              if (i > 0) const SizedBox(width: 10),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(
+                      () => _selectedPago = _opcionesPago[i]['valor'] as String),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _selectedPago == _opcionesPago[i]['valor']
+                          ? (_opcionesPago[i]['color'] as Color)
+                              .withValues(alpha: 0.12)
+                          : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _selectedPago == _opcionesPago[i]['valor']
+                            ? _opcionesPago[i]['color'] as Color
+                            : Colors.grey.shade300,
+                        width:
+                            _selectedPago == _opcionesPago[i]['valor'] ? 2 : 1,
+                      ),
                     ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(opcion['icon'] as IconData,
-                          color: isSelected ? color : Colors.grey.shade400,
-                          size: 20),
-                      const SizedBox(width: 8),
-                      Text(opcion['label'] as String,
-                          style: TextStyle(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _opcionesPago[i]['icon'] as IconData,
+                          color: _selectedPago == _opcionesPago[i]['valor']
+                              ? _opcionesPago[i]['color'] as Color
+                              : Colors.grey.shade400,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            _opcionesPago[i]['label'] as String,
+                            style: TextStyle(
                               fontSize: 14,
-                              fontWeight: isSelected
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                              color: isSelected
-                                  ? color
-                                  : Colors.grey.shade500)),
-                    ],
+                              fontWeight:
+                                  _selectedPago == _opcionesPago[i]['valor']
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                              color:
+                                  _selectedPago == _opcionesPago[i]['valor']
+                                      ? _opcionesPago[i]['color'] as Color
+                                      : Colors.grey.shade500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            );
-          }).toList(),
+            ],
+          ],
         ),
       ],
     );
   }
 
-  // ── BUILD ────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).viewInsets.bottom +
+        MediaQuery.of(context).viewPadding.bottom;
+
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: const Color(0xFF1E3A5F),
       body: SafeArea(
+        bottom: true,
         child: Column(
           children: [
-            // ── Header ──────────────────────────────────────────────
             SlideTransition(
               position: _headerSlide,
               child: FadeTransition(
@@ -551,41 +602,60 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Registro de Estudiantes',
-                                style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white)),
-                            Text('Crear nuevas cuentas',
-                                style: TextStyle(
-                                    fontSize: 13, color: Colors.white70)),
+                            Text(
+                              'Registro de Estudiantes',
+                              style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              'Crear nuevas cuentas',
+                              style: TextStyle(
+                                  fontSize: 13, color: Colors.white70),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ],
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.file_upload,
-                            color: Colors.white, size: 26),
-                        onPressed: () => Navigator.push(context,
-                            MaterialPageRoute(
-                                builder: (_) => const ImportacionSelectorScreen())),
-                        tooltip: 'Importar Excel',
+                      SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.file_upload,
+                              color: Colors.white, size: 26),
+                          onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      const ImportacionSelectorScreen())),
+                          tooltip: 'Importar Excel',
+                        ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.list,
-                            color: Colors.white, size: 26),
-                        onPressed: () => Navigator.push(context,
-                            MaterialPageRoute(
-                                builder: (_) =>
-                                    const EstudiantesRegistradosScreen())),
-                        tooltip: 'Ver registrados',
+                      SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.list,
+                              color: Colors.white, size: 26),
+                          onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      const EstudiantesRegistradosScreen())),
+                          tooltip: 'Ver registrados',
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
             ),
-
-            // ── Body ────────────────────────────────────────────────
             Expanded(
               child: FadeTransition(
                 opacity: _formFade,
@@ -598,31 +668,36 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                     ),
                   ),
                   child: _isLoading || _isLoadingFiliales
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const CircularProgressIndicator(
-                                  color: Color(0xFF1E3A5F)),
-                              const SizedBox(height: 16),
-                              Text(
-                                _isLoadingFiliales
-                                    ? 'Cargando filiales...'
-                                    : 'Creando estudiante...',
-                                style: const TextStyle(
-                                    color: Color(0xFF1E3A5F), fontSize: 16),
-                              ),
-                            ],
+                      ? SafeArea(
+                          top: false,
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const CircularProgressIndicator(
+                                    color: Color(0xFF1E3A5F)),
+                                const SizedBox(height: 16),
+                                Text(
+                                  _isLoadingFiliales
+                                      ? 'Cargando filiales...'
+                                      : 'Creando estudiante...',
+                                  style: const TextStyle(
+                                      color: Color(0xFF1E3A5F), fontSize: 16),
+                                ),
+                              ],
+                            ),
                           ),
                         )
                       : SingleChildScrollView(
-                          padding: const EdgeInsets.all(20),
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
+                          padding: EdgeInsets.fromLTRB(
+                              20, 20, 20, 20 + bottomPadding),
                           child: Form(
                             key: _formKey,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // ── Información personal ─────────────
                                 _buildSectionCard(
                                   title: 'Información Personal',
                                   icon: Icons.person,
@@ -653,13 +728,15 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                       icon: Icons.account_circle,
                                       hintText: 'Ej: juan.perez',
                                       onChanged: (value) {
-                                        final cleaned = _cleanUsername(value);
+                                        final cleaned =
+                                            _cleanUsername(value);
                                         if (cleaned != value) {
                                           _usernameController.value =
                                               TextEditingValue(
                                             text: cleaned,
-                                            selection: TextSelection.collapsed(
-                                                offset: cleaned.length),
+                                            selection:
+                                                TextSelection.collapsed(
+                                                    offset: cleaned.length),
                                           );
                                         }
                                       },
@@ -691,8 +768,6 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                   ],
                                 ),
                                 const SizedBox(height: 20),
-
-                                // ── Información de contacto ──────────
                                 _buildSectionCard(
                                   title: 'Información de Contacto',
                                   icon: Icons.contact_phone,
@@ -703,7 +778,8 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                       icon: Icons.email,
                                       keyboardType: TextInputType.emailAddress,
                                       validator: (v) {
-                                        if (v != null && v.trim().isNotEmpty) {
+                                        if (v != null &&
+                                            v.trim().isNotEmpty) {
                                           if (!RegExp(
                                                   r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
                                               .hasMatch(v)) {
@@ -720,7 +796,8 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                       icon: Icons.phone,
                                       keyboardType: TextInputType.phone,
                                       validator: (v) {
-                                        if (v != null && v.trim().isNotEmpty) {
+                                        if (v != null &&
+                                            v.trim().isNotEmpty) {
                                           if (v.trim().length != 9) {
                                             return 'El celular debe tener 9 dígitos';
                                           }
@@ -731,14 +808,13 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                   ],
                                 ),
                                 const SizedBox(height: 20),
-
-                                // ── Información académica ────────────
                                 _buildSectionCard(
                                   title: 'Información Académica',
                                   icon: Icons.school,
                                   children: [
                                     _buildTextField(
-                                      controller: _codigoEstudianteController,
+                                      controller:
+                                          _codigoEstudianteController,
                                       label: 'Código estudiante',
                                       icon: Icons.badge,
                                       hintText: 'Ej: 202320800',
@@ -764,33 +840,32 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                           .map((m) => DropdownMenuItem(
                                               value: m, child: Text(m)))
                                           .toList(),
-                                      onChanged: (v) => setState(
-                                          () => _selectedModalidadEstudio = v),
+                                      onChanged: (v) => setState(() =>
+                                          _selectedModalidadEstudio = v),
                                     ),
                                     const SizedBox(height: 16),
-
-                                    // ── Filial ───────────────────────
                                     _buildDropdown<String>(
                                       label: 'Filial (Sede)',
                                       icon: Icons.location_city,
                                       value: _selectedFilial,
                                       items: _filiales.map((filial) {
-                                        final nombre =
-                                            _filialesService.getNombreFilial(filial);
-                                        final ubicacion =
-                                            _filialesService.getUbicacionFilial(filial);
+                                        final nombre = _filialesService
+                                            .getNombreFilial(filial);
+                                        final ubicacion = _filialesService
+                                            .getUbicacionFilial(filial);
                                         return DropdownMenuItem<String>(
                                           value: filial,
-                                          child: Text('$nombre - $ubicacion',
-                                              overflow: TextOverflow.ellipsis),
+                                          child: Text(
+                                            '$nombre - $ubicacion',
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         );
                                       }).toList(),
                                       onChanged: _onFilialChanged,
-                                      validator: (v) =>
-                                          v == null ? 'Selecciona una filial' : null,
+                                      validator: (v) => v == null
+                                          ? 'Selecciona una filial'
+                                          : null,
                                     ),
-
-                                    // ── Facultad ─────────────────────
                                     if (_selectedFilial != null) ...[
                                       const SizedBox(height: 16),
                                       _buildDropdown<String>(
@@ -798,19 +873,19 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                         icon: Icons.account_balance,
                                         value: _selectedFacultad,
                                         items: _facultadesDisponibles
-                                            .map((f) => DropdownMenuItem<String>(
-                                                value: f,
-                                                child: Text(f,
-                                                    overflow:
-                                                        TextOverflow.ellipsis)))
+                                            .map((f) =>
+                                                DropdownMenuItem<String>(
+                                                    value: f,
+                                                    child: Text(f,
+                                                        overflow: TextOverflow
+                                                            .ellipsis)))
                                             .toList(),
                                         onChanged: _onFacultadChanged,
-                                        validator: (v) =>
-                                            v == null ? 'Selecciona una facultad' : null,
+                                        validator: (v) => v == null
+                                            ? 'Selecciona una facultad'
+                                            : null,
                                       ),
                                     ],
-
-                                    // ── Carrera ──────────────────────
                                     if (_selectedFacultad != null) ...[
                                       const SizedBox(height: 16),
                                       _buildDropdown<String>(
@@ -818,33 +893,32 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                         icon: Icons.menu_book,
                                         value: _selectedCarrera,
                                         items: _carrerasDisponibles
-                                            .map((c) => DropdownMenuItem<String>(
+                                            .map((c) =>
+                                                DropdownMenuItem<String>(
                                                   value: c['nombre'],
-                                                  child: Text(c['nombre'],
-                                                      overflow:
-                                                          TextOverflow.ellipsis),
+                                                  child: Text(
+                                                    c['nombre'],
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
                                                 ))
                                             .toList(),
                                         onChanged: (v) => setState(() {
                                           _selectedCarrera = v;
-                                          // guardar id si lo necesitas
-                                          final found = _carrerasDisponibles
-                                              .firstWhere(
+                                          final found =
+                                              _carrerasDisponibles.firstWhere(
                                                   (c) => c['nombre'] == v,
                                                   orElse: () => {});
                                           _selectedCarreraId = found['id'];
                                         }),
-                                        validator: (v) =>
-                                            v == null ? 'Selecciona una carrera' : null,
+                                        validator: (v) => v == null
+                                            ? 'Selecciona una carrera'
+                                            : null,
                                       ),
                                     ],
-
                                     const SizedBox(height: 16),
-                                    // ── Estado de pago ───────────────
                                     _buildPagoSelector(),
                                     const SizedBox(height: 16),
-
-                                    // ── Ciclo y Grupo ────────────────
                                     Row(
                                       children: [
                                         Expanded(
@@ -855,7 +929,11 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                             items: _ciclos
                                                 .map((c) => DropdownMenuItem(
                                                     value: c,
-                                                    child: Text('Ciclo $c')))
+                                                    child: Text(
+                                                      'Ciclo $c',
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    )))
                                                 .toList(),
                                             onChanged: (v) => setState(
                                                 () => _selectedCiclo = v),
@@ -870,7 +948,11 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                             items: _grupos
                                                 .map((g) => DropdownMenuItem(
                                                     value: g,
-                                                    child: Text('Grupo $g')))
+                                                    child: Text(
+                                                      'Grupo $g',
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    )))
                                                 .toList(),
                                             onChanged: (v) => setState(
                                                 () => _selectedGrupo = v),
@@ -881,8 +963,6 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                   ],
                                 ),
                                 const SizedBox(height: 24),
-
-                                // ── Botones ──────────────────────────
                                 _buildActionButton(
                                   label: 'Crear Estudiante',
                                   icon: Icons.person_add,

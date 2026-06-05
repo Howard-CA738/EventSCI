@@ -17,7 +17,6 @@ class _AsistenciasPersonalesScreenState
     extends State<AsistenciasPersonalesScreen> with TickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ── Sesión ────────────────────────────────────────────────────────────────
   String? _filialId;
   String? _filialNombre;
   String? _facultad;
@@ -25,42 +24,33 @@ class _AsistenciasPersonalesScreenState
   String? _carreraNombre;
   bool _isLoadingSession = true;
 
-  // ── Eventos ───────────────────────────────────────────────────────────────
   List<Map<String, dynamic>> _eventos = [];
   bool _cargandoEventos = false;
   Map<String, dynamic>? _eventoSeleccionado;
 
-  // ── Vista actual: 0=lista eventos, 1=formulario crear, 2=QR resultado ─────
   int _paso = 0;
 
-  // ── Tab: 0=Crear, 1=Mis asistencias ──────────────────────────────────────
   int _tabActual = 0;
   late TabController _tabController;
 
-  // ── Formulario ────────────────────────────────────────────────────────────
   final _formKey = GlobalKey<FormState>();
   final _nombreCtrl = TextEditingController();
   final _descripcionCtrl = TextEditingController();
 
-  // ── QR resultado ─────────────────────────────────────────────────────────
   String? _qrData;
   String? _qrId;
   String? _asistenciaDocId;
   bool _creandoQR = false;
   Map<String, dynamic>? _asistenciaCreada;
 
-  // ── Lista de asistencias ─────────────────────────────────────────────────
   List<Map<String, dynamic>> _misAsistencias = [];
   bool _cargandoAsistencias = false;
-  String? _filtroEventoId; // null = todas
+  String? _filtroEventoId;
 
-  // ── Animaciones ───────────────────────────────────────────────────────────
   late AnimationController _fadeCtrl;
   late AnimationController _qrScaleCtrl;
 
-  // ── Colores ───────────────────────────────────────────────────────────────
   static const Color _primary = Color(0xFF1E3A5F);
-  static const Color _accent = Color(0xFF0D7377);
   static const Color _danger = Color(0xFFE53935);
   static const Color _success = Color(0xFF43A047);
 
@@ -92,10 +82,6 @@ class _AsistenciasPersonalesScreenState
     _descripcionCtrl.dispose();
     super.dispose();
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // SESIÓN
-  // ══════════════════════════════════════════════════════════════════════════
 
   Future<void> _loadSessionData() async {
     setState(() => _isLoadingSession = true);
@@ -144,17 +130,12 @@ class _AsistenciasPersonalesScreenState
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // MIS ASISTENCIAS
-  // ══════════════════════════════════════════════════════════════════════════
-
   Future<void> _cargarMisAsistencias() async {
     if (_eventos.isEmpty) return;
     setState(() => _cargandoAsistencias = true);
     try {
       final List<Map<String, dynamic>> todas = [];
 
-      // Determinar eventos a consultar
       final eventosAConsultar = _filtroEventoId != null
           ? _eventos.where((e) => e['id'] == _filtroEventoId).toList()
           : _eventos;
@@ -187,107 +168,131 @@ class _AsistenciasPersonalesScreenState
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // ELIMINAR ASISTENCIA
-  // ══════════════════════════════════════════════════════════════════════════
-
   Future<void> _confirmarEliminar(Map<String, dynamic> asistencia) async {
     final nombre = asistencia['nombre'] ?? 'esta asistencia';
     final docId = asistencia['docId'] as String;
     final eventId = asistencia['eventId'] as String;
     final qrId = asistencia['qrId'] as String? ?? '';
 
+    final mq = MediaQuery.of(context);
+    final maxH = (mq.size.height
+            - mq.viewInsets.bottom
+            - mq.padding.top
+            - mq.padding.bottom
+            - 48)
+        .clamp(260.0, 440.0);
+
     final confirmado = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-        contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        title: Row(children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-                color: _danger.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.delete_outline_rounded,
-                color: _danger, size: 22),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text('Eliminar asistencia',
-                style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: _primary)),
-          ),
-        ]),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const SizedBox(height: 4),
-          RichText(
-            text: TextSpan(
-              style: TextStyle(
-                  fontSize: 14, color: Colors.grey.shade700, height: 1.5),
+      builder: (ctx) => Dialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxH),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const TextSpan(text: '¿Seguro que deseas eliminar '),
-                TextSpan(
-                  text: '"$nombre"',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w700, color: _primary),
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                        color: _danger.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.delete_outline_rounded,
+                        color: _danger, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Eliminar asistencia',
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: _primary),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 16),
+                RichText(
+                  text: TextSpan(
+                    style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                        height: 1.5),
+                    children: [
+                      const TextSpan(text: '¿Seguro que deseas eliminar '),
+                      TextSpan(
+                        text: '"$nombre"',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, color: _primary),
+                      ),
+                      const TextSpan(text: '?'),
+                    ],
+                  ),
                 ),
-                const TextSpan(text: '?'),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _danger.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: _danger.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(children: [
+                    Icon(Icons.warning_amber_rounded,
+                        size: 16, color: _danger.withValues(alpha: 0.8)),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Se eliminará el QR y todos los datos asociados. Esta acción no se puede deshacer.',
+                        style: TextStyle(fontSize: 12, color: _danger),
+                      ),
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.grey.shade600,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 10),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('Cancelar',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      icon: const Icon(Icons.delete_rounded, size: 16),
+                      label: const Text('Eliminar',
+                          style:
+                              TextStyle(fontWeight: FontWeight.w700)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _danger,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 10),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        elevation: 0,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: _danger.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(10),
-              border:
-                  Border.all(color: _danger.withValues(alpha: 0.2)),
-            ),
-            child: Row(children: [
-              Icon(Icons.warning_amber_rounded,
-                  size: 16, color: _danger.withValues(alpha: 0.8)),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'Se eliminará el QR y todos los datos asociados. Esta acción no se puede deshacer.',
-                  style: TextStyle(fontSize: 12, color: _danger),
-                ),
-              ),
-            ]),
-          ),
-        ]),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.grey.shade600,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('Cancelar',
-                style: TextStyle(fontWeight: FontWeight.w600)),
-          ),
-          ElevatedButton.icon(
-            onPressed: () => Navigator.pop(ctx, true),
-            icon: const Icon(Icons.delete_rounded, size: 16),
-            label: const Text('Eliminar',
-                style: TextStyle(fontWeight: FontWeight.w700)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _danger,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              elevation: 0,
-            ),
-          ),
-        ],
+        ),
       ),
     );
 
@@ -304,7 +309,6 @@ class _AsistenciasPersonalesScreenState
     required String nombre,
   }) async {
     try {
-      // Eliminar asistencia_personal
       await _firestore
           .collection('events')
           .doc(eventId)
@@ -312,7 +316,6 @@ class _AsistenciasPersonalesScreenState
           .doc(docId)
           .delete();
 
-      // Eliminar qr_code asociado (si existe)
       if (qrId.isNotEmpty) {
         await _firestore
             .collection('events')
@@ -322,10 +325,8 @@ class _AsistenciasPersonalesScreenState
             .delete();
       }
 
-      // Quitar de la lista local inmediatamente
       setState(() {
-        _misAsistencias
-            .removeWhere((a) => a['docId'] == docId);
+        _misAsistencias.removeWhere((a) => a['docId'] == docId);
       });
 
       _snack('Asistencia "$nombre" eliminada');
@@ -334,10 +335,6 @@ class _AsistenciasPersonalesScreenState
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // CREAR ASISTENCIA Y QR
-  // ══════════════════════════════════════════════════════════════════════════
-
   Future<void> _crearAsistenciaYQR() async {
     if (!_formKey.currentState!.validate()) return;
     if (_eventoSeleccionado == null) return;
@@ -345,8 +342,9 @@ class _AsistenciasPersonalesScreenState
 
     try {
       final eventId = _eventoSeleccionado!['id'] as String;
-      final eventName =
-          _eventoSeleccionado!['name'] ?? _eventoSeleccionado!['nombre'] ?? 'Evento';
+      final eventName = _eventoSeleccionado!['name'] ??
+          _eventoSeleccionado!['nombre'] ??
+          'Evento';
 
       final asistenciaRef = _firestore
           .collection('events')
@@ -479,15 +477,12 @@ class _AsistenciasPersonalesScreenState
         ]),
         backgroundColor: error ? _danger : _success,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         duration: const Duration(seconds: 3),
       ),
     );
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // BUILD
-  // ══════════════════════════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
@@ -495,7 +490,6 @@ class _AsistenciasPersonalesScreenState
       backgroundColor: _primary,
       appBar: _buildAppBar(),
       body: Column(children: [
-        // Tab bar solo cuando está en la pantalla principal (paso 0)
         if (_paso == 0) _buildTabBar(),
         Expanded(
           child: Container(
@@ -514,7 +508,8 @@ class _AsistenciasPersonalesScreenState
             child: _isLoadingSession
                 ? const Center(
                     child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(_primary)))
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(_primary)))
                 : _buildCuerpo(),
           ),
         ),
@@ -538,7 +533,6 @@ class _AsistenciasPersonalesScreenState
           if (_paso == 1) {
             setState(() => _paso = 0);
           } else if (_paso == 2) {
-            // Volver al tab de lista y recargar
             setState(() => _paso = 0);
             _tabController.animateTo(1);
             _cargarMisAsistencias();
@@ -547,23 +541,32 @@ class _AsistenciasPersonalesScreenState
           }
         },
       ),
-      title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(titulos[_paso]!,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
-        const Text('Asistencias Personales',
-            style: TextStyle(fontSize: 11, color: Colors.white60)),
-      ]),
+      title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              titulos[_paso]!,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w700, fontSize: 17),
+            ),
+            const Text(
+              'Asistencias Personales',
+              style: TextStyle(fontSize: 11, color: Colors.white60),
+            ),
+          ]),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(26),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: Row(children: [
-            const Icon(Icons.location_city, color: Colors.white60, size: 13),
+            const Icon(Icons.location_city,
+                color: Colors.white60, size: 13),
             const SizedBox(width: 5),
             Flexible(
               child: Text(
                 '${_filialNombre ?? ''} › ${_facultad ?? ''} › ${_carreraNombre ?? ''}',
-                style: const TextStyle(color: Colors.white60, fontSize: 12),
+                style:
+                    const TextStyle(color: Colors.white60, fontSize: 12),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -582,8 +585,8 @@ class _AsistenciasPersonalesScreenState
         indicatorWeight: 3,
         labelColor: Colors.white,
         unselectedLabelColor: Colors.white54,
-        labelStyle:
-            const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+        labelStyle: const TextStyle(
+            fontWeight: FontWeight.w700, fontSize: 13),
         tabs: const [
           Tab(icon: Icon(Icons.add_circle_outline, size: 18), text: 'Crear'),
           Tab(
@@ -598,7 +601,6 @@ class _AsistenciasPersonalesScreenState
     if (_paso == 1) return _buildPasoSeleccionEvento();
     if (_paso == 2) return _buildPasoQRResultado();
 
-    // Paso 0: tabs
     return TabBarView(
       controller: _tabController,
       children: [
@@ -608,49 +610,43 @@ class _AsistenciasPersonalesScreenState
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // TAB 1 — CREAR ASISTENCIA
-  // ══════════════════════════════════════════════════════════════════════════
-
   Widget _buildTabCrear() {
     return FadeTransition(
       opacity: _fadeCtrl,
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Info tip
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.blue.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.withValues(alpha: 0.25)),
-            ),
-            child: Row(children: [
-              Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Crea una asistencia con el nombre que quieras, luego configura cuándo funciona el QR desde "Mis asistencias".',
-                  style: TextStyle(fontSize: 12, color: Colors.blue[700]),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: Colors.blue.withValues(alpha: 0.25)),
                 ),
+                child: Row(children: [
+                  Icon(Icons.info_outline,
+                      size: 16, color: Colors.blue[700]),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Crea una asistencia con el nombre que quieras, luego configura cuándo funciona el QR desde "Mis asistencias".',
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.blue[700]),
+                    ),
+                  ),
+                ]),
               ),
+              const SizedBox(height: 20),
+              if (_eventoSeleccionado == null)
+                _buildSelectorEventoTarjeta()
+              else
+                _buildEventoSeleccionadoChip(),
+              const SizedBox(height: 20),
+              if (_eventoSeleccionado != null) _buildFormularioCrear(),
             ]),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Evento seleccionado o selector
-          if (_eventoSeleccionado == null)
-            _buildSelectorEventoTarjeta()
-          else
-            _buildEventoSeleccionadoChip(),
-
-          const SizedBox(height: 20),
-
-          // Formulario (solo si hay evento seleccionado)
-          if (_eventoSeleccionado != null) _buildFormularioCrear(),
-        ]),
       ),
     );
   }
@@ -681,7 +677,8 @@ class _AsistenciasPersonalesScreenState
             decoration: BoxDecoration(
                 color: _primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12)),
-            child: const Icon(Icons.event_rounded, color: _primary, size: 24),
+            child: const Icon(Icons.event_rounded,
+                color: _primary, size: 24),
           ),
           const SizedBox(width: 14),
           const Expanded(
@@ -694,9 +691,10 @@ class _AsistenciasPersonalesScreenState
                           fontSize: 14,
                           color: _primary)),
                   SizedBox(height: 4),
-                  Text('Toca para elegir el evento al que pertenecerá',
-                      style:
-                          TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                  Text(
+                      'Toca para elegir el evento al que pertenecerá',
+                      style: TextStyle(
+                          fontSize: 12, color: Color(0xFF64748B))),
                 ]),
           ),
           Container(
@@ -728,26 +726,33 @@ class _AsistenciasPersonalesScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('Evento seleccionado',
-                    style: TextStyle(color: Colors.white54, fontSize: 11)),
-                Text(nombre,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14)),
+                    style:
+                        TextStyle(color: Colors.white54, fontSize: 11)),
+                Text(
+                  nombre.toString(),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ]),
         ),
+        const SizedBox(width: 8),
         GestureDetector(
           onTap: () {
             setState(() => _paso = 1);
             _fadeCtrl.forward(from: 0);
           },
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8)),
             child: const Text('Cambiar',
-                style: TextStyle(color: Colors.white70, fontSize: 11)),
+                style:
+                    TextStyle(color: Colors.white70, fontSize: 11)),
           ),
         ),
       ]),
@@ -757,89 +762,88 @@ class _AsistenciasPersonalesScreenState
   Widget _buildFormularioCrear() {
     return Form(
       key: _formKey,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        // Nombre libre
-        TextFormField(
-          controller: _nombreCtrl,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: InputDecoration(
-            labelText: 'Nombre de la asistencia',
-            hintText: 'Ej: Ingreso Mañana, Control Tarde, Cierre...',
-            prefixIcon: const Icon(Icons.edit_rounded),
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFDDE3EA))),
-            enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFDDE3EA))),
-            focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: _primary, width: 1.5)),
-          ),
-          validator: (v) =>
-              v == null || v.trim().isEmpty ? 'Campo requerido' : null,
-        ),
-
-        const SizedBox(height: 14),
-
-        TextFormField(
-          controller: _descripcionCtrl,
-          maxLines: 3,
-          decoration: InputDecoration(
-            labelText: 'Descripción (opcional)',
-            hintText: 'Agrega detalles adicionales...',
-            prefixIcon: const Padding(
-              padding: EdgeInsets.only(bottom: 42),
-              child: Icon(Icons.notes_rounded),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextFormField(
+              controller: _nombreCtrl,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                labelText: 'Nombre de la asistencia',
+                hintText: 'Ej: Ingreso Mañana, Control Tarde, Cierre...',
+                prefixIcon: const Icon(Icons.edit_rounded),
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: Color(0xFFDDE3EA))),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: Color(0xFFDDE3EA))),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: _primary, width: 1.5)),
+              ),
+              validator: (v) =>
+                  v == null || v.trim().isEmpty ? 'Campo requerido' : null,
             ),
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFDDE3EA))),
-            enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFDDE3EA))),
-            focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: _primary, width: 1.5)),
-          ),
-        ),
-
-        const SizedBox(height: 28),
-
-        ElevatedButton.icon(
-          onPressed: _creandoQR ? null : _crearAsistenciaYQR,
-          icon: _creandoQR
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2))
-              : const Icon(Icons.qr_code_2_rounded, size: 22),
-          label: Text(
-            _creandoQR ? 'Creando...' : 'Crear y generar QR',
-            style:
-                const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _primary,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
-            elevation: 0,
-          ),
-        ),
-      ]),
+            const SizedBox(height: 14),
+            TextFormField(
+              controller: _descripcionCtrl,
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: 'Descripción (opcional)',
+                hintText: 'Agrega detalles adicionales...',
+                prefixIcon: const Padding(
+                  padding: EdgeInsets.only(bottom: 42),
+                  child: Icon(Icons.notes_rounded),
+                ),
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: Color(0xFFDDE3EA))),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: Color(0xFFDDE3EA))),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: _primary, width: 1.5)),
+              ),
+            ),
+            const SizedBox(height: 28),
+            ElevatedButton.icon(
+              onPressed: _creandoQR ? null : _crearAsistenciaYQR,
+              icon: _creandoQR
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                  : const Icon(Icons.qr_code_2_rounded, size: 22),
+              label: Text(
+                _creandoQR ? 'Creando...' : 'Crear y generar QR',
+                style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
+              ),
+            ),
+          ]),
     );
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // TAB 2 — MIS ASISTENCIAS
-  // ══════════════════════════════════════════════════════════════════════════
 
   Widget _buildTabLista() {
     return RefreshIndicator(
@@ -848,71 +852,73 @@ class _AsistenciasPersonalesScreenState
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(20),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Filtro por evento
-          if (_eventos.isNotEmpty) _buildFiltroEvento(),
-
-          const SizedBox(height: 16),
-
-          // Header con contador
-          Row(children: [
-            const Text('Asistencias creadas',
-                style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: _primary)),
-            const SizedBox(width: 8),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                  color: _primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(20)),
-              child: Text('${_misAsistencias.length}',
-                  style: const TextStyle(
-                      fontSize: 12,
-                      color: _primary,
-                      fontWeight: FontWeight.w600)),
-            ),
-            const Spacer(),
-            GestureDetector(
-              onTap: _cargarMisAsistencias,
-              child: Container(
-                padding: const EdgeInsets.all(7),
-                decoration: BoxDecoration(
-                    color: _primary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8)),
-                child:
-                    const Icon(Icons.refresh, size: 18, color: _primary),
-              ),
-            ),
-          ]),
-
-          const SizedBox(height: 12),
-
-          if (_cargandoAsistencias)
-            const Center(
-                child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 48),
-              child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(_primary)),
-            ))
-          else if (_misAsistencias.isEmpty)
-            _buildEmptyAsistencias()
-          else
-            ...List.generate(_misAsistencias.length, (i) {
-              return TweenAnimationBuilder<double>(
-                duration: Duration(milliseconds: 260 + i * 50),
-                tween: Tween(begin: 0.0, end: 1.0),
-                curve: Curves.easeOutCubic,
-                builder: (ctx, v, child) => Transform.translate(
-                  offset: Offset(0, 14 * (1 - v)),
-                  child: Opacity(opacity: v, child: child),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_eventos.isNotEmpty) _buildFiltroEvento(),
+              const SizedBox(height: 16),
+              Row(children: [
+                Flexible(
+                  child: const Text(
+                    'Asistencias creadas',
+                    style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: _primary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                child: _buildAsistenciaCard(_misAsistencias[i]),
-              );
-            }),
-        ]),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                      color: _primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20)),
+                  child: Text('${_misAsistencias.length}',
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: _primary,
+                          fontWeight: FontWeight.w600)),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: _cargarMisAsistencias,
+                  child: Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                        color: _primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8)),
+                    child: const Icon(Icons.refresh,
+                        size: 18, color: _primary),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 12),
+              if (_cargandoAsistencias)
+                const Center(
+                    child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 48),
+                  child: CircularProgressIndicator(
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(_primary)),
+                ))
+              else if (_misAsistencias.isEmpty)
+                _buildEmptyAsistencias()
+              else
+                ...List.generate(_misAsistencias.length, (i) {
+                  return TweenAnimationBuilder<double>(
+                    duration: Duration(milliseconds: 260 + i * 50),
+                    tween: Tween(begin: 0.0, end: 1.0),
+                    curve: Curves.easeOutCubic,
+                    builder: (ctx, v, child) => Transform.translate(
+                      offset: Offset(0, 14 * (1 - v)),
+                      child: Opacity(opacity: v, child: child),
+                    ),
+                    child: _buildAsistenciaCard(_misAsistencias[i]),
+                  );
+                }),
+            ]),
       ),
     );
   }
@@ -923,7 +929,6 @@ class _AsistenciasPersonalesScreenState
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
-          // Chip "Todos"
           _buildFiltroChip(
             label: 'Todos',
             seleccionado: _filtroEventoId == null,
@@ -953,15 +958,17 @@ class _AsistenciasPersonalesScreenState
     );
   }
 
-  Widget _buildFiltroChip(
-      {required String label,
-      required bool seleccionado,
-      required VoidCallback onTap}) {
+  Widget _buildFiltroChip({
+    required String label,
+    required bool seleccionado,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
           color: seleccionado ? _primary : Colors.white,
           borderRadius: BorderRadius.circular(20),
@@ -976,13 +983,15 @@ class _AsistenciasPersonalesScreenState
                 ]
               : [],
         ),
-        child: Text(label,
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: seleccionado ? Colors.white : _primary),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis),
+        child: Text(
+          label,
+          style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: seleccionado ? Colors.white : _primary),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
     );
   }
@@ -1009,8 +1018,8 @@ class _AsistenciasPersonalesScreenState
         const SizedBox(height: 8),
         Text(
           'Ve a la pestaña "Crear" para generar\ntu primera asistencia con QR.',
-          style:
-              TextStyle(fontSize: 13, color: Colors.grey[500], height: 1.5),
+          style: TextStyle(
+              fontSize: 13, color: Colors.grey[500], height: 1.5),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 16),
@@ -1021,10 +1030,10 @@ class _AsistenciasPersonalesScreenState
           style: ElevatedButton.styleFrom(
             backgroundColor: _primary,
             foregroundColor: Colors.white,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 20, vertical: 10),
           ),
         ),
       ]),
@@ -1032,10 +1041,14 @@ class _AsistenciasPersonalesScreenState
   }
 
   Widget _buildAsistenciaCard(Map<String, dynamic> asistencia) {
-    final nombre = asistencia['nombre'] ?? 'Sin nombre';
-    final eventName = asistencia['eventName'] ?? '';
+    final nombre = (asistencia['nombre'] as String?) ?? 'Sin nombre';
+    final inicial =
+        nombre.isNotEmpty ? nombre.substring(0, 1).toUpperCase() : '?';
+    final eventName =
+        (asistencia['eventName'] as String?) ?? '';
     final activo = asistencia['activo'] == true;
-    final descripcion = asistencia['descripcion'] ?? '';
+    final descripcion =
+        (asistencia['descripcion'] as String?) ?? '';
     final docId = asistencia['docId'] as String;
     final eventId = asistencia['eventId'] as String;
     final qrId = asistencia['qrId'] as String? ?? '';
@@ -1048,7 +1061,6 @@ class _AsistenciasPersonalesScreenState
       direction: DismissDirection.endToStart,
       confirmDismiss: (_) async {
         await _confirmarEliminar(asistencia);
-        // Siempre retornamos false: la eliminación se maneja en _eliminarAsistencia
         return false;
       },
       background: Container(
@@ -1059,15 +1071,18 @@ class _AsistenciasPersonalesScreenState
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 24),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Icon(Icons.delete_rounded, color: Colors.white, size: 28),
-          const SizedBox(height: 4),
-          const Text('Eliminar',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700)),
-        ]),
+        child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.delete_rounded,
+                  color: Colors.white, size: 28),
+              const SizedBox(height: 4),
+              const Text('Eliminar',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700)),
+            ]),
       ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -1083,7 +1098,6 @@ class _AsistenciasPersonalesScreenState
           ],
         ),
         child: Column(children: [
-          // Cabecera
           Padding(
             padding: const EdgeInsets.all(14),
             child: Row(children: [
@@ -1099,7 +1113,7 @@ class _AsistenciasPersonalesScreenState
                 ),
                 child: Center(
                   child: Text(
-                    nombre.toString().substring(0, 1).toUpperCase(),
+                    inicial,
                     style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -1112,37 +1126,45 @@ class _AsistenciasPersonalesScreenState
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(nombre.toString(),
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              color: _primary)),
+                      Text(
+                        nombre,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: _primary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       const SizedBox(height: 3),
                       Row(children: [
                         const Icon(Icons.event_rounded,
                             size: 11, color: Color(0xFF64748B)),
                         const SizedBox(width: 4),
                         Expanded(
-                          child: Text(eventName.toString(),
-                              style: const TextStyle(
-                                  fontSize: 11, color: Color(0xFF64748B)),
-                              overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            eventName,
+                            style: const TextStyle(
+                                fontSize: 11, color: Color(0xFF64748B)),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ]),
-                      if (descripcion.toString().isNotEmpty) ...[
+                      if (descripcion.isNotEmpty) ...[
                         const SizedBox(height: 2),
-                        Text(descripcion.toString(),
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.grey.shade400),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
+                        Text(
+                          descripcion,
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade400),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ],
                     ]),
               ),
-              // Badge estado
+              const SizedBox(width: 8),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                     color: colorEstado.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20)),
@@ -1162,19 +1184,14 @@ class _AsistenciasPersonalesScreenState
               ),
             ]),
           ),
-
-          // Configuraciones activas (si las hay)
           _buildConfigResumen(asistencia),
-
-          // Botones del footer: Configurar | Eliminar
           Container(
             decoration: BoxDecoration(
               color: _primary.withValues(alpha: 0.04),
-              borderRadius:
-                  const BorderRadius.vertical(bottom: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(16)),
             ),
             child: Row(children: [
-              // Botón Configurar
               Expanded(
                 child: Material(
                   color: Colors.transparent,
@@ -1205,14 +1222,10 @@ class _AsistenciasPersonalesScreenState
                   ),
                 ),
               ),
-
-              // Divisor vertical
               Container(
                   width: 1,
                   height: 36,
                   color: _primary.withValues(alpha: 0.08)),
-
-              // Botón Eliminar
               Material(
                 color: Colors.transparent,
                 child: InkWell(
@@ -1224,7 +1237,8 @@ class _AsistenciasPersonalesScreenState
                         horizontal: 18, vertical: 12),
                     child: Row(children: [
                       Icon(Icons.delete_outline_rounded,
-                          color: _danger.withValues(alpha: 0.8), size: 15),
+                          color: _danger.withValues(alpha: 0.8),
+                          size: 15),
                       const SizedBox(width: 6),
                       Text('Eliminar',
                           style: TextStyle(
@@ -1303,77 +1317,80 @@ class _AsistenciasPersonalesScreenState
         ),
       ),
     );
-    // Al volver, recargar lista
     _cargarMisAsistencias();
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // PASO 1 — SELECCIÓN DE EVENTO
-  // ══════════════════════════════════════════════════════════════════════════
 
   Widget _buildPasoSeleccionEvento() {
     return FadeTransition(
       opacity: _fadeCtrl,
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const Text('Eventos de tu carrera',
-                style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: _primary)),
-            const SizedBox(width: 8),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                  color: _primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(20)),
-              child: Text('${_eventos.length}',
-                  style: const TextStyle(
-                      fontSize: 12,
-                      color: _primary,
-                      fontWeight: FontWeight.w600)),
-            ),
-            const Spacer(),
-            GestureDetector(
-              onTap: _cargarEventos,
-              child: Container(
-                padding: const EdgeInsets.all(7),
-                decoration: BoxDecoration(
-                    color: _primary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8)),
-                child:
-                    const Icon(Icons.refresh, size: 18, color: _primary),
-              ),
-            ),
-          ]),
-          const SizedBox(height: 12),
-          if (_cargandoEventos)
-            const Center(
-                child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 48),
-              child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(_primary)),
-            ))
-          else if (_eventos.isEmpty)
-            _buildEmptyEventos()
-          else
-            ...List.generate(_eventos.length, (i) {
-              final evento = _eventos[i];
-              return TweenAnimationBuilder<double>(
-                duration: Duration(milliseconds: 280 + i * 50),
-                tween: Tween(begin: 0.0, end: 1.0),
-                curve: Curves.easeOutCubic,
-                builder: (ctx, v, child) => Transform.translate(
-                  offset: Offset(0, 16 * (1 - v)),
-                  child: Opacity(opacity: v, child: child),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Flexible(
+                  child: const Text(
+                    'Eventos de tu carrera',
+                    style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: _primary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                child: _buildEventoCard(evento),
-              );
-            }),
-        ]),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                      color: _primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20)),
+                  child: Text('${_eventos.length}',
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: _primary,
+                          fontWeight: FontWeight.w600)),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: _cargarEventos,
+                  child: Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                        color: _primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8)),
+                    child: const Icon(Icons.refresh,
+                        size: 18, color: _primary),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 12),
+              if (_cargandoEventos)
+                const Center(
+                    child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 48),
+                  child: CircularProgressIndicator(
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(_primary)),
+                ))
+              else if (_eventos.isEmpty)
+                _buildEmptyEventos()
+              else
+                ...List.generate(_eventos.length, (i) {
+                  final evento = _eventos[i];
+                  return TweenAnimationBuilder<double>(
+                    duration: Duration(milliseconds: 280 + i * 50),
+                    tween: Tween(begin: 0.0, end: 1.0),
+                    curve: Curves.easeOutCubic,
+                    builder: (ctx, v, child) => Transform.translate(
+                      offset: Offset(0, 16 * (1 - v)),
+                      child: Opacity(opacity: v, child: child),
+                    ),
+                    child: _buildEventoCard(evento),
+                  );
+                }),
+            ]),
       ),
     );
   }
@@ -1400,8 +1417,8 @@ class _AsistenciasPersonalesScreenState
         const SizedBox(height: 8),
         Text(
           'No hay eventos registrados para esta carrera.\nCrea uno en Gestión de Eventos.',
-          style:
-              TextStyle(fontSize: 13, color: Colors.grey[500], height: 1.5),
+          style: TextStyle(
+              fontSize: 13, color: Colors.grey[500], height: 1.5),
           textAlign: TextAlign.center,
         ),
       ]),
@@ -1409,8 +1426,12 @@ class _AsistenciasPersonalesScreenState
   }
 
   Widget _buildEventoCard(Map<String, dynamic> evento) {
-    final nombre = evento['name'] ?? evento['nombre'] ?? 'Sin nombre';
-    final periodo = evento['periodoNombre'] ?? '';
+    final nombreRaw =
+        evento['name'] ?? evento['nombre'] ?? 'Sin nombre';
+    final nombre = nombreRaw.toString();
+    final inicial =
+        nombre.isNotEmpty ? nombre.substring(0, 1).toUpperCase() : '?';
+    final periodo = (evento['periodoNombre'] ?? '').toString();
 
     return GestureDetector(
       onTap: () {
@@ -1446,11 +1467,13 @@ class _AsistenciasPersonalesScreenState
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
-              child: Text(nombre.toString().substring(0, 1).toUpperCase(),
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18)),
+              child: Text(
+                inicial,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18),
+              ),
             ),
           ),
           const SizedBox(width: 14),
@@ -1458,20 +1481,28 @@ class _AsistenciasPersonalesScreenState
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(nombre.toString(),
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: _primary)),
-                  if (periodo.toString().isNotEmpty) ...[
+                  Text(
+                    nombre,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: _primary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (periodo.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Row(children: [
                       const Icon(Icons.calendar_today,
                           size: 11, color: Color(0xFF64748B)),
                       const SizedBox(width: 4),
-                      Text(periodo.toString(),
+                      Flexible(
+                        child: Text(
+                          periodo,
                           style: const TextStyle(
-                              fontSize: 12, color: Color(0xFF64748B))),
+                              fontSize: 12, color: Color(0xFF64748B)),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ]),
                   ],
                 ]),
@@ -1489,14 +1520,11 @@ class _AsistenciasPersonalesScreenState
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // PASO 2 — QR RESULTADO
-  // ══════════════════════════════════════════════════════════════════════════
-
   Widget _buildPasoQRResultado() {
     return ScaleTransition(
       scale: Tween<double>(begin: 0.88, end: 1.0).animate(
-          CurvedAnimation(parent: _qrScaleCtrl, curve: Curves.easeOutBack)),
+          CurvedAnimation(
+              parent: _qrScaleCtrl, curve: Curves.easeOutBack)),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -1515,7 +1543,6 @@ class _AsistenciasPersonalesScreenState
                   ],
                 ),
                 child: Column(children: [
-                  // Badge éxito
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 18, vertical: 10),
@@ -1535,10 +1562,7 @@ class _AsistenciasPersonalesScreenState
                                   color: Colors.white)),
                         ]),
                   ),
-
                   const SizedBox(height: 20),
-
-                  // QR
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -1554,10 +1578,7 @@ class _AsistenciasPersonalesScreenState
                       backgroundColor: Colors.white,
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
-                  // Info resumida
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
@@ -1573,14 +1594,14 @@ class _AsistenciasPersonalesScreenState
                           if ((_asistenciaCreada?['descripcion'] ?? '')
                               .toString()
                               .isNotEmpty)
-                            _infoRow(Icons.notes, 'Descripción:',
-                                _asistenciaCreada!['descripcion'].toString()),
+                            _infoRow(
+                                Icons.notes,
+                                'Descripción:',
+                                _asistenciaCreada!['descripcion']
+                                    .toString()),
                         ]),
                   ),
-
                   const SizedBox(height: 16),
-
-                  // Aviso: configurar desde lista
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -1602,10 +1623,7 @@ class _AsistenciasPersonalesScreenState
                       ),
                     ]),
                   ),
-
                   const SizedBox(height: 16),
-
-                  // Botones
                   Row(children: [
                     Expanded(
                       child: OutlinedButton.icon(
@@ -1614,8 +1632,7 @@ class _AsistenciasPersonalesScreenState
                           _tabController.animateTo(1);
                           _cargarMisAsistencias();
                         },
-                        icon:
-                            const Icon(Icons.list_alt_rounded, size: 16),
+                        icon: const Icon(Icons.list_alt_rounded, size: 16),
                         label: const Text('Ver lista'),
                         style: OutlinedButton.styleFrom(
                           padding:
@@ -1631,7 +1648,8 @@ class _AsistenciasPersonalesScreenState
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: _resetearFlujo,
-                        icon: const Icon(Icons.add_circle_outline, size: 16),
+                        icon: const Icon(Icons.add_circle_outline,
+                            size: 16),
                         label: const Text('Crear otra'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _primary,
@@ -1652,8 +1670,6 @@ class _AsistenciasPersonalesScreenState
     );
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
   Widget _infoRow(IconData icon, String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 7),
@@ -1669,11 +1685,13 @@ class _AsistenciasPersonalesScreenState
                   color: _primary)),
         ),
         Expanded(
-          child: Text(value,
-              style: const TextStyle(
-                  color: Color(0xFF4A5568), fontSize: 12.5),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 3),
+          child: Text(
+            value,
+            style: const TextStyle(
+                color: Color(0xFF4A5568), fontSize: 12.5),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 3,
+          ),
         ),
       ]),
     );

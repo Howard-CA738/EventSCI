@@ -4,7 +4,6 @@ import '/prefs_helper.dart';
 import '/admin/logica/crear_eventos.dart';
 import '/admin/logica/periodos_helper.dart';
 import '/admin/logica/eventos_detalles.dart';
-import 'package:flutter/foundation.dart';
 
 class CrearEventosCarreraScreen extends StatefulWidget {
   const CrearEventosCarreraScreen({super.key});
@@ -18,18 +17,17 @@ class _CrearEventosCarreraScreenState
     extends State<CrearEventosCarreraScreen> {
   final TextEditingController _eventNameController = TextEditingController();
   final EventosService _eventosService = EventosService();
+  final ScrollController _scrollController = ScrollController();
 
   bool _isLoading = false;
   bool _isLoadingData = true;
 
-  // Datos del admin de carrera (vienen de la sesión)
   String? _filialId;
   String? _filialNombre;
   String? _facultad;
   String? _carreraId;
   String? _carreraNombre;
 
-  // Período seleccionado
   String? _selectedPeriodoId;
   String? _selectedPeriodoNombre;
   List<Map<String, dynamic>> _periodos = [];
@@ -43,10 +41,10 @@ class _CrearEventosCarreraScreenState
   @override
   void dispose() {
     _eventNameController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  // Carga los datos de la sesión del admin de carrera y los períodos
   Future<void> _loadSessionData() async {
     setState(() => _isLoadingData = true);
     try {
@@ -58,8 +56,6 @@ class _CrearEventosCarreraScreenState
           _filialId = adminData['filial'];
           _filialNombre = adminData['filialNombre'];
           _facultad = adminData['facultad'];
-          // carreraId y carrera pueden estar en distintas claves según cómo
-          // guarda PrefsHelper; ajusta si es necesario.
           _carreraId = adminData['carreraId'] ?? adminData['carrera'];
           _carreraNombre = adminData['carrera'];
           _periodos = periodos;
@@ -70,15 +66,19 @@ class _CrearEventosCarreraScreenState
         });
       }
     } catch (e) {
-      debugPrint('Error cargando datos de sesión: $e');
-      _showSnackBar('Error al cargar datos de la sesión', isError: true);
+      if (mounted) {
+        _showSnackBar('Error al cargar datos de la sesión', isError: true);
+      }
     } finally {
-      setState(() => _isLoadingData = false);
+      if (mounted) {
+        setState(() => _isLoadingData = false);
+      }
     }
   }
 
   Future<void> _createEvent() async {
-    // Validaciones
+    FocusScope.of(context).unfocus();
+
     final nameError =
         _eventosService.validateEventName(_eventNameController.text);
     if (nameError != null) {
@@ -104,6 +104,11 @@ class _CrearEventosCarreraScreenState
       return;
     }
 
+    if (_selectedPeriodoNombre == null) {
+      _showSnackBar('Selecciona un período válido', isError: true);
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -123,7 +128,9 @@ class _CrearEventosCarreraScreenState
     } catch (e) {
       _showSnackBar('Error al crear evento: $e', isError: true);
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -139,6 +146,7 @@ class _CrearEventosCarreraScreenState
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -161,10 +169,11 @@ class _CrearEventosCarreraScreenState
     );
   }
 
-  // ─── BUILD ────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final keyboardPadding = MediaQuery.of(context).viewInsets.bottom;
+
     return Scaffold(
       backgroundColor: const Color(0xFFE8EDF2),
       appBar: AppBar(
@@ -178,31 +187,44 @@ class _CrearEventosCarreraScreenState
         centerTitle: true,
       ),
       body: _isLoadingData
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF1E3A5F)),
+          ? const SafeArea(
+              child: Center(
+                child: CircularProgressIndicator(color: Color(0xFF1E3A5F)),
+              ),
             )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // ── Tarjeta de contexto (carrera actual) ──────────────────
-                  _buildContextCard(),
-                  const SizedBox(height: 20),
-
-                  // ── Formulario de creación ────────────────────────────────
-                  _buildCreateCard(),
-                  const SizedBox(height: 20),
-
-                  // ── Lista de eventos de esta carrera ──────────────────────
-                  _buildEventsList(),
-                ],
+          : SafeArea(
+              child: GestureDetector(
+                onTap: () => FocusScope.of(context).unfocus(),
+                behavior: HitTestBehavior.opaque,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    20,
+                    20,
+                    20 +
+                        (keyboardPadding > 0
+                            ? keyboardPadding
+                            : bottomPadding),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildContextCard(),
+                      const SizedBox(height: 20),
+                      _buildCreateCard(),
+                      const SizedBox(height: 20),
+                      _buildEventsList(),
+                    ],
+                  ),
+                ),
               ),
             ),
     );
   }
 
-  // Tarjeta que muestra la carrera/facultad/filial asociada a la sesión
   Widget _buildContextCard() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -211,11 +233,12 @@ class _CrearEventosCarreraScreenState
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha:0.15),
+              color: Colors.white.withOpacity(0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.school, color: Colors.white, size: 22),
@@ -232,12 +255,15 @@ class _CrearEventosCarreraScreenState
                     fontWeight: FontWeight.w600,
                     fontSize: 15,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
                 ),
                 const SizedBox(height: 3),
                 Text(
                   _facultad ?? '—',
-                  style: const TextStyle(
-                      color: Colors.white70, fontSize: 12),
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
                 const SizedBox(height: 2),
                 Row(
@@ -245,22 +271,26 @@ class _CrearEventosCarreraScreenState
                     const Icon(Icons.location_on,
                         color: Colors.white54, size: 12),
                     const SizedBox(width: 4),
-                    Text(
-                      _filialNombre ?? '—',
-                      style: const TextStyle(
-                          color: Colors.white54, fontSize: 11),
+                    Expanded(
+                      child: Text(
+                        _filialNombre ?? '—',
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
                     ),
                   ],
                 ),
               ],
             ),
           ),
-          // Chip indicador
+          const SizedBox(width: 8),
           Container(
             padding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha:0.15),
+              color: Colors.white.withOpacity(0.15),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.white30),
             ),
@@ -274,7 +304,6 @@ class _CrearEventosCarreraScreenState
     );
   }
 
-  // Formulario de creación de evento
   Widget _buildCreateCard() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -283,7 +312,7 @@ class _CrearEventosCarreraScreenState
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.06),
+            color: Colors.black.withOpacity(0.06),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -292,13 +321,12 @@ class _CrearEventosCarreraScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Encabezado
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E3A5F).withValues(alpha:0.08),
+                  color: const Color(0xFF1E3A5F).withOpacity(0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.event_available,
@@ -317,9 +345,11 @@ class _CrearEventosCarreraScreenState
                         color: Color(0xFF1E3A5F),
                       ),
                     ),
+                    SizedBox(height: 2),
                     Text(
                       'El evento se asociará automáticamente a tu carrera',
-                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                      style: TextStyle(
+                          fontSize: 12, color: Color(0xFF64748B)),
                     ),
                   ],
                 ),
@@ -327,8 +357,6 @@ class _CrearEventosCarreraScreenState
             ],
           ),
           const SizedBox(height: 20),
-
-          // Campo: nombre del evento
           _buildTextField(
             controller: _eventNameController,
             label: 'Nombre del evento',
@@ -336,8 +364,6 @@ class _CrearEventosCarreraScreenState
             icon: Icons.event,
           ),
           const SizedBox(height: 16),
-
-          // Dropdown: período
           _buildDropdown(
             value: _selectedPeriodoId,
             label: 'Período académico',
@@ -353,13 +379,12 @@ class _CrearEventosCarreraScreenState
                           .firstWhere((p) => p['id'] == newValue);
                       setState(() {
                         _selectedPeriodoId = newValue;
-                        _selectedPeriodoNombre = periodo['nombre'];
+                        _selectedPeriodoNombre =
+                            periodo['nombre'] as String?;
                       });
                     }
                   },
           ),
-
-          // Aviso si no hay períodos activos
           if (_periodos.isEmpty) ...[
             const SizedBox(height: 12),
             _buildWarningBanner(
@@ -370,12 +395,10 @@ class _CrearEventosCarreraScreenState
                   'No hay períodos activos. Solicita al administrador que active un período.',
             ),
           ],
-
           const SizedBox(height: 24),
-
-          // Botón crear
           _buildPrimaryButton(
-            onPressed: (_isLoading || _periodos.isEmpty) ? null : _createEvent,
+            onPressed:
+                (_isLoading || _periodos.isEmpty) ? null : _createEvent,
             text: 'Crear Evento',
             icon: Icons.add_circle_outline,
             isLoading: _isLoading,
@@ -385,7 +408,6 @@ class _CrearEventosCarreraScreenState
     );
   }
 
-  // Lista de eventos filtrada por la carrera de la sesión
   Widget _buildEventsList() {
     return StreamBuilder<QuerySnapshot>(
       stream: _eventosService.getEventsStream(),
@@ -400,41 +422,56 @@ class _CrearEventosCarreraScreenState
         }
 
         if (snapshot.hasError) {
-          return Center(
-            child: Text('Error: ${snapshot.error}',
-                style: const TextStyle(color: Colors.red)),
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline,
+                    color: Color(0xFFE53935), size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Error al cargar eventos',
+                    style: const TextStyle(
+                        color: Color(0xFFE53935), fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
           );
         }
 
-        // Filtrar solo los eventos de esta carrera
         final allDocs = snapshot.data?.docs ?? [];
-        // Filtrar solo los eventos de esta carrera EN ESTA filial y facultad
-final events = allDocs.where((doc) {
-  final data = doc.data() as Map<String, dynamic>;
-  
-  // Debe coincidir filial + facultad + carrera
-  final mismaFilial = data['filialId'] == _filialId;
-  final mismaFacultad = data['facultad'] == _facultad;
-  final mismaCarrera = data['carreraId'] == _carreraId || 
-                       data['carreraNombre'] == _carreraNombre;
-  
-  return mismaFilial && mismaFacultad && mismaCarrera;
-}).toList();
+        final events = allDocs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final mismaFilial = data['filialId'] == _filialId;
+          final mismaFacultad = data['facultad'] == _facultad;
+          final mismaCarrera = data['carreraId'] == _carreraId ||
+              data['carreraNombre'] == _carreraNombre;
+          return mismaFilial && mismaFacultad && mismaCarrera;
+        }).toList();
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Encabezado de la sección
             Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 12),
               child: Row(
                 children: [
-                  const Text(
-                    'Eventos de tu carrera',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1E3A5F),
+                  const Flexible(
+                    child: Text(
+                      'Eventos de tu carrera',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1E3A5F),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -442,7 +479,7 @@ final events = allDocs.where((doc) {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
+                      color: const Color(0xFF1E3A5F).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -457,8 +494,6 @@ final events = allDocs.where((doc) {
                 ],
               ),
             ),
-
-            // Estado vacío
             if (events.isEmpty)
               Container(
                 padding: const EdgeInsets.all(32),
@@ -473,14 +508,13 @@ final events = allDocs.where((doc) {
                     const SizedBox(height: 12),
                     Text(
                       'Aún no hay eventos para esta carrera',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                           fontSize: 14, color: Colors.grey[500]),
                     ),
                   ],
                 ),
               ),
-
-            // Tarjetas de eventos
             ...events.map((event) {
               final data = event.data() as Map<String, dynamic>;
               return _buildEventCard(event.id, data);
@@ -492,8 +526,21 @@ final events = allDocs.where((doc) {
   }
 
   Widget _buildEventCard(String eventId, Map<String, dynamic> data) {
-    final name = data['name'] ?? 'Sin nombre';
-    final periodo = data['periodoNombre'] ?? '';
+    final name = (data['name'] as String?)?.trim().isNotEmpty == true
+        ? data['name'] as String
+        : 'Sin nombre';
+    final periodo = (data['periodoNombre'] as String?) ?? '';
+
+    DateTime? fecha;
+    try {
+      if (data['fecha'] is Timestamp) {
+        fecha = (data['fecha'] as Timestamp).toDate();
+      }
+    } catch (_) {
+      fecha = null;
+    }
+
+    final inicial = name.isNotEmpty ? name[0].toUpperCase() : '?';
 
     return GestureDetector(
       onTap: () => _navigateToEventDetails(eventId, data),
@@ -505,7 +552,7 @@ final events = allDocs.where((doc) {
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha:0.05),
+              color: Colors.black.withOpacity(0.05),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -513,7 +560,6 @@ final events = allDocs.where((doc) {
         ),
         child: Row(
           children: [
-            // Avatar con inicial
             Container(
               width: 44,
               height: 44,
@@ -523,7 +569,7 @@ final events = allDocs.where((doc) {
               ),
               child: Center(
                 child: Text(
-                  name.substring(0, 1).toUpperCase(),
+                  inicial,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -544,6 +590,8 @@ final events = allDocs.where((doc) {
                       fontSize: 14,
                       color: Color(0xFF1E3A5F),
                     ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
                   ),
                   if (periodo.isNotEmpty) ...[
                     const SizedBox(height: 4),
@@ -552,26 +600,33 @@ final events = allDocs.where((doc) {
                         const Icon(Icons.calendar_today,
                             size: 11, color: Color(0xFF64748B)),
                         const SizedBox(width: 4),
-                        Text(
-                          periodo,
-                          style: const TextStyle(
-                              fontSize: 12, color: Color(0xFF64748B)),
+                        Expanded(
+                          child: Text(
+                            periodo,
+                            style: const TextStyle(
+                                fontSize: 12, color: Color(0xFF64748B)),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
                       ],
                     ),
                   ],
-                  if (data['fecha'] != null) ...[
+                  if (fecha != null) ...[
                     const SizedBox(height: 2),
                     Row(
                       children: [
                         Icon(Icons.access_time,
                             size: 11, color: Colors.blue[400]),
                         const SizedBox(width: 4),
-                        Text(
-                          _eventosService.formatDate(
-                              (data['fecha'] as Timestamp).toDate()),
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.blue[400]),
+                        Expanded(
+                          child: Text(
+                            _eventosService.formatDate(fecha),
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.blue[400]),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
                       ],
                     ),
@@ -587,8 +642,6 @@ final events = allDocs.where((doc) {
     );
   }
 
-  // ─── WIDGETS AUXILIARES ───────────────────────────────────────────────────
-
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -597,6 +650,7 @@ final events = allDocs.where((doc) {
   }) {
     return TextField(
       controller: controller,
+      textCapitalization: TextCapitalization.sentences,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
@@ -633,6 +687,7 @@ final events = allDocs.where((doc) {
     return DropdownButtonFormField<String>(
       value: value,
       isExpanded: true,
+      menuMaxHeight: 300,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
@@ -643,6 +698,11 @@ final events = allDocs.where((doc) {
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              const BorderSide(color: Color(0xFF1E3A5F), width: 1.5),
         ),
         filled: true,
         fillColor: const Color(0xFFF8FAFC),
@@ -656,6 +716,7 @@ final events = allDocs.where((doc) {
             itemLabels != null ? itemLabels[i] : items[i],
             style: const TextStyle(fontSize: 14),
             overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
         );
       }),
@@ -674,9 +735,10 @@ final events = allDocs.where((doc) {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha:0.4)),
+        border: Border.all(color: color.withOpacity(0.4)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, size: 18, color: color),
           const SizedBox(width: 10),

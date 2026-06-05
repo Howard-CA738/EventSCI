@@ -24,28 +24,20 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   String? _studentCiclo;
   String? _studentGrupo;
 
-  // ── Eventos con asistencias ────────────────────────────────────
+  List<Map<String, dynamic>> _todosLosEventos = [];
   List<Map<String, dynamic>> _eventosConAsistencias = [];
-  bool _isLoadingAsistencias = false;
 
-  // ── Evento seleccionado ────────────────────────────────────────
+  bool _isLoadingEventos = false;
+
   String? _eventoSeleccionadoId;
   String? _eventoSeleccionadoNombre;
 
-  // Asistencias de proyectos (flujo normal)
   List<Map<String, dynamic>> _asistenciasDelEvento = [];
-
-  // Asistencias personales
   List<Map<String, dynamic>> _asistenciasPersonalesDelEvento = [];
 
-  // ── Tab seleccionado: 0 = Proyectos, 1 = Personales ───────────
   int _tabSeleccionado = 0;
 
-  // ── Meta de sellos ─────────────────────────────────────────────
   int? _metaSellos;
-
-  // ── Guard de generación para evitar mezcla de cargas paralelas ─
-  int _loadGeneration = 0;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -71,10 +63,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
     super.dispose();
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // OBTENER USUARIO
-  // ═══════════════════════════════════════════════════════════════
-
   Future<void> _getCurrentUserId() async {
     try {
       final userId = await PrefsHelper.getCurrentUserId();
@@ -94,7 +82,7 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
             _studentGrupo = userData['grupo']?.toString();
           }
         });
-        await _cargarMisAsistencias();
+        await _cargarEventosYAsistencias();
       } else {
         _showSnackBar('No se pudo obtener el usuario actual', isError: true);
       }
@@ -103,18 +91,12 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // CARGA PRINCIPAL
-  // ═══════════════════════════════════════════════════════════════
-
-  Future<void> _cargarMisAsistencias() async {
+  Future<void> _cargarEventosYAsistencias() async {
     if (_currentUserId == null) return;
 
-    _loadGeneration++;
-    final myGen = _loadGeneration;
-
     setState(() {
-      _isLoadingAsistencias = true;
+      _isLoadingEventos = true;
+      _todosLosEventos.clear();
       _eventosConAsistencias.clear();
       _eventoSeleccionadoId = null;
       _eventoSeleccionadoNombre = null;
@@ -129,363 +111,220 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
       if (parts.length != 2) throw Exception('ID de usuario inválido');
       final studentId = parts[1];
 
-      await _cargarTodo(studentId, myGen);
-    } catch (e) {
-      if (!mounted || myGen != _loadGeneration) return;
-      _showSnackBar('Error al cargar asistencias: $e', isError: true);
-    } finally {
-      if (!mounted || myGen != _loadGeneration) return;
-      setState(() => _isLoadingAsistencias = false);
-    }
-  }
+      Query query = _firestore
+          .collection('events')
+          .orderBy('createdAt', descending: true);
 
-  Future<void> _cargarTodo(String studentId, int gen) async {
-  final eventosSnapshot = await _firestore
-      .collection('events')
-      .orderBy('createdAt', descending: true)
-      .get();
+      if (_studentFacultad != null && _studentFacultad!.isNotEmpty) {
+        query = query.where('facultad', isEqualTo: _studentFacultad);
+      }
+      if (_studentCarrera != null && _studentCarrera!.isNotEmpty) {
+        query = query.where('carreraNombre', isEqualTo: _studentCarrera);
+      }
+      if (_studentFilial != null && _studentFilial!.isNotEmpty) {
+        query = query.where('filialNombre', isEqualTo: _studentFilial);
+      }
 
-  await Future.wait(
-    eventosSnapshot.docs
-        .map((doc) => _cargarScansDeEvento(doc, studentId, gen)),
-  );
+      final eventosSnap = await query.get();
 
-  if (!mounted || gen != _loadGeneration) return;
+      if (eventosSnap.docs.isEmpty) {
+        setState(() => _isLoadingEventos = false);
+        return;
+      }
 
-  // Cargar asistencias personales con collectionGroup
-  // y fallback si falla
-  try {
-    final registrosSnap = await _firestore
-        .collectionGroup('registros')
-        .where('studentId', isEqualTo: studentId)
-        .get();
-
-    if (!mounted || gen != _loadGeneration) return;
-
-    for (final registroDoc in registrosSnap.docs) {
-      final data = registroDoc.data();
-      final eventoId = data['eventId']?.toString();
-      if (eventoId == null) continue;
-
-      final idx = _eventosConAsistencias
-          .indexWhere((e) => e['eventId'] == eventoId);
-
-      if (idx == -1) {
-        _eventosConAsistencias.add({
-          'eventId': eventoId,
-          'eventName': data['eventName'] ?? 'Sin nombre',
-          'eventDescription': '',
-          'eventDate': null,
-          'eventFacultad': data['facultad'] ?? '',
-          'eventCarrera': data['carrera'] ?? '',
-          'eventFilial': data['filial'] ?? '',
+      final todos = eventosSnap.docs.map((doc) {
+        final d = doc.data() as Map<String, dynamic>;
+        return {
+          'eventId': doc.id,
+          'eventName': d['name'] ?? 'Sin nombre',
+          'eventDescription': d['description'] ?? '',
+          'eventDate': d['fecha'],
+          'eventFacultad': d['facultad'] ?? '',
+          'eventCarrera': d['carreraNombre'] ?? d['carrera'] ?? '',
+          'eventFilial': d['filialNombre'] ?? '',
           'asistencias': <Map<String, dynamic>>[],
+          'asistenciasPersonales': <Map<String, dynamic>>[],
+          'tieneAsistencias': false,
+        };
+      }).toList();
+
+      setState(() => _todosLosEventos = todos);
+
+      await Future.wait(
+        todos.map((evento) => _cargarAsistenciasDeEvento(evento, studentId)),
+      );
+
+      final conAsistencias = _todosLosEventos
+          .where((e) => e['tieneAsistencias'] == true)
+          .toList();
+
+      if (mounted) {
+        setState(() {
+          _eventosConAsistencias = conAsistencias;
+          _isLoadingEventos = false;
         });
       }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingEventos = false);
+        _showSnackBar('Error al cargar asistencias: $e', isError: true);
+      }
     }
-  } catch (e) {
-    debugPrint('collectionGroup falló, usando fallback: $e');
-    if (!mounted || gen != _loadGeneration) return;
-    await _cargarAsistenciasPersonalesFallback(studentId, gen);
   }
 
-  if (!mounted || gen != _loadGeneration) return;
+  Future<void> _cargarAsistenciasDeEvento(
+      Map<String, dynamic> evento, String studentId) async {
+    final eventId = evento['eventId'] as String;
 
-  _aplicarSortYDedup();
-}
-
-  /// Carga los scans de proyectos de un evento para el estudiante.
-  /// Verifica la generación antes de modificar la lista compartida.
-  Future<void> _cargarScansDeEvento(
-    DocumentSnapshot eventDoc,
-    String studentId,
-    int gen,
-  ) async {
     try {
-      final eventId = eventDoc.id;
-      final eventData = eventDoc.data() as Map<String, dynamic>;
-
       final resumenDoc = await _firestore
           .collection('events')
           .doc(eventId)
           .collection('asistencias')
           .doc(studentId)
           .get();
-      if (!resumenDoc.exists) return;
 
-      final scansSnapshot = await _firestore
-          .collection('events')
-          .doc(eventId)
-          .collection('asistencias')
-          .doc(studentId)
-          .collection('scans')
-          .orderBy('timestamp', descending: true)
-          .get();
-      if (scansSnapshot.docs.isEmpty) return;
+      List<Map<String, dynamic>> scans = [];
+      if (resumenDoc.exists) {
+        final scansSnap = await _firestore
+            .collection('events')
+            .doc(eventId)
+            .collection('asistencias')
+            .doc(studentId)
+            .collection('scans')
+            .orderBy('timestamp', descending: true)
+            .get();
 
-      final asistencias = scansSnapshot.docs
-          .map((s) {
-            final d = s.data();
-            if (d['timestamp'] == null) return null;
-            return {
-              'id': s.id,
-              'timestamp': d['timestamp'],
-              'categoria': d['categoria'] ?? 'Sin categoría',
-              'tipoInvestigacion': d['categoria'] ?? 'Sin categoría',
-              'codigoProyecto': d['codigoProyecto'] ?? 'Sin código',
-              'tituloProyecto': d['tituloProyecto'] ?? 'Sin título',
-              'grupo': d['grupo'],
-              'qrId': d['qrId'],
-              'registrationMethod': d['registrationMethod'] ?? 'qr_scan',
-            };
-          })
-          .whereType<Map<String, dynamic>>()
-          .toList();
+        scans = scansSnap.docs
+            .map((s) {
+              final d = s.data();
+              if (d['timestamp'] == null) return null;
+              return {
+                'id': s.id,
+                'timestamp': d['timestamp'],
+                'categoria': d['categoria'] ?? 'Sin categoría',
+                'tipoInvestigacion': d['categoria'] ?? 'Sin categoría',
+                'codigoProyecto': d['codigoProyecto'] ?? 'Sin código',
+                'tituloProyecto': d['tituloProyecto'] ?? 'Sin título',
+                'grupo': d['grupo'],
+                'qrId': d['qrId'],
+                'registrationMethod': d['registrationMethod'] ?? 'qr_scan',
+                'tipo': 'proyecto',
+              };
+            })
+            .whereType<Map<String, dynamic>>()
+            .toList();
+      }
 
-      if (asistencias.isEmpty) return;
-
-      // Verificar generación antes de mutar la lista compartida
-      if (!mounted || gen != _loadGeneration) return;
-
-      _eventosConAsistencias.add({
-        'eventId': eventId,
-        'eventName': eventData['name'] ?? 'Sin nombre',
-        'eventDescription': eventData['description'] ?? '',
-        'eventDate': eventData['date'],
-        'eventFacultad': eventData['facultad'] ?? '',
-        'eventCarrera': eventData['carrera'] ?? '',
-        'eventFilial': eventData['filial']?.toString() ??
-            eventData['filialNombre']?.toString() ??
-            '',
-        'asistencias': asistencias,
-      });
-    } catch (e) {
-      debugPrint('Error cargando scans del evento ${eventDoc.id}: $e');
-    }
-  }
-
-  /// Carga asistencias personales usando collectionGroup.
-  Future<void> _cargarAsistenciasPersonalesFallback(
-    String studentId, int gen) async {
-  try {
-    final eventosSnapshot = await _firestore
-        .collection('events')
-        .orderBy('createdAt', descending: true)
-        .get();
-
-    for (final eventDoc in eventosSnapshot.docs) {
-      if (!mounted || gen != _loadGeneration) return;
-
-      final eventId = eventDoc.id;
-      final eventData = eventDoc.data();
-
-      final asistenciasPersonalesSnap = await _firestore
+      List<Map<String, dynamic>> personales = [];
+      final asistPersonalesSnap = await _firestore
           .collection('events')
           .doc(eventId)
           .collection('asistencias_personales')
           .get();
 
-      for (final asistenciaDoc in asistenciasPersonalesSnap.docs) {
-        if (!mounted || gen != _loadGeneration) return;
+      final registros = await Future.wait(
+        asistPersonalesSnap.docs.map((asistDoc) async {
+          final registroDoc = await _firestore
+              .collection('events')
+              .doc(eventId)
+              .collection('asistencias_personales')
+              .doc(asistDoc.id)
+              .collection('registros')
+              .doc(studentId)
+              .get();
 
-        final registroDoc = await _firestore
-            .collection('events')
-            .doc(eventId)
-            .collection('asistencias_personales')
-            .doc(asistenciaDoc.id)
-            .collection('registros')
-            .doc(studentId)
-            .get();
+          if (!registroDoc.exists) return null;
 
-        if (registroDoc.exists) {
-          // Verificar si el evento ya está en la lista
-          final idx = _eventosConAsistencias
-              .indexWhere((e) => e['eventId'] == eventId);
+          final rd = registroDoc.data()!;
+          final ad = asistDoc.data();
+          return {
+            'id': registroDoc.id,
+            'asistenciaId': asistDoc.id,
+            'asistenciaNombre':
+                rd['asistenciaNombre'] ?? ad['nombre'] ?? 'Asistencia personal',
+            'asistenciaTipo':
+                rd['asistenciaTipo'] ?? ad['tipo'] ?? 'Asistencia Personal',
+            'timestamp': rd['timestamp'],
+            'eventId': eventId,
+            'eventName': evento['eventName'],
+            'type': 'asistencia_personal',
+            'qrId': rd['qrId'],
+            'tipo': 'personal',
+          };
+        }),
+      );
 
-          if (idx == -1) {
-            _eventosConAsistencias.add({
-              'eventId': eventId,
-              'eventName': eventData['name'] ?? 'Sin nombre',
-              'eventDescription': eventData['description'] ?? '',
-              'eventDate': eventData['date'],
-              'eventFacultad': eventData['facultad'] ?? '',
-              'eventCarrera': eventData['carrera'] ?? '',
-              'eventFilial': eventData['filial']?.toString() ??
-                  eventData['filialNombre']?.toString() ??
-                  '',
-              'asistencias': <Map<String, dynamic>>[],
-            });
-          }
-          // Ya encontramos un registro en este evento, pasamos al siguiente
-          break;
-        }
-      }
-    }
-  } catch (e) {
-    debugPrint('Error en fallback de asistencias personales: $e');
-  }
-}
+      personales.addAll(registros.whereType<Map<String, dynamic>>());
 
-  /// Deduplica por eventId fusionando asistencias, y ordena por fecha desc.
-  void _aplicarSortYDedup() {
-  final unique = <String, Map<String, dynamic>>{};
-
-  for (final e in _eventosConAsistencias) {
-    final id = e['eventId'] as String;
-    if (unique.containsKey(id)) {
-      final existing = unique[id]!;
-      final merged = List<Map<String, dynamic>>.from(
-          existing['asistencias'] as List<dynamic>);
-      merged.addAll(
-          (e['asistencias'] as List<dynamic>)
-              .cast<Map<String, dynamic>>());
-      existing['asistencias'] = merged;
-
-      if (existing['eventDate'] == null && e['eventDate'] != null) {
-        existing['eventDate'] = e['eventDate'];
-        existing['eventName'] = e['eventName'];
-        existing['eventFacultad'] = e['eventFacultad'];
-        existing['eventCarrera'] = e['eventCarrera'];
-        existing['eventFilial'] = e['eventFilial'];
-      }
-    } else {
-      unique[id] = Map<String, dynamic>.from(e);
+      evento['asistencias'] = scans;
+      evento['asistenciasPersonales'] = personales;
+      evento['tieneAsistencias'] = scans.isNotEmpty || personales.isNotEmpty;
+    } catch (e) {
+      debugPrint('Error cargando asistencias del evento $eventId: $e');
     }
   }
-
-  _eventosConAsistencias
-    ..clear()
-    ..addAll(unique.values);
-
-  _eventosConAsistencias.sort((a, b) {
-    final dateA = (a['eventDate'] as Timestamp?)?.toDate();
-    final dateB = (b['eventDate'] as Timestamp?)?.toDate();
-    if (dateA == null && dateB == null) return 0;
-    if (dateA == null) return 1;
-    if (dateB == null) return -1;
-    return dateB.compareTo(dateA);
-  });
-}
-
-  // ═══════════════════════════════════════════════════════════════
-  // SELECCIONAR EVENTO
-  // ═══════════════════════════════════════════════════════════════
 
   Future<void> _seleccionarEvento(Map<String, dynamic> eventoData) async {
     final eventoId = eventoData['eventId'] as String;
     final nombre = eventoData['eventName'] as String;
-    final asistencias = List<Map<String, dynamic>>.from(
-        eventoData['asistencias'] as List);
+    final scans =
+        List<Map<String, dynamic>>.from(eventoData['asistencias'] as List);
+    final personales = List<Map<String, dynamic>>.from(
+        (eventoData['asistenciasPersonales'] as List?) ?? []);
 
     int meta = -1;
-    List<Map<String, dynamic>> asistenciasPersonales = [];
 
     try {
-      final parts = _currentUserId!.split('/');
-if (parts.length != 2) {
-  _showSnackBar('ID de usuario inválido', isError: true);
-  return;
-}
-final studentId = parts[1];
-
-      // ── Meta de sellos ───────────────────────────────────────────
       final eventDoc =
           await _firestore.collection('events').doc(eventoId).get();
-
       if (eventDoc.exists) {
-        final eventData = eventDoc.data()!;
-        final filialId = eventData['filialId']?.toString();
-        final facultad = eventData['facultad']?.toString();
-        final carreraId = eventData['carreraId']?.toString();
+        final ed = eventDoc.data()!;
+        final filialId = ed['filialId']?.toString();
+        final facultad = ed['facultad']?.toString();
+        final carreraId = ed['carreraId']?.toString();
 
         if (filialId != null && facultad != null && carreraId != null) {
           final docId =
-              '${filialId}_${facultad}_${carreraId}_$eventoId'
-                  .replaceAll(' ', '_');
-
-          final doc = await _firestore
+              '${filialId}_${facultad}_${carreraId}_$eventoId'.replaceAll(' ', '_');
+          final configDoc = await _firestore
               .collection('sellos_asistencia')
               .doc(docId)
               .get();
 
-          if (doc.exists) {
-            final m = doc.data()!['meta'];
-            if (m is int && m > 0) {
+          if (configDoc.exists) {
+            final m = configDoc.data()!['meta'];
+            if (m is int && m > 0)
               meta = m;
-            } else if (m == 'libre') {
-              meta = -1;
-            }
+            else if (m is double && m > 0) meta = m.toInt();
           }
         }
       }
-
-      // ── Asistencias personales del estudiante ────────────────────
-      final asistenciasPersonalesSnap = await _firestore
-          .collection('events')
-          .doc(eventoId)
-          .collection('asistencias_personales')
-          .get();
-
-      for (final asistenciaDoc in asistenciasPersonalesSnap.docs) {
-        final asistenciaId = asistenciaDoc.id;
-        final asistenciaData = asistenciaDoc.data();
-
-        final registroDoc = await _firestore
-            .collection('events')
-            .doc(eventoId)
-            .collection('asistencias_personales')
-            .doc(asistenciaId)
-            .collection('registros')
-            .doc(studentId)
-            .get();
-
-        if (registroDoc.exists) {
-          final registroData = registroDoc.data()!;
-          asistenciasPersonales.add({
-            'id': registroDoc.id,
-            'asistenciaId': asistenciaId,
-            'asistenciaNombre': registroData['asistenciaNombre'] ??
-                asistenciaData['nombre'] ??
-                'Asistencia personal',
-            'asistenciaTipo': registroData['asistenciaTipo'] ??
-                asistenciaData['tipo'] ??
-                'Asistencia Personal',
-            'timestamp': registroData['timestamp'],
-            'eventId': eventoId,
-            'eventName': nombre,
-            'type': 'asistencia_personal',
-            'qrId': registroData['qrId'],
-          });
-        }
-      }
-
-      asistenciasPersonales.sort((a, b) {
-        final tA = (a['timestamp'] as Timestamp?)?.toDate();
-        final tB = (b['timestamp'] as Timestamp?)?.toDate();
-        if (tA == null || tB == null) return 0;
-        return tB.compareTo(tA);
-      });
     } catch (e) {
-      debugPrint('Error cargando detalle del evento: $e');
+      debugPrint('Error cargando meta de sellos: $e');
     }
 
-    // Auto-seleccionar tab: si no hay scans de proyectos pero sí personales,
-    // mostrar directamente el tab de personales.
-    final tabInicial =
-        asistencias.isEmpty && asistenciasPersonales.isNotEmpty ? 1 : 0;
+    scans.sort((a, b) {
+      final tA = (a['timestamp'] as Timestamp?)?.toDate();
+      final tB = (b['timestamp'] as Timestamp?)?.toDate();
+      if (tA == null || tB == null) return 0;
+      return tB.compareTo(tA);
+    });
+    personales.sort((a, b) {
+      final tA = (a['timestamp'] as Timestamp?)?.toDate();
+      final tB = (b['timestamp'] as Timestamp?)?.toDate();
+      if (tA == null || tB == null) return 0;
+      return tB.compareTo(tA);
+    });
+
+    final tabInicial = scans.isEmpty && personales.isNotEmpty ? 1 : 0;
 
     setState(() {
       _eventoSeleccionadoId = eventoId;
       _eventoSeleccionadoNombre = nombre;
-      _asistenciasDelEvento = asistencias
-        ..sort((a, b) {
-          final tA = (a['timestamp'] as Timestamp?)?.toDate();
-          final tB = (b['timestamp'] as Timestamp?)?.toDate();
-          if (tA == null || tB == null) return 0;
-          return tB.compareTo(tA);
-        });
+      _asistenciasDelEvento = scans;
+      _asistenciasPersonalesDelEvento = personales;
       _metaSellos = meta;
-      _asistenciasPersonalesDelEvento = asistenciasPersonales;
       _tabSeleccionado = tabInicial;
     });
 
@@ -508,41 +347,39 @@ final studentId = parts[1];
       ..forward();
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // HELPERS
-  // ═══════════════════════════════════════════════════════════════
-
   void _showSnackBar(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              isError ? Icons.error_outline : Icons.check_circle_outline,
-              color: Colors.white,
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
+        content: Row(children: [
+          Icon(
+            isError ? Icons.error_outline : Icons.check_circle_outline,
+            color: Colors.white,
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Text(message)),
+        ]),
         backgroundColor:
             isError ? Colors.red.shade600 : Colors.green.shade600,
         behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 3),
       ),
     );
   }
 
   Color _getColorByCategoria(String? categoria) {
-    if (categoria == null || categoria.isEmpty)
-      return const Color(0xFF5A6C7D);
+    if (categoria == null || categoria.isEmpty) return const Color(0xFF5A6C7D);
     const colors = [
-      Color(0xFF2563EB), Color(0xFF059669), Color(0xFFD97706),
-      Color(0xFF7C3AED), Color(0xFF0891B2), Color(0xFF4F46E5),
-      Color(0xFF6366F1), Color(0xFF0D9488), Color(0xFF1E40AF),
+      Color(0xFF2563EB),
+      Color(0xFF059669),
+      Color(0xFFD97706),
+      Color(0xFF7C3AED),
+      Color(0xFF0891B2),
+      Color(0xFF4F46E5),
+      Color(0xFF6366F1),
+      Color(0xFF0D9488),
+      Color(0xFF1E40AF),
       Color(0xFF15803D),
     ];
     return colors[categoria.hashCode.abs() % colors.length];
@@ -553,16 +390,14 @@ final studentId = parts[1];
     final c = categoria.toLowerCase();
     if (c.contains('revisión') || c.contains('revision'))
       return Icons.library_books;
-    if (c.contains('empírico') || c.contains('empirico'))
-      return Icons.science;
+    if (c.contains('empírico') || c.contains('empirico')) return Icons.science;
     if (c.contains('innovación') ||
         c.contains('innovacion') ||
         c.contains('tecnológica')) return Icons.lightbulb;
     if (c.contains('narrativa')) return Icons.auto_stories;
     if (c.contains('descriptiv')) return Icons.description;
     if (c.contains('experimental')) return Icons.biotech;
-    if (c.contains('teóric') || c.contains('teorico'))
-      return Icons.psychology;
+    if (c.contains('teóric') || c.contains('teorico')) return Icons.psychology;
     if (c.contains('cualitativ')) return Icons.forum;
     if (c.contains('cuantitativ')) return Icons.analytics;
     return Icons.assignment;
@@ -580,137 +415,145 @@ final studentId = parts[1];
         v != 'null';
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // BUILD
-  // ═══════════════════════════════════════════════════════════════
+  List<Map<String, dynamic>> get _todosLosSellos {
+    final List<Map<String, dynamic>> todos = [];
+
+    for (final s in _asistenciasDelEvento) {
+      todos.add({...s, 'tipoSello': 'proyecto'});
+    }
+    for (final p in _asistenciasPersonalesDelEvento) {
+      todos.add({...p, 'tipoSello': 'personal'});
+    }
+
+    todos.sort((a, b) {
+      final tA = (a['timestamp'] as Timestamp?)?.toDate();
+      final tB = (b['timestamp'] as Timestamp?)?.toDate();
+      if (tA == null || tB == null) return 0;
+      return tB.compareTo(tA);
+    });
+
+    return todos;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF1E3A5F),
       body: SafeArea(
-        child: Column(
-          children: [
-            // ── Header ───────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back,
-                        color: Colors.white, size: 28),
-                    onPressed: _eventoSeleccionadoId != null
-                        ? _volverASeleccion
-                        : () => Navigator.of(context).pop(),
-                    tooltip: _eventoSeleccionadoId != null
-                        ? 'Volver a eventos'
-                        : 'Volver',
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.verified_user,
-                        color: Color(0xFF1E3A5F), size: 30),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Mis Asistencias',
-                          style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white),
-                        ),
-                        if (_eventoSeleccionadoNombre != null)
-                          Text(
-                            _eventoSeleccionadoNombre!,
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.white.withValues(alpha: 0.8)),
-                            overflow: TextOverflow.ellipsis,
-                          )
-                        else if (_currentUserName != null)
-                          Text(
-                            _currentUserName!,
-                            style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.white.withValues(alpha: 0.8)),
-                          ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.refresh,
-                        color: Colors.white, size: 28),
-                    onPressed: _cargarMisAsistencias,
-                    tooltip: 'Actualizar',
-                  ),
-                ],
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Row(children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+                onPressed: _eventoSeleccionadoId != null
+                    ? _volverASeleccion
+                    : () => Navigator.of(context).pop(),
+                tooltip:
+                    _eventoSeleccionadoId != null ? 'Volver a eventos' : 'Volver',
               ),
-            ),
-
-            Expanded(
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFFE8EDF2),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(30),
-                    topRight: Radius.circular(30),
-                  ),
+              const SizedBox(width: 8),
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: _currentUserId == null
-                    ? const Center(child: CircularProgressIndicator())
-                    : _isLoadingAsistencias
-                        ? const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                CircularProgressIndicator(
-                                    color: Color(0xFF1E3A5F)),
-                                SizedBox(height: 16),
-                                Text('Cargando tus asistencias...',
-                                    style: TextStyle(
-                                        color: Color(0xFF64748B),
-                                        fontSize: 14)),
-                              ],
-                            ),
-                          )
-                        : _eventoSeleccionadoId == null
-                            ? _buildPantallaSeleccionEvento()
-                            : _buildPantallaEvento(),
+                child: const Icon(Icons.verified_user,
+                    color: Color(0xFF1E3A5F), size: 30),
               ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Mis Asistencias',
+                      style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (_eventoSeleccionadoNombre != null)
+                      Text(
+                        _eventoSeleccionadoNombre!,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withValues(alpha: 0.8)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    else if (_currentUserName != null)
+                      Text(
+                        _currentUserName!,
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withValues(alpha: 0.8)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh, color: Colors.white, size: 28),
+                onPressed: _cargarEventosYAsistencias,
+                tooltip: 'Actualizar',
+              ),
+            ]),
+          ),
+          Expanded(
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFFE8EDF2),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(30),
+                  topRight: Radius.circular(30),
+                ),
+              ),
+              child: _currentUserId == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : _isLoadingEventos
+                      ? const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircularProgressIndicator(
+                                  color: Color(0xFF1E3A5F)),
+                              SizedBox(height: 16),
+                              Text(
+                                'Cargando tus asistencias...',
+                                style: TextStyle(
+                                    color: Color(0xFF64748B), fontSize: 14),
+                              ),
+                            ],
+                          ),
+                        )
+                      : _eventoSeleccionadoId == null
+                          ? _buildPantallaSeleccionEvento()
+                          : _buildPantallaEvento(),
             ),
-          ],
-        ),
+          ),
+        ]),
       ),
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // PANTALLA: SELECCIÓN DE EVENTO
-  // ═══════════════════════════════════════════════════════════════
-
   Widget _buildPantallaSeleccionEvento() {
-    if (_eventosConAsistencias.isEmpty) {
+    if (_todosLosEventos.isEmpty) {
       return Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(40),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.event_available,
-                  size: 80, color: Colors.grey.shade400),
+              Icon(Icons.event_available, size: 80, color: Colors.grey.shade400),
               const SizedBox(height: 24),
               const Text(
-                'No tienes asistencias registradas',
+                'No hay eventos disponibles',
                 style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -719,20 +562,18 @@ final studentId = parts[1];
               ),
               const SizedBox(height: 12),
               Text(
-                'Escanea un código QR para registrar tu primera asistencia',
-                style:
-                    TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                'No hay eventos registrados para tu carrera',
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 32),
               OutlinedButton.icon(
-                onPressed: _cargarMisAsistencias,
+                onPressed: _cargarEventosYAsistencias,
                 icon: const Icon(Icons.refresh),
                 label: const Text('Reintentar'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF1E3A5F),
-                  side: const BorderSide(
-                      color: Color(0xFF1E3A5F), width: 2),
+                  side: const BorderSide(color: Color(0xFF1E3A5F), width: 2),
                   padding: const EdgeInsets.symmetric(
                       horizontal: 32, vertical: 16),
                   shape: RoundedRectangleBorder(
@@ -750,7 +591,6 @@ final studentId = parts[1];
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Info card
           Container(
             margin: const EdgeInsets.only(bottom: 20),
             padding: const EdgeInsets.all(16),
@@ -762,64 +602,63 @@ final studentId = parts[1];
               ),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.touch_app,
-                      color: Colors.white, size: 22),
+            child: Row(children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Elige un evento',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        'Selecciona el evento para ver tus asistencias',
-                        style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.8),
-                            fontSize: 12),
-                      ),
-                    ],
-                  ),
+                child:
+                    const Icon(Icons.touch_app, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Eventos de tu carrera',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Selecciona un evento para ver tus asistencias',
+                      style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          fontSize: 12),
+                    ),
+                  ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${_eventosConAsistencias.length} evento${_eventosConAsistencias.length != 1 ? 's' : ''}',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600),
-                  ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-              ],
-            ),
+                child: Text(
+                  '${_todosLosEventos.length} evento${_todosLosEventos.length != 1 ? 's' : ''}',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+            ]),
           ),
-
-          // Lista de eventos
-          ...List.generate(_eventosConAsistencias.length, (index) {
-            final evento = _eventosConAsistencias[index];
+          ...List.generate(_todosLosEventos.length, (index) {
+            final evento = _todosLosEventos[index];
             final eventDate =
                 (evento['eventDate'] as Timestamp?)?.toDate();
-            final totalAsistencias =
-                (evento['asistencias'] as List).length;
+            final scans = (evento['asistencias'] as List);
+            final personales = (evento['asistenciasPersonales'] as List);
+            final totalSellos = scans.length + personales.length;
+            final tieneAsistencia = totalSellos > 0;
 
             return TweenAnimationBuilder<double>(
               tween: Tween(begin: 0, end: 1),
@@ -837,6 +676,12 @@ final studentId = parts[1];
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
+                        border: tieneAsistencia
+                            ? Border.all(
+                                color: const Color(0xFF059669)
+                                    .withValues(alpha: 0.4),
+                                width: 1.5)
+                            : null,
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.05),
@@ -845,71 +690,83 @@ final studentId = parts[1];
                           ),
                         ],
                       ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 52,
-                            height: 52,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1E3A5F)
-                                  .withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: const Icon(Icons.event,
-                                color: Color(0xFF1E3A5F), size: 26),
+                      child: Row(children: [
+                        Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: tieneAsistencia
+                                ? const Color(0xFF059669).withValues(alpha: 0.12)
+                                : const Color(0xFF1E3A5F).withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  evento['eventName'],
-                                  style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF1E3A5F)),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    if (eventDate != null) ...[
-                                      Icon(Icons.calendar_today,
-                                          size: 12,
-                                          color: Colors.grey.shade500),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '${eventDate.day}/${eventDate.month}/${eventDate.year}',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey.shade500),
-                                      ),
-                                      const SizedBox(width: 10),
-                                    ],
-                                    Icon(Icons.workspace_premium,
-                                        size: 12,
-                                        color: Colors.amber.shade600),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '$totalAsistencias sello${totalAsistencias != 1 ? 's' : ''}',
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.amber.shade700,
-                                          fontWeight: FontWeight.w600),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
+                          child: Icon(
+                            tieneAsistencia
+                                ? Icons.event_available
+                                : Icons.event,
+                            color: tieneAsistencia
+                                ? const Color(0xFF059669)
+                                : const Color(0xFF1E3A5F),
+                            size: 26,
                           ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.chevron_right,
-                              color: Color(0xFF1E3A5F)),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                evento['eventName']?.toString() ?? 'Sin nombre',
+                                style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1E3A5F)),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Row(children: [
+                                if (eventDate != null) ...[
+                                  Icon(Icons.calendar_today,
+                                      size: 12, color: Colors.grey.shade500),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${eventDate.day}/${eventDate.month}/${eventDate.year}',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade500),
+                                  ),
+                                  const SizedBox(width: 10),
+                                ],
+                                Icon(Icons.workspace_premium,
+                                    size: 12,
+                                    color: tieneAsistencia
+                                        ? Colors.amber.shade600
+                                        : Colors.grey.shade400),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    tieneAsistencia
+                                        ? '$totalSellos sello${totalSellos != 1 ? 's' : ''}'
+                                        : 'Sin asistencias aún',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: tieneAsistencia
+                                            ? Colors.amber.shade700
+                                            : Colors.grey.shade400,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ]),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.chevron_right,
+                            color: Color(0xFF1E3A5F)),
+                      ]),
                     ),
                   ),
                 ),
@@ -921,16 +778,12 @@ final studentId = parts[1];
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // PANTALLA: DETALLE DEL EVENTO CON TABS
-  // ═══════════════════════════════════════════════════════════════
-
   Widget _buildPantallaEvento() {
     final tieneProyectos = _asistenciasDelEvento.isNotEmpty;
     final tienePersonales = _asistenciasPersonalesDelEvento.isNotEmpty;
 
     return RefreshIndicator(
-      onRefresh: _cargarMisAsistencias,
+      onRefresh: _cargarEventosYAsistencias,
       color: const Color(0xFF1E3A5F),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -941,14 +794,13 @@ final studentId = parts[1];
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildBannerAcademico(),
+              _buildColeccionSellos(),
               _buildTabs(tieneProyectos, tienePersonales),
               const SizedBox(height: 16),
-
               if (_tabSeleccionado == 0) ...[
-                if (tieneProyectos) ...[
-                  _buildColeccionSellos(),
-                  _buildHistorialCard(),
-                ] else
+                if (tieneProyectos)
+                  _buildHistorialCard()
+                else
                   _buildEstadoVacio(
                     icon: Icons.workspace_premium_outlined,
                     titulo: 'Sin sellos de proyectos',
@@ -961,12 +813,11 @@ final studentId = parts[1];
                 else
                   _buildEstadoVacio(
                     icon: Icons.how_to_reg_outlined,
-                    titulo: 'Sin asistencias generales',
+                    titulo: 'Sin asistencias personales',
                     subtitulo:
                         'Aún no has registrado ninguna asistencia personal en este evento',
                   ),
               ],
-
               const SizedBox(height: 20),
             ],
           ),
@@ -974,8 +825,6 @@ final studentId = parts[1];
       ),
     );
   }
-
-  // ── Tabs ───────────────────────────────────────────────────────
 
   Widget _buildTabs(bool tieneProyectos, bool tienePersonales) {
     return Container(
@@ -991,45 +840,43 @@ final studentId = parts[1];
         ],
       ),
       padding: const EdgeInsets.all(6),
-      child: Row(
-        children: [
-          // Tab Proyectos
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _tabSeleccionado = 0),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeInOut,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: _tabSeleccionado == 0
-                      ? const Color(0xFF1E3A5F)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.workspace_premium,
+      child: Row(children: [
+        Expanded(
+          child: GestureDetector(
+            onTap: () => setState(() => _tabSeleccionado = 0),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: _tabSeleccionado == 0
+                    ? const Color(0xFF1E3A5F)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.workspace_premium,
                       size: 18,
                       color: _tabSeleccionado == 0
                           ? Colors.amber
-                          : Colors.grey.shade500,
-                    ),
-                    const SizedBox(width: 6),
-                    Column(
+                          : Colors.grey.shade500),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           'Proyectos',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: _tabSeleccionado == 0
-                                ? Colors.white
-                                : Colors.grey.shade600,
-                          ),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: _tabSeleccionado == 0
+                                  ? Colors.white
+                                  : Colors.grey.shade600),
                         ),
                         if (tieneProyectos)
                           Container(
@@ -1045,59 +892,57 @@ final studentId = parts[1];
                             child: Text(
                               '${_asistenciasDelEvento.length}',
                               style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: _tabSeleccionado == 0
-                                    ? const Color(0xFF1E3A5F)
-                                    : Colors.amber.shade800,
-                              ),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: _tabSeleccionado == 0
+                                      ? const Color(0xFF1E3A5F)
+                                      : Colors.amber.shade800),
                             ),
                           ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
-
-          // Tab Asistencias Personales
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _tabSeleccionado = 1),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeInOut,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: _tabSeleccionado == 1
-                      ? Colors.deepPurple.shade600
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.how_to_reg_rounded,
+        ),
+        Expanded(
+          child: GestureDetector(
+            onTap: () => setState(() => _tabSeleccionado = 1),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: _tabSeleccionado == 1
+                    ? Colors.deepPurple.shade600
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.how_to_reg_rounded,
                       size: 18,
                       color: _tabSeleccionado == 1
                           ? Colors.white
-                          : Colors.grey.shade500,
-                    ),
-                    const SizedBox(width: 6),
-                    Column(
+                          : Colors.grey.shade500),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           'Personales',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: _tabSeleccionado == 1
-                                ? Colors.white
-                                : Colors.grey.shade600,
-                          ),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: _tabSeleccionado == 1
+                                  ? Colors.white
+                                  : Colors.grey.shade600),
                         ),
                         if (tienePersonales)
                           Container(
@@ -1107,34 +952,30 @@ final studentId = parts[1];
                             decoration: BoxDecoration(
                               color: _tabSeleccionado == 1
                                   ? Colors.white.withValues(alpha: 0.3)
-                                  : Colors.deepPurple
-                                      .withValues(alpha: 0.15),
+                                  : Colors.deepPurple.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
                               '${_asistenciasPersonalesDelEvento.length}',
                               style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: _tabSeleccionado == 1
-                                    ? Colors.white
-                                    : Colors.deepPurple.shade700,
-                              ),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: _tabSeleccionado == 1
+                                      ? Colors.white
+                                      : Colors.deepPurple.shade700),
                             ),
                           ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
-
-  // ── Estado vacío ───────────────────────────────────────────────
 
   Widget _buildEstadoVacio({
     required IconData icon,
@@ -1144,35 +985,27 @@ final studentId = parts[1];
     return Container(
       padding: const EdgeInsets.all(40),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 64, color: Colors.grey.shade300),
-          const SizedBox(height: 16),
-          Text(
-            titulo,
-            style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF1E3A5F)),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            subtitulo,
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
+          color: Colors.white, borderRadius: BorderRadius.circular(20)),
+      child: Column(children: [
+        Icon(icon, size: 64, color: Colors.grey.shade300),
+        const SizedBox(height: 16),
+        Text(
+          titulo,
+          style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF1E3A5F)),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          subtitulo,
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+          textAlign: TextAlign.center,
+        ),
+      ]),
     );
   }
-
-  // ═══════════════════════════════════════════════════════════════
-  // BANNER ACADÉMICO
-  // ═══════════════════════════════════════════════════════════════
 
   Widget _buildBannerAcademico() {
     if (_studentFilial == null && _studentFacultad == null) {
@@ -1198,24 +1031,27 @@ final studentId = parts[1];
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(10)),
-                child:
-                    const Icon(Icons.school, color: Colors.white, size: 20),
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.school, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Mi Información Académica',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold),
               ),
-              const SizedBox(width: 10),
-              const Text('Mi Información Académica',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold)),
-            ],
-          ),
+            ),
+          ]),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -1272,28 +1108,31 @@ final studentId = parts[1];
           const SizedBox(width: 5),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 120),
-            child: Text(label,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600),
-                overflow: TextOverflow.ellipsis),
+            child: Text(
+              label,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // TAB 0: COLECCIÓN DE SELLOS
-  // ═══════════════════════════════════════════════════════════════
-
   Widget _buildColeccionSellos() {
-    final totalGanados = _asistenciasDelEvento.length;
+    final sellos = _todosLosSellos;
+    final totalGanados = sellos.length;
     final metaFija = _metaSellos != null && _metaSellos! > 0;
     final meta = metaFija ? _metaSellos! : 0;
     final totalCeldas =
         metaFija ? math.max(meta, totalGanados) : totalGanados;
+
+    final tieneProyectos = _asistenciasDelEvento.isNotEmpty;
+    final tienePersonales = _asistenciasPersonalesDelEvento.isNotEmpty;
 
     return AnimatedOpacity(
       opacity: 1.0,
@@ -1316,6 +1155,7 @@ final studentId = parts[1];
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
                   padding: const EdgeInsets.all(10),
@@ -1328,12 +1168,17 @@ final studentId = parts[1];
                 ),
                 const SizedBox(width: 12),
                 const Expanded(
-                  child: Text('Mis Sellos',
-                      style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E3A5F))),
+                  child: Text(
+                    'Mis Sellos',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E3A5F)),
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 8),
@@ -1345,8 +1190,7 @@ final studentId = parts[1];
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.star,
-                          color: Colors.amber, size: 16),
+                      const Icon(Icons.star, color: Colors.amber, size: 16),
                       const SizedBox(width: 6),
                       Text(
                         metaFija
@@ -1362,17 +1206,39 @@ final studentId = parts[1];
                 ),
               ],
             ),
-
+            if (tieneProyectos || tienePersonales) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  if (tieneProyectos)
+                    _buildLeyendaChip(
+                        color: Colors.amber.shade600,
+                        icon: Icons.workspace_premium,
+                        label:
+                            '${_asistenciasDelEvento.length} Proyectos'),
+                  if (tienePersonales)
+                    _buildLeyendaChip(
+                        color: Colors.deepPurple.shade600,
+                        icon: Icons.how_to_reg_rounded,
+                        label:
+                            '${_asistenciasPersonalesDelEvento.length} Personal'),
+                ],
+              ),
+            ],
             if (metaFija) ...[
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Progreso',
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                          fontWeight: FontWeight.w500)),
+                  Text(
+                    'Progreso',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500),
+                  ),
                   Text(
                     '${((totalGanados / meta) * 100).clamp(0, 100).toStringAsFixed(0)}%',
                     style: const TextStyle(
@@ -1405,9 +1271,7 @@ final studentId = parts[1];
                 ),
               ],
             ],
-
             const SizedBox(height: 20),
-
             if (totalCeldas == 0)
               Container(
                 padding: const EdgeInsets.all(40),
@@ -1415,18 +1279,19 @@ final studentId = parts[1];
                     color: const Color(0xFFF5F5F5),
                     borderRadius: BorderRadius.circular(16)),
                 child: Center(
-                  child: Column(
-                    children: [
-                      Icon(Icons.workspace_premium_outlined,
-                          size: 64, color: Colors.grey.shade400),
-                      const SizedBox(height: 16),
-                      Text('Aún no tienes sellos en este evento',
-                          style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey.shade700,
-                              fontWeight: FontWeight.w600)),
-                    ],
-                  ),
+                  child: Column(children: [
+                    Icon(Icons.workspace_premium_outlined,
+                        size: 64, color: Colors.grey.shade400),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Aún no tienes sellos en este evento',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ]),
                 ),
               )
             else
@@ -1448,24 +1313,17 @@ final studentId = parts[1];
                     duration: Duration(
                         milliseconds:
                             esGanado ? 300 + (index * 50) : 200),
-                    curve: esGanado
-                        ? Curves.elasticOut
-                        : Curves.easeOut,
+                    curve:
+                        esGanado ? Curves.elasticOut : Curves.easeOut,
                     builder: (ctx, val, _) => Transform.scale(
                       scale: val,
                       child: esGanado
-                          ? Hero(
-                              tag:
-                                  'sello_${_asistenciasDelEvento[index]['id']}',
-                              child: _buildSelloGanado(
-                                  _asistenciasDelEvento[index]),
-                            )
+                          ? _buildSelloGanado(sellos[index])
                           : _buildSelloVacio(index + 1),
                     ),
                   );
                 },
               ),
-
             if (totalGanados > 0) ...[
               const SizedBox(height: 20),
               Container(
@@ -1476,41 +1334,38 @@ final studentId = parts[1];
                     Colors.orange.shade50
                   ]),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: Colors.amber.shade200, width: 2),
+                  border:
+                      Border.all(color: Colors.amber.shade200, width: 2),
                 ),
-                child: Row(
-                  children: [
-                    Icon(Icons.celebration,
-                        color: Colors.amber.shade700, size: 24),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            metaFija && totalGanados >= meta
-                                ? '¡Meta completada!'
-                                : '¡Excelente trabajo!',
-                            style: TextStyle(
-                                color: Colors.amber.shade900,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            metaFija
-                                ? 'Has ganado $totalGanados de $meta sellos'
-                                : 'Has ganado $totalGanados sello${totalGanados == 1 ? '' : 's'}',
-                            style: TextStyle(
-                                color: Colors.amber.shade800,
-                                fontSize: 13),
-                          ),
-                        ],
-                      ),
+                child: Row(children: [
+                  Icon(Icons.celebration,
+                      color: Colors.amber.shade700, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          metaFija && totalGanados >= meta
+                              ? '¡Meta completada!'
+                              : '¡Excelente trabajo!',
+                          style: TextStyle(
+                              color: Colors.amber.shade900,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          metaFija
+                              ? 'Has ganado $totalGanados de $meta sellos'
+                              : 'Has ganado $totalGanados sello${totalGanados == 1 ? '' : 's'}',
+                          style: TextStyle(
+                              color: Colors.amber.shade800, fontSize: 13),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ]),
               ),
             ],
           ],
@@ -1519,16 +1374,54 @@ final studentId = parts[1];
     );
   }
 
-  Widget _buildSelloGanado(Map<String, dynamic> asistencia) {
-    final timestamp =
-        (asistencia['timestamp'] as Timestamp?)?.toDate();
-    final categoria = asistencia['categoria'] ??
-        asistencia['tipoInvestigacion'] ??
-        'Sin categoría';
-    final color = _getColorByCategoria(categoria);
+  Widget _buildLeyendaChip({
+    required Color color,
+    required IconData icon,
+    required String label,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 10, color: color),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+              fontSize: 9, color: color, fontWeight: FontWeight.w700),
+        ),
+      ]),
+    );
+  }
+
+  Widget _buildSelloGanado(Map<String, dynamic> sello) {
+    final timestamp = (sello['timestamp'] as Timestamp?)?.toDate();
+    final esPersonal = sello['tipoSello'] == 'personal';
+
+    final String etiqueta;
+    final Color color;
+    final IconData icono;
+
+    if (esPersonal) {
+      etiqueta =
+          sello['asistenciaNombre']?.toString() ?? 'Asistencia personal';
+      color = Colors.deepPurple.shade600;
+      icono = Icons.how_to_reg_rounded;
+    } else {
+      final categoria =
+          (sello['categoria'] ?? sello['tipoInvestigacion'] ?? 'Sin categoría')
+              .toString();
+      etiqueta = categoria;
+      color = _getColorByCategoria(categoria);
+      icono = _getIconByCategoria(categoria);
+    }
 
     return Tooltip(
-      message: categoria,
+      message: etiqueta,
       child: Container(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
@@ -1549,49 +1442,44 @@ final studentId = parts[1];
           ],
           border: Border.all(color: color.withValues(alpha: 0.8), width: 3),
         ),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: CustomPaint(
-                  painter:
-                      SelloPainter(color: color.withValues(alpha: 0.2))),
-            ),
-            Center(
-              child: Icon(_getIconByCategoria(categoria),
-                  color: Colors.white,
-                  size: 22,
-                  shadows: [
-                    Shadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        offset: const Offset(1, 1),
-                        blurRadius: 2)
-                  ]),
-            ),
-            if (timestamp != null)
-              Positioned(
-                bottom: 6,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Text(
-                    '${timestamp.day}/${timestamp.month}',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        shadows: [
-                          Shadow(
-                              color: Colors.black54,
-                              offset: Offset(0.5, 0.5),
-                              blurRadius: 1)
-                        ]),
-                  ),
+        child: Stack(children: [
+          Positioned.fill(
+            child: CustomPaint(
+                painter:
+                    SelloPainter(color: color.withValues(alpha: 0.2))),
+          ),
+          Center(
+            child: Icon(icono, color: Colors.white, size: 22, shadows: [
+              Shadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  offset: const Offset(1, 1),
+                  blurRadius: 2)
+            ]),
+          ),
+          if (timestamp != null)
+            Positioned(
+              bottom: 6,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Text(
+                  '${timestamp.day}/${timestamp.month}',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      shadows: [
+                        Shadow(
+                            color: Colors.black54,
+                            offset: Offset(0.5, 0.5),
+                            blurRadius: 1)
+                      ]),
                 ),
               ),
-            Positioned.fill(
-                child: CustomPaint(painter: TextoCurvadoPainter())),
-          ],
-        ),
+            ),
+          Positioned.fill(
+              child: CustomPaint(painter: const TextoCurvadoPainter())),
+        ]),
       ),
     );
   }
@@ -1603,34 +1491,28 @@ final studentId = parts[1];
         color: Colors.grey.shade100,
         border: Border.all(color: Colors.grey.shade300, width: 2),
       ),
-      child: Stack(
-        children: [
-          Center(
-            child: Icon(Icons.workspace_premium_outlined,
-                size: 24, color: Colors.grey.shade300),
-          ),
-          Positioned(
-            bottom: 8,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Text(
-                '$numero',
-                style: TextStyle(
-                    color: Colors.grey.shade400,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold),
-              ),
+      child: Stack(children: [
+        Center(
+          child: Icon(Icons.workspace_premium_outlined,
+              size: 24, color: Colors.grey.shade300),
+        ),
+        Positioned(
+          bottom: 8,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Text(
+              '$numero',
+              style: TextStyle(
+                  color: Colors.grey.shade400,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold),
             ),
           ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
-
-  // ═══════════════════════════════════════════════════════════════
-  // HISTORIAL DETALLADO (proyectos)
-  // ═══════════════════════════════════════════════════════════════
 
   Widget _buildHistorialCard() {
     return Container(
@@ -1649,39 +1531,43 @@ final studentId = parts[1];
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                  color: const Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.circular(12)),
+              child:
+                  const Icon(Icons.history, color: Color(0xFF1E3A5F), size: 24),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Historial de Proyectos',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3A5F)),
+              ),
+            ),
+            if (_asistenciasDelEvento.isNotEmpty)
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                    color: const Color(0xFFF5F5F5),
-                    borderRadius: BorderRadius.circular(12)),
-                child: const Icon(Icons.history,
-                    color: Color(0xFF1E3A5F), size: 24),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text('Historial de Proyectos',
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E3A5F))),
-              ),
-              if (_asistenciasDelEvento.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                      color: const Color(0xFFE8EDF2),
-                      borderRadius: BorderRadius.circular(20)),
-                  child: Text('${_asistenciasDelEvento.length}',
-                      style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E3A5F))),
+                    color: const Color(0xFFE8EDF2),
+                    borderRadius: BorderRadius.circular(20)),
+                child: Text(
+                  '${_asistenciasDelEvento.length}',
+                  style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E3A5F)),
                 ),
-            ],
-          ),
+              ),
+          ]),
           const SizedBox(height: 20),
           ListView.separated(
             shrinkWrap: true,
@@ -1691,8 +1577,7 @@ final studentId = parts[1];
             itemBuilder: (context, index) {
               return TweenAnimationBuilder<double>(
                 tween: Tween(begin: 0, end: 1),
-                duration:
-                    Duration(milliseconds: 300 + (index * 100)),
+                duration: Duration(milliseconds: 300 + (index * 100)),
                 curve: Curves.easeOut,
                 builder: (ctx, val, _) => Transform.translate(
                   offset: Offset(0, 20 * (1 - val)),
@@ -1710,11 +1595,10 @@ final studentId = parts[1];
   }
 
   Widget _buildAsistenciaCard(Map<String, dynamic> asistencia) {
-    final timestamp =
-        (asistencia['timestamp'] as Timestamp?)?.toDate();
-    final categoria = asistencia['categoria'] ??
-        asistencia['tipoInvestigacion'] ??
-        'Sin categoría';
+    final timestamp = (asistencia['timestamp'] as Timestamp?)?.toDate();
+    final categoria =
+        (asistencia['categoria'] ?? asistencia['tipoInvestigacion'] ?? 'Sin categoría')
+            .toString();
     final codigoProyecto = asistencia['codigoProyecto'];
     final tituloProyecto = asistencia['tituloProyecto'];
     final grupo = asistencia['grupo'];
@@ -1722,6 +1606,8 @@ final studentId = parts[1];
     final hasValidCode = _esValorValido(codigoProyecto);
     final hasValidGroup = _esValorValido(grupo);
     final hasValidTitle = _esValorValido(tituloProyecto);
+
+    final maxChipWidth = MediaQuery.sizeOf(context).width * 0.7;
 
     return Container(
       decoration: BoxDecoration(
@@ -1735,13 +1621,11 @@ final studentId = parts[1];
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-            color:
-                _getColorByCategoria(categoria).withValues(alpha: 0.3),
+            color: _getColorByCategoria(categoria).withValues(alpha: 0.3),
             width: 1.5),
         boxShadow: [
           BoxShadow(
-              color: _getColorByCategoria(categoria)
-                  .withValues(alpha: 0.1),
+              color: _getColorByCategoria(categoria).withValues(alpha: 0.1),
               blurRadius: 12,
               offset: const Offset(0, 4)),
         ],
@@ -1752,68 +1636,69 @@ final studentId = parts[1];
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: _getColorByCategoria(categoria)
-                  .withValues(alpha: 0.08),
+              color:
+                  _getColorByCategoria(categoria).withValues(alpha: 0.08),
               borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(16),
                   topRight: Radius.circular(16)),
             ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                      color: _getColorByCategoria(categoria),
-                      borderRadius: BorderRadius.circular(10)),
-                  child: Icon(_getIconByCategoria(categoria),
-                      color: Colors.white, size: 22),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (hasValidCode)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(colors: [
-                              Color(0xFF1E40AF),
-                              Color(0xFF2563EB)
-                            ]),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.qr_code_2,
-                                  size: 14, color: Colors.white),
-                              const SizedBox(width: 6),
-                              Text(
+            child: Row(children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                    color: _getColorByCategoria(categoria),
+                    borderRadius: BorderRadius.circular(10)),
+                child: Icon(_getIconByCategoria(categoria),
+                    color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (hasValidCode)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(colors: [
+                            Color(0xFF1E40AF),
+                            Color(0xFF2563EB)
+                          ]),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.qr_code_2,
+                                size: 14, color: Colors.white),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
                                 codigoProyecto.toString().toUpperCase(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
                                     letterSpacing: 0.8),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
-                      color: Color(0xFF059669),
-                      shape: BoxShape.circle),
-                  child: const Icon(Icons.check,
-                      color: Colors.white, size: 18),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                    color: Color(0xFF059669), shape: BoxShape.circle),
+                child: const Icon(Icons.check, color: Colors.white, size: 18),
+              ),
+            ]),
           ),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -1824,56 +1709,74 @@ final studentId = parts[1];
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _getColorByCategoria(categoria)
-                            .withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                            color: _getColorByCategoria(categoria)
-                                .withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(_getIconByCategoria(categoria),
-                              size: 14,
-                              color: _getColorByCategoria(categoria)),
-                          const SizedBox(width: 6),
-                          Text(categoria,
-                              style: TextStyle(
-                                  color: _getColorByCategoria(categoria),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                    if (hasValidGroup)
-                      Container(
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: maxChipWidth),
+                      child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF7C3AED)
+                          color: _getColorByCategoria(categoria)
                               .withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                              color: const Color(0xFF7C3AED)
+                              color: _getColorByCategoria(categoria)
                                   .withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.group,
-                                size: 14, color: Color(0xFF7C3AED)),
+                            Icon(_getIconByCategoria(categoria),
+                                size: 14,
+                                color: _getColorByCategoria(categoria)),
                             const SizedBox(width: 6),
-                            Text(grupo.toString().toUpperCase(),
-                                style: const TextStyle(
-                                    color: Color(0xFF7C3AED),
+                            Flexible(
+                              child: Text(
+                                categoria,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    color: _getColorByCategoria(categoria),
                                     fontSize: 12,
-                                    fontWeight: FontWeight.w600)),
+                                    fontWeight: FontWeight.w600),
+                              ),
+                            ),
                           ],
+                        ),
+                      ),
+                    ),
+                    if (hasValidGroup)
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: maxChipWidth),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF7C3AED)
+                                .withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: const Color(0xFF7C3AED)
+                                    .withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.group,
+                                  size: 14, color: Color(0xFF7C3AED)),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  grupo.toString().toUpperCase(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      color: Color(0xFF7C3AED),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                   ],
@@ -1908,21 +1811,25 @@ final studentId = parts[1];
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Proyecto Presentado',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF4F46E5),
-                                      letterSpacing: 0.5)),
+                              const Text(
+                                'Proyecto Presentado',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF4F46E5),
+                                    letterSpacing: 0.5),
+                              ),
                               const SizedBox(height: 4),
-                              Text(tituloProyecto.toString(),
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: Color(0xFF312E81),
-                                      height: 1.3),
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis),
+                              Text(
+                                tituloProyecto.toString(),
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: Color(0xFF312E81),
+                                    height: 1.3),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ],
                           ),
                         ),
@@ -1949,10 +1856,6 @@ final studentId = parts[1];
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // TAB 1: ASISTENCIAS PERSONALES
-  // ═══════════════════════════════════════════════════════════════
-
   Widget _buildListaAsistenciasPersonales() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1971,66 +1874,61 @@ final studentId = parts[1];
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.how_to_reg_rounded,
-                    color: Colors.deepPurple.shade600, size: 24),
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.deepPurple.shade50,
+                borderRadius: BorderRadius.circular(12),
               ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text('Asistencias Generales',
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E3A5F))),
+              child: Icon(Icons.how_to_reg_rounded,
+                  color: Colors.deepPurple.shade600, size: 24),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Asistencias Personales',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3A5F)),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple.shade600,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '${_asistenciasPersonalesDelEvento.length}',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15),
-                ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.deepPurple.shade600,
+                borderRadius: BorderRadius.circular(20),
               ),
-            ],
-          ),
-
+              child: Text(
+                '${_asistenciasPersonalesDelEvento.length}',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15),
+              ),
+            ),
+          ]),
           const SizedBox(height: 20),
-
           ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: _asistenciasPersonalesDelEvento.length,
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              final asistencia =
-                  _asistenciasPersonalesDelEvento[index];
+              final asistencia = _asistenciasPersonalesDelEvento[index];
               final timestamp =
                   (asistencia['timestamp'] as Timestamp?)?.toDate();
               final nombre =
-                  asistencia['asistenciaNombre'] as String? ??
-                      'Asistencia personal';
+                  asistencia['asistenciaNombre'] as String? ?? 'Asistencia personal';
               final tipo =
-                  asistencia['asistenciaTipo'] as String? ??
-                      'Asistencia Personal';
+                  asistencia['asistenciaTipo'] as String? ?? 'Asistencia Personal';
 
               return TweenAnimationBuilder<double>(
                 tween: Tween(begin: 0, end: 1),
-                duration:
-                    Duration(milliseconds: 250 + (index * 80)),
+                duration: Duration(milliseconds: 250 + (index * 80)),
                 curve: Curves.easeOut,
                 builder: (ctx, val, _) => Opacity(
                   opacity: val,
@@ -2042,116 +1940,104 @@ final studentId = parts[1];
                         color: Colors.deepPurple.shade50,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: Colors.deepPurple.shade100,
-                          width: 1.5,
-                        ),
+                            color: Colors.deepPurple.shade100, width: 1.5),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.deepPurple
-                                .withValues(alpha: 0.06),
+                            color:
+                                Colors.deepPurple.withValues(alpha: 0.06),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
                         ],
                       ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.deepPurple.shade600,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: const Icon(
-                                Icons.how_to_reg_rounded,
-                                color: Colors.white,
-                                size: 22),
+                      child: Row(children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurple.shade600,
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding:
-                                          const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: Colors.deepPurple.shade600,
-                                        borderRadius:
-                                            BorderRadius.circular(6),
-                                      ),
-                                      child: const Text(
-                                        'PERSONAL',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 1,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Flexible(
-                                      child: Text(
-                                        tipo,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.deepPurple.shade400,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
+                          child: const Icon(Icons.how_to_reg_rounded,
+                              color: Colors.white, size: 22),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.deepPurple.shade600,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'PERSONAL',
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1),
+                                  ),
                                 ),
-                                const SizedBox(height: 5),
-                                Text(
-                                  nombre,
-                                  style: const TextStyle(
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    tipo,
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.deepPurple.shade400),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ]),
+                              const SizedBox(height: 5),
+                              Text(
+                                nombre,
+                                style: const TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w700,
-                                    color: Color(0xFF1E3A5F),
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if (timestamp != null) ...[
-                                  const SizedBox(height: 6),
-                                  Row(
-                                    children: [
-                                      Icon(Icons.schedule,
-                                          size: 12,
-                                          color: Colors.grey.shade500),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '${timestamp.day}/${timestamp.month}/${timestamp.year}  '
-                                        '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}',
-                                        style: TextStyle(
+                                    color: Color(0xFF1E3A5F)),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (timestamp != null) ...[
+                                const SizedBox(height: 6),
+                                Row(children: [
+                                  Icon(Icons.schedule,
+                                      size: 12,
+                                      color: Colors.grey.shade500),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      '${timestamp.day}/${timestamp.month}/${timestamp.year}  '
+                                      '${timestamp.hour.toString().padLeft(2, '0')}:'
+                                      '${timestamp.minute.toString().padLeft(2, '0')}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
                                           fontSize: 12,
-                                          color: Colors.grey.shade500,
-                                        ),
-                                      ),
-                                    ],
+                                          color: Colors.grey.shade500),
+                                    ),
                                   ),
-                                ],
+                                ]),
                               ],
-                            ),
+                            ],
                           ),
-                          Container(
-                            padding: const EdgeInsets.all(7),
-                            decoration: const BoxDecoration(
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: const BoxDecoration(
                               color: Color(0xFF059669),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.check,
-                                color: Colors.white, size: 16),
-                          ),
-                        ],
-                      ),
+                              shape: BoxShape.circle),
+                          child: const Icon(Icons.check,
+                              color: Colors.white, size: 16),
+                        ),
+                      ]),
                     ),
                   ),
                 ),
@@ -2184,16 +2070,16 @@ final studentId = parts[1];
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                      color: color)),
-              Text(value,
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: color)),
+              Text(
+                label,
+                style: TextStyle(
+                    fontSize: 9, fontWeight: FontWeight.w600, color: color),
+              ),
+              Text(
+                value,
+                style: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w600, color: color),
+              ),
             ],
           ),
         ],
@@ -2201,10 +2087,6 @@ final studentId = parts[1];
     );
   }
 }
-
-// ══════════════════════════════════════════════════════════════════
-// PAINTERS
-// ══════════════════════════════════════════════════════════════════
 
 class SelloPainter extends CustomPainter {
   final Color color;
@@ -2219,11 +2101,9 @@ class SelloPainter extends CustomPainter {
     final radius = size.width / 2;
     for (int i = 0; i < 12; i++) {
       final angle = (i * 30) * (3.14159 / 180);
-      final start = Offset(
-          center.dx + radius * 0.6 * math.cos(angle),
+      final start = Offset(center.dx + radius * 0.6 * math.cos(angle),
           center.dy + radius * 0.6 * math.sin(angle));
-      final end = Offset(
-          center.dx + radius * 0.9 * math.cos(angle),
+      final end = Offset(center.dx + radius * 0.9 * math.cos(angle),
           center.dy + radius * 0.9 * math.sin(angle));
       canvas.drawLine(start, end, paint..strokeWidth = 2);
     }

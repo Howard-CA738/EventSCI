@@ -17,7 +17,6 @@ class AsistenciasCarreraExcelService {
   static const _white      = '#FFFFFF';
   static const _gray900    = '#111827';
   static const _gray700    = '#374151';
-  static const _gray400    = '#9CA3AF';
   static const _gray100    = '#F3F4F6';
   static const _greenDark  = '#166534';
   static const _greenLight = '#DCFCE7';

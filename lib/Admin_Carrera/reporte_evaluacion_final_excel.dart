@@ -69,15 +69,12 @@ class NotaFinalItem {
 class ReporteEvaluacionFinalExcelService {
 
   // ── Paleta ─────────────────────────────────────────────────────────────────
-  static const _navy      = '#0F2342';
   static const _cobalt    = '#1A3A6E';
   static const _teal      = '#0F9D58';
   static const _tealLight = '#D7F5E6';
   static const _tealDark  = '#065F46';
   static const _purple    = '#7C3AED';
   static const _blue      = '#2563EB';
-  static const _blueL     = '#DBEAFE';
-  static const _blueText  = '#1E40AF';
   static const _orange    = '#D97706';
   static const _gray900   = '#111827';
   static const _gray700   = '#374151';

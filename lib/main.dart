@@ -5,13 +5,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:app_links/app_links.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'dart:async';
-import '/admin_carrera/admin_carrera_screen.dart';
+import '/admin_carrera/interfaz/admin_carrera_screen.dart';
 import 'dart:convert';
 import 'firebase_options.dart';
 import '/login.dart';
 import '/admin/logica/admin.dart';
 import '/usuarios/logica/estudiante.dart';
-import '/Asistentes/asistentes.dart';
 import '/Jurados/jurados.dart';
 import '/prefs_helper.dart';
 import '/super_admin_login.dart';
@@ -185,7 +184,6 @@ class _MyAppState extends State<MyApp> {
         '/login': (context) => const LoginScreen(),
         '/admin': (context) => const AdminScreen(),
         '/estudiante': (context) => const EstudianteScreen(),
-        '/asistente': (context) => const AsistentesScreen(),
         '/jurado': (context) => const JuradosScreen(),
         '/registro-asistencia': (context) => RegistroAsistenciaScreen(
               qrData: ModalRoute.of(context)?.settings.arguments

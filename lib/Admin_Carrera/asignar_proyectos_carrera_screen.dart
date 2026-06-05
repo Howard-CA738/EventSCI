@@ -3,8 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 import '/admin/logica/gestion_criterios.dart';
 
-/// Versión mejorada de AsignarProyectos para Admin de Carrera.
-/// Carga filial/facultad/carrera automáticamente desde la sesión.
 class AsignarProyectosCarreraScreen extends StatefulWidget {
   const AsignarProyectosCarreraScreen({super.key});
 
@@ -19,14 +17,12 @@ class _AsignarProyectosCarreraScreenState
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final RubricasService _rubricasService = RubricasService();
 
-  // ── Datos de sesión ──────────────────────────────────────────────────────
   String? _filialId;
   String? _filialNombre;
   String? _facultad;
   String? _carreraId;
   String? _carreraNombre;
 
-  // ── Selección paso a paso ────────────────────────────────────────────────
   String? _eventoSeleccionado;
   Map<String, dynamic>? _eventoData;
   String? _juradoSeleccionado;
@@ -49,7 +45,6 @@ class _AsignarProyectosCarreraScreenState
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
-  // Paleta de colores para categorías — más suave y profesional
   static const _categoryColors = [
     Color(0xFF3B6FD4),
     Color(0xFF2E9E6E),
@@ -72,7 +67,6 @@ class _AsignarProyectosCarreraScreenState
       parent: _fadeController,
       curve: Curves.easeOut,
     );
-    _fadeController.forward();
     _loadSessionData();
   }
 
@@ -82,31 +76,35 @@ class _AsignarProyectosCarreraScreenState
     super.dispose();
   }
 
-  // ── Carga sesión ─────────────────────────────────────────────────────────
   Future<void> _loadSessionData() async {
-    setState(() => _isLoadingSession = true);
+    if (mounted) setState(() => _isLoadingSession = true);
     try {
       final adminData = await PrefsHelper.getAdminCarreraData();
       if (adminData != null) {
-        _filialId = adminData['filial'];
-        _filialNombre = adminData['filialNombre'];
-        _facultad = adminData['facultad'];
-        _carreraId = adminData['carreraId'] ?? adminData['carrera'];
+        _filialId      = adminData['filial'];
+        _filialNombre  = adminData['filialNombre'];
+        _facultad      = adminData['facultad'];
+        _carreraId     = adminData['carreraId'] ?? adminData['carrera'];
         _carreraNombre = adminData['carrera'];
+      } else {
+        _showSnackBar('No se encontraron datos de sesión', isError: true);
       }
     } catch (e) {
       debugPrint('Error cargando sesión: $e');
       _showSnackBar('Error al cargar datos de la sesión', isError: true);
     } finally {
-      setState(() => _isLoadingSession = false);
+      if (mounted) {
+        setState(() => _isLoadingSession = false);
+        _fadeController.forward();
+      }
     }
   }
 
   Stream<QuerySnapshot> _buildEventsQuery() {
     return _firestore
         .collection('events')
-        .where('filialId', isEqualTo: _filialId)
-        .where('facultad', isEqualTo: _facultad)
+        .where('filialId',  isEqualTo: _filialId)
+        .where('facultad',  isEqualTo: _facultad)
         .where('carreraId', isEqualTo: _carreraId)
         .orderBy('createdAt', descending: true)
         .snapshots();
@@ -117,44 +115,44 @@ class _AsignarProyectosCarreraScreenState
     eventoData['id'] = eventoId;
     setState(() {
       _eventoSeleccionado = eventoId;
-      _eventoData = eventoData;
+      _eventoData         = eventoData;
       _juradoSeleccionado = null;
-      _juradoData = null;
-      _rubricasDelJurado = [];
+      _juradoData         = null;
+      _rubricasDelJurado  = [];
       _rubricaSeleccionada = null;
       _proyectosSeleccionados.clear();
       _proyectosDisponibles.clear();
       _proyectosPorCategoria.clear();
       _juradosDisponibles = [];
-      _modoEdicion = false;
+      _modoEdicion        = false;
     });
     await _cargarJuradosParaEvento();
   }
 
   void _deseleccionarEvento() {
     setState(() {
-      _eventoSeleccionado = null;
-      _eventoData = null;
-      _juradoSeleccionado = null;
-      _juradoData = null;
-      _rubricasDelJurado = [];
+      _eventoSeleccionado  = null;
+      _eventoData          = null;
+      _juradoSeleccionado  = null;
+      _juradoData          = null;
+      _rubricasDelJurado   = [];
       _rubricaSeleccionada = null;
       _proyectosSeleccionados.clear();
       _proyectosDisponibles.clear();
       _proyectosPorCategoria.clear();
-      _juradosDisponibles = [];
-      _modoEdicion = false;
+      _juradosDisponibles  = [];
+      _modoEdicion         = false;
     });
   }
 
   Future<void> _cargarJuradosParaEvento() async {
     if (_eventoData == null) return;
-    setState(() => _isLoadingJurados = true);
+    if (mounted) setState(() => _isLoadingJurados = true);
     try {
       final jurados = await _rubricasService.obtenerJurados(
-        filial: _eventoData!['filialId'],
+        filial:   _eventoData!['filialId'],
         facultad: _eventoData!['facultad'],
-        carrera: (_eventoData!['carreraNombre'] as String).isNotEmpty
+        carrera:  (_eventoData!['carreraNombre'] as String).isNotEmpty
             ? _eventoData!['carreraNombre']
             : null,
       );
@@ -169,6 +167,7 @@ class _AsignarProyectosCarreraScreenState
       }
     } catch (e) {
       debugPrint('Error cargando jurados: $e');
+      if (mounted) _showSnackBar('Error al cargar jurados', isError: true);
     } finally {
       if (mounted) setState(() => _isLoadingJurados = false);
     }
@@ -177,34 +176,36 @@ class _AsignarProyectosCarreraScreenState
   Future<void> _onJuradoChanged(String? juradoId) async {
     if (juradoId == null) return;
     setState(() {
-      _juradoSeleccionado = juradoId;
-      _juradoData = _juradosDisponibles.firstWhere((j) => j['id'] == juradoId);
-      _rubricasDelJurado = [];
+      _juradoSeleccionado  = juradoId;
+      _juradoData          = _juradosDisponibles.firstWhere((j) => j['id'] == juradoId);
+      _rubricasDelJurado   = [];
       _rubricaSeleccionada = null;
       _proyectosSeleccionados.clear();
       _proyectosDisponibles.clear();
       _proyectosPorCategoria.clear();
-      _modoEdicion = false;
+      _modoEdicion         = false;
     });
     await _cargarRubricasDelJurado(juradoId);
   }
 
   Future<void> _cargarRubricasDelJurado(String juradoId) async {
     try {
-      final todasRubricas = await _rubricasService.obtenerRubricas();
-      final rubricasJurado = todasRubricas
+      final todasRubricas    = await _rubricasService.obtenerRubricas();
+      final rubricasJurado   = todasRubricas
           .where((r) => r.juradosAsignados.contains(juradoId))
           .toList();
 
       if (rubricasJurado.isEmpty) {
-        _showSnackBar('Este jurado no tiene rúbricas asignadas.',
-            isWarning: true);
+        if (mounted) {
+          _showSnackBar('Este jurado no tiene rúbricas asignadas.',
+              isWarning: true);
+        }
         return;
       }
 
-      final eventoFilial = _eventoData!['filialId'];
+      final eventoFilial   = _eventoData!['filialId'];
       final eventoFacultad = _eventoData!['facultad'];
-      final eventoCarrera = _eventoData!['carreraNombre'] as String;
+      final eventoCarrera  = _eventoData!['carreraNombre'] as String;
 
       final rubricasCompatibles = rubricasJurado.where((r) {
         if (r.filial != eventoFilial) return false;
@@ -219,10 +220,12 @@ class _AsignarProyectosCarreraScreenState
       }).toList();
 
       if (rubricasCompatibles.isEmpty) {
-        _showSnackBar(
-          'El jurado no tiene rúbricas compatibles con este evento',
-          isWarning: true,
-        );
+        if (mounted) {
+          _showSnackBar(
+            'El jurado no tiene rúbricas compatibles con este evento',
+            isWarning: true,
+          );
+        }
         return;
       }
 
@@ -236,7 +239,7 @@ class _AsignarProyectosCarreraScreenState
         });
       }
     } catch (e) {
-      _showSnackBar('Error al cargar rúbricas: $e', isError: true);
+      if (mounted) _showSnackBar('Error al cargar rúbricas: $e', isError: true);
     }
   }
 
@@ -255,7 +258,7 @@ class _AsignarProyectosCarreraScreenState
 
   Future<void> _cargarProyectosConRubrica(Rubrica rubrica) async {
     if (_eventoSeleccionado == null || _juradoSeleccionado == null) return;
-    setState(() => _isLoadingProyectos = true);
+    if (mounted) setState(() => _isLoadingProyectos = true);
 
     try {
       final resultados = await Future.wait([
@@ -267,13 +270,13 @@ class _AsignarProyectosCarreraScreenState
             .get(),
         _firestore
             .collectionGroup('evaluaciones')
-            .where('juradoId', isEqualTo: _juradoSeleccionado)
+            .where('juradoId',  isEqualTo: _juradoSeleccionado)
             .where('rubricaId', isEqualTo: rubrica.id)
             .get(),
       ]);
 
-      final juradoDoc = resultados[0] as DocumentSnapshot;
-      final proyectosSnap = resultados[1] as QuerySnapshot;
+      final juradoDoc        = resultados[0] as DocumentSnapshot;
+      final proyectosSnap    = resultados[1] as QuerySnapshot;
       final evaluacionesSnap = resultados[2] as QuerySnapshot;
 
       List<String> categoriasJurado = [];
@@ -285,9 +288,11 @@ class _AsignarProyectosCarreraScreenState
       }
 
       if (categoriasJurado.isEmpty) {
-        _showSnackBar('Este jurado no tiene categorías asignadas',
-            isWarning: true);
-        if (mounted) setState(() => _isLoadingProyectos = false);
+        if (mounted) {
+          _showSnackBar('Este jurado no tiene categorías asignadas',
+              isWarning: true);
+          setState(() => _isLoadingProyectos = false);
+        }
         return;
       }
 
@@ -299,22 +304,22 @@ class _AsignarProyectosCarreraScreenState
 
       final Map<String, Map<String, dynamic>> proyectosMap = {};
       for (var doc in proyectosSnap.docs) {
-        final d = doc.data() as Map<String, dynamic>;
-        final codigo = d['Código'] ?? '';
+        final d             = doc.data() as Map<String, dynamic>;
+        final codigo        = d['Código']        ?? '';
         final clasificacion = d['Clasificación'] ?? 'Sin categoría';
         if (codigo.isEmpty || !categoriasJurado.contains(clasificacion)) {
           continue;
         }
         if (!proyectosMap.containsKey(codigo)) {
           proyectosMap[codigo] = {
-            'id': doc.id,
-            'eventId': _eventoSeleccionado,
-            'codigo': codigo,
-            'titulo': d['Título'] ?? '',
-            'integrantes': d['Integrantes'] ?? '',
-            'sala': d['Sala'] ?? '',
+            'id':            doc.id,
+            'eventId':       _eventoSeleccionado,
+            'codigo':        codigo,
+            'titulo':        d['Título']      ?? '',
+            'integrantes':   d['Integrantes'] ?? '',
+            'sala':          d['Sala']        ?? '',
             'clasificacion': clasificacion,
-            'yaAsignado': proyectosAsignados.contains(doc.id),
+            'yaAsignado':    proyectosAsignados.contains(doc.id),
           };
         }
       }
@@ -337,15 +342,17 @@ class _AsignarProyectosCarreraScreenState
           }
         }
         setState(() {
-          _proyectosDisponibles = proyectosList;
+          _proyectosDisponibles  = proyectosList;
           _proyectosPorCategoria = grupos;
-          _isLoadingProyectos = false;
+          _isLoadingProyectos    = false;
         });
       }
     } catch (e) {
       debugPrint('Error cargando proyectos: $e');
-      if (mounted) setState(() => _isLoadingProyectos = false);
-      _showSnackBar('Error al cargar proyectos: $e', isError: true);
+      if (mounted) {
+        setState(() => _isLoadingProyectos = false);
+        _showSnackBar('Error al cargar proyectos: $e', isError: true);
+      }
     }
   }
 
@@ -367,6 +374,7 @@ class _AsignarProyectosCarreraScreenState
 
     final confirmar = await showDialog<bool>(
       context: context,
+      useRootNavigator: true,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         elevation: 0,
@@ -378,7 +386,7 @@ class _AsignarProyectosCarreraScreenState
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
+                color: Colors.black.withOpacity(0.12),
                 blurRadius: 30,
                 offset: const Offset(0, 10),
               ),
@@ -388,7 +396,6 @@ class _AsignarProyectosCarreraScreenState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header del diálogo
               Row(
                 children: [
                   Container(
@@ -397,11 +404,13 @@ class _AsignarProyectosCarreraScreenState
                       color: (_modoEdicion
                               ? const Color(0xFF2E9E6E)
                               : const Color(0xFF1E3A5F))
-                          .withValues(alpha: 0.1),
+                          .withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      _modoEdicion ? Icons.edit_note : Icons.assignment_turned_in,
+                      _modoEdicion
+                          ? Icons.edit_note
+                          : Icons.assignment_turned_in,
                       color: _modoEdicion
                           ? const Color(0xFF2E9E6E)
                           : const Color(0xFF1E3A5F),
@@ -409,12 +418,16 @@ class _AsignarProyectosCarreraScreenState
                     ),
                   ),
                   const SizedBox(width: 14),
-                  Text(
-                    _modoEdicion ? 'Confirmar cambios' : 'Confirmar asignación',
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF1E3A5F),
+                  Expanded(
+                    child: Text(
+                      _modoEdicion
+                          ? 'Confirmar cambios'
+                          : 'Confirmar asignación',
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1E3A5F),
+                      ),
                     ),
                   ),
                 ],
@@ -431,10 +444,10 @@ class _AsignarProyectosCarreraScreenState
                 ),
               ),
               const SizedBox(height: 14),
-              // Chip de rúbrica
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF0F5FF),
                   borderRadius: BorderRadius.circular(12),
@@ -462,12 +475,13 @@ class _AsignarProyectosCarreraScreenState
                 const SizedBox(height: 10),
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFFF5F5),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFFEC5C5)),
+                    border:
+                        Border.all(color: const Color(0xFFFEC5C5)),
                   ),
                   child: Row(
                     children: [
@@ -495,10 +509,12 @@ class _AsignarProyectosCarreraScreenState
                     child: TextButton(
                       onPressed: () => Navigator.pop(context, false),
                       style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
-                          side: const BorderSide(color: Color(0xFFE2E8F0)),
+                          side: const BorderSide(
+                              color: Color(0xFFE2E8F0)),
                         ),
                       ),
                       child: const Text(
@@ -519,7 +535,8 @@ class _AsignarProyectosCarreraScreenState
                             ? const Color(0xFF2E9E6E)
                             : const Color(0xFF1E3A5F),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -527,7 +544,8 @@ class _AsignarProyectosCarreraScreenState
                       ),
                       child: Text(
                         _modoEdicion ? 'Guardar' : 'Asignar',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700),
                       ),
                     ),
                   ),
@@ -540,15 +558,15 @@ class _AsignarProyectosCarreraScreenState
     );
 
     if (confirmar != true) return;
-    setState(() => _isAsignando = true);
+    if (mounted) setState(() => _isAsignando = true);
 
     try {
       final batch = _firestore.batch();
       int asignados = 0, actualizados = 0, eliminados = 0;
 
       for (var p in _proyectosDisponibles) {
-        final codigo = p['codigo'] as String;
-        final yaAsignado = p['yaAsignado'] as bool;
+        final codigo      = p['codigo']     as String;
+        final yaAsignado  = p['yaAsignado'] as bool;
         final seleccionado = _proyectosSeleccionados.contains(codigo);
 
         final docRef = _firestore
@@ -564,23 +582,23 @@ class _AsignarProyectosCarreraScreenState
           eliminados++;
         } else if (yaAsignado && seleccionado) {
           batch.update(docRef, {
-            'rubricaId': _rubricaSeleccionada!.id,
-            'rubricaNombre': _rubricaSeleccionada!.nombre,
-            'fechaActualizacion': FieldValue.serverTimestamp(),
+            'rubricaId':           _rubricaSeleccionada!.id,
+            'rubricaNombre':       _rubricaSeleccionada!.nombre,
+            'fechaActualizacion':  FieldValue.serverTimestamp(),
           });
           actualizados++;
         } else if (!yaAsignado && seleccionado) {
           batch.set(docRef, {
-            'juradoId': _juradoSeleccionado,
-            'juradoNombre': _juradoData!['nombre'],
-            'rubricaId': _rubricaSeleccionada!.id,
+            'juradoId':      _juradoSeleccionado,
+            'juradoNombre':  _juradoData!['nombre'],
+            'rubricaId':     _rubricaSeleccionada!.id,
             'rubricaNombre': _rubricaSeleccionada!.nombre,
-            'filialId': _rubricaSeleccionada!.filial,
-            'facultad': _rubricaSeleccionada!.facultad,
+            'filialId':      _rubricaSeleccionada!.filial,
+            'facultad':      _rubricaSeleccionada!.facultad,
             'carreraNombre': _rubricaSeleccionada!.carrera,
-            'evaluada': false,
-            'bloqueada': false,
-            'notaTotal': 0.0,
+            'evaluada':      false,
+            'bloqueada':     false,
+            'notaTotal':     0.0,
             'fechaAsignacion': FieldValue.serverTimestamp(),
           });
           asignados++;
@@ -591,15 +609,15 @@ class _AsignarProyectosCarreraScreenState
 
       if (mounted) {
         final partes = <String>[];
-        if (asignados > 0) partes.add('$asignados nuevo(s)');
+        if (asignados   > 0) partes.add('$asignados nuevo(s)');
         if (actualizados > 0) partes.add('$actualizados actualizado(s)');
-        if (eliminados > 0) partes.add('$eliminados eliminado(s)');
+        if (eliminados  > 0) partes.add('$eliminados eliminado(s)');
         _showSnackBar(partes.isEmpty ? 'Sin cambios' : partes.join(' · '));
         setState(() => _modoEdicion = false);
         await _cargarProyectosConRubrica(_rubricaSeleccionada!);
       }
     } catch (e) {
-      _showSnackBar('Error al asignar: $e', isError: true);
+      if (mounted) _showSnackBar('Error al asignar: $e', isError: true);
     } finally {
       if (mounted) setState(() => _isAsignando = false);
     }
@@ -607,6 +625,7 @@ class _AsignarProyectosCarreraScreenState
 
   void _showSnackBar(String msg,
       {bool isError = false, bool isWarning = false}) {
+    if (!mounted) return;
     final color = isError
         ? const Color(0xFFD4453B)
         : isWarning
@@ -635,7 +654,8 @@ class _AsignarProyectosCarreraScreenState
         ),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 3),
         elevation: 6,
@@ -647,11 +667,9 @@ class _AsignarProyectosCarreraScreenState
       _categoryColors[index % _categoryColors.length];
 
   String _formatDate(Timestamp timestamp) {
-    final date = timestamp.toDate();
+    final date = timestamp.toDate().toLocal();
     return '${date.day}/${date.month}/${date.year}';
   }
-
-  // ─── BUILD ───────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -667,17 +685,22 @@ class _AsignarProyectosCarreraScreenState
         elevation: 0,
         centerTitle: true,
         leading: _eventoSeleccionado != null
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-                onPressed: _deseleccionarEvento,
-                tooltip: 'Cambiar evento',
+            ? Semantics(
+                label: 'Cambiar evento',
+                button: true,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                      size: 18),
+                  onPressed: _deseleccionarEvento,
+                  tooltip: 'Cambiar evento',
+                ),
               )
             : null,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(
             height: 1,
-            color: Colors.white.withValues(alpha: 0.1),
+            color: Colors.white.withOpacity(0.1),
           ),
         ),
       ),
@@ -691,7 +714,8 @@ class _AsignarProyectosCarreraScreenState
           : FadeTransition(
               opacity: _fadeAnimation,
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+                padding:
+                    const EdgeInsets.fromLTRB(16, 20, 16, 32),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -721,7 +745,6 @@ class _AsignarProyectosCarreraScreenState
     );
   }
 
-  // ── Tarjeta de contexto ──────────────────────────────────────────────────
   Widget _buildContextCard() {
     return Container(
       padding: const EdgeInsets.all(18),
@@ -734,7 +757,7 @@ class _AsignarProyectosCarreraScreenState
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1E3A5F).withValues(alpha: 0.3),
+            color: const Color(0xFF1E3A5F).withOpacity(0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -746,7 +769,7 @@ class _AsignarProyectosCarreraScreenState
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
+              color: Colors.white.withOpacity(0.15),
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Icon(Icons.school_rounded,
@@ -765,14 +788,18 @@ class _AsignarProyectosCarreraScreenState
                     fontSize: 15,
                     letterSpacing: 0.2,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
                 Text(
                   _facultad ?? '—',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.75),
+                    color: Colors.white.withOpacity(0.75),
                     fontSize: 12,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Row(
@@ -780,23 +807,29 @@ class _AsignarProyectosCarreraScreenState
                     const Icon(Icons.location_on_rounded,
                         color: Colors.white54, size: 12),
                     const SizedBox(width: 4),
-                    Text(
-                      _filialNombre ?? '—',
-                      style: const TextStyle(
-                          color: Colors.white54, fontSize: 11),
+                    Expanded(
+                      child: Text(
+                        _filialNombre ?? '—',
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 11),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 8),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
+              color: Colors.white.withOpacity(0.15),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+              border: Border.all(
+                  color: Colors.white.withOpacity(0.25)),
             ),
             child: const Text(
               'Tu carrera',
@@ -812,7 +845,6 @@ class _AsignarProyectosCarreraScreenState
     );
   }
 
-  // ── Lista de eventos ─────────────────────────────────────────────────────
   Widget _buildEventosList() {
     return StreamBuilder<QuerySnapshot>(
       stream: _buildEventsQuery(),
@@ -830,7 +862,7 @@ class _AsignarProyectosCarreraScreenState
         }
 
         if (snapshot.hasError) {
-          return _buildErrorState(snapshot.error.toString());
+          return _buildErrorState('Error al cargar los eventos. Verifica tu conexión.');
         }
 
         final events = snapshot.data?.docs ?? [];
@@ -849,7 +881,11 @@ class _AsignarProyectosCarreraScreenState
             else
               ...events.map((event) {
                 final data = event.data() as Map<String, dynamic>;
-                return _buildEventCard(event.id, data);
+                return _buildEventCard(
+                  event.id,
+                  data,
+                  key: ValueKey(event.id),
+                );
               }),
           ],
         );
@@ -867,21 +903,25 @@ class _AsignarProyectosCarreraScreenState
       children: [
         Row(
           children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1E3A5F),
-                letterSpacing: 0.2,
+            Flexible(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1E3A5F),
+                  letterSpacing: 0.2,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 8),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 9, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
+                color: const Color(0xFF1E3A5F).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
@@ -897,21 +937,25 @@ class _AsignarProyectosCarreraScreenState
         ),
         const SizedBox(height: 8),
         Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(
+              horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.blue.withValues(alpha: 0.07),
+            color: Colors.blue.withOpacity(0.07),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+            border:
+                Border.all(color: Colors.blue.withOpacity(0.2)),
           ),
           child: Row(
             children: [
               Icon(Icons.info_outline_rounded,
                   size: 15, color: Colors.blue[700]),
               const SizedBox(width: 10),
-              Text(
-                hint,
-                style: TextStyle(fontSize: 12, color: Colors.blue[700]),
+              Expanded(
+                child: Text(
+                  hint,
+                  style:
+                      TextStyle(fontSize: 12, color: Colors.blue[700]),
+                ),
               ),
             ],
           ),
@@ -920,122 +964,136 @@ class _AsignarProyectosCarreraScreenState
     );
   }
 
-  // ── Tarjeta de evento ────────────────────────────────────────────────────
-  Widget _buildEventCard(String eventId, Map<String, dynamic> data) {
-    final name = data['name'] ?? 'Sin nombre';
+  Widget _buildEventCard(String eventId, Map<String, dynamic> data,
+      {Key? key}) {
+    final name    = data['name'] as String? ?? '';
     final periodo = data['periodoNombre'] ?? '';
-    final initial = name.substring(0, 1).toUpperCase();
+    final displayName = name.isNotEmpty ? name : 'Sin nombre';
+    final initial = displayName[0].toUpperCase();
 
-    return GestureDetector(
-      onTap: () =>
-          _onEventoSelected(eventId, Map<String, dynamic>.from(data)),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE8EDF5)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1E3A5F), Color(0xFF2E5A8D)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(14),
+    return Semantics(
+      label: 'Evento: $displayName',
+      button: true,
+      child: GestureDetector(
+        key: key,
+        onTap: () => _onEventoSelected(
+            eventId, Map<String, dynamic>.from(data)),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE8EDF5)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
-              child: Center(
-                child: Text(
-                  initial,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 20,
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1E3A5F), Color(0xFF2E5A8D)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
+                child: Center(
+                  child: Text(
+                    initial,
                     style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: Color(0xFF1E3A5F),
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 20,
                     ),
                   ),
-                  if (periodo.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(Icons.calendar_month_rounded,
-                            size: 11, color: Color(0xFF64748B)),
-                        const SizedBox(width: 4),
-                        Text(
-                          periodo,
-                          style: const TextStyle(
-                              fontSize: 12, color: Color(0xFF64748B)),
-                        ),
-                      ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: Color(0xFF1E3A5F),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
+                    if (periodo.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_month_rounded,
+                              size: 11, color: Color(0xFF64748B)),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              periodo,
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF64748B)),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (data['createdAt'] != null) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(Icons.schedule_rounded,
+                              size: 11, color: Colors.blue[400]),
+                          const SizedBox(width: 4),
+                          Text(
+                            _formatDate(
+                                data['createdAt'] as Timestamp),
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.blue[400]),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
-                  if (data['createdAt'] != null) ...[
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Icon(Icons.schedule_rounded,
-                            size: 11, color: Colors.blue[400]),
-                        const SizedBox(width: 4),
-                        Text(
-                          _formatDate(data['createdAt'] as Timestamp),
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.blue[400]),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
+                ),
               ),
-            ),
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0F5FF),
-                borderRadius: BorderRadius.circular(9),
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0F5FF),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Color(0xFF1E3A5F),
+                  size: 20,
+                ),
               ),
-              child: const Icon(
-                Icons.chevron_right_rounded,
-                color: Color(0xFF1E3A5F),
-                size: 20,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // ── Evento seleccionado compacto ─────────────────────────────────────────
   Widget _buildEventoSeleccionadoCard() {
-    final name = _eventoData?['name'] ?? 'Sin nombre';
+    final name    = _eventoData?['name'] ?? 'Sin nombre';
     final periodo = _eventoData?['periodoNombre'] ?? '';
 
     return Container(
@@ -1043,10 +1101,11 @@ class _AsignarProyectosCarreraScreenState
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF2E9E6E), width: 1.5),
+        border:
+            Border.all(color: const Color(0xFF2E9E6E), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2E9E6E).withValues(alpha: 0.12),
+            color: const Color(0xFF2E9E6E).withOpacity(0.12),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -1058,7 +1117,7 @@ class _AsignarProyectosCarreraScreenState
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: const Color(0xFF2E9E6E).withValues(alpha: 0.12),
+              color: const Color(0xFF2E9E6E).withOpacity(0.12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(Icons.event_available_rounded,
@@ -1092,37 +1151,45 @@ class _AsignarProyectosCarreraScreenState
                     fontSize: 14,
                     color: Color(0xFF1E3A5F),
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 if (periodo.isNotEmpty)
                   Text(
                     periodo,
                     style: const TextStyle(
                         fontSize: 12, color: Color(0xFF64748B)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
               ],
             ),
           ),
-          TextButton.icon(
-            onPressed: _deseleccionarEvento,
-            icon: const Icon(Icons.swap_horiz_rounded,
-                size: 15, color: Color(0xFF1E3A5F)),
-            label: const Text(
-              'Cambiar',
-              style: TextStyle(
-                fontSize: 12,
-                color: Color(0xFF1E3A5F),
-                fontWeight: FontWeight.w700,
+          Semantics(
+            label: 'Cambiar evento seleccionado',
+            button: true,
+            child: TextButton.icon(
+              onPressed: _deseleccionarEvento,
+              icon: const Icon(Icons.swap_horiz_rounded,
+                  size: 15, color: Color(0xFF1E3A5F)),
+              label: const Text(
+                'Cambiar',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF1E3A5F),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-            style: TextButton.styleFrom(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              backgroundColor:
-                  const Color(0xFF1E3A5F).withValues(alpha: 0.07),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 8),
+                minimumSize: const Size(44, 44),
+                backgroundColor:
+                    const Color(0xFF1E3A5F).withOpacity(0.07),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ),
         ],
@@ -1130,7 +1197,6 @@ class _AsignarProyectosCarreraScreenState
     );
   }
 
-  // ── Paso 2: Jurado ───────────────────────────────────────────────────────
   Widget _buildJuradoCard() {
     final nombreSeleccionado = _juradoData?['nombre'] as String?;
 
@@ -1178,15 +1244,20 @@ class _AsignarProyectosCarreraScreenState
                               height: 36,
                               decoration: BoxDecoration(
                                 gradient: const LinearGradient(
-                                  colors: [Color(0xFFD4863B), Color(0xFFE8A458)],
+                                  colors: [
+                                    Color(0xFFD4863B),
+                                    Color(0xFFE8A458)
+                                  ],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                 ),
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius:
+                                    BorderRadius.circular(10),
                               ),
                               child: Center(
                                 child: Text(
-                                  (nombreSeleccionado ?? '?')[0].toUpperCase(),
+                                  (nombreSeleccionado ?? '?')[0]
+                                      .toUpperCase(),
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w800,
@@ -1199,14 +1270,17 @@ class _AsignarProyectosCarreraScreenState
                               width: 36,
                               height: 36,
                               decoration: BoxDecoration(
-                                color: const Color(0xFFD4863B).withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(10),
+                                color: const Color(0xFFD4863B)
+                                    .withOpacity(0.1),
+                                borderRadius:
+                                    BorderRadius.circular(10),
                               ),
                               child: const Icon(Icons.badge_rounded,
                                   color: Color(0xFFD4863B), size: 18),
                             ),
                       title: Text(
-                        nombreSeleccionado ?? 'Selecciona un jurado',
+                        nombreSeleccionado ??
+                            'Selecciona un jurado',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: _juradoSeleccionado != null
@@ -1216,12 +1290,15 @@ class _AsignarProyectosCarreraScreenState
                               ? const Color(0xFF92400E)
                               : const Color(0xFF94A3B8),
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       subtitle: _juradoSeleccionado != null
                           ? const Text(
                               'Toca para cambiar',
                               style: TextStyle(
-                                  fontSize: 11, color: Color(0xFFD4863B)),
+                                  fontSize: 11,
+                                  color: Color(0xFFD4863B)),
                             )
                           : null,
                       iconColor: const Color(0xFFD4863B),
@@ -1239,18 +1316,19 @@ class _AsignarProyectosCarreraScreenState
 
   Widget _buildNoJuradosState() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      padding: const EdgeInsets.symmetric(
+          vertical: 20, horizontal: 16),
       decoration: BoxDecoration(
         color: const Color(0xFFFFF7ED),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFFDE68A)),
       ),
-      child: Row(
+      child: const Row(
         children: [
-          const Icon(Icons.person_off_rounded,
+          Icon(Icons.person_off_rounded,
               color: Color(0xFFD4863B), size: 22),
-          const SizedBox(width: 12),
-          const Expanded(
+          SizedBox(width: 12),
+          Expanded(
             child: Text(
               'No hay jurados disponibles para esta carrera',
               style: TextStyle(
@@ -1266,178 +1344,193 @@ class _AsignarProyectosCarreraScreenState
   }
 
   Widget _buildJuradoItem(Map<String, dynamic> jurado) {
-    final id = jurado['id'] as String;
-    final nombre = jurado['nombre'] as String? ?? '—';
-    final categorias = jurado['categorias'] as List<dynamic>? ?? [];
+    final id         = jurado['id']     as String;
+    final nombre     = jurado['nombre'] as String? ?? '—';
+    final categorias = List<dynamic>.from(
+        (jurado['categorias'] as List<dynamic>?) ?? []);
     final isSelected = _juradoSeleccionado == id;
+    final inicial    = nombre.isNotEmpty ? nombre[0].toUpperCase() : '?';
 
-    // Inicial del nombre para el avatar
-    final inicial = nombre.isNotEmpty ? nombre[0].toUpperCase() : '?';
-
-    return GestureDetector(
-      onTap: () => _onJuradoChanged(id),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(13),
+    final chipsCategorias = categorias.take(3).map<Widget>((cat) {
+      return Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: 7, vertical: 2),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFFF7ED) : const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isSelected
-                ? const Color(0xFFD4863B)
-                : const Color(0xFFE8EDF5),
-            width: isSelected ? 1.5 : 1,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: const Color(0xFFD4863B).withValues(alpha: 0.15),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.03),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+          color: isSelected
+              ? const Color(0xFFD4863B).withOpacity(0.15)
+              : const Color(0xFF1E3A5F).withOpacity(0.07),
+          borderRadius: BorderRadius.circular(6),
         ),
-        child: Row(
-          children: [
-            // Avatar con inicial
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                gradient: isSelected
-                    ? const LinearGradient(
-                        colors: [Color(0xFFD4863B), Color(0xFFE8A458)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      )
-                    : const LinearGradient(
-                        colors: [Color(0xFF64748B), Color(0xFF94A3B8)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                borderRadius: BorderRadius.circular(13),
-              ),
-              child: Center(
-                child: Text(
-                  inicial,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18,
+        child: Text(
+          cat.toString(),
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: isSelected
+                ? const Color(0xFF92400E)
+                : const Color(0xFF475569),
+          ),
+        ),
+      );
+    }).toList();
+
+    if (categorias.length > 3) {
+      chipsCategorias.add(
+        Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.grey.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            '+${categorias.length - 3}',
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF64748B),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Semantics(
+      label: 'Jurado: $nombre',
+      button: true,
+      selected: isSelected,
+      child: GestureDetector(
+        onTap: () => _onJuradoChanged(id),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? const Color(0xFFFFF7ED)
+                : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isSelected
+                  ? const Color(0xFFD4863B)
+                  : const Color(0xFFE8EDF5),
+              width: isSelected ? 1.5 : 1,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color:
+                          const Color(0xFFD4863B).withOpacity(0.15),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: isSelected
+                      ? const LinearGradient(
+                          colors: [
+                            Color(0xFFD4863B),
+                            Color(0xFFE8A458)
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : const LinearGradient(
+                          colors: [
+                            Color(0xFF64748B),
+                            Color(0xFF94A3B8)
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Center(
+                  child: Text(
+                    inicial,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            // Info del jurado
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    nombre,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: isSelected
-                          ? const Color(0xFF92400E)
-                          : const Color(0xFF1E3A5F),
-                    ),
-                  ),
-                  if (categorias.isNotEmpty) ...[
-                    const SizedBox(height: 5),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: categorias.take(3).map((cat) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? const Color(0xFFD4863B).withValues(alpha: 0.15)
-                                : const Color(0xFF1E3A5F).withValues(alpha: 0.07),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            cat.toString(),
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: isSelected
-                                  ? const Color(0xFF92400E)
-                                  : const Color(0xFF475569),
-                            ),
-                          ),
-                        );
-                      }).toList()
-                        ..addAll(categorias.length > 3
-                            ? [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 7, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    '+${categorias.length - 3}',
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF64748B),
-                                    ),
-                                  ),
-                                ),
-                              ]
-                            : []),
-                    ),
-                  ] else
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      'Sin categorías asignadas',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                      nombre,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: isSelected
+                            ? const Color(0xFF92400E)
+                            : const Color(0xFF1E3A5F),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                ],
+                    if (categorias.isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: chipsCategorias,
+                      ),
+                    ] else
+                      Text(
+                        'Sin categorías asignadas',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey[400]),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            // Indicador de selección
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? const Color(0xFFD4863B)
-                    : Colors.transparent,
-                border: Border.all(
+              const SizedBox(width: 8),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
                   color: isSelected
                       ? const Color(0xFFD4863B)
-                      : const Color(0xFFCBD5E1),
-                  width: 1.5,
+                      : Colors.transparent,
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFFD4863B)
+                        : const Color(0xFFCBD5E1),
+                    width: 1.5,
+                  ),
+                  shape: BoxShape.circle,
                 ),
-                shape: BoxShape.circle,
+                child: isSelected
+                    ? const Icon(Icons.check_rounded,
+                        color: Colors.white, size: 14)
+                    : null,
               ),
-              child: isSelected
-                  ? const Icon(Icons.check_rounded,
-                      color: Colors.white, size: 14)
-                  : null,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // ── Paso 3: Rúbrica ──────────────────────────────────────────────────────
   Widget _buildRubricasCard() {
     return _buildStepCard(
       stepNumber: '3',
@@ -1452,7 +1545,8 @@ class _AsignarProyectosCarreraScreenState
               decoration: BoxDecoration(
                 color: const Color(0xFFF0FBF6),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF9FD9BB), width: 1.5),
+                border: Border.all(
+                    color: const Color(0xFF9FD9BB), width: 1.5),
               ),
               child: Row(
                 children: [
@@ -1460,7 +1554,7 @@ class _AsignarProyectosCarreraScreenState
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2E9E6E).withValues(alpha: 0.15),
+                      color: const Color(0xFF2E9E6E).withOpacity(0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.check_circle_rounded,
@@ -1478,6 +1572,8 @@ class _AsignarProyectosCarreraScreenState
                             fontWeight: FontWeight.w700,
                             color: Color(0xFF1A5C3E),
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -1496,14 +1592,15 @@ class _AsignarProyectosCarreraScreenState
           : DropdownButtonFormField<String>(
               value: _rubricaSeleccionada?.id,
               isExpanded: true,
-              decoration:
-                  _inputDecoration('Selecciona una rúbrica', Icons.assignment_rounded),
+              decoration: _inputDecoration(
+                  'Selecciona una rúbrica', Icons.assignment_rounded),
               items: _rubricasDelJurado
                   .map((r) => DropdownMenuItem(
                         value: r.id,
                         child: Text(
                           r.nombre,
                           style: const TextStyle(fontSize: 14),
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ))
@@ -1513,7 +1610,6 @@ class _AsignarProyectosCarreraScreenState
     );
   }
 
-  // ── Paso 4: Proyectos ────────────────────────────────────────────────────
   Widget _buildProyectosCard() {
     return _buildStepCard(
       stepNumber: '4',
@@ -1521,9 +1617,10 @@ class _AsignarProyectosCarreraScreenState
       stepColor: const Color(0xFF3B6FD4),
       icon: Icons.folder_open_rounded,
       trailing: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(
+            horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: const Color(0xFF3B6FD4).withValues(alpha: 0.1),
+          color: const Color(0xFF3B6FD4).withOpacity(0.1),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -1539,21 +1636,24 @@ class _AsignarProyectosCarreraScreenState
           ? const Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
-                child: CircularProgressIndicator(strokeWidth: 2),
+                child:
+                    CircularProgressIndicator(strokeWidth: 2),
               ),
             )
           : _proyectosPorCategoria.isEmpty
               ? _buildEmptyProyectos()
-              : ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _proyectosPorCategoria.keys.length,
-                  itemBuilder: (context, index) {
-                    final categoria =
-                        _proyectosPorCategoria.keys.elementAt(index);
-                    final proyectos = _proyectosPorCategoria[categoria]!;
-                    return _buildCategoryCard(categoria, proyectos, index);
-                  },
+              : Column(
+                  children: List.generate(
+                    _proyectosPorCategoria.keys.length,
+                    (index) {
+                      final categoria = _proyectosPorCategoria.keys
+                          .elementAt(index);
+                      final proyectos =
+                          _proyectosPorCategoria[categoria]!;
+                      return _buildCategoryCard(
+                          categoria, proyectos, index);
+                    },
+                  ),
                 ),
     );
   }
@@ -1563,11 +1663,13 @@ class _AsignarProyectosCarreraScreenState
       padding: const EdgeInsets.symmetric(vertical: 24),
       child: Column(
         children: [
-          Icon(Icons.folder_off_rounded, size: 44, color: Colors.grey[350]),
+          Icon(Icons.folder_off_rounded,
+              size: 44, color: Colors.grey[350]),
           const SizedBox(height: 10),
           Text(
             'No hay proyectos disponibles',
-            style: TextStyle(color: Colors.grey[500], fontSize: 14),
+            style:
+                TextStyle(color: Colors.grey[500], fontSize: 14),
           ),
         ],
       ),
@@ -1585,20 +1687,22 @@ class _AsignarProyectosCarreraScreenState
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.25), width: 1.5),
+        border: Border.all(
+            color: color.withOpacity(0.25), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
+            color: Colors.black.withOpacity(0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        data: Theme.of(context)
+            .copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          tilePadding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          tilePadding: const EdgeInsets.symmetric(
+              horizontal: 14, vertical: 6),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
@@ -1630,56 +1734,70 @@ class _AsignarProyectosCarreraScreenState
               fontSize: 14,
               color: Color(0xFF1E3A5F),
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           subtitle: Text(
             '${proyectos.length} proyecto(s)',
-            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+            style: TextStyle(
+                fontSize: 11, color: Colors.grey[500]),
           ),
-          childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-          children: proyectos.map(_buildProyectoItem).toList(),
+          childrenPadding:
+              const EdgeInsets.fromLTRB(10, 0, 10, 10),
+          children: proyectos
+              .map((p) => _buildProyectoItem(
+                  p, key: ValueKey(p['codigo'])))
+              .toList(),
         ),
       ),
     );
   }
 
-  Widget _buildProyectoItem(Map<String, dynamic> proyecto) {
-    final codigo = proyecto['codigo'] as String;
-    final yaAsignado = proyecto['yaAsignado'] as bool;
-    final isSelected = _proyectosSeleccionados.contains(codigo);
-
-    final tieneAsignados =
+  Widget _buildProyectoItem(Map<String, dynamic> proyecto,
+      {Key? key}) {
+    final codigo      = proyecto['codigo']     as String;
+    final yaAsignado  = proyecto['yaAsignado'] as bool;
+    final isSelected  =
+        _proyectosSeleccionados.contains(codigo);
         _proyectosDisponibles.any((p) => p['yaAsignado'] == true);
-    final interactivo = _modoEdicion || !tieneAsignados;
+    final interactivo = _modoEdicion || !yaAsignado;
 
-    // Lógica de colores
     Color cardBg;
-    Color? textColor;
-    if (yaAsignado && !_modoEdicion) {
-      cardBg = const Color(0xFFFFFBEB);
-      textColor = const Color(0xFF92400E);
-    } else if (yaAsignado && _modoEdicion) {
-      cardBg = isSelected
-          ? const Color(0xFFF0FBF6)
-          : const Color(0xFFFFF5F5);
-      textColor = isSelected ? const Color(0xFF1A5C3E) : const Color(0xFF9B1C1C);
-    } else {
-      cardBg = isSelected ? const Color(0xFFF0F5FF) : const Color(0xFFF8FAFC);
-      textColor = isSelected ? const Color(0xFF1E3A5F) : const Color(0xFF334155);
-    }
+Color? textColor;
+Color borderColor = Colors.transparent;
+
+if (!_modoEdicion && yaAsignado) {
+  cardBg      = const Color(0xFFFFFBEB);
+  textColor   = const Color(0xFF92400E);
+  borderColor = Colors.transparent;
+} else if (_modoEdicion && yaAsignado && isSelected) {
+  cardBg      = const Color(0xFFF0FBF6);
+  textColor   = const Color(0xFF1A5C3E);
+  borderColor = const Color(0xFF2E9E6E);
+} else if (_modoEdicion && yaAsignado && !isSelected) {
+  cardBg      = const Color(0xFFFFF5F5);
+  textColor   = const Color(0xFF9B1C1C);
+  borderColor = const Color(0xFFD4453B);
+} else if (!yaAsignado && isSelected) {
+  cardBg      = const Color(0xFFF0F5FF);
+  textColor   = const Color(0xFF1E3A5F);
+  borderColor = const Color(0xFF3B6FD4);
+} else {
+  cardBg      = const Color(0xFFF8FAFC);
+  textColor   = const Color(0xFF334155);
+  borderColor = Colors.transparent;
+}
 
     return Container(
+      key: key,
       margin: const EdgeInsets.only(bottom: 6),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isSelected
-              ? (yaAsignado && _modoEdicion
-                  ? const Color(0xFF2E9E6E)
-                  : const Color(0xFF3B6FD4))
-              : Colors.transparent,
-          width: 1.5,
-        ),
+  color: borderColor,
+  width: 1.5,
+),
       ),
       child: CheckboxListTile(
         value: isSelected,
@@ -1710,11 +1828,14 @@ class _AsignarProyectosCarreraScreenState
             ),
             const SizedBox(width: 6),
             if (yaAsignado && !_modoEdicion)
-              _buildStatusChip('Asignado', const Color(0xFFD4863B)),
+              _buildStatusChip(
+                  'Asignado', const Color(0xFFD4863B)),
             if (yaAsignado && _modoEdicion)
               _buildStatusChip(
                 isSelected ? 'Mantener' : 'Quitar',
-                isSelected ? const Color(0xFF2E9E6E) : const Color(0xFFD4453B),
+                isSelected
+                    ? const Color(0xFF2E9E6E)
+                    : const Color(0xFFD4453B),
               ),
           ],
         ),
@@ -1722,11 +1843,13 @@ class _AsignarProyectosCarreraScreenState
           padding: const EdgeInsets.only(top: 3),
           child: Row(
             children: [
-              Icon(Icons.qr_code_rounded, size: 11, color: Colors.grey[500]),
+              Icon(Icons.qr_code_rounded,
+                  size: 11, color: Colors.grey[500]),
               const SizedBox(width: 4),
               Text(
                 codigo,
-                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                style: TextStyle(
+                    fontSize: 11, color: Colors.grey[500]),
               ),
             ],
           ),
@@ -1734,20 +1857,22 @@ class _AsignarProyectosCarreraScreenState
         activeColor: const Color(0xFF1E3A5F),
         checkColor: Colors.white,
         controlAffinity: ListTileControlAffinity.leading,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12, vertical: 2),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
 
   Widget _buildStatusChip(String label, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      padding: const EdgeInsets.symmetric(
+          horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
+        color: color.withOpacity(0.15),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+        border: Border.all(color: color.withOpacity(0.4)),
       ),
       child: Text(
         label,
@@ -1760,22 +1885,22 @@ class _AsignarProyectosCarreraScreenState
     );
   }
 
-  // ── Botón asignar / editar ───────────────────────────────────────────────
   Widget _buildBotonAsignar() {
     final tieneAsignados =
         _proyectosDisponibles.any((p) => p['yaAsignado'] == true);
 
     return Column(
       children: [
-        // Banner de modo edición
         if (_modoEdicion)
           Container(
             margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
               color: const Color(0xFFFFFBEB),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFFDE68A), width: 1.5),
+              border: Border.all(
+                  color: const Color(0xFFFDE68A), width: 1.5),
             ),
             child: Row(
               children: [
@@ -1792,25 +1917,36 @@ class _AsignarProyectosCarreraScreenState
                     ),
                   ),
                 ),
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _modoEdicion = false;
-                      _proyectosSeleccionados.clear();
-                      for (var p in _proyectosDisponibles) {
-                        if (p['yaAsignado'] == true) {
-                          _proyectosSeleccionados
-                              .add(p['codigo'] as String);
+                const SizedBox(width: 8),
+                Semantics(
+                  label: 'Cancelar modo edición',
+                  button: true,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      setState(() {
+                        _modoEdicion = false;
+                        _proyectosSeleccionados.clear();
+                        for (var p in _proyectosDisponibles) {
+                          if (p['yaAsignado'] == true) {
+                            _proyectosSeleccionados
+                                .add(p['codigo'] as String);
+                          }
                         }
-                      }
-                    });
-                  },
-                  child: const Text(
-                    'Cancelar',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFFD4453B),
-                      fontWeight: FontWeight.w700,
+                      });
+                    },
+                    child: Container(
+                      constraints: const BoxConstraints(
+                          minWidth: 44, minHeight: 44),
+                      alignment: Alignment.center,
+                      child: const Text(
+                        'Cancelar',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFFD4453B),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1818,85 +1954,100 @@ class _AsignarProyectosCarreraScreenState
             ),
           ),
 
-        // Botón editar
         if (tieneAsignados && !_modoEdicion)
           Container(
             margin: const EdgeInsets.only(bottom: 10),
             width: double.infinity,
             height: 50,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                setState(() => _modoEdicion = true);
-                _showSnackBar(
-                  'Modo edición activo. Modifica los proyectos y guarda.',
-                  isWarning: true,
-                );
-              },
-              icon: const Icon(Icons.edit_rounded,
-                  size: 17, color: Color(0xFF1E3A5F)),
-              label: const Text(
-                'Editar proyectos asignados',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1E3A5F),
+            child: Semantics(
+              label: 'Editar proyectos asignados',
+              button: true,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  setState(() => _modoEdicion = true);
+                  _showSnackBar(
+                    'Modo edición activo. Modifica los proyectos y guarda.',
+                    isWarning: true,
+                  );
+                },
+                icon: const Icon(Icons.edit_rounded,
+                    size: 17, color: Color(0xFF1E3A5F)),
+                label: const Text(
+                  'Editar proyectos asignados',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1E3A5F),
+                  ),
                 ),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFF1E3A5F), width: 1.5),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(
+                      color: Color(0xFF1E3A5F), width: 1.5),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
               ),
             ),
           ),
 
-        // Botón principal
         if (_modoEdicion || !tieneAsignados)
           SizedBox(
             height: 52,
             width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _isAsignando || _proyectosSeleccionados.isEmpty
-                  ? null
-                  : _asignarProyectos,
-              icon: _isAsignando
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : Icon(
-                      _modoEdicion
-                          ? Icons.save_rounded
-                          : Icons.check_circle_rounded,
-                      size: 20,
-                    ),
-              label: Text(
-                _isAsignando
-                    ? 'Guardando...'
-                    : _modoEdicion
-                        ? 'Guardar cambios'
-                        : 'Asignar ${_proyectosSeleccionados.length} Proyecto(s)',
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
+            child: Semantics(
+              label: _modoEdicion
+                  ? 'Guardar cambios'
+                  : 'Asignar ${_proyectosSeleccionados.length} proyectos',
+              button: true,
+              child: ElevatedButton.icon(
+                onPressed:
+                    _isAsignando || _proyectosSeleccionados.isEmpty
+                        ? null
+                        : _asignarProyectos,
+                icon: _isAsignando
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white),
+                      )
+                    : Icon(
+                        _modoEdicion
+                            ? Icons.save_rounded
+                            : Icons.check_circle_rounded,
+                        size: 20,
+                      ),
+                label: Text(
+                  _isAsignando
+                      ? 'Guardando...'
+                      : _modoEdicion
+                          ? 'Guardar cambios'
+                          : 'Asignar ${_proyectosSeleccionados.length} Proyecto(s)',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _modoEdicion
-                    ? const Color(0xFF2E9E6E)
-                    : const Color(0xFF1E3A5F),
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: const Color(0xFFCBD5E1),
-                disabledForegroundColor: Colors.white70,
-                elevation: _proyectosSeleccionados.isNotEmpty ? 4 : 0,
-                shadowColor: (_modoEdicion
-                        ? const Color(0xFF2E9E6E)
-                        : const Color(0xFF1E3A5F))
-                    .withValues(alpha: 0.4),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _modoEdicion
+                      ? const Color(0xFF2E9E6E)
+                      : const Color(0xFF1E3A5F),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor:
+                      const Color(0xFFCBD5E1),
+                  disabledForegroundColor: Colors.white70,
+                  elevation:
+                      _proyectosSeleccionados.isNotEmpty ? 4 : 0,
+                  shadowColor: (_modoEdicion
+                          ? const Color(0xFF2E9E6E)
+                          : const Color(0xFF1E3A5F))
+                      .withOpacity(0.4),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
               ),
             ),
           ),
@@ -1904,10 +2055,10 @@ class _AsignarProyectosCarreraScreenState
     );
   }
 
-  // ── Estados vacío / error ────────────────────────────────────────────────
   Widget _buildNoEventsState() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+      padding: const EdgeInsets.symmetric(
+          vertical: 36, horizontal: 24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -1953,7 +2104,8 @@ class _AsignarProyectosCarreraScreenState
 
   Widget _buildErrorState(String error) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+      padding: const EdgeInsets.symmetric(
+          vertical: 36, horizontal: 24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -1982,7 +2134,8 @@ class _AsignarProyectosCarreraScreenState
           const SizedBox(height: 8),
           Text(
             error,
-            style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+            style:
+                TextStyle(fontSize: 12, color: Colors.grey[500]),
             textAlign: TextAlign.center,
           ),
         ],
@@ -1990,7 +2143,6 @@ class _AsignarProyectosCarreraScreenState
     );
   }
 
-  // ── Helpers de UI ────────────────────────────────────────────────────────
   Widget _buildStepCard({
     required String stepNumber,
     required String title,
@@ -2005,7 +2157,7 @@ class _AsignarProyectosCarreraScreenState
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -2045,6 +2197,8 @@ class _AsignarProyectosCarreraScreenState
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF1E3A5F),
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 if (trailing != null) trailing,
@@ -2065,23 +2219,27 @@ class _AsignarProyectosCarreraScreenState
         fontSize: 13,
         color: Color(0xFF64748B),
       ),
-      prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F), size: 20),
+      prefixIcon:
+          Icon(icon, color: const Color(0xFF1E3A5F), size: 20),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        borderSide:
+            const BorderSide(color: Color(0xFFE2E8F0)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        borderSide:
+            const BorderSide(color: Color(0xFFE2E8F0)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF1E3A5F), width: 1.5),
+        borderSide: const BorderSide(
+            color: Color(0xFF1E3A5F), width: 1.5),
       ),
       filled: true,
       fillColor: const Color(0xFFF8FAFC),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14, vertical: 14),
     );
   }
 }

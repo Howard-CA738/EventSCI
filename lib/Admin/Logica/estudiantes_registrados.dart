@@ -16,31 +16,25 @@ class _EstudiantesRegistradosScreenState
     extends State<EstudiantesRegistradosScreen>
     with TickerProviderStateMixin {
 
-  // ── Datos de estructura (filiales desde Firebase) ────────────────
   final FilialesService _filialesService = FilialesService();
   Map<String, dynamic> _estructuraFiliales = {};
   bool _estructuraCargada = false;
 
-  // ── Filtros ──────────────────────────────────────────────────────
   String? _selectedFilialId;
   String? _selectedFilialNombre;
   String? _selectedFacultad;
   String? _selectedCarrera;
-  String? _carreraPath; // "${filialNombre}_${carrera}"
+  String? _carreraPath;
 
-  // ── Estudiantes ──────────────────────────────────────────────────
   bool _isLoading = false;
   List<Map<String, dynamic>> _allStudents = [];
   List<Map<String, dynamic>> _filteredStudents = [];
   final Set<String> _expandedStudents = {};
 
-  // ── DNI cache ────────────────────────────────────────────────────
   final Map<String, String> _dniCache = {};
 
-  // ── Search ───────────────────────────────────────────────────────
   final _searchController = TextEditingController();
 
-  // ── Edición ──────────────────────────────────────────────────────
   final _editNombreController              = TextEditingController();
   final _editEmailController               = TextEditingController();
   final _editCodigoController              = TextEditingController();
@@ -50,7 +44,12 @@ class _EstudiantesRegistradosScreenState
 
   late AnimationController _filterAnimController;
 
-  // ── Lifecycle ────────────────────────────────────────────────────
+  static const _primaryColor  = Color(0xFF1E3A5F);
+  static const _surfaceColor  = Color(0xFFE8EDF2);
+  static const _subtextColor  = Color(0xFF64748B);
+  static const _borderColor   = Color(0xFFE2E8F0);
+  static const _minTapTarget  = 44.0;
+
   @override
   void initState() {
     super.initState();
@@ -74,7 +73,6 @@ class _EstudiantesRegistradosScreenState
     super.dispose();
   }
 
-  // ── Cargar estructura de filiales desde FilialesService ─────────
   Future<void> _loadEstructura() async {
     setState(() => _isLoading = true);
     try {
@@ -90,9 +88,7 @@ class _EstudiantesRegistradosScreenState
     setState(() => _isLoading = false);
   }
 
-  // ── Helpers de estructura ─────────────────────────────────────────
-  List<String> get _filialesDisponibles =>
-      _estructuraFiliales.keys.toList();
+  List<String> get _filialesDisponibles => _estructuraFiliales.keys.toList();
 
   List<String> _getFacultades(String filialId) {
     final filial = _estructuraFiliales[filialId];
@@ -100,31 +96,27 @@ class _EstudiantesRegistradosScreenState
     return (filial['facultades'] as Map<String, dynamic>).keys.toList();
   }
 
-  List<Map<String, dynamic>> _getCarreras(
-      String filialId, String facultad) {
+  List<Map<String, dynamic>> _getCarreras(String filialId, String facultad) {
     final filial = _estructuraFiliales[filialId];
     if (filial == null) return [];
-    final facultades = filial['facultades'] as Map<String, dynamic>;
+    final facultades  = filial['facultades'] as Map<String, dynamic>;
     final facultadData = facultades[facultad];
     if (facultadData == null) return [];
-    return List<Map<String, dynamic>>.from(
-        facultadData['carreras'] ?? []);
+    return List<Map<String, dynamic>>.from(facultadData['carreras'] ?? []);
   }
 
-  String _getNombreFilial(String filialId) {
-    return _estructuraFiliales[filialId]?['nombre'] ?? filialId;
-  }
+  String _getNombreFilial(String filialId) =>
+      _estructuraFiliales[filialId]?['nombre'] ?? filialId;
 
-  // ── Cambios de filtro ─────────────────────────────────────────────
   void _onFilialChanged(String? filialId) {
     setState(() {
-      _selectedFilialId      = filialId;
-      _selectedFilialNombre  = filialId != null ? _getNombreFilial(filialId) : null;
-      _selectedFacultad      = null;
-      _selectedCarrera       = null;
-      _carreraPath           = null;
-      _allStudents           = [];
-      _filteredStudents      = [];
+      _selectedFilialId     = filialId;
+      _selectedFilialNombre = filialId != null ? _getNombreFilial(filialId) : null;
+      _selectedFacultad     = null;
+      _selectedCarrera      = null;
+      _carreraPath          = null;
+      _allStudents          = [];
+      _filteredStudents     = [];
       _expandedStudents.clear();
       _dniCache.clear();
       _searchController.clear();
@@ -152,7 +144,6 @@ class _EstudiantesRegistradosScreenState
       _searchController.clear();
     });
     if (carrera != null && _selectedFilialNombre != null) {
-      // Path: "filialNombre_carrera"  (mismo formato que el admin carrera)
       _carreraPath = '${_selectedFilialNombre}_$carrera';
       _loadStudents();
     }
@@ -173,14 +164,12 @@ class _EstudiantesRegistradosScreenState
     });
   }
 
-  // ── Carga de estudiantes ──────────────────────────────────────────
   Future<void> _loadStudents() async {
     if (_carreraPath == null) return;
     setState(() => _isLoading = true);
     _dniCache.clear();
     try {
-      final students =
-          await PrefsHelper.getStudentsByCarrera(_carreraPath!);
+      final students = await PrefsHelper.getStudentsByCarrera(_carreraPath!);
       setState(() {
         _allStudents      = students;
         _filteredStudents = students;
@@ -193,8 +182,7 @@ class _EstudiantesRegistradosScreenState
     setState(() => _isLoading = false);
   }
 
-  Future<void> _precargarTodosDnis(
-      List<Map<String, dynamic>> students) async {
+  Future<void> _precargarTodosDnis(List<Map<String, dynamic>> students) async {
     if (students.isEmpty) return;
     try {
       await Future.wait(
@@ -203,7 +191,7 @@ class _EstudiantesRegistradosScreenState
       );
       if (mounted) setState(() {});
     } catch (e) {
-      debugPrint('⚠️ Error precargando DNIs: $e');
+      debugPrint('Error precargando DNIs: $e');
     }
   }
 
@@ -223,7 +211,6 @@ class _EstudiantesRegistradosScreenState
     return result;
   }
 
-  // ── Búsqueda ──────────────────────────────────────────────────────
   void _applySearch() {
     final term = _searchController.text.toLowerCase().trim();
     if (term.isEmpty) {
@@ -235,7 +222,7 @@ class _EstudiantesRegistradosScreenState
         final name      = (s['name']                ?? '').toString().toLowerCase();
         final codigo    = (s['codigoUniversitario'] ?? '').toString().toLowerCase();
         final studentId = s['id'] as String? ?? '';
-        final dniCached = (_dniCache[studentId] ?? '').toLowerCase();
+        final dniCached = (_dniCache[studentId]     ?? '').toLowerCase();
         return name.contains(term) ||
             codigo.contains(term) ||
             dniCached.contains(term);
@@ -243,7 +230,6 @@ class _EstudiantesRegistradosScreenState
     });
   }
 
-  // ── Edición ───────────────────────────────────────────────────────
   Future<void> _showEditDialog(
       Map<String, dynamic> student, String studentId) async {
     final dniActual = await _decryptDni(student);
@@ -268,213 +254,217 @@ class _EstudiantesRegistradosScreenState
     await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => Dialog(
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.85,
-              maxWidth: 560,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Título
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
+        builder: (context, setDialogState) {
+          final screenHeight = MediaQuery.of(context).size.height;
+          final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+          final availableHeight = screenHeight - keyboardHeight;
+
+          return Dialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: availableHeight * 0.88,
+                maxWidth:  560,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 8, 0),
+                    child: Row(
+                      children: [
+                        Container(
+                          width:  40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: _primaryColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.edit, color: _primaryColor, size: 20),
                         ),
-                        child: const Icon(Icons.edit,
-                            color: Color(0xFF1E3A5F)),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Editar Estudiante',
-                          style: TextStyle(
-                              fontSize: 18,
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Editar Estudiante',
+                            style: TextStyle(
+                              fontSize:   18,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF1E3A5F)),
-                          overflow: TextOverflow.ellipsis,
+                              color:      _primaryColor,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close, size: 20),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
+                        SizedBox(
+                          width:  _minTapTarget,
+                          height: _minTapTarget,
+                          child: IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.close, size: 20),
+                            tooltip: 'Cerrar',
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                const Divider(height: 1),
-                Flexible(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-                    child: Form(
-                      key: formKey,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _editField(
-                            _editNombreController,
-                            'Nombre completo',
-                            Icons.person,
-                            validator: (v) =>
-                                (v == null || v.trim().isEmpty)
-                                    ? 'El nombre es requerido'
-                                    : null,
-                          ),
-                          const SizedBox(height: 14),
-                          _editField(
-                            _editEmailController,
-                            'Email',
-                            Icons.email,
-                            keyboardType: TextInputType.emailAddress,
-                          ),
-                          const SizedBox(height: 14),
-                          _editField(
-                            _editCodigoController,
-                            'Código universitario',
-                            Icons.badge,
-                          ),
-                          const SizedBox(height: 14),
-                          _buildDniField(
-                            obscure:   obscureDni,
-                            dniActual: dniActual,
-                            onToggle:  () => setDialogState(
-                                () => obscureDni = !obscureDni),
-                          ),
-                          const SizedBox(height: 14),
-                          _editField(
-                            _editCelularController,
-                            'Celular',
-                            Icons.phone,
-                            keyboardType: TextInputType.phone,
-                          ),
-                          const SizedBox(height: 14),
-                          _editField(
-                            _editCorreoInstitucionalController,
-                            'Correo institucional',
-                            Icons.email_outlined,
-                            keyboardType: TextInputType.emailAddress,
-                          ),
-                          const SizedBox(height: 14),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _dropdownField(
-                                  label: 'Ciclo',
-                                  icon: Icons.layers,
-                                  value: selectedCiclo,
-                                  options: cicloOptions,
-                                  itemLabel: (v) => 'Ciclo $v',
-                                  onChanged: (v) => setDialogState(
-                                      () => selectedCiclo = v),
+                  const SizedBox(height: 12),
+                  const Divider(height: 1),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      child: Form(
+                        key: formKey,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _editField(
+                              _editNombreController,
+                              'Nombre completo',
+                              Icons.person,
+                              validator: (v) =>
+                                  (v == null || v.trim().isEmpty)
+                                      ? 'El nombre es requerido'
+                                      : null,
+                            ),
+                            const SizedBox(height: 14),
+                            _editField(
+                              _editEmailController,
+                              'Email',
+                              Icons.email,
+                              keyboardType: TextInputType.emailAddress,
+                            ),
+                            const SizedBox(height: 14),
+                            _editField(
+                              _editCodigoController,
+                              'Código universitario',
+                              Icons.badge,
+                            ),
+                            const SizedBox(height: 14),
+                            _buildDniField(
+                              obscure:   obscureDni,
+                              dniActual: dniActual,
+                              onToggle:  () =>
+                                  setDialogState(() => obscureDni = !obscureDni),
+                            ),
+                            const SizedBox(height: 14),
+                            _editField(
+                              _editCelularController,
+                              'Celular',
+                              Icons.phone,
+                              keyboardType: TextInputType.phone,
+                            ),
+                            const SizedBox(height: 14),
+                            _editField(
+                              _editCorreoInstitucionalController,
+                              'Correo institucional',
+                              Icons.email_outlined,
+                              keyboardType: TextInputType.emailAddress,
+                            ),
+                            const SizedBox(height: 14),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _dropdownField(
+                                    label:     'Ciclo',
+                                    icon:      Icons.layers,
+                                    value:     selectedCiclo,
+                                    options:   cicloOptions,
+                                    itemLabel: (v) => 'Ciclo $v',
+                                    onChanged: (v) =>
+                                        setDialogState(() => selectedCiclo = v),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _dropdownField(
-                                  label: 'Grupo',
-                                  icon: Icons.groups,
-                                  value: selectedGrupo,
-                                  options: grupoOptions,
-                                  itemLabel: (v) => 'Grupo $v',
-                                  onChanged: (v) => setDialogState(
-                                      () => selectedGrupo = v),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _dropdownField(
+                                    label:     'Grupo',
+                                    icon:      Icons.groups,
+                                    value:     selectedGrupo,
+                                    options:   grupoOptions,
+                                    itemLabel: (v) => 'Grupo $v',
+                                    onChanged: (v) =>
+                                        setDialogState(() => selectedGrupo = v),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF64748B),
-                            side: BorderSide(color: Colors.grey.shade300),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 14),
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: _minTapTarget,
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: _subtextColor,
+                                side: BorderSide(color: Colors.grey.shade300),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Text('Cancelar'),
+                            ),
                           ),
-                          child: const Text('Cancelar'),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            if (formKey.currentState!.validate()) {
-                              final nuevoDni =
-                                  _editDniController.text.trim();
-                              final dniParaActualizar =
-                                  (nuevoDni.isNotEmpty &&
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: SizedBox(
+                            height: _minTapTarget,
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                if (formKey.currentState!.validate()) {
+                                  final nuevoDni = _editDniController.text.trim();
+                                  final dniParaActualizar = (nuevoDni.isNotEmpty &&
                                           nuevoDni != dniActual &&
                                           nuevoDni != 'Sin DNI')
                                       ? nuevoDni
                                       : null;
-                              Navigator.of(context).pop();
-                              await _updateStudent(
-                                studentId: studentId,
-                                name:      _editNombreController.text.trim(),
-                                email:     _editEmailController.text.trim(),
-                                codigoUniversitario:
-                                    _editCodigoController.text.trim(),
-                                dni:    dniParaActualizar,
-                                celular:
-                                    _editCelularController.text.trim(),
-                                correoInstitucional:
-                                    _editCorreoInstitucionalController
-                                        .text
-                                        .trim(),
-                                ciclo: selectedCiclo,
-                                grupo: selectedGrupo,
-                              );
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1E3A5F),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 14),
+                                  Navigator.of(context).pop();
+                                  await _updateStudent(
+                                    studentId:           studentId,
+                                    name:                _editNombreController.text.trim(),
+                                    email:               _editEmailController.text.trim(),
+                                    codigoUniversitario: _editCodigoController.text.trim(),
+                                    dni:                 dniParaActualizar,
+                                    celular:             _editCelularController.text.trim(),
+                                    correoInstitucional: _editCorreoInstitucionalController.text.trim(),
+                                    ciclo: selectedCiclo,
+                                    grupo: selectedGrupo,
+                                  );
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _primaryColor,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Text('Guardar'),
+                            ),
                           ),
-                          child: const Text('Guardar'),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
 
-  // ── Campo DNI con aviso + ver/ocultar + copiar ────────────────────
   Widget _buildDniField({
     required bool obscure,
     required String dniActual,
@@ -484,12 +474,11 @@ class _EstudiantesRegistradosScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFF8E1),
+            color:        const Color(0xFFFFF8E1),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFFFE082)),
+            border:       Border.all(color: const Color(0xFFFFE082)),
           ),
           child: const Row(
             children: [
@@ -500,8 +489,7 @@ class _EstudiantesRegistradosScreenState
                 child: Text(
                   'Este es el DNI actual del estudiante. '
                   'Puedes copiarlo o escribir uno nuevo.',
-                  style:
-                      TextStyle(fontSize: 11, color: Color(0xFF7D5A00)),
+                  style: TextStyle(fontSize: 11, color: Color(0xFF7D5A00)),
                 ),
               ),
             ],
@@ -514,52 +502,56 @@ class _EstudiantesRegistradosScreenState
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
             labelText: 'DNI actual',
-            labelStyle: const TextStyle(
-                fontSize: 13, color: Color(0xFF64748B)),
+            labelStyle: const TextStyle(fontSize: 13, color: _subtextColor),
             prefixIcon: const Icon(Icons.credit_card,
-                color: Color(0xFF1E3A5F), size: 20),
+                color: _primaryColor, size: 20),
             suffixIcon: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.copy_rounded,
-                      color: Color(0xFF3B6FD4), size: 19),
-                  tooltip: 'Copiar DNI',
-                  onPressed: () {
-                    if (_editDniController.text.isNotEmpty) {
-                      _copyToClipboard(_editDniController.text);
-                    }
-                  },
-                ),
-                IconButton(
-                  icon: Icon(
-                    obscure
-                        ? Icons.visibility_off_rounded
-                        : Icons.visibility_rounded,
-                    color: Colors.grey[400],
-                    size: 20,
+                SizedBox(
+                  width:  _minTapTarget,
+                  height: _minTapTarget,
+                  child: IconButton(
+                    icon: const Icon(Icons.copy_rounded,
+                        color: Color(0xFF3B6FD4), size: 19),
+                    tooltip:   'Copiar DNI',
+                    onPressed: () {
+                      if (_editDniController.text.isNotEmpty) {
+                        _copyToClipboard(_editDniController.text);
+                      }
+                    },
                   ),
-                  onPressed: onToggle,
+                ),
+                SizedBox(
+                  width:  _minTapTarget,
+                  height: _minTapTarget,
+                  child: IconButton(
+                    icon: Icon(
+                      obscure
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
+                      color: Colors.grey[400],
+                      size:  20,
+                    ),
+                    onPressed: onToggle,
+                  ),
                 ),
               ],
             ),
-            helperText: 'Dejar vacío para no cambiar el DNI',
-            helperStyle: const TextStyle(
-                fontSize: 11, color: Color(0xFF94A3B8)),
+            helperText:  'Dejar vacío para no cambiar el DNI',
+            helperStyle: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
             border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12)),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: Color(0xFFE2E8F0)),
+              borderSide:   const BorderSide(color: _borderColor),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(
-                  color: Color(0xFF1E3A5F), width: 1.5),
+              borderSide:   const BorderSide(color: _primaryColor, width: 1.5),
             ),
-            filled:     true,
-            fillColor:  const Color(0xFFF8FAFC),
+            filled:         true,
+            fillColor:      const Color(0xFFF8FAFC),
             contentPadding: const EdgeInsets.symmetric(
                 horizontal: 14, vertical: 14),
           ),
@@ -570,7 +562,7 @@ class _EstudiantesRegistradosScreenState
 
   void _copyToClipboard(String text) {
     Clipboard.setData(ClipboardData(text: text));
-    _showMessage('✅ DNI copiado al portapapeles');
+    _showMessage('DNI copiado al portapapeles');
   }
 
   String? _safeOption(dynamic value, List<String> options) {
@@ -591,22 +583,19 @@ class _EstudiantesRegistradosScreenState
       keyboardType: keyboardType,
       decoration: InputDecoration(
         labelText:  label,
-        prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12)),
+        prefixIcon: Icon(icon, color: _primaryColor),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide:   BorderSide(color: Colors.grey.shade300),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(
-              color: Color(0xFF1E3A5F), width: 2),
+          borderSide:   const BorderSide(color: _primaryColor, width: 2),
         ),
-        filled:    true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 14),
+        filled:         true,
+        fillColor:      Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       validator: validator,
     );
@@ -625,28 +614,24 @@ class _EstudiantesRegistradosScreenState
       isExpanded: true,
       decoration: InputDecoration(
         labelText:  label,
-        prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12)),
+        prefixIcon: Icon(icon, color: _primaryColor),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide:   BorderSide(color: Colors.grey.shade300),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(
-              color: Color(0xFF1E3A5F), width: 2),
+          borderSide:   const BorderSide(color: _primaryColor, width: 2),
         ),
-        filled:    true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 14),
+        filled:         true,
+        fillColor:      Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       items: [
         const DropdownMenuItem<String>(
           value: null,
-          child: Text('Sin seleccionar',
-              overflow: TextOverflow.ellipsis),
+          child: Text('Sin seleccionar', overflow: TextOverflow.ellipsis),
         ),
         ...options.map((o) => DropdownMenuItem(
               value: o,
@@ -659,12 +644,10 @@ class _EstudiantesRegistradosScreenState
       onChanged:     onChanged,
       dropdownColor: Colors.white,
       menuMaxHeight: 260,
-      icon: const Icon(Icons.arrow_drop_down,
-          color: Color(0xFF1E3A5F)),
+      icon: const Icon(Icons.arrow_drop_down, color: _primaryColor),
     );
   }
 
-  // ── Actualizar estudiante ─────────────────────────────────────────
   Future<void> _updateStudent({
     required String studentId,
     String? name,
@@ -700,37 +683,32 @@ class _EstudiantesRegistradosScreenState
           );
           _dniCache.remove(studentId);
         }
-        _showMessage('✅ Estudiante actualizado exitosamente');
+        _showMessage('Estudiante actualizado exitosamente');
         await _loadStudents();
       } else {
-        _showMessage('❌ Error actualizando estudiante');
+        _showMessage('Error actualizando estudiante');
       }
     } catch (e) {
-      _showMessage('❌ Error: $e');
+      _showMessage('Error: $e');
     }
     setState(() => _isLoading = false);
   }
 
-  // ── Eliminar individual ───────────────────────────────────────────
-  Future<void> _deleteStudent(
-      String studentId, String studentName) async {
+  Future<void> _deleteStudent(String studentId, String studentName) async {
     if (_carreraPath == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
-        title: const Text('Confirmar eliminación',
-            style: TextStyle(
-                color: Color(0xFF1E3A5F),
-                fontWeight: FontWeight.bold)),
-        content: Text(
-            '¿Estás seguro de que quieres eliminar a $studentName?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Confirmar eliminación',
+          style: TextStyle(color: _primaryColor, fontWeight: FontWeight.bold),
+        ),
+        content: Text('¿Estás seguro de que quieres eliminar a $studentName?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF64748B)),
+            style: TextButton.styleFrom(foregroundColor: _subtextColor),
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
@@ -749,23 +727,21 @@ class _EstudiantesRegistradosScreenState
     if (confirmed == true) {
       setState(() => _isLoading = true);
       try {
-        final success =
-            await PrefsHelper.deleteStudent(_carreraPath!, studentId);
+        final success = await PrefsHelper.deleteStudent(_carreraPath!, studentId);
         if (success) {
           _dniCache.remove(studentId);
-          _showMessage('✅ Estudiante eliminado exitosamente');
+          _showMessage('Estudiante eliminado exitosamente');
           await _loadStudents();
         } else {
-          _showMessage('❌ Error eliminando estudiante');
+          _showMessage('Error eliminando estudiante');
         }
       } catch (e) {
-        _showMessage('❌ Error: $e');
+        _showMessage('Error: $e');
       }
       setState(() => _isLoading = false);
     }
   }
 
-  // ── Eliminar todos ────────────────────────────────────────────────
   Future<void> _deleteAllStudents() async {
     if (_filteredStudents.isEmpty || _carreraPath == null) {
       _showMessage('No hay estudiantes para eliminar');
@@ -775,26 +751,27 @@ class _EstudiantesRegistradosScreenState
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Row(
           children: [
             Icon(Icons.warning_rounded, color: Colors.red, size: 28),
             SizedBox(width: 8),
             Expanded(
-              child: Text('ADVERTENCIA',
-                  style: TextStyle(
-                      color: Colors.red,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18),
-                  overflow: TextOverflow.ellipsis),
+              child: Text(
+                'ADVERTENCIA',
+                style: TextStyle(
+                  color:      Colors.red,
+                  fontWeight: FontWeight.bold,
+                  fontSize:   18,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
+        content: SingleChildScrollView(
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize:      MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
@@ -806,9 +783,9 @@ class _EstudiantesRegistradosScreenState
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade50,
+                  color:        Colors.red.shade50,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.shade300),
+                  border:       Border.all(color: Colors.red.shade300),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -822,9 +799,10 @@ class _EstudiantesRegistradosScreenState
                           child: Text(
                             'Total a eliminar: ${_filteredStudents.length} estudiantes',
                             style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red.shade700,
-                                fontSize: 13),
+                              fontWeight: FontWeight.bold,
+                              color:      Colors.red.shade700,
+                              fontSize:   13,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -834,9 +812,7 @@ class _EstudiantesRegistradosScreenState
                     Text(
                       '• Esta acción NO se puede deshacer\n'
                       '• Los estudiantes no podrán iniciar sesión',
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.red.shade900),
+                      style: TextStyle(fontSize: 12, color: Colors.red.shade900),
                     ),
                   ],
                 ),
@@ -847,8 +823,7 @@ class _EstudiantesRegistradosScreenState
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF64748B)),
+            style: TextButton.styleFrom(foregroundColor: _subtextColor),
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
@@ -870,24 +845,25 @@ class _EstudiantesRegistradosScreenState
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: const Padding(
           padding: EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(color: Color(0xFF1E3A5F)),
+              CircularProgressIndicator(color: _primaryColor),
               SizedBox(height: 16),
-              Text('Eliminando estudiantes...',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 15),
-                  textAlign: TextAlign.center),
+              Text(
+                'Eliminando estudiantes...',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                textAlign: TextAlign.center,
+              ),
               SizedBox(height: 8),
-              Text('Esto puede tomar unos segundos',
-                  style: TextStyle(
-                      fontSize: 12, color: Color(0xFF64748B)),
-                  textAlign: TextAlign.center),
+              Text(
+                'Esto puede tomar unos segundos',
+                style: TextStyle(fontSize: 12, color: _subtextColor),
+                textAlign: TextAlign.center,
+              ),
             ],
           ),
         ),
@@ -901,8 +877,7 @@ class _EstudiantesRegistradosScreenState
                 'studentId':   s['id'] as String,
               })
           .toList();
-      final result =
-          await PrefsHelper.deleteMultipleStudents(studentsToDelete);
+      final result = await PrefsHelper.deleteMultipleStudents(studentsToDelete);
       if (mounted) Navigator.of(context).pop();
       await _showDeleteResultsDialog(
           result['success'] ?? 0, result['errors'] ?? 0);
@@ -917,8 +892,7 @@ class _EstudiantesRegistradosScreenState
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
             Icon(
@@ -931,10 +905,11 @@ class _EstudiantesRegistradosScreenState
               size: 24,
             ),
             const SizedBox(width: 8),
-            const Text('Resultados',
-                style: TextStyle(
-                    color: Color(0xFF1E3A5F),
-                    fontWeight: FontWeight.bold)),
+            const Text(
+              'Resultados',
+              style: TextStyle(
+                  color: _primaryColor, fontWeight: FontWeight.bold),
+            ),
           ],
         ),
         content: Column(
@@ -943,20 +918,23 @@ class _EstudiantesRegistradosScreenState
             _resultRow('Eliminados:', '$success',
                 Icons.check_circle, Colors.green),
             const SizedBox(height: 8),
-            _resultRow(
-                'Errores:', '$errors', Icons.error, Colors.red),
+            _resultRow('Errores:', '$errors',
+                Icons.error, Colors.red),
           ],
         ),
         actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1E3A5F),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+          SizedBox(
+            height: _minTapTarget,
+            child: ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Cerrar'),
             ),
-            child: const Text('Cerrar'),
           ),
         ],
       ),
@@ -970,45 +948,44 @@ class _EstudiantesRegistradosScreenState
         Icon(icon, size: 20, color: color),
         const SizedBox(width: 8),
         Expanded(
-            child:
-                Text(label, style: const TextStyle(fontSize: 14))),
+            child: Text(label, style: const TextStyle(fontSize: 14))),
         Text(value,
             style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: color,
-                fontSize: 16)),
+                color:      color,
+                fontSize:   16)),
       ],
     );
   }
 
-  // ── Snackbar ──────────────────────────────────────────────────────
   void _showMessage(String message) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(message,
-            overflow: TextOverflow.ellipsis, maxLines: 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message,
+              overflow: TextOverflow.ellipsis, maxLines: 2),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
     }
   }
 
-  // ── Selectores de filtro ──────────────────────────────────────────
   void _showFilialSelector() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor:    Colors.transparent,
       builder: (context) => _buildSelectorSheet(
         title: 'Seleccionar Sede',
-        icon: Icons.location_city,
+        icon:  Icons.location_city,
         items: _filialesDisponibles.map((id) {
           return _SelectorItem(
-            value: id,
-            label: _getNombreFilial(id),
-            subtitle: _estructuraFiliales[id]?['ubicacion'] ?? '',
+            value:      id,
+            label:      _getNombreFilial(id),
+            subtitle:   _estructuraFiliales[id]?['ubicacion'] ?? '',
             isSelected: _selectedFilialId == id,
           );
         }).toList(),
@@ -1022,23 +999,23 @@ class _EstudiantesRegistradosScreenState
 
   void _showFacultadSelector() {
     if (_selectedFilialId == null) {
-      _showMessage('⚠️ Debes seleccionar una Sede primero');
+      _showMessage('Debes seleccionar una Sede primero');
       return;
     }
     final facultades = _getFacultades(_selectedFilialId!);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor:    Colors.transparent,
       builder: (context) => _buildSelectorSheet(
         title: 'Seleccionar Facultad',
-        icon: Icons.business,
+        icon:  Icons.business,
         items: facultades.map((f) {
           final carreras = _getCarreras(_selectedFilialId!, f);
           return _SelectorItem(
-            value: f,
-            label: f,
-            subtitle: '${carreras.length} carreras',
+            value:      f,
+            label:      f,
+            subtitle:   '${carreras.length} carreras',
             isSelected: _selectedFacultad == f,
           );
         }).toList(),
@@ -1052,23 +1029,22 @@ class _EstudiantesRegistradosScreenState
 
   void _showCarreraSelector() {
     if (_selectedFilialId == null || _selectedFacultad == null) {
-      _showMessage('⚠️ Debes seleccionar una Facultad primero');
+      _showMessage('Debes seleccionar una Facultad primero');
       return;
     }
-    final carreras =
-        _getCarreras(_selectedFilialId!, _selectedFacultad!);
+    final carreras = _getCarreras(_selectedFilialId!, _selectedFacultad!);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor:    Colors.transparent,
       builder: (context) => _buildSelectorSheet(
         title: 'Seleccionar Carrera',
-        icon: Icons.school,
+        icon:  Icons.school,
         items: carreras.map((c) {
           return _SelectorItem(
-            value: c['nombre'] as String,
-            label: c['nombre'] as String,
-            subtitle: '',
+            value:      c['nombre'] as String,
+            label:      c['nombre'] as String,
+            subtitle:   '',
             isSelected: _selectedCarrera == c['nombre'],
           );
         }).toList(),
@@ -1086,119 +1062,131 @@ class _EstudiantesRegistradosScreenState
     required List<_SelectorItem> items,
     required ValueChanged<String> onSelected,
   }) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
-      ),
-      child: DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        maxChildSize: 0.9,
-        minChildSize: 0.4,
-        expand: false,
-        builder: (context, scrollController) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              Container(
-                width: 50,
-                height: 5,
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(10),
+    return SafeArea(
+      child: Container(
+        decoration: const BoxDecoration(
+          color:        Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+        ),
+        child: DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          maxChildSize:     0.92,
+          minChildSize:     0.4,
+          expand: false,
+          builder: (context, scrollController) => Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            child: Column(
+              children: [
+                Container(
+                  width:  50,
+                  height: 5,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color:        Colors.grey[300],
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-              ),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E3A5F)
-                          .withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child:
-                        Icon(icon, color: const Color(0xFF1E3A5F), size: 26),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    title,
-                    style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E3A5F)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ListView.builder(
-                  controller: scrollController,
-                  itemCount: items.length,
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      margin: const EdgeInsets.only(bottom: 10),
+                Row(
+                  children: [
+                    Container(
+                      width:  44,
+                      height: 44,
                       decoration: BoxDecoration(
-                        color: item.isSelected
-                            ? const Color(0xFF1E3A5F)
-                                .withValues(alpha: 0.08)
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: item.isSelected
-                              ? const Color(0xFF1E3A5F)
-                              : Colors.grey.shade300,
-                          width: item.isSelected ? 2 : 1,
-                        ),
+                        color:        _primaryColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 6),
-                        title: Text(
-                          item.label,
-                          style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: item.isSelected
-                                  ? const Color(0xFF1E3A5F)
-                                  : Colors.black87,
-                              fontSize: 14),
+                      child: Icon(icon, color: _primaryColor, size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize:   20,
+                          fontWeight: FontWeight.bold,
+                          color:      _primaryColor,
                         ),
-                        subtitle: item.subtitle.isNotEmpty
-                            ? Text(item.subtitle,
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: item.isSelected
-                                        ? const Color(0xFF1E3A5F)
-                                            .withValues(alpha: 0.7)
-                                        : Colors.grey))
-                            : null,
-                        trailing: item.isSelected
-                            ? const Icon(Icons.check_circle,
-                                color: Color(0xFF1E3A5F))
-                            : const Icon(Icons.arrow_forward_ios,
-                                size: 14, color: Colors.grey),
-                        onTap: () => onSelected(item.value),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    );
-                  },
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    itemCount:  items.length,
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      return Semantics(
+                        button:   true,
+                        selected: item.isSelected,
+                        label:    item.label,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          margin: const EdgeInsets.only(bottom: 10),
+                          decoration: BoxDecoration(
+                            color: item.isSelected
+                                ? _primaryColor.withValues(alpha: 0.08)
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: item.isSelected
+                                  ? _primaryColor
+                                  : Colors.grey.shade300,
+                              width: item.isSelected ? 2 : 1,
+                            ),
+                          ),
+                          child: ListTile(
+                            minVerticalPadding: 12,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 6),
+                            title: Text(
+                              item.label,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: item.isSelected
+                                    ? _primaryColor
+                                    : Colors.black87,
+                                fontSize: 14,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 2,
+                            ),
+                            subtitle: item.subtitle.isNotEmpty
+                                ? Text(
+                                    item.subtitle,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: item.isSelected
+                                          ? _primaryColor.withValues(alpha: 0.7)
+                                          : Colors.grey,
+                                    ),
+                                  )
+                                : null,
+                            trailing: item.isSelected
+                                ? const Icon(Icons.check_circle,
+                                    color: _primaryColor)
+                                : const Icon(Icons.arrow_forward_ios,
+                                    size: 14, color: Colors.grey),
+                            onTap: () => onSelected(item.value),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // ── Card de estudiante ────────────────────────────────────────────
-  Widget _buildEstudianteCard(
-      Map<String, dynamic> student, int index) {
+  Widget _buildEstudianteCard(Map<String, dynamic> student, int index) {
     final studentId  = student['id'] as String? ?? '';
     final isExpanded = _expandedStudents.contains(studentId);
-
     final animDuration =
         Duration(milliseconds: 200 + (index * 30).clamp(0, 400));
 
@@ -1213,7 +1201,7 @@ class _EstudiantesRegistradosScreenState
         duration: const Duration(milliseconds: 250),
         margin: const EdgeInsets.only(bottom: 14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color:        Colors.white,
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
@@ -1238,11 +1226,13 @@ class _EstudiantesRegistradosScreenState
                 child: Padding(
                   padding: const EdgeInsets.all(14),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        width: 50, height: 50,
+                        width:  50,
+                        height: 50,
                         decoration: const BoxDecoration(
-                          color: Color(0xFF1E3A5F),
+                          color: _primaryColor,
                           shape: BoxShape.circle,
                         ),
                         child: Center(
@@ -1251,9 +1241,10 @@ class _EstudiantesRegistradosScreenState
                                 .substring(0, 1)
                                 .toUpperCase(),
                             style: const TextStyle(
-                                color:      Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize:   20),
+                              color:      Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize:   20,
+                            ),
                           ),
                         ),
                       ),
@@ -1265,31 +1256,33 @@ class _EstudiantesRegistradosScreenState
                             Text(
                               student['name'] ?? 'Sin nombre',
                               style: const TextStyle(
-                                  fontSize:   15,
-                                  fontWeight: FontWeight.bold,
-                                  color:      Color(0xFF1E3A5F)),
+                                fontSize:   15,
+                                fontWeight: FontWeight.bold,
+                                color:      _primaryColor,
+                              ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 6),
                             Wrap(
-                              spacing: 6, runSpacing: 4,
+                              spacing:    6,
+                              runSpacing: 4,
                               children: [
                                 _badge(
-                                  student['codigoUniversitario'] ??
-                                      'Sin código',
+                                  student['codigoUniversitario'] ?? 'Sin código',
                                   Icons.badge,
                                   Colors.blue,
                                 ),
                                 FutureBuilder<String>(
                                   future: _decryptDni(student),
                                   builder: (context, snapshot) {
-                                    final dni = snapshot.connectionState ==
-                                            ConnectionState.waiting
-                                        ? '...'
-                                        : (snapshot.data?.isNotEmpty == true
-                                            ? snapshot.data!
-                                            : 'Sin DNI');
+                                    final dni =
+                                        snapshot.connectionState ==
+                                                ConnectionState.waiting
+                                            ? '...'
+                                            : (snapshot.data?.isNotEmpty == true
+                                                ? snapshot.data!
+                                                : 'Sin DNI');
                                     return _badge(
                                         dni, Icons.credit_card, Colors.green);
                                   },
@@ -1308,52 +1301,61 @@ class _EstudiantesRegistradosScreenState
                       Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          PopupMenuButton<String>(
-                            icon: const Icon(Icons.more_vert,
-                                color: Color(0xFF64748B), size: 20),
-                            shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(12)),
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(
-                                value: 'edit',
-                                child: Row(children: [
-                                  Icon(Icons.edit,
-                                      color: Color(0xFF1E3A5F),
-                                      size: 18),
-                                  SizedBox(width: 8),
-                                  Text('Editar',
-                                      style:
-                                          TextStyle(fontSize: 14)),
-                                ]),
-                              ),
-                              const PopupMenuItem(
-                                value: 'delete',
-                                child: Row(children: [
-                                  Icon(Icons.delete,
-                                      color: Colors.red, size: 18),
-                                  SizedBox(width: 8),
-                                  Text('Eliminar',
-                                      style:
-                                          TextStyle(fontSize: 14)),
-                                ]),
-                              ),
-                            ],
-                            onSelected: (value) {
-                              if (value == 'edit') {
-                                _showEditDialog(student, studentId);
-                              } else if (value == 'delete') {
-                                _deleteStudent(studentId,
-                                    student['name'] ?? 'Estudiante');
-                              }
-                            },
+                          SizedBox(
+                            width:  _minTapTarget,
+                            height: _minTapTarget,
+                            child: PopupMenuButton<String>(
+                              icon: const Icon(Icons.more_vert,
+                                  color: _subtextColor, size: 22),
+                              tooltip: 'Opciones',
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value:  'edit',
+                                  height: _minTapTarget,
+                                  child: Row(children: [
+                                    Icon(Icons.edit,
+                                        color: _primaryColor, size: 18),
+                                    SizedBox(width: 8),
+                                    Text('Editar',
+                                        style: TextStyle(fontSize: 14)),
+                                  ]),
+                                ),
+                                const PopupMenuItem(
+                                  value:  'delete',
+                                  height: _minTapTarget,
+                                  child: Row(children: [
+                                    Icon(Icons.delete,
+                                        color: Colors.red, size: 18),
+                                    SizedBox(width: 8),
+                                    Text('Eliminar',
+                                        style: TextStyle(fontSize: 14)),
+                                  ]),
+                                ),
+                              ],
+                              onSelected: (value) {
+                                if (value == 'edit') {
+                                  _showEditDialog(student, studentId);
+                                } else if (value == 'delete') {
+                                  _deleteStudent(
+                                      studentId,
+                                      student['name'] ?? 'Estudiante');
+                                }
+                              },
+                            ),
                           ),
-                          AnimatedRotation(
-                            turns:    isExpanded ? 0.5 : 0,
-                            duration:
-                                const Duration(milliseconds: 250),
-                            child: const Icon(Icons.expand_more,
-                                color: Color(0xFF64748B), size: 20),
+                          SizedBox(
+                            width:  _minTapTarget,
+                            height: _minTapTarget,
+                            child: Center(
+                              child: AnimatedRotation(
+                                turns:    isExpanded ? 0.5 : 0,
+                                duration: const Duration(milliseconds: 250),
+                                child: const Icon(Icons.expand_more,
+                                    color: _subtextColor, size: 22),
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -1362,7 +1364,6 @@ class _EstudiantesRegistradosScreenState
                 ),
               ),
 
-              // Detalle expandido
               AnimatedSize(
                 duration: const Duration(milliseconds: 250),
                 curve:    Curves.easeInOut,
@@ -1370,44 +1371,53 @@ class _EstudiantesRegistradosScreenState
                     ? Column(
                         children: [
                           Divider(
-                              height: 1,
-                              color:  Colors.grey.shade200,
-                              indent: 16,
-                              endIndent: 16),
+                            height:    1,
+                            color:     Colors.grey.shade200,
+                            indent:    16,
+                            endIndent: 16,
+                          ),
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(
-                                16, 12, 16, 16),
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                             child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _infoRow('Usuario:',
-                                    student['username'] ??
-                                        'Sin usuario',
-                                    Icons.person),
+                                _infoRow(
+                                  'Usuario:',
+                                  student['username'] ?? 'Sin usuario',
+                                  Icons.person,
+                                ),
                                 const SizedBox(height: 10),
                                 _dniInfoRow(student),
                                 const SizedBox(height: 10),
-                                _infoRow('Celular:',
-                                    student['celular'] ?? 'Sin celular',
-                                    Icons.phone),
+                                _infoRow(
+                                  'Celular:',
+                                  student['celular'] ?? 'Sin celular',
+                                  Icons.phone,
+                                ),
                                 if (student['email'] != null &&
-                                    (student['email'] as String)
-                                        .isNotEmpty) ...[
+                                    (student['email'] as String).isNotEmpty) ...[
                                   const SizedBox(height: 10),
-                                  _infoRow('Email:',
-                                      student['email'], Icons.email),
+                                  _infoRow(
+                                    'Email:',
+                                    student['email'],
+                                    Icons.email,
+                                  ),
                                 ],
                                 if (student['grupo'] != null) ...[
                                   const SizedBox(height: 10),
-                                  _infoRow('Grupo:',
-                                      'Grupo ${student['grupo']}',
-                                      Icons.groups),
+                                  _infoRow(
+                                    'Grupo:',
+                                    'Grupo ${student['grupo']}',
+                                    Icons.groups,
+                                  ),
                                 ],
                                 if (student['facultad'] != null) ...[
                                   const SizedBox(height: 10),
-                                  _infoRow('Facultad:',
-                                      student['facultad'], Icons.business),
+                                  _infoRow(
+                                    'Facultad:',
+                                    student['facultad'],
+                                    Icons.business,
+                                  ),
                                 ],
                               ],
                             ),
@@ -1423,7 +1433,6 @@ class _EstudiantesRegistradosScreenState
     );
   }
 
-  // ── Fila DNI con caché ────────────────────────────────────────────
   Widget _dniInfoRow(Map<String, dynamic> student) {
     final studentId = student['id'] as String? ?? '';
     final dni       = _dniCache[studentId];
@@ -1440,7 +1449,9 @@ class _EstudiantesRegistradosScreenState
                   ? '(error)'
                   : (snapshot.data ?? 'Sin DNI'));
           return _infoRowWithCopy(
-            'DNI:', dniText, Icons.credit_card,
+            'DNI:',
+            dniText,
+            Icons.credit_card,
             isLoading: isLoading,
             onCopy: !isLoading &&
                     dniText != 'Sin DNI' &&
@@ -1452,9 +1463,10 @@ class _EstudiantesRegistradosScreenState
       );
     }
     return _infoRowWithCopy(
-      'DNI:', dni, Icons.credit_card,
-      onCopy:
-          dni != 'Sin DNI' ? () => _copyToClipboard(dni) : null,
+      'DNI:',
+      dni,
+      Icons.credit_card,
+      onCopy: dni != 'Sin DNI' ? () => _copyToClipboard(dni) : null,
     );
   }
 
@@ -1469,81 +1481,90 @@ class _EstudiantesRegistradosScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.all(7),
+          width:  34,
+          height: 34,
           decoration: BoxDecoration(
-            color: const Color(0xFF1E3A5F).withValues(alpha: 0.08),
+            color:        _primaryColor.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, size: 16, color: const Color(0xFF1E3A5F)),
+          child: Icon(icon, size: 16, color: _primaryColor),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                      color: Color(0xFF64748B))),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize:   12,
+                  color:      _subtextColor,
+                ),
+              ),
               const SizedBox(height: 2),
               isLoading
                   ? const SizedBox(
-                      height: 16,
-                      width:  80,
+                      height: 4,
                       child: LinearProgressIndicator(
-                        backgroundColor: Color(0xFFE2E8F0),
-                        color:           Color(0xFF1E3A5F),
+                        backgroundColor: _borderColor,
+                        color:           _primaryColor,
                       ),
                     )
-                  : Text(value,
+                  : Text(
+                      value,
                       style: const TextStyle(
-                          fontSize:   13,
-                          color:      Color(0xFF1E3A5F),
-                          fontWeight: FontWeight.w500),
+                        fontSize:   13,
+                        color:      _primaryColor,
+                        fontWeight: FontWeight.w500,
+                      ),
                       maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
+                      overflow: TextOverflow.ellipsis,
+                    ),
             ],
           ),
         ),
         if (onCopy != null)
-          IconButton(
-            icon:    const Icon(Icons.copy_rounded,
-                color: Color(0xFF3B6FD4), size: 17),
-            tooltip: 'Copiar DNI',
-            onPressed: onCopy,
-            padding:    EdgeInsets.zero,
-            constraints: const BoxConstraints(),
+          SizedBox(
+            width:  _minTapTarget,
+            height: _minTapTarget,
+            child: IconButton(
+              icon:    const Icon(Icons.copy_rounded,
+                  color: Color(0xFF3B6FD4), size: 17),
+              tooltip: 'Copiar DNI',
+              onPressed: onCopy,
+            ),
           ),
       ],
     );
   }
 
   Widget _badge(String text, IconData icon, MaterialColor color) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 180),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color:        color.shade100,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 12, color: color.shade700),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(text,
-                  style: TextStyle(
-                      fontSize:   11,
-                      color:      color.shade700,
-                      fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines:  1),
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 160),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color:        color.shade100,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color.shade700),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize:   11,
+                color:      color.shade700,
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1553,31 +1574,38 @@ class _EstudiantesRegistradosScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.all(7),
+          width:  34,
+          height: 34,
           decoration: BoxDecoration(
-            color: const Color(0xFF1E3A5F).withValues(alpha: 0.08),
+            color:        _primaryColor.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, size: 16, color: const Color(0xFF1E3A5F)),
+          child: Icon(icon, size: 16, color: _primaryColor),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                      color: Color(0xFF64748B))),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize:   12,
+                  color:      _subtextColor,
+                ),
+              ),
               const SizedBox(height: 2),
-              Text(value,
-                  style: const TextStyle(
-                      fontSize:   13,
-                      color:      Color(0xFF1E3A5F),
-                      fontWeight: FontWeight.w500),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize:   13,
+                  color:      _primaryColor,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
         ),
@@ -1585,7 +1613,6 @@ class _EstudiantesRegistradosScreenState
     );
   }
 
-  // ── Empty state ───────────────────────────────────────────────────
   Widget _buildEmptyState() {
     IconData icon;
     String title, subtitle;
@@ -1611,71 +1638,79 @@ class _EstudiantesRegistradosScreenState
     }
 
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(20),
+              width:  100,
+              height: 100,
               decoration: BoxDecoration(
-                color: const Color(0xFF1E3A5F).withValues(alpha: 0.08),
+                color: _primaryColor.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 64, color: const Color(0xFF1E3A5F)),
+              child: Icon(icon, size: 56, color: _primaryColor),
             ),
             const SizedBox(height: 20),
-            Text(title,
-                style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A5F)),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize:   20,
+                fontWeight: FontWeight.bold,
+                color:      _primaryColor,
+              ),
+              textAlign: TextAlign.center,
+              maxLines:  2,
+              overflow:  TextOverflow.ellipsis,
+            ),
             const SizedBox(height: 8),
-            Text(subtitle,
-                style: const TextStyle(
-                    fontSize: 13, color: Color(0xFF64748B)),
-                textAlign: TextAlign.center,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis),
+            Text(
+              subtitle,
+              style: const TextStyle(fontSize: 13, color: _subtextColor),
+              textAlign: TextAlign.center,
+              maxLines:  3,
+              overflow:  TextOverflow.ellipsis,
+            ),
           ],
         ),
       ),
     );
   }
 
-  // ── BUILD ─────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1E3A5F),
+      backgroundColor: _primaryColor,
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ─────────────────────────────────────────────
             Container(
-              padding: const EdgeInsets.fromLTRB(8, 12, 16, 16),
+              padding: const EdgeInsets.fromLTRB(4, 8, 12, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back,
-                            color: Colors.white),
-                        onPressed: () => Navigator.of(context).pop(),
-                        tooltip: 'Volver',
+                      SizedBox(
+                        width:  _minTapTarget,
+                        height: _minTapTarget,
+                        child: IconButton(
+                          icon: const Icon(Icons.arrow_back,
+                              color: Colors.white),
+                          onPressed: () => Navigator.of(context).pop(),
+                          tooltip: 'Volver',
+                        ),
                       ),
                       const SizedBox(width: 4),
                       const Expanded(
                         child: Text(
                           'Estudiantes Registrados',
                           style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white),
+                            fontSize:   18,
+                            fontWeight: FontWeight.bold,
+                            color:      Colors.white,
+                          ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),
@@ -1694,7 +1729,6 @@ class _EstudiantesRegistradosScreenState
                       ),
                     ],
                   ),
-                  // Banner de contexto cuando hay carrera seleccionada
                   if (_selectedCarrera != null) ...[
                     const SizedBox(height: 10),
                     Container(
@@ -1703,8 +1737,7 @@ class _EstudiantesRegistradosScreenState
                         color: Colors.white.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                            color:
-                                Colors.white.withValues(alpha: 0.2)),
+                            color: Colors.white.withValues(alpha: 0.2)),
                       ),
                       child: Row(
                         children: [
@@ -1713,23 +1746,22 @@ class _EstudiantesRegistradosScreenState
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   _selectedCarrera!,
                                   style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600),
+                                    color:      Colors.white,
+                                    fontSize:   13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                   overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
+                                  maxLines: 2,
                                 ),
                                 Text(
                                   '${_selectedFacultad ?? ''} · ${_selectedFilialNombre ?? ''}',
                                   style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 11),
+                                      color: Colors.white70, fontSize: 11),
                                   overflow: TextOverflow.ellipsis,
                                   maxLines: 1,
                                 ),
@@ -1741,17 +1773,16 @@ class _EstudiantesRegistradosScreenState
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
-                              color: Colors.white
-                                  .withValues(alpha: 0.2),
-                              borderRadius:
-                                  BorderRadius.circular(20),
+                              color:        Colors.white.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
                               '${_allStudents.length} total',
                               style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600),
+                                color:      Colors.white,
+                                fontSize:   12,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],
@@ -1762,11 +1793,10 @@ class _EstudiantesRegistradosScreenState
               ),
             ),
 
-            // ── Body ───────────────────────────────────────────────
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
-                  color: Color(0xFFE8EDF2),
+                  color: _surfaceColor,
                   borderRadius: BorderRadius.only(
                     topLeft:  Radius.circular(28),
                     topRight: Radius.circular(28),
@@ -1774,11 +1804,9 @@ class _EstudiantesRegistradosScreenState
                 ),
                 child: _isLoading && !_estructuraCargada
                     ? const Center(
-                        child: CircularProgressIndicator(
-                            color: Color(0xFF1E3A5F)))
+                        child: CircularProgressIndicator(color: _primaryColor))
                     : Column(
                         children: [
-                          // ── Panel de filtros ──────────────────
                           SlideTransition(
                             position: Tween<Offset>(
                               begin: const Offset(0, -1),
@@ -1790,71 +1818,60 @@ class _EstudiantesRegistradosScreenState
                             child: FadeTransition(
                               opacity: _filterAnimController,
                               child: Container(
-                                margin: const EdgeInsets.fromLTRB(
-                                    16, 16, 16, 8),
+                                margin:  const EdgeInsets.fromLTRB(16, 16, 16, 8),
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius:
-                                      BorderRadius.circular(20),
+                                  color:        Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black
-                                          .withValues(alpha: 0.04),
+                                      color:      Colors.black.withValues(alpha: 0.04),
                                       blurRadius: 8,
-                                      offset: const Offset(0, 3),
+                                      offset:     const Offset(0, 3),
                                     ),
                                   ],
                                 ),
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
-                                    // Título filtros + limpiar
                                     Row(
                                       children: [
                                         Container(
-                                          padding: const EdgeInsets.all(7),
+                                          width:  36,
+                                          height: 36,
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFF1E3A5F)
-                                                .withValues(alpha: 0.1),
+                                            color: _primaryColor.withValues(alpha: 0.1),
                                             borderRadius:
                                                 BorderRadius.circular(8),
                                           ),
-                                          child: const Icon(
-                                              Icons.filter_list,
-                                              color: Color(0xFF1E3A5F),
-                                              size: 18),
+                                          child: const Icon(Icons.filter_list,
+                                              color: _primaryColor, size: 18),
                                         ),
                                         const SizedBox(width: 10),
-                                        const Text('Filtros',
-                                            style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight:
-                                                    FontWeight.bold,
-                                                color:
-                                                    Color(0xFF1E3A5F))),
+                                        const Text(
+                                          'Filtros',
+                                          style: TextStyle(
+                                            fontSize:   16,
+                                            fontWeight: FontWeight.bold,
+                                            color:      _primaryColor,
+                                          ),
+                                        ),
                                         const Spacer(),
                                         if (_selectedFilialId != null)
                                           TextButton.icon(
                                             onPressed: _clearFilters,
-                                            icon: const Icon(
-                                                Icons.clear_all,
+                                            icon: const Icon(Icons.clear_all,
                                                 size: 16),
-                                            label: const Text(
-                                                'Limpiar',
-                                                style: TextStyle(
-                                                    fontSize: 13)),
+                                            label: const Text('Limpiar',
+                                                style:
+                                                    TextStyle(fontSize: 13)),
                                             style: TextButton.styleFrom(
-                                                foregroundColor:
-                                                    const Color(
-                                                        0xFF1E3A5F)),
+                                                foregroundColor: _primaryColor),
                                           ),
                                       ],
                                     ),
                                     const SizedBox(height: 12),
 
-                                    // Fila: Sede + Facultad
                                     Row(
                                       children: [
                                         Expanded(
@@ -1874,27 +1891,24 @@ class _EstudiantesRegistradosScreenState
                                                     .replaceFirst(
                                                         'Facultad de ', '')
                                                 : null,
-                                            icon:  Icons.business,
-                                            onTap: _showFacultadSelector,
-                                            enabled:
-                                                _selectedFilialId != null,
+                                            icon:    Icons.business,
+                                            onTap:   _showFacultadSelector,
+                                            enabled: _selectedFilialId != null,
                                           ),
                                         ),
                                       ],
                                     ),
                                     const SizedBox(height: 10),
 
-                                    // Carrera (ancho completo)
                                     _filterButton(
-                                      label:   'Carrera',
-                                      value:   _selectedCarrera,
-                                      icon:    Icons.school,
-                                      onTap:   _showCarreraSelector,
-                                      enabled: _selectedFacultad != null,
+                                      label:     'Carrera',
+                                      value:     _selectedCarrera,
+                                      icon:      Icons.school,
+                                      onTap:     _showCarreraSelector,
+                                      enabled:   _selectedFacultad != null,
                                       fullWidth: true,
                                     ),
 
-                                    // Búsqueda (solo si hay carrera)
                                     if (_selectedCarrera != null) ...[
                                       const SizedBox(height: 12),
                                       TextField(
@@ -1902,75 +1916,72 @@ class _EstudiantesRegistradosScreenState
                                         decoration: InputDecoration(
                                           labelText: 'Buscar estudiante',
                                           labelStyle: const TextStyle(
-                                              color: Color(0xFF64748B),
-                                              fontSize: 14),
+                                            color:    _subtextColor,
+                                            fontSize: 14,
+                                          ),
                                           prefixIcon: const Icon(
                                               Icons.search,
-                                              color: Color(0xFF1E3A5F)),
+                                              color: _primaryColor),
                                           border: OutlineInputBorder(
                                             borderRadius:
-                                                BorderRadius.circular(
-                                                    12),
+                                                BorderRadius.circular(12),
                                             borderSide: BorderSide(
-                                                color:
-                                                    Colors.grey.shade300),
+                                                color: Colors.grey.shade300),
                                           ),
                                           enabledBorder: OutlineInputBorder(
                                             borderRadius:
                                                 BorderRadius.circular(12),
                                             borderSide: BorderSide(
-                                                color:
-                                                    Colors.grey.shade300),
+                                                color: Colors.grey.shade300),
                                           ),
                                           focusedBorder: OutlineInputBorder(
                                             borderRadius:
                                                 BorderRadius.circular(12),
-                                            borderSide:
-                                                const BorderSide(
-                                                    color: Color(
-                                                        0xFF1E3A5F),
-                                                    width: 2),
+                                            borderSide: const BorderSide(
+                                              color: _primaryColor,
+                                              width: 2,
+                                            ),
                                           ),
-                                          hintText:
-                                              'Nombre, código o DNI',
+                                          hintText: 'Nombre, código o DNI',
                                           hintStyle: const TextStyle(
-                                              color: Color(0xFF64748B),
-                                              fontSize: 14),
-                                          filled:     true,
+                                            color:    _subtextColor,
+                                            fontSize: 14,
+                                          ),
+                                          filled:    true,
                                           fillColor: Colors.grey.shade50,
                                           contentPadding:
                                               const EdgeInsets.symmetric(
                                                   horizontal: 16,
                                                   vertical: 12),
-                                          suffixIcon: _searchController
-                                                  .text.isNotEmpty
-                                              ? IconButton(
-                                                  onPressed: () {
-                                                    _searchController
-                                                        .clear();
-                                                    _applySearch();
-                                                  },
-                                                  icon: const Icon(
-                                                      Icons.clear,
-                                                      color: Color(
-                                                          0xFF64748B),
-                                                      size: 18),
-                                                )
-                                              : null,
+                                          suffixIcon:
+                                              _searchController.text.isNotEmpty
+                                                  ? SizedBox(
+                                                      width:  _minTapTarget,
+                                                      height: _minTapTarget,
+                                                      child: IconButton(
+                                                        onPressed: () {
+                                                          _searchController.clear();
+                                                          _applySearch();
+                                                        },
+                                                        icon: const Icon(
+                                                          Icons.clear,
+                                                          color: _subtextColor,
+                                                          size: 18,
+                                                        ),
+                                                      ),
+                                                    )
+                                                  : null,
                                         ),
                                         onChanged: (_) => _applySearch(),
                                       ),
                                       const SizedBox(height: 10),
-                                      // Contador
                                       if (!_isLoading)
                                         Container(
                                           width: double.infinity,
-                                          padding:
-                                              const EdgeInsets.symmetric(
-                                                  horizontal: 12,
-                                                  vertical: 8),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 12, vertical: 8),
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFF1E3A5F)
+                                            color: _primaryColor
                                                 .withValues(alpha: 0.07),
                                             borderRadius:
                                                 BorderRadius.circular(10),
@@ -1985,8 +1996,7 @@ class _EstudiantesRegistradosScreenState
                                                     : Icons
                                                         .check_circle_outline,
                                                 size:  16,
-                                                color: const Color(
-                                                    0xFF1E3A5F),
+                                                color: _primaryColor,
                                               ),
                                               const SizedBox(width: 6),
                                               Flexible(
@@ -1995,11 +2005,10 @@ class _EstudiantesRegistradosScreenState
                                                       ? 'No se encontraron estudiantes'
                                                       : 'Mostrando ${_filteredStudents.length} de ${_allStudents.length} estudiante${_allStudents.length != 1 ? 's' : ''}',
                                                   style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: Color(
-                                                          0xFF1E3A5F),
-                                                      fontSize: 13),
+                                                    fontWeight: FontWeight.bold,
+                                                    color:      _primaryColor,
+                                                    fontSize:   13,
+                                                  ),
                                                   overflow:
                                                       TextOverflow.ellipsis,
                                                 ),
@@ -2014,24 +2023,22 @@ class _EstudiantesRegistradosScreenState
                             ),
                           ),
 
-                          // ── Lista / empty state ───────────────
                           Expanded(
                             child: _isLoading
                                 ? const Center(
                                     child: CircularProgressIndicator(
-                                        color: Color(0xFF1E3A5F)))
+                                        color: _primaryColor))
                                 : _filteredStudents.isEmpty
                                     ? _buildEmptyState()
                                     : ListView.builder(
-                                        padding:
-                                            const EdgeInsets.fromLTRB(
-                                                16, 4, 16, 20),
-                                        itemCount:
-                                            _filteredStudents.length,
+                                        padding: const EdgeInsets.fromLTRB(
+                                            16, 4, 16, 20),
+                                        itemCount: _filteredStudents.length,
                                         itemBuilder: (context, index) =>
                                             _buildEstudianteCard(
-                                                _filteredStudents[index],
-                                                index),
+                                          _filteredStudents[index],
+                                          index,
+                                        ),
                                       ),
                           ),
                         ],
@@ -2044,7 +2051,6 @@ class _EstudiantesRegistradosScreenState
     );
   }
 
-  // ── Botón de filtro ───────────────────────────────────────────────
   Widget _filterButton({
     required String label,
     required String? value,
@@ -2053,73 +2059,77 @@ class _EstudiantesRegistradosScreenState
     bool enabled   = true,
     bool fullWidth = false,
   }) {
-    final isSelected = value != null;
-    final effectiveColor = enabled
-        ? const Color(0xFF1E3A5F)
-        : Colors.grey.shade400;
+    final isSelected     = value != null;
+    final effectiveColor = enabled ? _primaryColor : Colors.grey.shade400;
 
-    Widget content = Material(
+    final Widget content = Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: enabled ? onTap : null,
+        onTap:        enabled ? onTap : null,
         borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 12, vertical: 12),
-          decoration: BoxDecoration(
-            border: Border.all(
+        child: Semantics(
+          button: true,
+          label:  '$label: ${value ?? 'Seleccionar'}',
+          child: Container(
+            constraints: const BoxConstraints(minHeight: _minTapTarget),
+            padding:     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: isSelected && enabled
+                    ? _primaryColor
+                    : Colors.grey.shade300,
+                width: isSelected && enabled ? 2 : 1,
+              ),
+              borderRadius: BorderRadius.circular(12),
               color: isSelected && enabled
-                  ? const Color(0xFF1E3A5F)
-                  : Colors.grey.shade300,
-              width: isSelected && enabled ? 2 : 1,
+                  ? _primaryColor.withValues(alpha: 0.05)
+                  : enabled
+                      ? Colors.white
+                      : Colors.grey.shade50,
             ),
-            borderRadius: BorderRadius.circular(12),
-            color: isSelected && enabled
-                ? const Color(0xFF1E3A5F).withValues(alpha: 0.05)
-                : enabled
-                    ? Colors.white
-                    : Colors.grey.shade50,
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: effectiveColor, size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(label,
+            child: Row(
+              children: [
+                Icon(icon, color: effectiveColor, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment:  MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        label,
                         style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey.shade500)),
-                    const SizedBox(height: 2),
-                    Text(
-                      value ?? 'Seleccionar',
-                      style: TextStyle(
-                          fontSize: 12,
+                            fontSize: 10, color: Colors.grey.shade500),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        value ?? 'Seleccionar',
+                        style: TextStyle(
+                          fontSize:   12,
                           fontWeight: FontWeight.w600,
                           color: isSelected && enabled
-                              ? const Color(0xFF1E3A5F)
+                              ? _primaryColor
                               : enabled
                                   ? Colors.grey
-                                  : Colors.grey.shade400),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                                  : Colors.grey.shade400,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Icon(
-                Icons.arrow_drop_down,
-                color: effectiveColor,
-                size: 18,
-              ),
-            ],
+                Icon(Icons.arrow_drop_down, color: effectiveColor, size: 18),
+              ],
+            ),
           ),
         ),
       ),
     );
 
-    return fullWidth ? SizedBox(width: double.infinity, child: content) : content;
+    return fullWidth
+        ? SizedBox(width: double.infinity, child: content)
+        : content;
   }
 
   Widget _headerIconBtn({
@@ -2129,29 +2139,36 @@ class _EstudiantesRegistradosScreenState
   }) {
     return Tooltip(
       message: tooltip,
-      child: InkWell(
-        onTap:        onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          width: 40, height: 40,
-          decoration: BoxDecoration(
-            color: onTap == null
-                ? Colors.white.withValues(alpha: 0.1)
-                : Colors.white.withValues(alpha: 0.2),
+      child: SizedBox(
+        width:  _minTapTarget,
+        height: _minTapTarget,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap:        onTap,
             borderRadius: BorderRadius.circular(10),
+            child: Container(
+              decoration: BoxDecoration(
+                color: onTap == null
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                icon,
+                color: onTap == null
+                    ? Colors.white.withValues(alpha: 0.4)
+                    : Colors.white,
+                size: 22,
+              ),
+            ),
           ),
-          child: Icon(icon,
-              color: onTap == null
-                  ? Colors.white.withValues(alpha: 0.4)
-                  : Colors.white,
-              size: 20),
         ),
       ),
     );
   }
 }
 
-// ── Helper para el selector de bottom sheet ──────────────────────────
 class _SelectorItem {
   final String value;
   final String label;

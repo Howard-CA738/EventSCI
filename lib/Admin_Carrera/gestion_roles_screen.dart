@@ -20,7 +20,6 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
   List<Map<String, dynamic>> _filteredStudents = [];
   final TextEditingController _searchController = TextEditingController();
 
-  // Roles disponibles
   static const String rolEstudiante = 'estudiante';
   static const String rolAsistente = 'asistente_qr';
 
@@ -53,40 +52,39 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
   }
 
   Future<void> _init() async {
-  final adminData = await PrefsHelper.getAdminCarreraData();
-  if (adminData == null) {
-    _showSnack('No se encontró información del administrador', isError: true);
-    setState(() => _isLoading = false);
-    return;
-  }
-
-  // ✅ Igual que GestionSesionesScreen: buscar por filialNombre y carrera
-  final filialNombre = adminData['filialNombre'] ?? adminData['filial'] ?? '';
-  final carrera = adminData['carrera'] ?? '';
-
-  try {
-    final usersSnap = await _firestore
-        .collection('users')
-        .where('filial', isEqualTo: filialNombre)
-        .where('carrera', isEqualTo: carrera)
-        .limit(1)
-        .get();
-
-    if (usersSnap.docs.isEmpty) {
-      _showSnack('No se encontró la carrera en Firestore', isError: true);
+    final adminData = await PrefsHelper.getAdminCarreraData();
+    if (adminData == null) {
+      _showSnack('No se encontró información del administrador', isError: true);
       setState(() => _isLoading = false);
       return;
     }
 
-    _carreraPath = usersSnap.docs.first.id;
-  } catch (e) {
-    _showSnack('Error al localizar la carrera: $e', isError: true);
-    setState(() => _isLoading = false);
-    return;
-  }
+    final filialNombre = adminData['filialNombre'] ?? adminData['filial'] ?? '';
+    final carrera = adminData['carrera'] ?? '';
 
-  await _loadStudents();
-}
+    try {
+      final usersSnap = await _firestore
+          .collection('users')
+          .where('filial', isEqualTo: filialNombre)
+          .where('carrera', isEqualTo: carrera)
+          .limit(1)
+          .get();
+
+      if (usersSnap.docs.isEmpty) {
+        _showSnack('No se encontró la carrera en Firestore', isError: true);
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      _carreraPath = usersSnap.docs.first.id;
+    } catch (e) {
+      _showSnack('Error al localizar la carrera: $e', isError: true);
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    await _loadStudents();
+  }
 
   Future<void> _loadStudents() async {
     setState(() => _isLoading = true);
@@ -99,14 +97,13 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
           .get();
 
       _students = snap.docs.map((doc) {
-  final data = doc.data();
-  data['id'] = doc.id;
-  // ✅ Leer esAsisteQR para mostrar badge correcto en UI
-  final bool esAsiste = data['esAsisteQR'] == true;
-  data['rol'] = esAsiste ? rolAsistente : rolEstudiante;
-  data['esAsisteQR'] = esAsiste;
-  return data;
-}).toList();
+        final data = doc.data();
+        data['id'] = doc.id;
+        final bool esAsiste = data['esAsisteQR'] == true;
+        data['rol'] = esAsiste ? rolAsistente : rolEstudiante;
+        data['esAsisteQR'] = esAsiste;
+        return data;
+      }).toList();
 
       _applyFilter(_searchController.text);
     } catch (e) {
@@ -125,54 +122,54 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
           : _students.where((s) {
               final name = (s['name'] ?? '').toString().toLowerCase();
               final user = (s['username'] ?? '').toString().toLowerCase();
-              final cod = (s['codigoUniversitario'] ?? '').toString().toLowerCase();
+              final cod =
+                  (s['codigoUniversitario'] ?? '').toString().toLowerCase();
               return name.contains(q) || user.contains(q) || cod.contains(q);
             }).toList();
     });
   }
 
-  Future<void> _changeRole(Map<String, dynamic> student, String newRole) async {
-  final studentId = student['id'] as String;
-  final currentRole = student['rol'] as String;
+  Future<void> _changeRole(
+      Map<String, dynamic> student, String newRole) async {
+    final studentId = student['id'] as String;
+    final currentRole = student['rol'] as String;
 
-  if (currentRole == newRole) return;
+    if (currentRole == newRole) return;
 
-  final confirm = await _showConfirmDialog(student, newRole);
-  if (!confirm) return;
+    final confirm = await _showConfirmDialog(student, newRole);
+    if (!confirm) return;
 
-  setState(() => _isSaving = true);
-  try {
-    // ✅ En vez de pisar 'rol', guardamos un campo extra
-    final bool asignarAsistente = newRole == rolAsistente;
+    setState(() => _isSaving = true);
+    try {
+      final bool asignarAsistente = newRole == rolAsistente;
 
-    await _firestore
-        .collection('users')
-        .doc(_carreraPath)
-        .collection('students')
-        .doc(studentId)
-        .update({
-      'rol': rolEstudiante,           // El rol base SIEMPRE se mantiene
-      'esAsisteQR': asignarAsistente, // true o false según la acción
-    });
+      await _firestore
+          .collection('users')
+          .doc(_carreraPath)
+          .collection('students')
+          .doc(studentId)
+          .update({
+        'rol': rolEstudiante,
+        'esAsisteQR': asignarAsistente,
+      });
 
-    // Actualizar localmente
-    final idx = _students.indexWhere((s) => s['id'] == studentId);
-    if (idx != -1) {
-      _students[idx]['rol'] = newRole; // Solo para reflejar UI
-      _students[idx]['esAsisteQR'] = asignarAsistente;
-      _applyFilter(_searchController.text);
+      final idx = _students.indexWhere((s) => s['id'] == studentId);
+      if (idx != -1) {
+        _students[idx]['rol'] = newRole;
+        _students[idx]['esAsisteQR'] = asignarAsistente;
+        _applyFilter(_searchController.text);
+      }
+
+      _showSnack(
+        asignarAsistente
+            ? 'Rol Asistente QR agregado correctamente'
+            : 'Rol Asistente QR removido correctamente',
+      );
+    } catch (e) {
+      _showSnack('Error actualizando rol: $e', isError: true);
     }
-
-    _showSnack(
-      asignarAsistente
-          ? 'Rol Asistente QR agregado correctamente'
-          : 'Rol Asistente QR removido correctamente',
-    );
-  } catch (e) {
-    _showSnack('Error actualizando rol: $e', isError: true);
+    setState(() => _isSaving = false);
   }
-  setState(() => _isSaving = false);
-}
 
   Future<bool> _showConfirmDialog(
       Map<String, dynamic> student, String newRole) async {
@@ -180,18 +177,21 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
             Icon(roleInfo['icon'] as IconData,
                 color: roleInfo['color'] as Color),
             const SizedBox(width: 10),
-            const Text(
-              'Cambiar Rol',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E3A5F)),
+            const Flexible(
+              child: Text(
+                'Cambiar Rol',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3A5F)),
+              ),
             ),
           ],
         ),
@@ -245,7 +245,8 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
       backgroundColor:
           isError ? Colors.red.shade600 : const Color(0xFF0D7377),
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ));
   }
 
@@ -264,59 +265,60 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loadStudents,
+            onPressed: _isSaving ? null : _loadStudents,
             tooltip: 'Actualizar',
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // ── Banner informativo ──────────────────────────────────────
-          _buildBanner(),
-
-          // ── Buscador ───────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: _buildSearchBar(),
-          ),
-
-          // ── Contador ──────────────────────────────────────────────
-          if (!_isLoading)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: _buildCountRow(),
+      body: SafeArea(
+        top: false,
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                _buildBanner(),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: _buildSearchBar(),
+                ),
+                if (!_isLoading)
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: _buildCountRow(),
+                  ),
+                Expanded(
+                  child: _isLoading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                              color: Color(0xFF1E3A5F)),
+                        )
+                      : _filteredStudents.isEmpty
+                          ? _buildEmptyState()
+                          : ListView.builder(
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                              itemCount: _filteredStudents.length,
+                              itemBuilder: (_, i) =>
+                                  _buildStudentCard(_filteredStudents[i]),
+                            ),
+                ),
+              ],
             ),
-
-          // ── Lista ─────────────────────────────────────────────────
-          Expanded(
-            child: _isLoading
-                ? const Center(
+            if (_isSaving)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: Colors.black.withOpacity(0.15),
+                  child: const Center(
                     child: CircularProgressIndicator(
-                        color: Color(0xFF1E3A5F)))
-                : _filteredStudents.isEmpty
-                    ? _buildEmptyState()
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                        itemCount: _filteredStudents.length,
-                        itemBuilder: (_, i) =>
-                            _buildStudentCard(_filteredStudents[i]),
-                      ),
-          ),
-        ],
-      ),
-      // Loading overlay al guardar
-      floatingActionButton: _isSaving
-          ? FloatingActionButton(
-              onPressed: null,
-              backgroundColor: const Color(0xFF1E3A5F),
-              child: const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 2),
+                      color: Color(0xFF1E3A5F),
+                    ),
+                  ),
+                ),
               ),
-            )
-          : null,
+          ],
+        ),
+      ),
     );
   }
 
@@ -324,13 +326,14 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
     return Container(
       width: double.infinity,
       color: const Color(0xFF1E3A5F),
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha:0.15),
+              color: Colors.white.withOpacity(0.15),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(Icons.manage_accounts_rounded,
@@ -352,6 +355,8 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
                 Text(
                   'El rol Asistente QR permite generar QR de asistencia',
                   style: TextStyle(color: Colors.white70, fontSize: 12),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -368,13 +373,14 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha:0.07),
+              color: Colors.black.withOpacity(0.07),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],
       ),
       child: TextField(
         controller: _searchController,
+        textInputAction: TextInputAction.search,
         decoration: InputDecoration(
           hintText: 'Buscar por nombre, usuario o código...',
           hintStyle:
@@ -404,39 +410,48 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
         _students.where((s) => s['rol'] == rolAsistente).length;
     return Row(
       children: [
-        Text(
-          '${_filteredStudents.length} estudiante(s)',
-          style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF64748B),
-              fontWeight: FontWeight.w500),
+        Flexible(
+          child: Text(
+            '${_filteredStudents.length} estudiante(s)',
+            style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w500),
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
-        const Spacer(),
-        if (asistentes > 0)
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE0F7F7),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF0D7377)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.qr_code_scanner,
-                    size: 13, color: Color(0xFF0D7377)),
-                const SizedBox(width: 4),
-                Text(
-                  '$asistentes Asistente(s) QR',
-                  style: const TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFF0D7377),
-                      fontWeight: FontWeight.w600),
-                ),
-              ],
+        if (asistentes > 0) ...[
+          const SizedBox(width: 8),
+          Flexible(
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE0F7F7),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF0D7377)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.qr_code_scanner,
+                      size: 13, color: Color(0xFF0D7377)),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      '$asistentes Asistente(s) QR',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF0D7377),
+                          fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
+        ],
       ],
     );
   }
@@ -456,7 +471,7 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
             : Border.all(color: Colors.transparent),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha:0.06),
+              color: Colors.black.withOpacity(0.06),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],
@@ -466,15 +481,14 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Fila principal ─────────────────────────────────────
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Avatar
                 Container(
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: (roleInfo['bgColor'] as Color),
+                    color: roleInfo['bgColor'] as Color,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -484,7 +498,6 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                // Nombre y usuario
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -503,33 +516,40 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
                         '@${student['username'] ?? '—'}',
                         style: const TextStyle(
                             fontSize: 12, color: Color(0xFF64748B)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 ),
-                // Badge de rol actual
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 9, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: roleInfo['bgColor'] as Color,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(roleInfo['icon'] as IconData,
-                          size: 12,
-                          color: roleInfo['color'] as Color),
-                      const SizedBox(width: 4),
-                      Text(
-                        roleInfo['label'] as String,
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: roleInfo['bgColor'] as Color,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(roleInfo['icon'] as IconData,
+                            size: 12,
                             color: roleInfo['color'] as Color),
-                      ),
-                    ],
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            roleInfo['label'] as String,
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: roleInfo['color'] as Color),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -539,7 +559,6 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
             const Divider(height: 1, color: Color(0xFFF1F5F9)),
             const SizedBox(height: 12),
 
-            // ── Botones de rol ─────────────────────────────────────
             Row(
               children: [
                 const Text(
@@ -558,55 +577,59 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
                         child: Padding(
                           padding:
                               const EdgeInsets.symmetric(horizontal: 3),
-                          child: GestureDetector(
-                            onTap: isActive
-                                ? null
-                                : () => _changeRole(student, rKey),
-                            child: AnimatedContainer(
-                              duration:
-                                  const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isActive
-                                    ? rInfo['color'] as Color
-                                    : (rInfo['bgColor'] as Color),
-                                borderRadius:
-                                    BorderRadius.circular(10),
-                                border: Border.all(
+                          child: Semantics(
+                            label:
+                                'Asignar rol ${rInfo['label']} a ${student['name'] ?? 'estudiante'}',
+                            button: true,
+                            child: GestureDetector(
+                              onTap: (isActive || _isSaving)
+                                  ? null
+                                  : () => _changeRole(student, rKey),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                constraints:
+                                    const BoxConstraints(minHeight: 44),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 10, horizontal: 4),
+                                decoration: BoxDecoration(
                                   color: isActive
                                       ? rInfo['color'] as Color
-                                      : (rInfo['color'] as Color)
-                                          .withValues(alpha:0.3),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    rInfo['icon'] as IconData,
-                                    size: 13,
+                                      : rInfo['bgColor'] as Color,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
                                     color: isActive
-                                        ? Colors.white
-                                        : rInfo['color'] as Color,
+                                        ? rInfo['color'] as Color
+                                        : (rInfo['color'] as Color)
+                                            .withOpacity(0.3),
                                   ),
-                                  const SizedBox(width: 4),
-                                  Flexible(
-                                    child: Text(
-                                      rInfo['label'] as String,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: isActive
-                                            ? Colors.white
-                                            : rInfo['color'] as Color,
-                                      ),
-                                      overflow:
-                                          TextOverflow.ellipsis,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      rInfo['icon'] as IconData,
+                                      size: 13,
+                                      color: isActive
+                                          ? Colors.white
+                                          : rInfo['color'] as Color,
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(width: 4),
+                                    Flexible(
+                                      child: Text(
+                                        rInfo['label'] as String,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: isActive
+                                              ? Colors.white
+                                              : rInfo['color'] as Color,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -625,37 +648,42 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withValues(alpha:0.07),
-                    blurRadius: 12)
-              ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.07),
+                      blurRadius: 12)
+                ],
+              ),
+              child: const Icon(Icons.person_search_rounded,
+                  size: 48, color: Color(0xFF1E3A5F)),
             ),
-            child: const Icon(Icons.person_search_rounded,
-                size: 48, color: Color(0xFF1E3A5F)),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'No se encontraron estudiantes',
-            style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF1E3A5F)),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Intenta con otro término de búsqueda',
-            style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-          ),
-        ],
+            const SizedBox(height: 16),
+            const Text(
+              'No se encontraron estudiantes',
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1E3A5F)),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Intenta con otro término de búsqueda',
+              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

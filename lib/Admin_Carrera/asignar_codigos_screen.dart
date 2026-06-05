@@ -3,21 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CONSTANTES DE COLOR
-// ─────────────────────────────────────────────────────────────────────────────
 const _kPrimario       = Color(0xFF1E3A5F);
-const _kPrimario10     = Color(0x1A1E3A5F);
 const _kPrimario40     = Color(0x661E3A5F);
 const _kTextoGris      = Color(0xFF64748B);
 const _kTextoGrisClaro = Color(0xFF94A3B8);
 const _kTextoOscuro    = Color(0xFF334155);
 const _kFondo          = Color(0xFFE8EDF2);
 const _kCampoFondo2    = Color(0xFFF1F5F9);
+const _kVerde          = Color(0xFF16A34A);
+const _kAmbar          = Color(0xFFF59E0B);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MODELO
-// ─────────────────────────────────────────────────────────────────────────────
 class _CertEntry {
   final String certId;
   final String personaId;
@@ -67,9 +62,6 @@ class _CertEntry {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PANTALLA
-// ─────────────────────────────────────────────────────────────────────────────
 class AsignarCodigosScreen extends StatefulWidget {
   const AsignarCodigosScreen({super.key});
 
@@ -80,13 +72,14 @@ class AsignarCodigosScreen extends StatefulWidget {
 class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     with SingleTickerProviderStateMixin {
 
-  String _carrera          = '';
-  String _facultad         = '';
-  String _filial           = '';
-  String _filialId         = '';
+  String _carrera           = '';
+  String _facultad          = '';
+  String _filial            = '';
+  String _filialId          = '';
   String _filialCarreraPath = '';
 
   bool             _isLoading = true;
+  bool             _huboError = false;
   List<_CertEntry> _entries   = [];
 
   String _searchQuery  = '';
@@ -95,15 +88,12 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
   final _searchController = TextEditingController();
   Timer? _debounce;
 
-  // guardando / guardado OK (por certId)
-  final Set<String> _guardando = {};
-  final Set<String> _guardados = {};
-  // eliminando (por certId)
+  final Set<String> _guardando  = {};
+  final Set<String> _guardados  = {};
   final Set<String> _eliminando = {};
 
   late final TabController _tabController;
 
-  // ─────────────────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
@@ -120,9 +110,8 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
   Future<void> _init() async {
-    setState(() => _isLoading = true);
+    if (mounted) setState(() { _isLoading = true; _huboError = false; });
     final data = await PrefsHelper.getAdminCarreraData();
     if (data != null) {
       _carrera           = data['carrera']      ?? '';
@@ -135,18 +124,19 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     if (mounted) setState(() => _isLoading = false);
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // CARGA
-  // ─────────────────────────────────────────────────────────────────────────
   Future<void> _cargarTodo() async {
-    final results = await Future.wait([
-      _cargarCertsEstudiantes(),
-      _cargarCertsJurados(),
-    ]);
-    final nuevas = [...results[0], ...results[1]];
-    nuevas.sort((a, b) => a.personaNombre.compareTo(b.personaNombre));
-    for (final e in _entries) e.dispose();
-    if (mounted) setState(() => _entries = nuevas);
+    try {
+      final results = await Future.wait([
+        _cargarCertsEstudiantes(),
+        _cargarCertsJurados(),
+      ]);
+      final nuevas = [...results[0], ...results[1]];
+      nuevas.sort((a, b) => a.personaNombre.compareTo(b.personaNombre));
+      for (final e in _entries) e.dispose();
+      if (mounted) setState(() { _entries = nuevas; _huboError = false; });
+    } catch (_) {
+      if (mounted) setState(() => _huboError = true);
+    }
   }
 
   Future<List<_CertEntry>> _cargarCertsEstudiantes() async {
@@ -232,13 +222,10 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // GUARDAR CÓDIGO
-  // ─────────────────────────────────────────────────────────────────────────
   Future<void> _guardarCodigo(_CertEntry entry) async {
     final codigo = entry.controller.text.trim();
     if (_guardando.contains(entry.certId)) return;
-    setState(() => _guardando.add(entry.certId));
+    if (mounted) setState(() => _guardando.add(entry.certId));
     try {
       await entry.docRef.update({'codigoCertificado': codigo});
       entry.codigoCertificado = codigo;
@@ -260,13 +247,10 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // ELIMINAR CERTIFICADO INDIVIDUAL
-  // ─────────────────────────────────────────────────────────────────────────
   Future<void> _eliminarCertificado(_CertEntry entry) async {
-    // Diálogo de confirmación
     final confirmar = await showDialog<bool>(
       context: context,
+      useRootNavigator: true,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -274,56 +258,62 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
           Icon(Icons.delete_forever, color: Colors.red, size: 26),
           SizedBox(width: 10),
           Expanded(
-            child: Text('Eliminar certificado',
-                style: TextStyle(fontSize: 17,
-                    fontWeight: FontWeight.bold, color: Colors.red)),
+            child: Text(
+              'Eliminar certificado',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: Colors.red,
+              ),
+            ),
           ),
         ]),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '¿Estás seguro de eliminar este certificado?',
-              style: TextStyle(fontSize: 14, color: _kTextoGris),
-            ),
-            const SizedBox(height: 12),
-            // Detalle del certificado a eliminar
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.red.shade200),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '¿Estás seguro de eliminar este certificado?',
+                style: TextStyle(fontSize: 14, color: _kTextoGris),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _dialogoDetalle(Icons.person_outline,
-                      entry.personaNombre),
-                  const SizedBox(height: 4),
-                  _dialogoDetalle(Icons.badge_outlined,
-                      'Rol: ${entry.rol}'),
-                  const SizedBox(height: 4),
-                  _dialogoDetalle(Icons.event_outlined,
-                      entry.evento, maxLines: 2),
-                  if (entry.codigoCertificado.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _dialogoDetalle(Icons.person_outline, entry.personaNombre),
                     const SizedBox(height: 4),
-                    _dialogoDetalle(Icons.qr_code_2_rounded,
-                        'Código: ${entry.codigoCertificado}'),
+                    _dialogoDetalle(Icons.badge_outlined, 'Rol: ${entry.rol}'),
+                    const SizedBox(height: 4),
+                    _dialogoDetalle(Icons.event_outlined, entry.evento, maxLines: 2),
+                    if (entry.codigoCertificado.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      _dialogoDetalle(
+                        Icons.qr_code_2_rounded,
+                        'Código: ${entry.codigoCertificado}',
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Esta acción no se puede deshacer.',
-              style: TextStyle(
+              const SizedBox(height: 10),
+              const Text(
+                'Esta acción no se puede deshacer.',
+                style: TextStyle(
                   fontSize: 12,
                   color: Colors.red,
-                  fontStyle: FontStyle.italic),
-            ),
-          ],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -348,7 +338,7 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
 
     if (confirmar != true) return;
 
-    setState(() => _eliminando.add(entry.certId));
+    if (mounted) setState(() => _eliminando.add(entry.certId));
     try {
       await entry.docRef.delete();
       if (mounted) {
@@ -374,25 +364,24 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
         Icon(icon, size: 13, color: Colors.red.shade400),
         const SizedBox(width: 6),
         Expanded(
-          child: Text(texto,
-              maxLines: maxLines,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12, color: Colors.red.shade700)),
+          child: Text(
+            texto,
+            maxLines: maxLines,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+          ),
         ),
       ],
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // FILTROS
-  // ─────────────────────────────────────────────────────────────────────────
   List<_CertEntry> get _entriesFiltradas {
     return _entries.where((e) {
       final tab = _tabController.index;
       if (tab == 0 &&  e.esJurado) return false;
       if (tab == 1 && !e.esJurado) return false;
-      if (_rolFiltro    != 'TODOS'      && e.rol != _rolFiltro)          return false;
-      if (_estadoFiltro == 'CON_CODIGO' && e.codigoCertificado.isEmpty)  return false;
+      if (_rolFiltro    != 'TODOS'      && e.rol != _rolFiltro)            return false;
+      if (_estadoFiltro == 'CON_CODIGO' && e.codigoCertificado.isEmpty)    return false;
       if (_estadoFiltro == 'SIN_CODIGO' && e.codigoCertificado.isNotEmpty) return false;
       if (_searchQuery.isNotEmpty) {
         final q = _searchQuery.toLowerCase();
@@ -404,15 +393,11 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     }).toList();
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // ESTADÍSTICAS
-  // ─────────────────────────────────────────────────────────────────────────
   int get _totalEstudiantes => _entries.where((e) => !e.esJurado).length;
   int get _totalJurados     => _entries.where((e) =>  e.esJurado).length;
   int get _conCodigo        => _entries.where((e) => e.codigoCertificado.isNotEmpty).length;
   int get _sinCodigo        => _entries.length - _conCodigo;
 
-  // ─────────────────────────────────────────────────────────────────────────
   void _snack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -423,13 +408,11 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     ));
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // BUILD
-  // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _kPrimario,
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: Column(children: [
           _buildHeader(),
@@ -453,7 +436,6 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
@@ -461,45 +443,81 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            Container(
-              width: 46, height: 46,
-              decoration: BoxDecoration(
+            Semantics(
+              label: 'Logo de la aplicación',
+              child: Container(
+                width: 46, height: 46,
+                decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(12)),
-              child: Image.asset('assets/logo.png', fit: BoxFit.contain,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Image.asset(
+                  'assets/logo.png',
+                  fit: BoxFit.contain,
+                  semanticLabel: 'Logo',
                   errorBuilder: (_, __, ___) => const Icon(
-                      Icons.qr_code_2_rounded, color: _kPrimario, size: 26)),
+                    Icons.qr_code_2_rounded, color: _kPrimario, size: 26,
+                  ),
+                ),
+              ),
             ),
             const SizedBox(width: 14),
             const Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Gestionar Certificados',
-                      style: TextStyle(fontSize: 19,
-                          fontWeight: FontWeight.bold, color: Colors.white)),
-                  Text('Asigna códigos y administra certificados enviados',
-                      style: TextStyle(fontSize: 11, color: Colors.white70)),
+                  Text(
+                    'Gestionar Certificados',
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'Asigna códigos y administra certificados enviados',
+                    style: TextStyle(fontSize: 11, color: Colors.white70),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded,
-                  color: Colors.white, size: 22),
-              onPressed: () async {
-                setState(() => _isLoading = true);
-                await _cargarTodo();
-                if (mounted) setState(() => _isLoading = false);
-              },
-              tooltip: 'Recargar',
+            Semantics(
+              label: 'Recargar certificados',
+              button: true,
+              child: IconButton(
+                icon: const Icon(Icons.refresh_rounded,
+                    color: Colors.white, size: 22),
+                onPressed: () async {
+                  setState(() => _isLoading = true);
+                  await _cargarTodo();
+                  if (mounted) setState(() => _isLoading = false);
+                },
+                tooltip: 'Recargar',
+              ),
             ),
-            IconButton(
-              icon: const Icon(Icons.close, color: Colors.white, size: 24),
-              onPressed: () => Navigator.pop(context),
+            Semantics(
+              label: 'Cerrar pantalla',
+              button: true,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 24),
+                onPressed: () => Navigator.pop(context),
+              ),
             ),
           ]),
-          const SizedBox(height: 14),
-          if (!_isLoading) _buildEstadisticas(),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+            child: _isLoading
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: _buildEstadisticas(),
+                  ),
+          ),
         ],
       ),
     );
@@ -507,45 +525,53 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
 
   Widget _buildEstadisticas() {
     return Row(children: [
-      _statChip(Icons.people_outlined,        '$_totalEstudiantes', 'Estudiantes'),
+      Expanded(child: _statChip(Icons.people_outlined, '$_totalEstudiantes', 'Estudiantes')),
       const SizedBox(width: 8),
-      _statChip(Icons.gavel_rounded,          '$_totalJurados',     'Jurados'),
+      Expanded(child: _statChip(Icons.gavel_rounded, '$_totalJurados', 'Jurados')),
       const SizedBox(width: 8),
-      _statChip(Icons.check_circle_outline,   '$_conCodigo',        'Con código',
-          color: const Color(0xFF16A34A)),
+      Expanded(child: _statChip(Icons.check_circle_outline, '$_conCodigo', 'Con código', color: _kVerde)),
       const SizedBox(width: 8),
-      _statChip(Icons.radio_button_unchecked, '$_sinCodigo',        'Sin código',
-          color: const Color(0xFFF59E0B)),
+      Expanded(child: _statChip(Icons.radio_button_unchecked, '$_sinCodigo', 'Sin código', color: _kAmbar)),
     ]);
   }
 
   Widget _statChip(IconData icon, String valor, String label,
       {Color color = Colors.white}) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(children: [
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           Icon(icon, color: color, size: 16),
           const SizedBox(height: 2),
-          Text(valor,
-              style: TextStyle(color: color,
-                  fontWeight: FontWeight.bold, fontSize: 13)),
-          Text(label,
-              style: const TextStyle(color: Colors.white60, fontSize: 9),
-              textAlign: TextAlign.center),
-        ]),
+          Text(
+            valor,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white60, fontSize: 9),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildBody() {
     return Column(children: [
-      // Tabs
       Container(
         color: Colors.white,
         child: TabBar(
@@ -555,7 +581,9 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
           indicatorColor: _kPrimario,
           indicatorWeight: 3,
           labelStyle: const TextStyle(
-              fontWeight: FontWeight.bold, fontSize: 13),
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
           onTap: (_) => setState(() {}),
           tabs: [
             Tab(text: 'Estudiantes ($_totalEstudiantes)'),
@@ -568,7 +596,6 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     ]);
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildFiltros() {
     return Container(
       color: Colors.white,
@@ -594,6 +621,7 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
                       _searchController.clear();
                       setState(() => _searchQuery = '');
                     },
+                    tooltip: 'Limpiar búsqueda',
                   )
                 : null,
             filled: true,
@@ -605,33 +633,39 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
           ),
         ),
         const SizedBox(height: 8),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(children: [
-            _filtroChip('Todos', _estadoFiltro == 'TODOS',
-                () => setState(() => _estadoFiltro = 'TODOS')),
-            const SizedBox(width: 6),
-            _filtroChip('Sin código', _estadoFiltro == 'SIN_CODIGO',
-                () => setState(() => _estadoFiltro = 'SIN_CODIGO'),
-                color: const Color(0xFFF59E0B)),
-            const SizedBox(width: 6),
-            _filtroChip('Con código', _estadoFiltro == 'CON_CODIGO',
-                () => setState(() => _estadoFiltro = 'CON_CODIGO'),
-                color: const Color(0xFF16A34A)),
-            const SizedBox(width: 10),
-            Container(width: 1, height: 20, color: Colors.grey.shade300),
-            const SizedBox(width: 10),
-            for (final rol in [
-              'TODOS', 'ASISTENTE', 'PONENTE', 'JURADO', 'ORGANIZADOR'
-            ]) ...[
-              _filtroChip(
-                rol == 'TODOS' ? 'Todos los roles' : rol,
-                _rolFiltro == rol,
-                () => setState(() => _rolFiltro = rol),
-              ),
-              const SizedBox(width: 6),
-            ],
-          ]),
+        SizedBox(
+          height: 44,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _filtroChip('Todos', _estadoFiltro == 'TODOS',
+                    () => setState(() => _estadoFiltro = 'TODOS')),
+                const SizedBox(width: 6),
+                _filtroChip('Sin código', _estadoFiltro == 'SIN_CODIGO',
+                    () => setState(() => _estadoFiltro = 'SIN_CODIGO'),
+                    color: _kAmbar),
+                const SizedBox(width: 6),
+                _filtroChip('Con código', _estadoFiltro == 'CON_CODIGO',
+                    () => setState(() => _estadoFiltro = 'CON_CODIGO'),
+                    color: _kVerde),
+                const SizedBox(width: 10),
+                Container(width: 1, height: 20, color: Colors.grey.shade300),
+                const SizedBox(width: 10),
+                for (final rol in [
+                  'TODOS', 'ASISTENTE', 'PONENTE', 'JURADO', 'ORGANIZADOR'
+                ]) ...[
+                  _filtroChip(
+                    rol == 'TODOS' ? 'Todos los roles' : rol,
+                    _rolFiltro == rol,
+                    () => setState(() => _rolFiltro = rol),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+              ],
+            ),
+          ),
         ),
       ]),
     );
@@ -640,28 +674,81 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
   Widget _filtroChip(String label, bool selected, VoidCallback onTap,
       {Color? color}) {
     final c = color ?? _kPrimario;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: selected ? c.withOpacity(0.12) : _kCampoFondo2,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-              color: selected ? c : Colors.transparent, width: 1.5),
-        ),
-        child: Text(label,
-            style: TextStyle(
+    return Semantics(
+      label: label,
+      button: true,
+      selected: selected,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? c.withOpacity(0.12) : _kCampoFondo2,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: selected ? c : Colors.transparent,
+              width: 1.5,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                color: selected ? c : _kTextoGris)),
+                color: selected ? c : _kTextoGris,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildLista() {
+    if (_huboError) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_off_outlined, size: 56, color: Colors.grey[300]),
+              const SizedBox(height: 12),
+              Text(
+                'No se pudieron cargar los certificados',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[500],
+                  fontStyle: FontStyle.italic,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  setState(() => _isLoading = true);
+                  await _cargarTodo();
+                  if (mounted) setState(() => _isLoading = false);
+                },
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Reintentar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _kPrimario,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final lista = _entriesFiltradas;
 
     if (lista.isEmpty) {
@@ -678,11 +765,27 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
                     ? 'No hay certificados enviados aún'
                     : 'Sin resultados para los filtros aplicados',
                 style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[500],
-                    fontStyle: FontStyle.italic),
+                  fontSize: 14,
+                  color: Colors.grey[500],
+                  fontStyle: FontStyle.italic,
+                ),
                 textAlign: TextAlign.center,
               ),
+              if (_entries.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                TextButton.icon(
+                  onPressed: () => setState(() {
+                    _searchQuery  = '';
+                    _rolFiltro    = 'TODOS';
+                    _estadoFiltro = 'TODOS';
+                    _searchController.clear();
+                  }),
+                  icon: const Icon(Icons.filter_list_off_rounded,
+                      size: 16, color: _kPrimario),
+                  label: const Text('Limpiar filtros',
+                      style: TextStyle(color: _kPrimario, fontSize: 13)),
+                ),
+              ],
             ],
           ),
         ),
@@ -690,17 +793,18 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       itemCount: lista.length,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (ctx, i) => _buildEntryCard(lista[i]),
+      itemBuilder: (ctx, i) {
+        final entry = lista[i];
+        return _buildEntryCard(entry, key: ValueKey(entry.certId));
+      },
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // TARJETA DE CERTIFICADO
-  // ─────────────────────────────────────────────────────────────────────────
-  Widget _buildEntryCard(_CertEntry entry) {
+  Widget _buildEntryCard(_CertEntry entry, {Key? key}) {
     final guardando   = _guardando.contains(entry.certId);
     final guardado    = _guardados.contains(entry.certId);
     final eliminando  = _eliminando.contains(entry.certId);
@@ -708,6 +812,7 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     final rolColor    = _colorPorRol(entry.rol);
 
     return Card(
+      key: key,
       elevation: 2,
       shadowColor: Colors.black.withOpacity(0.08),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -718,81 +823,97 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
 
-            // ── ENCABEZADO ────────────────────────────────────────────────
-            Row(children: [
-              // Avatar
-              Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(
-                  color: rolColor.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: Text(
-                    entry.personaNombre.isNotEmpty
-                        ? entry.personaNombre[0].toUpperCase()
-                        : '?',
-                    style: TextStyle(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 44, height: 44,
+                  decoration: BoxDecoration(
+                    color: rolColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: Text(
+                      entry.personaNombre.isNotEmpty
+                          ? entry.personaNombre[0].toUpperCase()
+                          : '?',
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: rolColor, fontSize: 17),
+                        color: rolColor,
+                        fontSize: 17,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(entry.personaNombre,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        entry.personaNombre,
                         style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14, color: _kTextoOscuro),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 2),
-                    Row(children: [
-                      _rolBadge(entry.rol, rolColor),
-                      const SizedBox(width: 6),
-                      if (entry.esJurado)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F6E56).withOpacity(0.10),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Text('Jurado',
-                              style: TextStyle(fontSize: 9,
-                                  color: Color(0xFF0F6E56),
-                                  fontWeight: FontWeight.w600)),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: _kTextoOscuro,
                         ),
-                    ]),
-                  ],
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          _rolBadge(entry.rol, rolColor),
+                          if (entry.esJurado)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0F6E56).withOpacity(0.10),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'Jurado',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Color(0xFF0F6E56),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              // Indicador de código
-              _codigoIndicador(tieneCodigo, guardado),
-            ]),
+                const SizedBox(width: 8),
+                _codigoIndicador(tieneCodigo, guardado),
+              ],
+            ),
 
             const SizedBox(height: 10),
 
-            // Evento y fecha
             Row(children: [
               const Icon(Icons.event_outlined,
                   size: 12, color: _kTextoGrisClaro),
               const SizedBox(width: 4),
               Expanded(
-                child: Text(entry.evento,
-                    style: const TextStyle(
-                        fontSize: 11, color: _kTextoGris),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
+                child: Text(
+                  entry.evento,
+                  style: const TextStyle(fontSize: 11, color: _kTextoGris),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               if (entry.fecha.isNotEmpty) ...[
                 const SizedBox(width: 6),
-                Text(entry.fecha,
-                    style: const TextStyle(
-                        fontSize: 10, color: _kTextoGrisClaro)),
+                Text(
+                  entry.fecha,
+                  style: const TextStyle(
+                      fontSize: 10, color: _kTextoGrisClaro),
+                ),
               ],
             ]),
 
@@ -800,18 +921,25 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
             Divider(color: Colors.grey.shade100, height: 1),
             const SizedBox(height: 12),
 
-            // ── CAMPO DE CÓDIGO ───────────────────────────────────────────
-            const Text('Código del certificado',
-                style: TextStyle(fontSize: 11,
-                    fontWeight: FontWeight.w600, color: _kPrimario)),
+            const Text(
+              'Código del certificado',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: _kPrimario,
+              ),
+            ),
             const SizedBox(height: 6),
             Row(children: [
               Expanded(
                 child: TextField(
                   controller: entry.controller,
                   style: const TextStyle(
-                      fontSize: 13, color: _kTextoOscuro,
-                      fontFamily: 'monospace'),
+                    fontSize: 13,
+                    color: _kTextoOscuro,
+                    fontFamily: 'monospace',
+                  ),
+                  textInputAction: TextInputAction.done,
                   decoration: InputDecoration(
                     hintText: 'Ej: CERT-2024-001',
                     hintStyle: const TextStyle(
@@ -837,19 +965,18 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
                 ),
               ),
               const SizedBox(width: 8),
-
-              // Botón guardar
               SizedBox(
-                width: 48, height: 44,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
+                width: 52,
+                height: 48,
+                child: Semantics(
+                  label: 'Guardar código de ${entry.personaNombre}',
+                  button: true,
                   child: ElevatedButton(
                     onPressed: (guardando || eliminando)
                         ? null
                         : () => _guardarCodigo(entry),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          guardado ? const Color(0xFF16A34A) : _kPrimario,
+                      backgroundColor: guardado ? _kVerde : _kPrimario,
                       foregroundColor: Colors.white,
                       disabledBackgroundColor: _kPrimario40,
                       padding: EdgeInsets.zero,
@@ -858,31 +985,34 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
                       elevation: 0,
                     ),
                     child: guardando
-                        ? const SizedBox(width: 18, height: 18,
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
                             child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2))
+                                color: Colors.white, strokeWidth: 2),
+                          )
                         : Icon(
                             guardado
                                 ? Icons.check_rounded
                                 : Icons.save_rounded,
-                            size: 20),
+                            size: 20,
+                          ),
                   ),
                 ),
               ),
             ]),
 
-            // Código actual
             if (tieneCodigo) ...[
               const SizedBox(height: 6),
               Row(children: [
-                const Icon(Icons.info_outline,
-                    size: 12, color: Color(0xFF16A34A)),
+                const Icon(Icons.info_outline, size: 12, color: _kVerde),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
                     'Código actual: ${entry.codigoCertificado}',
-                    style: const TextStyle(
-                        fontSize: 10, color: Color(0xFF16A34A)),
+                    style: const TextStyle(fontSize: 10, color: _kVerde),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ]),
@@ -892,49 +1022,51 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
             Divider(color: Colors.grey.shade100, height: 1),
             const SizedBox(height: 10),
 
-            // ── BOTÓN ELIMINAR ESTE CERTIFICADO ──────────────────────────
             SizedBox(
               width: double.infinity,
+              height: 44,
               child: eliminando
                   ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: 16, height: 16,
-                              child: CircularProgressIndicator(
-                                  color: Colors.red, strokeWidth: 2),
-                            ),
-                            SizedBox(width: 8),
-                            Text('Eliminando...',
-                                style: TextStyle(
-                                    fontSize: 12, color: Colors.red)),
-                          ],
-                        ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(
+                                color: Colors.red, strokeWidth: 2),
+                          ),
+                          SizedBox(width: 8),
+                          Text('Eliminando...',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.red)),
+                        ],
                       ),
                     )
-                  : OutlinedButton.icon(
-                      onPressed: (guardando || eliminando)
-                          ? null
-                          : () => _eliminarCertificado(entry),
-                      icon: const Icon(Icons.delete_outline,
-                          size: 16, color: Colors.red),
-                      label: const Text(
-                        'Eliminar este certificado',
-                        style: TextStyle(
+                  : Semantics(
+                      label: 'Eliminar certificado de ${entry.personaNombre}',
+                      button: true,
+                      child: OutlinedButton.icon(
+                        onPressed: (guardando || eliminando)
+                            ? null
+                            : () => _eliminarCertificado(entry),
+                        icon: const Icon(Icons.delete_outline,
+                            size: 16, color: Colors.red),
+                        label: const Text(
+                          'Eliminar este certificado',
+                          style: TextStyle(
                             fontSize: 12,
                             color: Colors.red,
-                            fontWeight: FontWeight.w600),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        side: BorderSide(
-                            color: Colors.red.shade200, width: 1.5),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: BorderSide(
+                              color: Colors.red.shade200, width: 1.5),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
                       ),
                     ),
             ),
@@ -944,9 +1076,6 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // WIDGETS HELPER
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _rolBadge(String rol, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -954,49 +1083,57 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
         color: color.withOpacity(0.10),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(rol,
-          style: TextStyle(
-              fontSize: 9, fontWeight: FontWeight.bold, color: color)),
+      child: Text(
+        rol,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: color,
+        ),
+      ),
     );
   }
 
   Widget _codigoIndicador(bool tieneCodigo, bool recienGuardado) {
     if (recienGuardado) {
       return Container(
+        width: 36,
+        height: 36,
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: const Color(0xFF16A34A).withOpacity(0.10),
+          color: _kVerde.withOpacity(0.10),
           shape: BoxShape.circle,
         ),
         child: const Icon(Icons.check_circle_rounded,
-            color: Color(0xFF16A34A), size: 18),
+            color: _kVerde, size: 18),
       );
     }
     return Container(
+      constraints: const BoxConstraints(maxWidth: 90),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: tieneCodigo
-            ? const Color(0xFF16A34A).withOpacity(0.10)
-            : const Color(0xFFF59E0B).withOpacity(0.10),
+            ? _kVerde.withOpacity(0.10)
+            : _kAmbar.withOpacity(0.10),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(
           tieneCodigo ? Icons.check_circle_outline : Icons.pending_outlined,
           size: 12,
-          color: tieneCodigo
-              ? const Color(0xFF16A34A)
-              : const Color(0xFFF59E0B),
+          color: tieneCodigo ? _kVerde : _kAmbar,
         ),
         const SizedBox(width: 4),
-        Text(
-          tieneCodigo ? 'Asignado' : 'Pendiente',
-          style: TextStyle(
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-            color: tieneCodigo
-                ? const Color(0xFF16A34A)
-                : const Color(0xFFF59E0B),
+        Flexible(
+          child: Text(
+            tieneCodigo ? 'Asignado' : 'Pendiente',
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+              color: tieneCodigo ? _kVerde : _kAmbar,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ]),

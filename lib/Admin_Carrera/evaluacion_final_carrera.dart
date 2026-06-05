@@ -415,7 +415,6 @@ class _EvaluacionFinalCarreraScreenState
 
         // Normalizar a 20
         if (count > 0 && sumMaximos > 0) {
-          final promedioNormalizado =
               (sumNotas / sumMaximos) * 20 * count / count;
           // Equivalente: (promedio_de_notas / promedio_de_maximos) * 20
           final avgNota = sumNotas / count;
@@ -448,20 +447,45 @@ class _EvaluacionFinalCarreraScreenState
         final codigoUniv = sData['codigoUniversitario']?.toString() ?? '';
 
         // N1: asistencias
-        double notaAsist = 0;
-        if (metaSellos > 0) {
-          try {
-            final scansSnap = await _firestore
-                .collection('events')
-                .doc(_eventoId!)
-                .collection('asistencias')
-                .doc(sDoc.id)
-                .collection('scans')
-                .get();
-            notaAsist =
-                (scansSnap.docs.length / metaSellos * 20).clamp(0.0, 20.0);
-          } catch (_) {}
-        }
+        // N1: asistencias (proyectos + personales)
+double notaAsist = 0;
+if (metaSellos > 0) {
+  try {
+    // Scans de proyectos
+    final scansSnap = await _firestore
+        .collection('events')
+        .doc(_eventoId!)
+        .collection('asistencias')
+        .doc(sDoc.id)
+        .collection('scans')
+        .get();
+    final sellosProyectos = scansSnap.docs.length;
+
+    // Asistencias personales en paralelo
+    final asistPersonalesSnap = await _firestore
+        .collection('events')
+        .doc(_eventoId!)
+        .collection('asistencias_personales')
+        .get();
+
+    final resultados = await Future.wait(
+      asistPersonalesSnap.docs.map((asistDoc) => _firestore
+          .collection('events')
+          .doc(_eventoId!)
+          .collection('asistencias_personales')
+          .doc(asistDoc.id)
+          .collection('registros')
+          .doc(sDoc.id)
+          .get()),
+    );
+    final sellosPersonales =
+        resultados.where((doc) => doc.exists).length;
+
+    final totalSellos = sellosProyectos + sellosPersonales;
+    notaAsist =
+        (totalSellos / metaSellos * 20).clamp(0.0, 20.0);
+  } catch (_) {}
+}
 
         // ¿Está seleccionado?
         final seleccionado    = codigoAProyecto.containsKey(codigoUniv);
@@ -1509,9 +1533,6 @@ Widget _buildBotonExportar() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// BOTTOM SHEET: CONFIGURACIÓN
-// ═══════════════════════════════════════════════════════════════════
 class _ConfigBottomSheet extends StatefulWidget {
   final _Config config;
   final Future<void> Function(_Config) onGuardar;

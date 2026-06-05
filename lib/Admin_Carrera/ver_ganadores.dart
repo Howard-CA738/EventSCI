@@ -21,14 +21,8 @@ class _C {
   static const podioEtiquetas = ['1er lugar', '2do lugar', '3er lugar'];
 }
 
-// ============================================================================
-// ENUM MODO DE VISTA
-// ============================================================================
 enum _ModoVista { lista, tabla, grafico }
 
-// ============================================================================
-// HELPERS SEGUROS
-// ============================================================================
 String _s(dynamic v, [String fb = '—']) {
   if (v == null) return fb;
   final s = v.toString().trim();
@@ -40,9 +34,6 @@ String _sf(dynamic v, [int dec = 2]) {
   return d.toStringAsFixed(dec);
 }
 
-// ============================================================================
-// SCREEN PRINCIPAL
-// ============================================================================
 class VerGanadoresScreen extends StatefulWidget {
   const VerGanadoresScreen({super.key});
 
@@ -96,34 +87,33 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
   }
 
   Future<void> _init() async {
-  setState(() => _isLoadingInit = true);
-  try {
-    final adminData = await PrefsHelper.getAdminCarreraData();
-    if (adminData == null) {
-      _snack('No se encontró información de sesión', isError: true);
-      setState(() => _isLoadingInit = false);
-      return;
-    }
-    _filialId     = adminData['filial']       as String?;
-    _filialNombre = adminData['filialNombre'] as String?;
-    _facultad     = adminData['facultad']     as String?;
-    _carrera      = adminData['carrera']      as String?;
-    _carreraId    = adminData['carreraId'] ?? adminData['carrera'];
-    debugPrint('🔑 filialNombre: $_filialNombre');
-    debugPrint('🔑 carrera: $_carrera');
-    debugPrint('🔑 docKey que se usará: ${_filialNombre}_$_carrera');
-    // ← AQUÍ
-    await _resolverNombres.cargarEstudiantes(
-      filialNombre: _filialNombre ?? '',
-      carrera: _carrera ?? '',
-    );
+    setState(() => _isLoadingInit = true);
+    try {
+      final adminData = await PrefsHelper.getAdminCarreraData();
+      if (adminData == null) {
+        _snack('No se encontró información de sesión', isError: true);
+        if (mounted) setState(() => _isLoadingInit = false);
+        return;
+      }
+      _filialId     = adminData['filial']       as String?;
+      _filialNombre = adminData['filialNombre'] as String?;
+      _facultad     = adminData['facultad']     as String?;
+      _carrera      = adminData['carrera']      as String?;
+      _carreraId    = adminData['carreraId'] ?? adminData['carrera'];
+      debugPrint('🔑 filialNombre: $_filialNombre');
+      debugPrint('🔑 carrera: $_carrera');
+      debugPrint('🔑 docKey que se usará: ${_filialNombre}_$_carrera');
+      await _resolverNombres.cargarEstudiantes(
+        filialNombre: _filialNombre ?? '',
+        carrera: _carrera ?? '',
+      );
 
-    await _cargarEventos();
-  } catch (e) {
-    _snack('Error al iniciar: $e', isError: true);
+      await _cargarEventos();
+    } catch (e) {
+      _snack('Error al iniciar: $e', isError: true);
+    }
+    if (mounted) setState(() => _isLoadingInit = false);
   }
-  if (mounted) setState(() => _isLoadingInit = false);
-}
 
   Future<void> _cargarEventos() async {
     if (mounted) setState(() => _isLoadingEventos = true);
@@ -180,110 +170,107 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
   }
 
   Future<Map<String, List<Map<String, dynamic>>>> _calcularGanadores(
-    String eventoId) async {
-  // Escala base igual que en participantes
-  const double escalaBase = 20.0;
+      String eventoId) async {
+    const double escalaBase = 20.0;
 
-  final proyectosSnap = await _firestore
-      .collection('events')
-      .doc(eventoId)
-      .collection('proyectos')
-      .get();
+    final proyectosSnap = await _firestore
+        .collection('events')
+        .doc(eventoId)
+        .collection('proyectos')
+        .get();
 
-  if (proyectosSnap.docs.isEmpty) return {};
+    if (proyectosSnap.docs.isEmpty) return {};
 
-  final results = await Future.wait(
-    proyectosSnap.docs.map((doc) async {
-      try {
-        final evalSnap = await _firestore
-            .collection('events')
-            .doc(eventoId)
-            .collection('proyectos')
-            .doc(doc.id)
-            .collection('evaluaciones')
-            .where('evaluada', isEqualTo: true)
-            .get();
+    final results = await Future.wait(
+      proyectosSnap.docs.map((doc) async {
+        try {
+          final evalSnap = await _firestore
+              .collection('events')
+              .doc(eventoId)
+              .collection('proyectos')
+              .doc(doc.id)
+              .collection('evaluaciones')
+              .where('evaluada', isEqualTo: true)
+              .get();
 
-        if (evalSnap.docs.isEmpty) return null;
+          if (evalSnap.docs.isEmpty) return null;
 
-        final d = doc.data();
+          final d = doc.data();
 
-        // FIX: normalizar igual que en participantes_completo_carrera
-        final notasNormalizadas = <double>[];
+          final notasNormalizadas = <double>[];
 
-        for (final e in evalSnap.docs) {
-          final data = e.data();
-          final notaTotal =
-              ((data['notaTotal'] ?? 0.0) as num).toDouble();
+          for (final e in evalSnap.docs) {
+            final data = e.data();
+            final notaTotal =
+                ((data['notaTotal'] ?? 0.0) as num).toDouble();
 
-          if (!data.containsKey('puntajeMaximo')) {
-            debugPrint(
-                '⚠️ [Ganadores] Evaluación ${e.id} sin puntajeMaximo — omitida');
-            continue;
+            if (!data.containsKey('puntajeMaximo')) {
+              debugPrint(
+                  '⚠️ [Ganadores] Evaluación ${e.id} sin puntajeMaximo — omitida');
+              continue;
+            }
+
+            final puntajeMax =
+                (data['puntajeMaximo'] as num).toDouble();
+            final maxSeguro = puntajeMax > 0 ? puntajeMax : escalaBase;
+            final normalizada =
+                ((notaTotal / maxSeguro) * escalaBase)
+                    .clamp(0.0, escalaBase);
+
+            notasNormalizadas
+                .add(double.parse(normalizada.toStringAsFixed(2)));
           }
 
-          final puntajeMax =
-              (data['puntajeMaximo'] as num).toDouble();
-          final maxSeguro = puntajeMax > 0 ? puntajeMax : escalaBase;
-          final normalizada =
-              ((notaTotal / maxSeguro) * escalaBase)
-                  .clamp(0.0, escalaBase);
+          if (notasNormalizadas.isEmpty) return null;
 
-          notasNormalizadas
-              .add(double.parse(normalizada.toStringAsFixed(2)));
+          final promedio = notasNormalizadas.reduce((a, b) => a + b) /
+              notasNormalizadas.length;
+          final notaMax =
+              notasNormalizadas.reduce((a, b) => a > b ? a : b);
+          final notaMin =
+              notasNormalizadas.reduce((a, b) => a < b ? a : b);
+
+          return {
+            'proyectoId': doc.id,
+            'codigo':      _s(d['Código'],       'Sin código'),
+            'titulo':      _s(d['Título'],        'Sin título'),
+            'integrantes': _resolverNombres.resolver(d['Integrantes']),
+            'sala':        _s(d['Sala'],           ''),
+            'clasificacion': _s(d['Clasificación'], 'Sin categoría'),
+            'asesor':      _s(d['Asesor'],         ''),
+            'descripcion': _s(d['Descripción'],   ''),
+            'promedio':    double.parse(promedio.toStringAsFixed(2)),
+            'notaMax':     notaMax,
+            'notaMin':     notaMin,
+            'cantidadJurados': notasNormalizadas.length,
+            'notas':       notasNormalizadas,
+            'escalaBase':  escalaBase,
+          };
+        } catch (e) {
+          debugPrint('❌ [Ganadores] Error en proyecto ${doc.id}: $e');
+          return null;
         }
+      }),
+    );
 
-        // Si todas las evaluaciones fueron omitidas, tratar como sin eval
-        if (notasNormalizadas.isEmpty) return null;
+    final validos = results.whereType<Map<String, dynamic>>().toList();
+    if (validos.isEmpty) return {};
 
-        final promedio = notasNormalizadas.reduce((a, b) => a + b) /
-            notasNormalizadas.length;
-        final notaMax =
-            notasNormalizadas.reduce((a, b) => a > b ? a : b);
-        final notaMin =
-            notasNormalizadas.reduce((a, b) => a < b ? a : b);
+    final Map<String, List<Map<String, dynamic>>> porCategoria = {};
+    for (final p in validos) {
+      final cat = p['clasificacion'] as String;
+      porCategoria.putIfAbsent(cat, () => []).add(p);
+    }
 
-        return {
-          'proyectoId': doc.id,
-          'codigo':      _s(d['Código'],       'Sin código'),
-          'titulo':      _s(d['Título'],        'Sin título'),
-          'integrantes': _resolverNombres.resolver(d['Integrantes']),
-          'sala':        _s(d['Sala'],           ''),
-          'clasificacion': _s(d['Clasificación'], 'Sin categoría'),
-          'asesor':      _s(d['Asesor'],         ''),
-          'descripcion': _s(d['Descripción'],   ''),
-          'promedio':    double.parse(promedio.toStringAsFixed(2)),
-          'notaMax':     notaMax,
-          'notaMin':     notaMin,
-          'cantidadJurados': notasNormalizadas.length,
-          'notas':       notasNormalizadas,
-          'escalaBase':  escalaBase,
-        };
-      } catch (e) {
-        debugPrint('❌ [Ganadores] Error en proyecto ${doc.id}: $e');
-        return null;
-      }
-    }),
-  );
-
-  final validos = results.whereType<Map<String, dynamic>>().toList();
-  if (validos.isEmpty) return {};
-
-  final Map<String, List<Map<String, dynamic>>> porCategoria = {};
-  for (final p in validos) {
-    final cat = p['clasificacion'] as String;
-    porCategoria.putIfAbsent(cat, () => []).add(p);
+    return {
+      for (final entry in porCategoria.entries)
+        entry.key: (entry.value
+              ..sort((a, b) => (b['promedio'] as double)
+                  .compareTo(a['promedio'] as double)))
+            .take(3)
+            .toList(),
+    };
   }
-
-  return {
-    for (final entry in porCategoria.entries)
-      entry.key: (entry.value
-            ..sort((a, b) => (b['promedio'] as double)
-                .compareTo(a['promedio'] as double)))
-          .take(3)
-          .toList(),
-  };
-}
 
   void _snack(String msg, {bool isError = false, bool isSuccess = false}) {
     if (!mounted) return;
@@ -320,9 +307,6 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
       ));
   }
 
-  // ============================================================================
-  // Mostrar detalle de un proyecto
-  // ============================================================================
   void _mostrarDetalle(
       BuildContext context, Map<String, dynamic> proyecto, int posicion) {
     showModalBottomSheet(
@@ -336,31 +320,35 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
     );
   }
 
-  // ============================================================================
-  // BUILD
-  // ============================================================================
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _C.primary,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFFEEF2F7),
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    final mq = MediaQuery.of(context);
+    return MediaQuery(
+      data: mq.copyWith(
+        textScaler: mq.textScaler.clamp(maxScaleFactor: 1.3),
+      ),
+      child: Scaffold(
+        backgroundColor: _C.primary,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFEEF2F7),
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(28)),
+                  ),
+                  child: _isLoadingInit
+                      ? const _CenteredLoader(mensaje: 'Cargando datos...')
+                      : _eventoSeleccionado == null
+                          ? _buildSeleccionEvento()
+                          : _buildResultados(),
                 ),
-                child: _isLoadingInit
-                    ? const _CenteredLoader(mensaje: 'Cargando datos...')
-                    : _eventoSeleccionado == null
-                        ? _buildSeleccionEvento()
-                        : _buildResultados(),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -379,6 +367,7 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
           const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text('Ganadores',
                     style: TextStyle(
@@ -388,12 +377,13 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
                         overflow: TextOverflow.ellipsis),
                     maxLines: 1),
                 Text('TOP 3 por categoría',
-                    style: TextStyle(fontSize: 12, color: Colors.white60)),
+                    style: TextStyle(fontSize: 12, color: Colors.white60),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
           if (_eventoSeleccionado != null) ...[
-            // Botones de modo de vista
             if (!_isLoadingGanadores && _ganadoresPorCategoria.isNotEmpty)
               _VistaToggle(
                 modoActual: _modoVista,
@@ -414,9 +404,6 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
     );
   }
 
-  // ============================================================================
-  // PASO 1 — Seleccionar evento
-  // ============================================================================
   Widget _buildSeleccionEvento() {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
@@ -449,9 +436,6 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
     );
   }
 
-  // ============================================================================
-  // PASO 2 — Resultados
-  // ============================================================================
   Widget _buildResultados() {
     return Column(
       children: [
@@ -506,9 +490,6 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
   }
 }
 
-// ============================================================================
-// TOGGLE DE VISTA
-// ============================================================================
 class _VistaToggle extends StatelessWidget {
   final _ModoVista modoActual;
   final ValueChanged<_ModoVista> onChange;
@@ -519,7 +500,7 @@ class _VistaToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha:0.15),
+        color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(10),
       ),
       padding: const EdgeInsets.all(3),
@@ -585,9 +566,6 @@ class _ToggleBtn extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// DETALLE DE PROYECTO — BOTTOM SHEET
-// ============================================================================
 class _DetalleProyectoSheet extends StatelessWidget {
   final Map<String, dynamic> proyecto;
   final int posicion;
@@ -623,7 +601,6 @@ class _DetalleProyectoSheet extends StatelessWidget {
         ),
         child: Column(
           children: [
-            // Handle
             Container(
               margin: const EdgeInsets.only(top: 12, bottom: 8),
               width: 40,
@@ -633,8 +610,6 @@ class _DetalleProyectoSheet extends StatelessWidget {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-
-            // Header del sheet
             Container(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
               child: Row(
@@ -643,9 +618,10 @@ class _DetalleProyectoSheet extends StatelessWidget {
                     width: 52,
                     height: 52,
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha:0.15),
+                      color: color.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
-                      border: Border.all(color: color.withValues(alpha:0.5), width: 2),
+                      border:
+                          Border.all(color: color.withValues(alpha: 0.5), width: 2),
                     ),
                     child: Center(
                       child: Text(icono, style: const TextStyle(fontSize: 24)),
@@ -660,10 +636,12 @@ class _DetalleProyectoSheet extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: color.withValues(alpha:0.15),
+                            color: color.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(etiqueta,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
@@ -689,16 +667,12 @@ class _DetalleProyectoSheet extends StatelessWidget {
                 ],
               ),
             ),
-
             Divider(height: 1, color: Colors.grey[200]),
-
-            // Contenido scrollable
             Expanded(
               child: ListView(
                 controller: controller,
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                 children: [
-                  // Nota promedio destacada
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -710,46 +684,50 @@ class _DetalleProyectoSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _StatItem(
-                          label: 'Promedio',
-                          value: _sf(promedio),
-                          icon: Icons.star_rounded,
-                          color: _C.gold,
-                          grande: true,
+                        Expanded(
+                          child: _StatItem(
+                            label: 'Promedio',
+                            value: _sf(promedio),
+                            icon: Icons.star_rounded,
+                            color: _C.gold,
+                            grande: true,
+                          ),
                         ),
                         Container(
                             width: 1, height: 40, color: Colors.white24),
-                        _StatItem(
-                          label: 'Nota máx.',
-                          value: _sf(notaMax),
-                          icon: Icons.arrow_upward_rounded,
-                          color: Colors.greenAccent,
+                        Expanded(
+                          child: _StatItem(
+                            label: 'Nota máx.',
+                            value: _sf(notaMax),
+                            icon: Icons.arrow_upward_rounded,
+                            color: Colors.greenAccent,
+                          ),
                         ),
                         Container(
                             width: 1, height: 40, color: Colors.white24),
-                        _StatItem(
-                          label: 'Nota mín.',
-                          value: _sf(notaMin),
-                          icon: Icons.arrow_downward_rounded,
-                          color: Colors.redAccent[100]!,
+                        Expanded(
+                          child: _StatItem(
+                            label: 'Nota mín.',
+                            value: _sf(notaMin),
+                            icon: Icons.arrow_downward_rounded,
+                            color: Colors.redAccent[100]!,
+                          ),
                         ),
                         Container(
                             width: 1, height: 40, color: Colors.white24),
-                        _StatItem(
-                          label: 'Jurados',
-                          value: '$jurados',
-                          icon: Icons.how_to_vote_outlined,
-                          color: Colors.lightBlueAccent,
+                        Expanded(
+                          child: _StatItem(
+                            label: 'Jurados',
+                            value: '$jurados',
+                            icon: Icons.how_to_vote_outlined,
+                            color: Colors.lightBlueAccent,
+                          ),
                         ),
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
-                  // Notas individuales de jurados
                   if (notas.isNotEmpty) ...[
                     _SheetSection(
                       titulo: 'Notas por jurado',
@@ -781,6 +759,7 @@ class _DetalleProyectoSheet extends StatelessWidget {
                             ),
                           ),
                           child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Text('J${e.key + 1}',
                                   style: TextStyle(
@@ -802,8 +781,6 @@ class _DetalleProyectoSheet extends StatelessWidget {
                     ),
                     const SizedBox(height: 20),
                   ],
-
-                  // Información del proyecto
                   _SheetSection(
                     titulo: 'Información del proyecto',
                     icon: Icons.info_outline_rounded,
@@ -872,9 +849,6 @@ class _DetalleProyectoSheet extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// VISTA TABLA
-// ============================================================================
 class _VistaTabla extends StatelessWidget {
   final Map<String, List<Map<String, dynamic>>> ganadoresPorCategoria;
   final void Function(Map<String, dynamic> proyecto, int posicion) onTapFila;
@@ -896,7 +870,7 @@ class _VistaTabla extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                  color: Colors.black.withValues(alpha:0.06),
+                  color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 12,
                   offset: const Offset(0, 4))
             ],
@@ -905,7 +879,6 @@ class _VistaTabla extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header categoría
               Container(
                 padding: const EdgeInsets.all(14),
                 color: _C.primary,
@@ -926,9 +899,8 @@ class _VistaTabla extends StatelessWidget {
                   ],
                 ),
               ),
-              // Cabecera tabla
               Container(
-                color: _C.primary.withValues(alpha:0.06),
+                color: _C.primary.withValues(alpha: 0.06),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 child: const Row(
@@ -940,7 +912,6 @@ class _VistaTabla extends StatelessWidget {
                   ],
                 ),
               ),
-              // Filas
               ...entry.value.asMap().entries.map((e) {
                 final i = e.key;
                 final p = e.value;
@@ -962,7 +933,7 @@ class _VistaTabla extends StatelessWidget {
                         bottom: BorderSide(color: Colors.grey[100]!),
                       ),
                       color: i == 0
-                          ? _C.gold.withValues(alpha:0.04)
+                          ? _C.gold.withValues(alpha: 0.04)
                           : Colors.transparent,
                     ),
                     child: Row(
@@ -985,6 +956,8 @@ class _VistaTabla extends StatelessWidget {
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis),
                               Text(_s(p['codigo'], '—'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                       fontSize: 10,
                                       color: _C.textSecondary)),
@@ -1001,18 +974,25 @@ class _VistaTabla extends StatelessWidget {
                                 color: color,
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Text(_sf(promedio),
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white),
-                                  textAlign: TextAlign.center),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(_sf(promedio),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white),
+                                    textAlign: TextAlign.center),
+                              ),
                             ),
                           ),
                         ),
                         SizedBox(
                           width: 36,
                           child: Text('$jurados',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                   fontSize: 12,
                                   color: _C.textSecondary),
@@ -1023,7 +1003,6 @@ class _VistaTabla extends StatelessWidget {
                   ),
                 );
               }),
-              // Hint
               Padding(
                 padding: const EdgeInsets.all(10),
                 child: Row(
@@ -1032,9 +1011,13 @@ class _VistaTabla extends StatelessWidget {
                     Icon(Icons.touch_app_outlined,
                         size: 12, color: Colors.grey[400]),
                     const SizedBox(width: 4),
-                    Text('Toca una fila para ver detalle',
-                        style: TextStyle(
-                            fontSize: 10, color: Colors.grey[400])),
+                    Flexible(
+                      child: Text('Toca una fila para ver detalle',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 10, color: Colors.grey[400])),
+                    ),
                   ],
                 ),
               ),
@@ -1046,15 +1029,11 @@ class _VistaTabla extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// VISTA GRÁFICO (barras horizontales)
-// ============================================================================
 class _VistaGrafico extends StatelessWidget {
   final Map<String, List<Map<String, dynamic>>> ganadoresPorCategoria;
 
   const _VistaGrafico({required this.ganadoresPorCategoria});
 
-  // Nota máxima global para escalar las barras
   double get _maxNota {
     double max = 0;
     for (final lista in ganadoresPorCategoria.values) {
@@ -1080,7 +1059,7 @@ class _VistaGrafico extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                  color: Colors.black.withValues(alpha:0.06),
+                  color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 12,
                   offset: const Offset(0, 4))
             ],
@@ -1089,7 +1068,6 @@ class _VistaGrafico extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               Container(
                 padding: const EdgeInsets.all(14),
                 color: _C.primary,
@@ -1130,7 +1108,6 @@ class _VistaGrafico extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Título y medalla
                           Row(
                             children: [
                               Text(icono,
@@ -1147,24 +1124,23 @@ class _VistaGrafico extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              const SizedBox(width: 6),
                               Text(_sf(promedio),
                                   style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.bold,
                                       color: color)),
-                              Text(' pts',
-                                  style: const TextStyle(
+                              const Text(' pts',
+                                  style: TextStyle(
                                       fontSize: 11,
                                       color: _C.textSecondary)),
                             ],
                           ),
                           const SizedBox(height: 6),
-                          // Barra
                           LayoutBuilder(
                             builder: (_, constraints) {
                               return Stack(
                                 children: [
-                                  // Fondo
                                   Container(
                                     height: 14,
                                     width: constraints.maxWidth,
@@ -1174,7 +1150,6 @@ class _VistaGrafico extends StatelessWidget {
                                           BorderRadius.circular(7),
                                     ),
                                   ),
-                                  // Relleno
                                   AnimatedContainer(
                                     duration:
                                         const Duration(milliseconds: 700),
@@ -1193,17 +1168,24 @@ class _VistaGrafico extends StatelessWidget {
                             },
                           ),
                           const SizedBox(height: 3),
-                          // Código y sala
                           Row(children: [
-                            Text(_s(p['codigo'], '—'),
-                                style: const TextStyle(
-                                    fontSize: 10,
-                                    color: _C.textSecondary)),
-                            if (_s(p['sala'], '').isNotEmpty) ...[
-                              Text(' · Sala ${_s(p['sala'])}',
+                            Flexible(
+                              child: Text(_s(p['codigo'], '—'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                       fontSize: 10,
                                       color: _C.textSecondary)),
+                            ),
+                            if (_s(p['sala'], '').isNotEmpty) ...[
+                              Flexible(
+                                child: Text(' · Sala ${_s(p['sala'])}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontSize: 10,
+                                        color: _C.textSecondary)),
+                              ),
                             ],
                           ]),
                         ],
@@ -1220,9 +1202,6 @@ class _VistaGrafico extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// WIDGETS DE DETALLE
-// ============================================================================
 class _StatItem extends StatelessWidget {
   final String label;
   final String value;
@@ -1245,12 +1224,19 @@ class _StatItem extends StatelessWidget {
       children: [
         Icon(icon, color: color, size: grande ? 18 : 14),
         const SizedBox(height: 4),
-        Text(value,
-            style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: grande ? 22 : 15)),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(value,
+              maxLines: 1,
+              style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: grande ? 22 : 15)),
+        ),
         Text(label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white60, fontSize: 10)),
       ],
     );
@@ -1269,11 +1255,13 @@ class _SheetSection extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: _C.primary),
         const SizedBox(width: 8),
-        Text(titulo,
-            style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: _C.primary)),
+        Expanded(
+          child: Text(titulo,
+              style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: _C.primary)),
+        ),
       ],
     );
   }
@@ -1322,7 +1310,6 @@ class _IntegrantesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Separar por comas o saltos de línea
     final items = texto
         .split(RegExp(r'[,\n]'))
         .map((s) => s.trim())
@@ -1347,7 +1334,7 @@ class _IntegrantesCard extends StatelessWidget {
                 width: 28,
                 height: 28,
                 decoration: BoxDecoration(
-                  color: _C.primary.withValues(alpha:0.1),
+                  color: _C.primary.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
@@ -1372,9 +1359,6 @@ class _IntegrantesCard extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// WIDGETS AUXILIARES EXISTENTES (sin cambios)
-// ============================================================================
 class _CenteredLoader extends StatelessWidget {
   final String mensaje;
   const _CenteredLoader({required this.mensaje});
@@ -1417,7 +1401,7 @@ class _InfoCarreraCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-              color: _C.primary.withValues(alpha:0.3),
+              color: _C.primary.withValues(alpha: 0.3),
               blurRadius: 12,
               offset: const Offset(0, 4))
         ],
@@ -1427,7 +1411,7 @@ class _InfoCarreraCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha:0.12),
+              color: Colors.white.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(Icons.emoji_events, color: _C.gold, size: 28),
@@ -1490,7 +1474,7 @@ class _SectionTitle extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: _C.primary.withValues(alpha:0.1),
+            color: _C.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(icon, color: _C.primary, size: 20),
@@ -1544,7 +1528,7 @@ class _EventoCard extends StatelessWidget {
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha:0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],
@@ -1594,9 +1578,13 @@ class _EventoCard extends StatelessWidget {
                         Icon(Icons.emoji_events,
                             size: 12, color: Colors.amber[700]),
                         const SizedBox(width: 4),
-                        Text('Ver ganadores',
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.amber[700])),
+                        Flexible(
+                          child: Text('Ver ganadores',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.amber[700])),
+                        ),
                       ]),
                     ],
                   ),
@@ -1604,7 +1592,7 @@ class _EventoCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: _C.gold.withValues(alpha:0.12),
+                    color: _C.gold.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(Icons.chevron_right_rounded,
@@ -1686,6 +1674,7 @@ class _EventoBanner extends StatelessWidget {
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(nombre,
                       style: const TextStyle(
@@ -1695,6 +1684,8 @@ class _EventoBanner extends StatelessWidget {
                           overflow: TextOverflow.ellipsis),
                       maxLines: 1),
                   const Text('Toca para cambiar de evento',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: Colors.white54, fontSize: 11)),
                 ],
               ),
@@ -1704,11 +1695,13 @@ class _EventoBanner extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha:0.15),
+                color: Colors.white.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
                 '$totalCategorias categ.',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: Colors.white70, fontSize: 11),
               ),
             ),
@@ -1725,10 +1718,11 @@ class _SinEvaluaciones extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               padding: const EdgeInsets.all(24),
@@ -1758,9 +1752,6 @@ class _SinEvaluaciones extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Sección por categoría (modo lista) — ahora con onTapGanador
-// ---------------------------------------------------------------------------
 class _CategoriaSection extends StatelessWidget {
   final String categoria;
   final List<Map<String, dynamic>> ganadores;
@@ -1782,7 +1773,7 @@ class _CategoriaSection extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha:0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 14,
               offset: const Offset(0, 4))
         ],
@@ -1799,7 +1790,7 @@ class _CategoriaSection extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha:0.2),
+                    color: Colors.amber.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: const Icon(Icons.category_outlined,
@@ -1815,15 +1806,18 @@ class _CategoriaSection extends StatelessWidget {
                           overflow: TextOverflow.ellipsis),
                       maxLines: 1),
                 ),
+                const SizedBox(width: 8),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha:0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     '${ganadores.length} proy.',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style:
                         const TextStyle(color: Colors.white70, fontSize: 11),
                   ),
@@ -1844,7 +1838,6 @@ class _CategoriaSection extends StatelessWidget {
               ),
             ),
           ),
-          // Hint de toque
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Row(
@@ -1853,9 +1846,13 @@ class _CategoriaSection extends StatelessWidget {
                 Icon(Icons.touch_app_outlined,
                     size: 12, color: Colors.grey[400]),
                 const SizedBox(width: 4),
-                Text('Toca una tarjeta para ver detalle',
-                    style:
-                        TextStyle(fontSize: 10, color: Colors.grey[400])),
+                Flexible(
+                  child: Text('Toca una tarjeta para ver detalle',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          TextStyle(fontSize: 10, color: Colors.grey[400])),
+                ),
               ],
             ),
           ),
@@ -1865,9 +1862,6 @@ class _CategoriaSection extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Card de ganador — con onTap
-// ---------------------------------------------------------------------------
 class _GanadorCard extends StatelessWidget {
   final Map<String, dynamic> proyecto;
   final int posicion;
@@ -1906,7 +1900,7 @@ class _GanadorCard extends StatelessWidget {
           color: fondo,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: color.withValues(alpha:posicion == 0 ? 0.5 : 0.25),
+            color: color.withValues(alpha: posicion == 0 ? 0.5 : 0.25),
             width: posicion == 0 ? 2 : 1,
           ),
         ),
@@ -1917,9 +1911,10 @@ class _GanadorCard extends StatelessWidget {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                color: color.withValues(alpha:0.15),
+                color: color.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
-                border: Border.all(color: color.withValues(alpha:0.4), width: 2),
+                border:
+                    Border.all(color: color.withValues(alpha: 0.4), width: 2),
               ),
               child: Center(
                 child: Text(icono, style: const TextStyle(fontSize: 20)),
@@ -1940,7 +1935,7 @@ class _GanadorCard extends StatelessWidget {
                           fg: Colors.white),
                       _MiniChip(
                           label: etiqueta,
-                          bg: color.withValues(alpha:0.18),
+                          bg: color.withValues(alpha: 0.18),
                           fg: color),
                     ],
                   ),
@@ -1973,22 +1968,29 @@ class _GanadorCard extends StatelessWidget {
                       const Icon(Icons.room_outlined,
                           size: 12, color: _C.textSecondary),
                       const SizedBox(width: 4),
-                      Text('Sala $sala',
-                          style: const TextStyle(
-                              fontSize: 11,
-                              color: _C.textSecondary,
-                              overflow: TextOverflow.ellipsis)),
+                      Flexible(
+                        child: Text('Sala $sala',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 11,
+                                color: _C.textSecondary)),
+                      ),
                     ]),
                   ],
-                  // Indicador de "ver más"
                   const SizedBox(height: 4),
                   Row(children: [
                     Icon(Icons.info_outline,
-                        size: 11, color: color.withValues(alpha:0.7)),
+                        size: 11, color: color.withValues(alpha: 0.7)),
                     const SizedBox(width: 3),
-                    Text('Ver detalle completo',
-                        style: TextStyle(
-                            fontSize: 10, color: color.withValues(alpha:0.8))),
+                    Flexible(
+                      child: Text('Ver detalle completo',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: color.withValues(alpha: 0.8))),
+                    ),
                   ]),
                 ],
               ),

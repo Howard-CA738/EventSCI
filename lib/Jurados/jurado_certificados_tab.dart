@@ -138,6 +138,7 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
         bytesFirma1: bytes1,
         bytesFirma2: bytes2,
         bytesFirma3: bytes3,
+        codigoCertificado: cert.datos.codigoCertificado, // ← imprime el código
       );
 
       final nombre = cert.nombreJurado.isNotEmpty

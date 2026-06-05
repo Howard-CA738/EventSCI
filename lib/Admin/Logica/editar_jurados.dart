@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'filiales_service.dart';
 import 'gestion_criterios.dart';
 
 class EditarJuradosScreen extends StatefulWidget {

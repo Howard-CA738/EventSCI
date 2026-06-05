@@ -3,7 +3,6 @@ import '/prefs_helper.dart';
 import 'estudiantes_registrados_carrera.dart';
 import '/admin/logica/datos_excel.dart';
 
-
 class RegistroEstudiantesCarreraScreen extends StatefulWidget {
   const RegistroEstudiantesCarreraScreen({super.key});
 
@@ -30,20 +29,23 @@ class _RegistroEstudiantesCarreraScreenState
   late Animation<Offset> _headerSlideAnimation;
   late Animation<double> _formFadeAnimation;
 
-  // ── Datos del admin (ya disponibles sin llamadas a Firebase) ──────────────
   String _adminCarreraFilial = '';
   String _adminCarreraFilialNombre = '';
   String _adminCarreraFacultad = '';
   String _adminCarreraCarrera = '';
 
   bool _isLoading = false;
-  bool _isLoadingAdminData = true; // Solo carga los prefs locales (muy rápido)
+  bool _isLoadingAdminData = true;
 
   String? _selectedCiclo;
   String? _selectedGrupo;
 
-  final List<String> _ciclos = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+  final List<String> _ciclos = [
+    '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'
+  ];
   final List<String> _grupos = ['Único', '1', '2', '3', '4'];
+
+  static const Color _primaryColor = Color(0xFF1E3A5F);
 
   @override
   void initState() {
@@ -77,27 +79,24 @@ class _RegistroEstudiantesCarreraScreenState
 
     _headerAnimationController.forward();
     Future.delayed(const Duration(milliseconds: 300), () {
-      _formAnimationController.forward();
+      if (mounted) _formAnimationController.forward();
     });
 
     _nombresController.addListener(_generateUsernameSuggestion);
     _apellidosController.addListener(_generateUsernameSuggestion);
     _correoController.addListener(_extractUsernameFromEmail);
 
-    // Carga solo desde SharedPreferences — sin Firebase, sin demora
     _loadAdminCarreraData();
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // Carga los datos del admin desde prefs locales (sin red)
-  // ═══════════════════════════════════════════════════════════════
   Future<void> _loadAdminCarreraData() async {
     try {
       final adminData = await PrefsHelper.getAdminCarreraData();
-      if (adminData != null) {
+      if (adminData != null && mounted) {
         setState(() {
           _adminCarreraFilial = adminData['filial'] ?? '';
-          _adminCarreraFilialNombre = adminData['filialNombre'] ?? adminData['filial'] ?? '';
+          _adminCarreraFilialNombre =
+              adminData['filialNombre'] ?? adminData['filial'] ?? '';
           _adminCarreraFacultad = adminData['facultad'] ?? '';
           _adminCarreraCarrera = adminData['carrera'] ?? '';
         });
@@ -105,10 +104,8 @@ class _RegistroEstudiantesCarreraScreenState
     } catch (e) {
       debugPrint('Error cargando datos admin carrera: $e');
     }
-    setState(() => _isLoadingAdminData = false);
+    if (mounted) setState(() => _isLoadingAdminData = false);
   }
-
-  // ── Username helpers ──────────────────────────────────────────────────────
 
   void _extractUsernameFromEmail() {
     final correo = _correoController.text.trim();
@@ -128,10 +125,13 @@ class _RegistroEstudiantesCarreraScreenState
     }
   }
 
-  String _generateUsernameFromNamesAndSurnames(String nombres, String apellidos) {
+  String _generateUsernameFromNamesAndSurnames(
+      String nombres, String apellidos) {
     if (nombres.isEmpty && apellidos.isEmpty) return '';
-    final n = nombres.toLowerCase().split(' ').where((s) => s.isNotEmpty).toList();
-    final a = apellidos.toLowerCase().split(' ').where((s) => s.isNotEmpty).toList();
+    final n =
+        nombres.toLowerCase().split(' ').where((s) => s.isNotEmpty).toList();
+    final a =
+        apellidos.toLowerCase().split(' ').where((s) => s.isNotEmpty).toList();
     String username = n.isNotEmpty ? n[0] : '';
     if (a.isNotEmpty) username += username.isNotEmpty ? '.${a[0]}' : a[0];
     return _cleanUsername(username);
@@ -165,9 +165,6 @@ class _RegistroEstudiantesCarreraScreenState
     super.dispose();
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // Crear estudiante — usa los datos fijos del admin sin consultas adicionales
-  // ═══════════════════════════════════════════════════════════════
   Future<void> _createStudent() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -178,12 +175,6 @@ class _RegistroEstudiantesCarreraScreenState
     setState(() => _isLoading = true);
 
     try {
-      debugPrint('🔍 Creando estudiante (admin carrera):');
-      debugPrint('   Filial: $_adminCarreraFilial ($_adminCarreraFilialNombre)');
-      debugPrint('   Facultad: $_adminCarreraFacultad');
-      debugPrint('   Carrera: $_adminCarreraCarrera');
-      debugPrint('   Username: $username');
-
       final success = await PrefsHelper.createStudentAccountWithUsername(
         email: _correoController.text.trim(),
         name: fullName,
@@ -205,11 +196,10 @@ class _RegistroEstudiantesCarreraScreenState
         _showMessage('Error: ya existe un usuario con esos datos');
       }
     } catch (e) {
-      debugPrint('❌ Error creando estudiante: $e');
       _showMessage('Error creando estudiante: $e');
     }
 
-    setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoading = false);
   }
 
   void _clearForm() {
@@ -220,10 +210,12 @@ class _RegistroEstudiantesCarreraScreenState
     _correoController.clear();
     _celularController.clear();
     _usernameController.clear();
-    setState(() {
-      _selectedCiclo = null;
-      _selectedGrupo = null;
-    });
+    if (mounted) {
+      setState(() {
+        _selectedCiclo = null;
+        _selectedGrupo = null;
+      });
+    }
   }
 
   void _showMessage(String message) {
@@ -231,14 +223,51 @@ class _RegistroEstudiantesCarreraScreenState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: const Color(0xFF1E3A5F),
+        backgroundColor: _primaryColor,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
 
-  // ── Widgets reutilizables ─────────────────────────────────────────────────
+  InputDecoration _fieldDecoration({
+    required String label,
+    required IconData icon,
+    String? hintText,
+    bool readOnly = false,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hintText,
+      prefixIcon: Icon(icon, color: _primaryColor),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide:
+            BorderSide(color: readOnly ? Colors.grey.shade200 : Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(
+            color: readOnly ? Colors.grey.shade300 : _primaryColor, width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.red),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.red, width: 2),
+      ),
+      filled: true,
+      fillColor: readOnly ? Colors.grey.shade100 : Colors.white,
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    );
+  }
 
   Widget _buildTextField({
     required TextEditingController controller,
@@ -253,31 +282,24 @@ class _RegistroEstudiantesCarreraScreenState
       controller: controller,
       keyboardType: keyboardType,
       onChanged: onChanged,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hintText,
-        prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF1E3A5F), width: 2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.red),
-        ),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      ),
+      decoration: _fieldDecoration(label: label, icon: icon, hintText: hintText),
       validator: validator,
+    );
+  }
+
+  Widget _buildReadOnlyField({
+    required String label,
+    required String value,
+    required IconData icon,
+  }) {
+    return AbsorbPointer(
+      child: TextFormField(
+        key: ValueKey('$label:$value'),
+        initialValue: value.isNotEmpty ? value : '—',
+        readOnly: true,
+        decoration: _fieldDecoration(label: label, icon: icon, readOnly: true),
+        style: TextStyle(color: Colors.grey.shade600),
+      ),
     );
   }
 
@@ -293,7 +315,7 @@ class _RegistroEstudiantesCarreraScreenState
       isExpanded: true,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
+        prefixIcon: Icon(icon, color: _primaryColor),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.grey.shade300),
@@ -304,17 +326,18 @@ class _RegistroEstudiantesCarreraScreenState
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF1E3A5F), width: 2),
+          borderSide: const BorderSide(color: _primaryColor, width: 2),
         ),
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
       items: items,
       onChanged: onChanged,
       dropdownColor: Colors.white,
       menuMaxHeight: 300,
-      icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF1E3A5F)),
+      icon: const Icon(Icons.arrow_drop_down, color: _primaryColor),
     );
   }
 
@@ -332,24 +355,28 @@ class _RegistroEstudiantesCarreraScreenState
         padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
+                    color: _primaryColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(icon, color: const Color(0xFF1E3A5F), size: 24),
+                  child: Icon(icon, color: _primaryColor, size: 24),
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A5F),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: _primaryColor,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -368,133 +395,280 @@ class _RegistroEstudiantesCarreraScreenState
     required VoidCallback onPressed,
     required bool isPrimary,
   }) {
+    final buttonStyle = isPrimary
+        ? ElevatedButton.styleFrom(
+            backgroundColor: _primaryColor,
+            foregroundColor: Colors.white,
+            elevation: 3,
+            shadowColor: _primaryColor.withOpacity(0.4),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16)),
+            minimumSize: const Size(double.infinity, 56),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          )
+        : null;
+
+    final outlinedStyle = OutlinedButton.styleFrom(
+      foregroundColor: _primaryColor,
+      side: const BorderSide(color: _primaryColor, width: 2),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      minimumSize: const Size(double.infinity, 56),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    );
+
+    final labelWidget = Text(
+      label,
+      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+      textAlign: TextAlign.center,
+      overflow: TextOverflow.ellipsis,
+    );
+
+    if (isPrimary) {
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: onPressed,
+          icon: Icon(icon, size: 22),
+          label: labelWidget,
+          style: buttonStyle,
+        ),
+      );
+    }
     return SizedBox(
       width: double.infinity,
-      height: 56,
-      child: isPrimary
-          ? ElevatedButton.icon(
-              onPressed: onPressed,
-              icon: Icon(icon, size: 22),
-              label: Text(label,
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1E3A5F),
-                foregroundColor: Colors.white,
-                elevation: 3,
-                shadowColor: const Color(0xFF1E3A5F).withValues(alpha:0.4),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-              ),
-            )
-          : OutlinedButton.icon(
-              onPressed: onPressed,
-              icon: Icon(icon, size: 22),
-              label: Text(label,
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF1E3A5F),
-                side: const BorderSide(color: Color(0xFF1E3A5F), width: 2),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-              ),
-            ),
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 22),
+        label: labelWidget,
+        style: outlinedStyle,
+      ),
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // BUILD
-  // ═══════════════════════════════════════════════════════════════
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF1E3A5F),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── Header animado ──────────────────────────────────────────
-            SlideTransition(
-              position: _headerSlideAnimation,
-              child: FadeTransition(
-                opacity: _headerFadeAnimation,
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Row(
-                    children: [
-                      Hero(
-                        tag: 'logo',
-                        child: Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Image.asset(
-                            'assets/logo.png',
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => const Icon(
-                              Icons.person_add,
-                              color: Color(0xFF1E3A5F),
-                              size: 30,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Registro de Estudiantes',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            Text(
-                              _adminCarreraCarrera.isNotEmpty
-                                  ? _adminCarreraCarrera
-                                  : 'Cargando...',
-                              style: const TextStyle(
-                                  fontSize: 13, color: Colors.white70),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.file_upload,
-                            color: Colors.white, size: 26),
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const DatosExcelScreen()),
-                        ),
-                        tooltip: 'Importar Excel',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.list,
-                            color: Colors.white, size: 26),
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) =>
-                                  const EstudiantesRegistradosCarreraScreen()),
-                        ),
-                        tooltip: 'Ver registrados',
-                      ),
-                    ],
+  Widget _buildHeader() {
+    return SlideTransition(
+      position: _headerSlideAnimation,
+      child: FadeTransition(
+        opacity: _headerFadeAnimation,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+          child: Row(
+            children: [
+              Hero(
+                tag: 'logo',
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Image.asset(
+                    'assets/logo.png',
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.person_add,
+                      color: _primaryColor,
+                      size: 26,
+                    ),
                   ),
                 ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Registro de Estudiantes',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                    Text(
+                      _adminCarreraCarrera.isNotEmpty
+                          ? _adminCarreraCarrera
+                          : 'Cargando...',
+                      style: const TextStyle(fontSize: 12, color: Colors.white70),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              Semantics(
+                label: 'Importar Excel',
+                button: true,
+                child: IconButton(
+                  icon: const Icon(Icons.file_upload,
+                      color: Colors.white, size: 24),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const DatosExcelScreen()),
+                  ),
+                  tooltip: 'Importar Excel',
+                  constraints: const BoxConstraints(
+                    minWidth: 44,
+                    minHeight: 44,
+                  ),
+                ),
+              ),
+              Semantics(
+                label: 'Ver estudiantes registrados',
+                button: true,
+                child: IconButton(
+                  icon: const Icon(Icons.list, color: Colors.white, size: 24),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            const EstudiantesRegistradosCarreraScreen()),
+                  ),
+                  tooltip: 'Ver registrados',
+                  constraints: const BoxConstraints(
+                    minWidth: 44,
+                    minHeight: 44,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-            // ── Área de contenido ───────────────────────────────────────
+  Widget _buildInfoBanner() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [
+          Colors.blue.shade50,
+          Colors.blue.shade100,
+        ]),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.blue.shade300, width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade700,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.school, color: Colors.white, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Registrando para: $_adminCarreraCarrera',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade900,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$_adminCarreraFacultad · $_adminCarreraFilialNombre',
+                  style: TextStyle(fontSize: 11, color: Colors.blue.shade700),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCicloGrupoRow(double availableWidth) {
+    final useColumn = availableWidth < 340;
+
+    final cicloDropdown = _buildDropdown<String>(
+      label: 'Ciclo',
+      icon: Icons.layers,
+      value: _selectedCiclo,
+      items: _ciclos
+          .map((c) => DropdownMenuItem(value: c, child: Text('Ciclo $c')))
+          .toList(),
+      onChanged: (v) => setState(() => _selectedCiclo = v),
+    );
+
+    final grupoDropdown = _buildDropdown<String>(
+      label: 'Grupo',
+      icon: Icons.groups,
+      value: _selectedGrupo,
+      items: _grupos
+          .map((g) => DropdownMenuItem(value: g, child: Text('Grupo $g')))
+          .toList(),
+      onChanged: (v) => setState(() => _selectedGrupo = v),
+    );
+
+    if (useColumn) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          cicloDropdown,
+          const SizedBox(height: 16),
+          grupoDropdown,
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: cicloDropdown),
+        const SizedBox(width: 16),
+        Expanded(child: grupoDropdown),
+      ],
+    );
+  }
+
+  Widget _buildLoadingBody(String message) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(color: _primaryColor),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            style: const TextStyle(color: _primaryColor, fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _primaryColor,
+      resizeToAvoidBottomInset: true,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(),
             Expanded(
               child: FadeTransition(
                 opacity: _formFadeAnimation,
@@ -507,301 +681,212 @@ class _RegistroEstudiantesCarreraScreenState
                     ),
                   ),
                   child: _isLoading || _isLoadingAdminData
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const CircularProgressIndicator(
-                                  color: Color(0xFF1E3A5F)),
-                              const SizedBox(height: 16),
-                              Text(
-                                _isLoading
-                                    ? 'Creando estudiante...'
-                                    : 'Cargando...',
-                                style: const TextStyle(
-                                    color: Color(0xFF1E3A5F), fontSize: 16),
+                      ? _buildLoadingBody(
+                          _isLoading ? 'Creando estudiante...' : 'Cargando...')
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            return SingleChildScrollView(
+                              keyboardDismissBehavior:
+                                  ScrollViewKeyboardDismissBehavior.onDrag,
+                              padding: EdgeInsets.fromLTRB(
+                                20,
+                                20,
+                                20,
+                                MediaQuery.of(context).viewInsets.bottom + 24,
                               ),
-                            ],
-                          ),
-                        )
-                      : SingleChildScrollView(
-                          padding: const EdgeInsets.all(20.0),
-                          child: Form(
-                            key: _formKey,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                // ── Banner de carrera (siempre visible) ──
-                                Container(
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(colors: [
-                                      Colors.blue.shade50,
-                                      Colors.blue.shade100,
-                                    ]),
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(
-                                        color: Colors.blue.shade300,
-                                        width: 1.5),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue.shade700,
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                        ),
-                                        child: const Icon(Icons.school,
-                                            color: Colors.white, size: 20),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Registrando para: $_adminCarreraCarrera',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.blue.shade900,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              '$_adminCarreraFacultad · $_adminCarreraFilialNombre',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.blue.shade700,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
-
-                                // ── Información personal ──────────────────
-                                _buildSectionCard(
-                                  title: 'Información Personal',
-                                  icon: Icons.person,
+                              child: Form(
+                                key: _formKey,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    _buildTextField(
-                                      controller: _nombresController,
-                                      label: 'Nombres',
+                                    _buildInfoBanner(),
+                                    const SizedBox(height: 20),
+                                    _buildSectionCard(
+                                      title: 'Información Personal',
                                       icon: Icons.person,
-                                      validator: (v) => (v == null ||
-                                              v.trim().isEmpty)
-                                          ? 'Los nombres son requeridos'
-                                          : null,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _buildTextField(
-                                      controller: _apellidosController,
-                                      label: 'Apellidos',
-                                      icon: Icons.person_outline,
-                                      validator: (v) => (v == null ||
-                                              v.trim().isEmpty)
-                                          ? 'Los apellidos son requeridos'
-                                          : null,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _buildTextField(
-                                      controller: _usernameController,
-                                      label: 'Usuario',
-                                      icon: Icons.account_circle,
-                                      hintText: 'Ej: juan.perez',
-                                      onChanged: (value) {
-                                        final cleaned = _cleanUsername(value);
-                                        if (cleaned != value) {
-                                          _usernameController.value =
-                                              TextEditingValue(
-                                            text: cleaned,
-                                            selection:
-                                                TextSelection.collapsed(
-                                                    offset: cleaned.length),
-                                          );
-                                        }
-                                      },
-                                      validator: (v) {
-                                        if (v == null || v.trim().isEmpty) {
-                                          return 'El usuario es requerido';
-                                        }
-                                        if (v.trim().length < 3) {
-                                          return 'Mínimo 3 caracteres';
-                                        }
-                                        if (!RegExp(r'^[a-z0-9.]+$')
-                                            .hasMatch(v.trim())) {
-                                          return 'Solo letras minúsculas, números y puntos';
-                                        }
-                                        return null;
-                                      },
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _buildTextField(
-                                      controller: _documentoController,
-                                      label: 'Documento (DNI)',
-                                      icon: Icons.credit_card,
-                                      keyboardType: TextInputType.number,
-                                      validator: (v) =>
-                                          (v == null || v.trim().isEmpty)
+                                      children: [
+                                        _buildTextField(
+                                          controller: _nombresController,
+                                          label: 'Nombres',
+                                          icon: Icons.person,
+                                          validator: (v) =>
+                                              (v == null || v.trim().isEmpty)
+                                                  ? 'Los nombres son requeridos'
+                                                  : null,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildTextField(
+                                          controller: _apellidosController,
+                                          label: 'Apellidos',
+                                          icon: Icons.person_outline,
+                                          validator: (v) =>
+                                              (v == null || v.trim().isEmpty)
+                                                  ? 'Los apellidos son requeridos'
+                                                  : null,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildTextField(
+                                          controller: _usernameController,
+                                          label: 'Usuario',
+                                          icon: Icons.account_circle,
+                                          hintText: 'Ej: juan.perez',
+                                          onChanged: (value) {
+                                            final cleaned =
+                                                _cleanUsername(value);
+                                            if (cleaned != value) {
+                                              _usernameController.value =
+                                                  TextEditingValue(
+                                                text: cleaned,
+                                                selection:
+                                                    TextSelection.collapsed(
+                                                        offset:
+                                                            cleaned.length),
+                                              );
+                                            }
+                                          },
+                                          validator: (v) {
+                                            if (v == null ||
+                                                v.trim().isEmpty) {
+                                              return 'El usuario es requerido';
+                                            }
+                                            if (v.trim().length < 3) {
+                                              return 'Mínimo 3 caracteres';
+                                            }
+                                            if (!RegExp(r'^[a-z0-9.]+$')
+                                                .hasMatch(v.trim())) {
+                                              return 'Solo letras minúsculas, números y puntos';
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildTextField(
+                                          controller: _documentoController,
+                                          label: 'Documento (DNI)',
+                                          icon: Icons.credit_card,
+                                          keyboardType: TextInputType.number,
+                                          validator: (v) => (v == null ||
+                                                  v.trim().isEmpty)
                                               ? 'El documento es requerido'
                                               : null,
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 20),
-
-                                // ── Información de contacto ───────────────
-                                _buildSectionCard(
-                                  title: 'Información de Contacto',
-                                  icon: Icons.contact_phone,
-                                  children: [
-                                    _buildTextField(
-                                      controller: _correoController,
-                                      label: 'Correo electrónico',
-                                      icon: Icons.email,
-                                      keyboardType: TextInputType.emailAddress,
-                                      validator: (v) {
-                                        if (v != null && v.trim().isNotEmpty) {
-                                          if (!RegExp(
-                                                  r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                                              .hasMatch(v)) {
-                                            return 'Ingresa un correo válido';
-                                          }
-                                        }
-                                        return null;
-                                      },
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _buildTextField(
-                                      controller: _celularController,
-                                      label: 'Celular',
-                                      icon: Icons.phone,
-                                      keyboardType: TextInputType.phone,
-                                      validator: (v) {
-                                        if (v != null && v.trim().isNotEmpty) {
-                                          if (v.trim().length != 9) {
-                                            return 'El celular debe tener 9 dígitos';
-                                          }
-                                        }
-                                        return null;
-                                      },
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 20),
-
-                                // ── Información académica ─────────────────
-                                _buildSectionCard(
-                                  title: 'Información Académica',
-                                  icon: Icons.school,
-                                  children: [
-                                    _buildTextField(
-                                      controller: _codigoEstudianteController,
-                                      label: 'Código estudiante',
-                                      icon: Icons.badge,
-                                      hintText: 'Ej: 202320800',
-                                      validator: (_) => null,
-                                    ),
-                                    const SizedBox(height: 16),
-
-                                    // Filial, facultad y carrera — solo lectura
-                                    _buildReadOnlyField(
-                                      label: 'Sede',
-                                      value: _adminCarreraFilialNombre,
-                                      icon: Icons.location_city,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _buildReadOnlyField(
-                                      label: 'Facultad',
-                                      value: _adminCarreraFacultad,
-                                      icon: Icons.account_balance,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _buildReadOnlyField(
-                                      label: 'Carrera',
-                                      value: _adminCarreraCarrera,
-                                      icon: Icons.menu_book,
-                                    ),
-                                    const SizedBox(height: 16),
-
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: _buildDropdown<String>(
-                                            label: 'Ciclo',
-                                            icon: Icons.layers,
-                                            value: _selectedCiclo,
-                                            items: _ciclos
-                                                .map((c) => DropdownMenuItem(
-                                                    value: c,
-                                                    child: Text('Ciclo $c')))
-                                                .toList(),
-                                            onChanged: (v) => setState(
-                                                () => _selectedCiclo = v),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 16),
-                                        Expanded(
-                                          child: _buildDropdown<String>(
-                                            label: 'Grupo',
-                                            icon: Icons.groups,
-                                            value: _selectedGrupo,
-                                            items: _grupos
-                                                .map((g) => DropdownMenuItem(
-                                                    value: g,
-                                                    child: Text('Grupo $g')))
-                                                .toList(),
-                                            onChanged: (v) => setState(
-                                                () => _selectedGrupo = v),
-                                          ),
                                         ),
                                       ],
                                     ),
+                                    const SizedBox(height: 20),
+                                    _buildSectionCard(
+                                      title: 'Información de Contacto',
+                                      icon: Icons.contact_phone,
+                                      children: [
+                                        _buildTextField(
+                                          controller: _correoController,
+                                          label: 'Correo electrónico',
+                                          icon: Icons.email,
+                                          keyboardType:
+                                              TextInputType.emailAddress,
+                                          validator: (v) {
+                                            if (v != null &&
+                                                v.trim().isNotEmpty) {
+                                              if (!RegExp(
+                                                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                                                  .hasMatch(v)) {
+                                                return 'Ingresa un correo válido';
+                                              }
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildTextField(
+                                          controller: _celularController,
+                                          label: 'Celular',
+                                          icon: Icons.phone,
+                                          keyboardType: TextInputType.phone,
+                                          validator: (v) {
+                                            if (v != null &&
+                                                v.trim().isNotEmpty) {
+                                              if (v.trim().length != 9) {
+                                                return 'El celular debe tener 9 dígitos';
+                                              }
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 20),
+                                    _buildSectionCard(
+                                      title: 'Información Académica',
+                                      icon: Icons.school,
+                                      children: [
+                                        _buildTextField(
+                                          controller:
+                                              _codigoEstudianteController,
+                                          label: 'Código estudiante',
+                                          icon: Icons.badge,
+                                          hintText: 'Ej: 202320800',
+                                          validator: (_) => null,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildReadOnlyField(
+                                          label: 'Sede',
+                                          value: _adminCarreraFilialNombre,
+                                          icon: Icons.location_city,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildReadOnlyField(
+                                          label: 'Facultad',
+                                          value: _adminCarreraFacultad,
+                                          icon: Icons.account_balance,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildReadOnlyField(
+                                          label: 'Carrera',
+                                          value: _adminCarreraCarrera,
+                                          icon: Icons.menu_book,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildCicloGrupoRow(
+                                            constraints.maxWidth - 40),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 24),
+                                    _buildActionButton(
+                                      label: 'Crear Estudiante',
+                                      icon: Icons.person_add,
+                                      onPressed: _createStudent,
+                                      isPrimary: true,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _buildActionButton(
+                                      label: 'Importar desde Excel',
+                                      icon: Icons.file_upload,
+                                      onPressed: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                const DatosExcelScreen()),
+                                      ),
+                                      isPrimary: false,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _buildActionButton(
+                                      label: 'Ver Estudiantes Registrados',
+                                      icon: Icons.list,
+                                      onPressed: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                const EstudiantesRegistradosCarreraScreen()),
+                                      ),
+                                      isPrimary: false,
+                                    ),
                                   ],
                                 ),
-                                const SizedBox(height: 24),
-
-                                // ── Botones ───────────────────────────────
-                                _buildActionButton(
-                                  label: 'Crear Estudiante',
-                                  icon: Icons.person_add,
-                                  onPressed: _createStudent,
-                                  isPrimary: true,
-                                ),
-                                const SizedBox(height: 12),
-                                _buildActionButton(
-                                  label: 'Importar desde Excel',
-                                  icon: Icons.file_upload,
-                                  onPressed: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) =>
-                                            const DatosExcelScreen()),
-                                  ),
-                                  isPrimary: false,
-                                ),
-                                const SizedBox(height: 12),
-                                _buildActionButton(
-                                  label: 'Ver Estudiantes Registrados',
-                                  icon: Icons.list,
-                                  onPressed: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) =>
-                                            const EstudiantesRegistradosCarreraScreen()),
-                                  ),
-                                  isPrimary: false,
-                                ),
-                              ],
-                            ),
-                          ),
+                              ),
+                            );
+                          },
                         ),
                 ),
               ),
@@ -809,35 +894,6 @@ class _RegistroEstudiantesCarreraScreenState
           ],
         ),
       ),
-    );
-  }
-
-  /// Campo de solo lectura con estilo igual al resto del formulario.
-  Widget _buildReadOnlyField({
-    required String label,
-    required String value,
-    required IconData icon,
-  }) {
-    return TextFormField(
-      initialValue: value,
-      readOnly: true,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade200),
-        ),
-        filled: true,
-        fillColor: Colors.grey.shade100,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      ),
-      style: TextStyle(color: Colors.grey.shade600),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '/admin/logica/grupos.dart';
 
 class AgregarProyectoScreen extends StatefulWidget {
@@ -20,6 +21,7 @@ class AgregarProyectoScreen extends StatefulWidget {
 class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
+  final _scrollController = ScrollController();
   final _codigoController = TextEditingController();
   final _tituloController = TextEditingController();
   final _integrantesController = TextEditingController();
@@ -32,7 +34,6 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
-  // Lista de categorías comunes (puedes personalizarla)
   final List<String> _categoriasSugeridas = [
     'INGENIERÍA Y TECNOLOGÍA',
     'CIENCIAS SOCIALES',
@@ -68,6 +69,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _codigoController.dispose();
     _tituloController.dispose();
     _integrantesController.dispose();
@@ -79,46 +81,70 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF2C5F7C),
-      appBar: AppBar(
-        title: const Text(
-          'Agregar Proyecto Manualmente',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: const Color(0xFF2C5F7C),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFFF5F7FA),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(30),
-            topRight: Radius.circular(30),
+      child: Scaffold(
+        backgroundColor: const Color(0xFF2C5F7C),
+        appBar: AppBar(
+          title: const Text(
+            'Agregar Proyecto',
+            style: TextStyle(fontWeight: FontWeight.w600),
+            overflow: TextOverflow.ellipsis,
+          ),
+          backgroundColor: const Color(0xFF2C5F7C),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+            onPressed: () => Navigator.of(context).pop(),
+            tooltip: 'Regresar',
           ),
         ),
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: SlideTransition(
-            position: _slideAnimation,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildHeaderCard(),
-                    const SizedBox(height: 24),
-                    _buildFormCard(),
-                    const SizedBox(height: 24),
-                    _buildActionButtons(),
-                  ],
+        body: SafeArea(
+          top: false,
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Color(0xFFF5F7FA),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(30),
+                topRight: Radius.circular(30),
+              ),
+            ),
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: KeyboardDismissOnScroll(
+                  child: SingleChildScrollView(
+                    controller: _scrollController,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: EdgeInsets.only(
+                      left: 20.0,
+                      right: 20.0,
+                      top: 20.0,
+                      bottom:
+                          MediaQuery.of(context).viewInsets.bottom + 32.0,
+                    ),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildHeaderCard(),
+                          const SizedBox(height: 24),
+                          _buildFormCard(),
+                          const SizedBox(height: 24),
+                          _buildActionButtons(),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -129,73 +155,62 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
   }
 
   Widget _buildHeaderCard() {
-    return TweenAnimationBuilder<double>(
-      duration: const Duration(milliseconds: 800),
-      tween: Tween(begin: 0.0, end: 1.0),
-      builder: (context, value, child) {
-        return Transform.scale(
-          scale: value,
-          child: Container(
-            padding: const EdgeInsets.all(24),
+    final eventName =
+        (widget.eventData['name'] as String? ?? 'Evento').trim();
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF4CAF50),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF4CAF50), Color(0xFF45A049)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF4CAF50).withValues(alpha:0.3),
-                  blurRadius: 15,
-                  offset: const Offset(0, 8),
-                ),
-              ],
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(16),
             ),
-            child: Row(
+            child: const Icon(
+              Icons.add_box,
+              color: Colors.white,
+              size: 36,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha:0.2),
-                    borderRadius: BorderRadius.circular(16),
+                const Text(
+                  'Nuevo Proyecto',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
                   ),
-                  child: const Icon(
-                    Icons.add_box,
-                    color: Colors.white,
-                    size: 40,
-                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Nuevo Proyecto',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        widget.eventData['name'] ?? 'Evento',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+                const SizedBox(height: 4),
+                Text(
+                  eventName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
                 ),
               ],
             ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -206,14 +221,14 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -221,12 +236,16 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
               children: [
                 Icon(Icons.edit_document, color: Color(0xFF2C5F7C), size: 24),
                 SizedBox(width: 12),
-                Text(
-                  'Información del Proyecto',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2C3E50),
+                Expanded(
+                  child: Text(
+                    'Información del Proyecto',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF2C3E50),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
                 ),
               ],
@@ -247,6 +266,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
               hint: 'Ingrese el título completo',
               maxLines: 3,
               isRequired: true,
+              alignLabelWithHint: true,
             ),
             const SizedBox(height: 20),
             _buildTextField(
@@ -256,6 +276,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
               hint: 'Nombres separados por comas',
               maxLines: 3,
               isRequired: true,
+              alignLabelWithHint: true,
             ),
             const SizedBox(height: 20),
             _buildClasificacionField(),
@@ -280,18 +301,23 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
     required String hint,
     int maxLines = 1,
     bool isRequired = false,
+    bool alignLabelWithHint = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF2C3E50),
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF2C3E50),
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
             ),
             if (isRequired) ...[
@@ -307,9 +333,20 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
         TextFormField(
           controller: controller,
           maxLines: maxLines,
+          textInputAction:
+              maxLines == 1 ? TextInputAction.next : TextInputAction.newline,
           decoration: InputDecoration(
             hintText: hint,
-            prefixIcon: Icon(icon, color: const Color(0xFF2C5F7C)),
+            alignLabelWithHint: alignLabelWithHint,
+            prefixIcon: Padding(
+              padding: maxLines > 1
+                  ? const EdgeInsets.only(bottom: 0)
+                  : EdgeInsets.zero,
+              child: Icon(icon, color: const Color(0xFF2C5F7C)),
+            ),
+            prefixIconConstraints: maxLines > 1
+                ? const BoxConstraints(minWidth: 48, minHeight: 48)
+                : null,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.grey.shade300),
@@ -371,20 +408,31 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
         const SizedBox(height: 8),
         TextFormField(
           controller: _clasificacionController,
+          textInputAction: TextInputAction.next,
           decoration: InputDecoration(
             hintText: 'Seleccione o escriba una categoría',
-            prefixIcon: const Icon(Icons.category, color: Color(0xFF2C5F7C)),
+            prefixIcon:
+                const Icon(Icons.category, color: Color(0xFF2C5F7C)),
             suffixIcon: PopupMenuButton<String>(
-              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF2C5F7C)),
+              icon: const Icon(Icons.arrow_drop_down,
+                  color: Color(0xFF2C5F7C)),
               tooltip: 'Seleccionar categoría',
+              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               onSelected: (String value) {
-                _clasificacionController.text = value;
+                setState(() {
+                  _clasificacionController.text = value;
+                });
               },
               itemBuilder: (BuildContext context) {
                 return _categoriasSugeridas.map((String categoria) {
                   return PopupMenuItem<String>(
                     value: categoria,
-                    child: Text(categoria),
+                    child: Text(
+                      categoria,
+                      style: const TextStyle(fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                    ),
                   );
                 }).toList();
               },
@@ -399,7 +447,8 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF2C5F7C), width: 2),
+              borderSide:
+                  const BorderSide(color: Color(0xFF2C5F7C), width: 2),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -423,21 +472,32 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
             return null;
           },
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: _categoriasSugeridas.take(5).map((categoria) {
             return InkWell(
               onTap: () {
-                _clasificacionController.text = categoria;
+                setState(() {
+                  _clasificacionController.text = categoria;
+                });
               },
+              borderRadius: BorderRadius.circular(20),
               child: Chip(
-                label: Text(categoria, style: const TextStyle(fontSize: 11)),
-                backgroundColor: const Color(0xFF2C5F7C).withValues(alpha:0.1),
+                label: Text(
+                  categoria,
+                  style: const TextStyle(fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+                backgroundColor:
+                    const Color(0xFF2C5F7C).withValues(alpha: 0.1),
                 labelStyle: const TextStyle(color: Color(0xFF2C5F7C)),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
               ),
             );
           }).toList(),
@@ -447,57 +507,83 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
   }
 
   Widget _buildActionButtons() {
-    return Row(
-      children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: _isLoading ? null : _limpiarFormulario,
-            icon: const Icon(Icons.clear_all),
-            label: const Text(
-              'Limpiar',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF64748B),
-              side: BorderSide(color: Colors.grey.shade300, width: 2),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 320;
+
+        if (isNarrow) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildSaveButton(),
+              const SizedBox(height: 12),
+              _buildClearButton(),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            Expanded(child: _buildClearButton()),
+            const SizedBox(width: 12),
+            Expanded(flex: 2, child: _buildSaveButton()),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildClearButton() {
+    return OutlinedButton.icon(
+      onPressed: _isLoading ? null : _limpiarFormulario,
+      icon: const Icon(Icons.clear_all, size: 20),
+      label: const Text(
+        'Limpiar',
+        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1,
+      ),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFF64748B),
+        side: BorderSide(color: Colors.grey.shade300, width: 2),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        minimumSize: const Size(0, 52),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          flex: 2,
-          child: ElevatedButton.icon(
-            onPressed: _isLoading ? null : _guardarProyecto,
-            icon: _isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : const Icon(Icons.save, size: 20),
-            label: Text(
-              _isLoading ? 'Guardando...' : 'Guardar Proyecto',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4CAF50),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+      ),
+    );
+  }
+
+  Widget _buildSaveButton() {
+    return ElevatedButton.icon(
+      onPressed: _isLoading ? null : _guardarProyecto,
+      icon: _isLoading
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
               ),
-              elevation: 0,
-            ),
-          ),
+            )
+          : const Icon(Icons.save, size: 20),
+      label: Text(
+        _isLoading ? 'Guardando...' : 'Guardar Proyecto',
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1,
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF4CAF50),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        minimumSize: const Size(0, 52),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
         ),
-      ],
+        elevation: 0,
+      ),
     );
   }
 
@@ -516,20 +602,28 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
       return;
     }
 
-    // Confirmación antes de guardar
+    final codigoSnapshot = _codigoController.text.trim();
+    final tituloSnapshot = _tituloController.text.trim();
+    final integrantesSnapshot = _integrantesController.text.trim();
+    final clasificacionSnapshot = _clasificacionController.text.trim();
+    final salaSnapshot = _salaController.text.trim();
+
     bool? confirm = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF4CAF50).withValues(alpha:0.1),
+                color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.check_circle, color: Color(0xFF4CAF50)),
+              child:
+                  const Icon(Icons.check_circle, color: Color(0xFF4CAF50)),
             ),
             const SizedBox(width: 12),
             const Text('Confirmar'),
@@ -567,11 +661,11 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
 
     try {
       final proyectoData = {
-        'Código': _codigoController.text.trim(),
-        'Título': _tituloController.text.trim(),
-        'Integrantes': _integrantesController.text.trim(),
-        'Clasificación': _clasificacionController.text.trim(),
-        'Sala': _salaController.text.trim(),
+        'Código': codigoSnapshot,
+        'Título': tituloSnapshot,
+        'Integrantes': integrantesSnapshot,
+        'Clasificación': clasificacionSnapshot,
+        'Sala': salaSnapshot,
       };
 
       await widget.gruposService.guardarProyectosEnEvento(
@@ -582,17 +676,18 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
       widget.onProyectoAgregado();
 
       if (mounted) {
-        _mostrarMensajeExito();
+        _mostrarMensajeExito(codigoSnapshot);
         _limpiarFormulario();
 
-        // Esperar un momento antes de cerrar para que el usuario vea el mensaje
         await Future.delayed(const Duration(seconds: 1));
         if (mounted) {
           Navigator.of(context).pop();
         }
       }
     } catch (e) {
-      _mostrarError('Error al guardar el proyecto: $e');
+      if (mounted) {
+        _mostrarError('Error al guardar el proyecto: $e');
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -602,7 +697,8 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
     }
   }
 
-  void _mostrarMensajeExito() {
+  void _mostrarMensajeExito(String codigo) {
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -611,15 +707,18 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Proyecto "${_codigoController.text}" agregado exitosamente',
-                style: const TextStyle(fontSize: 15),
+                'Proyecto "$codigo" agregado exitosamente',
+                style: const TextStyle(fontSize: 14),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
               ),
             ),
           ],
         ),
         backgroundColor: const Color(0xFF4CAF50),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         duration: const Duration(seconds: 2),
         margin: const EdgeInsets.all(16),
       ),
@@ -627,23 +726,44 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
   }
 
   void _mostrarError(String mensaje) {
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.error_outline, color: Colors.white),
+            const Icon(Icons.error_outline, color: Colors.white, size: 20),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(mensaje, style: const TextStyle(fontSize: 15)),
+              child: Text(
+                mensaje,
+                style: const TextStyle(fontSize: 14),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 3,
+              ),
             ),
           ],
         ),
         backgroundColor: const Color(0xFFF44336),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         duration: const Duration(seconds: 4),
         margin: const EdgeInsets.all(16),
       ),
+    );
+  }
+}
+
+class KeyboardDismissOnScroll extends StatelessWidget {
+  final Widget child;
+
+  const KeyboardDismissOnScroll({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: child,
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
 import 'admin_carrera_service.dart';
+import '/password_helper.dart'; // asegúrate de importarlo
 
 class EditarAdminCarreraScreen extends StatefulWidget {
   const EditarAdminCarreraScreen({super.key});
@@ -30,7 +31,13 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
   String _carrera = '';
   String _facultad = '';
   String _sede = '';
-  String _passwordActual = '';
+
+  // ── CORRECCIÓN 1 ──────────────────────────────────────────────────────────
+  // Guardamos el hash de la contraseña, NO el texto plano.
+  // Nunca se muestra en pantalla; solo se usa para verificar con
+  // PasswordHelper.verifyPassword() al momento de guardar.
+  String _passwordHashActual = '';
+  // ─────────────────────────────────────────────────────────────────────────
 
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
@@ -44,6 +51,7 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
     );
     _fadeAnimation =
         CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+    _passwordNuevaController.addListener(_onPasswordChanged);
     _loadAdminData();
   }
 
@@ -52,25 +60,35 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
     _fadeController.dispose();
     _usuarioController.dispose();
     _passwordActualController.dispose();
+    _passwordNuevaController.removeListener(_onPasswordChanged);
     _passwordNuevaController.dispose();
     _passwordConfirmarController.dispose();
     super.dispose();
   }
+
+  void _onPasswordChanged() => setState(() {});
 
   Future<void> _loadAdminData() async {
     setState(() => _isLoading = true);
     try {
       final adminData = await PrefsHelper.getAdminCarreraData();
       if (adminData != null) {
-        final adminCompleto = await _service.getAdminById(adminData['userId']);
+        final adminCompleto =
+            await _service.getAdminById(adminData['userId']);
         if (adminCompleto != null) {
           setState(() {
-            _adminId = adminCompleto['id'];
+            _adminId = adminCompleto['id'] ?? '';
             _usuarioController.text = adminCompleto['usuario'] ?? '';
             _carrera = adminCompleto['carrera'] ?? '';
             _facultad = adminCompleto['facultad'] ?? '';
             _sede = adminCompleto['filialNombre'] ?? '';
-            _passwordActual = adminCompleto['password'] ?? '';
+
+            // ── CORRECCIÓN 1 ───────────────────────────────────────────────
+            // Guardamos el hash (campo 'password') para poder verificar
+            // después con PasswordHelper.verifyPassword().
+            // No lo ponemos en ningún TextEditingController ni lo mostramos.
+            _passwordHashActual = adminCompleto['password'] ?? '';
+            // ──────────────────────────────────────────────────────────────
           });
         }
       }
@@ -85,16 +103,41 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
   Future<void> _guardarCambios() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_passwordNuevaController.text.isNotEmpty) {
-      if (_passwordActualController.text != _passwordActual) {
+    // ── CORRECCIÓN 2 ──────────────────────────────────────────────────────
+    // Si el usuario quiere cambiar la contraseña, verificamos la actual
+    // usando PasswordHelper.verifyPassword() contra el hash almacenado.
+    // Esto funciona correctamente tanto si el hash es SHA-256 como si
+    // fuera texto plano (contraseñas antiguas no migradas).
+    if (_passwordActualController.text.isNotEmpty ||
+        _passwordNuevaController.text.isNotEmpty) {
+      // Requiere que ambos campos estén llenos si se toca alguno
+      if (_passwordActualController.text.isEmpty) {
+        _showMessage('Ingresa tu contraseña actual', isError: true);
+        return;
+      }
+      if (_passwordNuevaController.text.isEmpty) {
+        _showMessage('Ingresa la nueva contraseña', isError: true);
+        return;
+      }
+
+      // Verificar contraseña actual contra el hash de Firestore
+      final esCorrecta = PasswordHelper.verifyPassword(
+        _passwordActualController.text,
+        _passwordHashActual,
+      );
+      if (!esCorrecta) {
         _showMessage('La contraseña actual es incorrecta', isError: true);
         return;
       }
-      if (_passwordNuevaController.text != _passwordConfirmarController.text) {
+
+      // Verificar que nueva y confirmación coincidan
+      if (_passwordNuevaController.text !=
+          _passwordConfirmarController.text) {
         _showMessage('Las contraseñas nuevas no coinciden', isError: true);
         return;
       }
     }
+    // ─────────────────────────────────────────────────────────────────────
 
     setState(() => _isSaving = true);
 
@@ -102,30 +145,54 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
       final success = await _service.actualizarAdminCarrera(
         adminId: _adminId,
         usuario: _usuarioController.text.trim(),
+        // Solo enviamos la nueva contraseña si el campo está lleno
         password: _passwordNuevaController.text.isNotEmpty
             ? _passwordNuevaController.text
             : null,
       );
 
       if (success) {
-        await PrefsHelper.saveAdminCarreraData(
-          userId: _adminId,
-          userName: _usuarioController.text.trim(),
-          filial: (await PrefsHelper.getAdminCarreraFilial())!,
-          filialNombre: (await PrefsHelper.getAdminCarreraFilialNombre())!,
-          facultad: (await PrefsHelper.getAdminCarreraFacultad())!,
-          carrera: (await PrefsHelper.getAdminCarreraCarrera())!,
-          carreraId: (await PrefsHelper.getAdminCarreraCarreraId())!,
-          permisos: await PrefsHelper.getAdminCarreraPermisos(),
-        );
+        // Actualizar SharedPreferences con el nuevo username
+        final filial = await PrefsHelper.getAdminCarreraFilial();
+        final filialNombre =
+            await PrefsHelper.getAdminCarreraFilialNombre();
+        final facultad = await PrefsHelper.getAdminCarreraFacultad();
+        final carrera = await PrefsHelper.getAdminCarreraCarrera();
+        final carreraId =
+            await PrefsHelper.getAdminCarreraCarreraId();
+        final permisos =
+            await PrefsHelper.getAdminCarreraPermisos();
+
+        if (filial != null &&
+            filialNombre != null &&
+            facultad != null &&
+            carrera != null &&
+            carreraId != null) {
+          await PrefsHelper.saveAdminCarreraData(
+            userId: _adminId,
+            userName: _usuarioController.text.trim(),
+            filial: filial,
+            filialNombre: filialNombre,
+            facultad: facultad,
+            carrera: carrera,
+            carreraId: carreraId,
+            permisos: permisos,
+          );
+        }
 
         _showMessage('Datos actualizados correctamente');
         _passwordActualController.clear();
         _passwordNuevaController.clear();
         _passwordConfirmarController.clear();
+
+        // ── CORRECCIÓN 3 ──────────────────────────────────────────────────
+        // Recargar para actualizar _passwordHashActual con el nuevo hash,
+        // en caso de que el admin haya cambiado su contraseña.
         await _loadAdminData();
+        // ──────────────────────────────────────────────────────────────────
       } else {
-        _showMessage('Ya existe otro admin con ese usuario', isError: true);
+        _showMessage('Ya existe otro admin con ese usuario',
+            isError: true);
       }
     } catch (e) {
       debugPrint('Error guardando cambios: $e');
@@ -153,7 +220,9 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
               child: Text(
                 message,
                 style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w500),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           ],
@@ -161,8 +230,8 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
         backgroundColor:
             isError ? const Color(0xFFD4453B) : const Color(0xFF2E9E6E),
         behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14)),
         margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 3),
         elevation: 6,
@@ -170,12 +239,11 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
     );
   }
 
-  // ─── BUILD ───────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF1E3A5F),
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: Column(
           children: [
@@ -199,6 +267,8 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
                     : FadeTransition(
                         opacity: _fadeAnimation,
                         child: SingleChildScrollView(
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
                           padding:
                               const EdgeInsets.fromLTRB(16, 24, 16, 36),
                           child: Form(
@@ -227,7 +297,6 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
     );
   }
 
-  // ── Header ───────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 12, 20, 20),
@@ -249,33 +318,38 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
                 color: Colors.white, size: 22),
           ),
           const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Editar Cuenta',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  letterSpacing: 0.2,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Editar Cuenta',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.2,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
-              ),
-              Text(
-                'Administrador de Carrera',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white.withValues(alpha: 0.65),
+                Text(
+                  'Administrador de Carrera',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.65),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  // ── Tarjeta carrera asignada (solo lectura) ──────────────────────────────
   Widget _buildCarreraCard() {
     return _buildCard(
       headerIcon: Icons.school_rounded,
@@ -309,7 +383,6 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
     );
   }
 
-  // ── Tarjeta datos de cuenta ──────────────────────────────────────────────
   Widget _buildCuentaCard() {
     return _buildCard(
       headerIcon: Icons.person_rounded,
@@ -318,6 +391,7 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
       headerSubtitle: 'Actualiza tu nombre de usuario',
       child: TextFormField(
         controller: _usuarioController,
+        textInputAction: TextInputAction.next,
         decoration: _inputDecoration(
           label: 'Usuario',
           icon: Icons.account_circle_rounded,
@@ -333,23 +407,24 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
     );
   }
 
-  // ── Tarjeta cambiar contraseña ───────────────────────────────────────────
   Widget _buildPasswordCard() {
     return _buildCard(
       headerIcon: Icons.lock_rounded,
       headerColor: const Color(0xFF8B4DC7),
       headerTitle: 'Cambiar Contraseña',
-      headerSubtitle:
-          'Deja los campos vacíos si no deseas cambiarla',
+      headerSubtitle: 'Deja los campos vacíos si no deseas cambiarla',
       child: Column(
         children: [
-          // Contraseña actual
+          // ── Campo: contraseña actual ──────────────────────────────────
           TextFormField(
             controller: _passwordActualController,
+            // CORRECCIÓN: obscureText controlado por _obscurePasswordActual
             obscureText: _obscurePasswordActual,
+            textInputAction: TextInputAction.next,
             decoration: _inputDecoration(
               label: 'Contraseña actual',
               icon: Icons.lock_outline_rounded,
+              // CORRECCIÓN: sufixIcon funciona correctamente con setState
               suffixIcon: IconButton(
                 icon: Icon(
                   _obscurePasswordActual
@@ -358,17 +433,31 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
                   color: Colors.grey[500],
                   size: 20,
                 ),
+                tooltip: _obscurePasswordActual
+                    ? 'Mostrar contraseña'
+                    : 'Ocultar contraseña',
                 onPressed: () => setState(
-                    () => _obscurePasswordActual = !_obscurePasswordActual),
+                  () => _obscurePasswordActual = !_obscurePasswordActual,
+                ),
               ),
             ),
+            // No es requerido a menos que el usuario empiece a llenar
+            // los campos de nueva contraseña
+            validator: (value) {
+              if (_passwordNuevaController.text.isNotEmpty &&
+                  (value == null || value.isEmpty)) {
+                return 'Ingresa tu contraseña actual';
+              }
+              return null;
+            },
           ),
           const SizedBox(height: 14),
 
-          // Nueva contraseña
+          // ── Campo: nueva contraseña ───────────────────────────────────
           TextFormField(
             controller: _passwordNuevaController,
             obscureText: _obscurePasswordNueva,
+            textInputAction: TextInputAction.next,
             decoration: _inputDecoration(
               label: 'Nueva contraseña',
               icon: Icons.lock_reset_rounded,
@@ -380,8 +469,12 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
                   color: Colors.grey[500],
                   size: 20,
                 ),
+                tooltip: _obscurePasswordNueva
+                    ? 'Mostrar contraseña'
+                    : 'Ocultar contraseña',
                 onPressed: () => setState(
-                    () => _obscurePasswordNueva = !_obscurePasswordNueva),
+                  () => _obscurePasswordNueva = !_obscurePasswordNueva,
+                ),
               ),
             ),
             validator: (value) {
@@ -396,10 +489,12 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
           ),
           const SizedBox(height: 14),
 
-          // Confirmar contraseña
+          // ── Campo: confirmar nueva contraseña ─────────────────────────
           TextFormField(
             controller: _passwordConfirmarController,
             obscureText: _obscurePasswordConfirmar,
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _guardarCambios(),
             decoration: _inputDecoration(
               label: 'Confirmar nueva contraseña',
               icon: Icons.check_circle_outline_rounded,
@@ -411,8 +506,13 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
                   color: Colors.grey[500],
                   size: 20,
                 ),
-                onPressed: () => setState(() =>
-                    _obscurePasswordConfirmar = !_obscurePasswordConfirmar),
+                tooltip: _obscurePasswordConfirmar
+                    ? 'Mostrar contraseña'
+                    : 'Ocultar contraseña',
+                onPressed: () => setState(
+                  () => _obscurePasswordConfirmar =
+                      !_obscurePasswordConfirmar,
+                ),
               ),
             ),
             validator: (value) {
@@ -420,12 +520,15 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
                 if (value == null || value.isEmpty) {
                   return 'Confirma la contraseña';
                 }
+                if (value != _passwordNuevaController.text) {
+                  return 'Las contraseñas no coinciden';
+                }
               }
               return null;
             },
           ),
 
-          // Indicador de seguridad (visual)
+          // ── Medidor de seguridad ──────────────────────────────────────
           if (_passwordNuevaController.text.isNotEmpty) ...[
             const SizedBox(height: 14),
             _buildPasswordStrength(_passwordNuevaController.text),
@@ -435,7 +538,6 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
     );
   }
 
-  // ── Indicador fuerza de contraseña ───────────────────────────────────────
   Widget _buildPasswordStrength(String password) {
     int strength = 0;
     if (password.length >= 6) strength++;
@@ -444,7 +546,13 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
     if (password.contains(RegExp(r'[0-9]'))) strength++;
     if (password.contains(RegExp(r'[!@#\$&*~]'))) strength++;
 
-    final labels = ['Muy débil', 'Débil', 'Regular', 'Fuerte', 'Muy fuerte'];
+    final labels = [
+      'Muy débil',
+      'Débil',
+      'Regular',
+      'Fuerte',
+      'Muy fuerte'
+    ];
     final colors = [
       const Color(0xFFD4453B),
       const Color(0xFFD4863B),
@@ -486,7 +594,6 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
     );
   }
 
-  // ── Botón guardar ─────────────────────────────────────────────────────────
   Widget _buildBotonGuardar() {
     return SizedBox(
       height: 52,
@@ -513,15 +620,15 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
           disabledBackgroundColor: const Color(0xFFCBD5E1),
           disabledForegroundColor: Colors.white70,
           elevation: _isSaving ? 0 : 4,
-          shadowColor: const Color(0xFF1E3A5F).withValues(alpha: 0.4),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shadowColor:
+              const Color(0xFF1E3A5F).withValues(alpha: 0.4),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14)),
         ),
       ),
     );
   }
 
-  // ── Helpers de UI ─────────────────────────────────────────────────────────
   Widget _buildCard({
     required IconData headerIcon,
     required Color headerColor,
@@ -546,8 +653,8 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header de sección
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
                   width: 34,
@@ -556,7 +663,8 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
                     color: headerColor,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(headerIcon, color: Colors.white, size: 18),
+                  child:
+                      Icon(headerIcon, color: Colors.white, size: 18),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -570,6 +678,8 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
                           fontWeight: FontWeight.w700,
                           color: Color(0xFF1E3A5F),
                         ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
                       Text(
                         headerSubtitle,
@@ -577,6 +687,8 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
                           fontSize: 11,
                           color: Color(0xFF94A3B8),
                         ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
                     ],
                   ),
@@ -598,6 +710,7 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
     required Color color,
   }) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Container(
           width: 32,
@@ -609,36 +722,40 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
           child: Icon(icon, color: color, size: 16),
         ),
         const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 11,
-                color: Color(0xFF94A3B8),
-                fontWeight: FontWeight.w500,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF94A3B8),
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            const SizedBox(height: 1),
-            Text(
-              value.isNotEmpty ? value : '—',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1E3A5F),
+              const SizedBox(height: 1),
+              Text(
+                value.isNotEmpty ? value : '—',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1E3A5F),
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
   }
 
   Widget _buildDivider() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Divider(height: 1, color: const Color(0xFFE8EDF5)),
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 10),
+      child: Divider(height: 1, color: Color(0xFFE8EDF5)),
     );
   }
 
@@ -649,8 +766,10 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
   }) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-      prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F), size: 20),
+      labelStyle:
+          const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+      prefixIcon:
+          Icon(icon, color: const Color(0xFF1E3A5F), size: 20),
       suffixIcon: suffixIcon,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -662,7 +781,8 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF1E3A5F), width: 1.5),
+        borderSide:
+            const BorderSide(color: Color(0xFF1E3A5F), width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -670,7 +790,8 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFD4453B), width: 1.5),
+        borderSide:
+            const BorderSide(color: Color(0xFFD4453B), width: 1.5),
       ),
       filled: true,
       fillColor: const Color(0xFFF8FAFC),

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:collection';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
@@ -8,231 +8,136 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:flutter/foundation.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Elimina fondo blanco — firma01 y firma03
+//  EXTRACCIÓN DE FIRMA — universal y de alta calidad
+//
+//  Funciona con cualquier firma sin importar el fondo:
+//   • Fondo blanco con tinta negra o azul.
+//   • Fondo negro con tinta azul o trazo gris débil.
+//   • Sellos circulares (se conservan).
+//
+//  Claves de calidad:
+//   1) Detecta el color de fondo real muestreando los bordes de la imagen.
+//   2) Alpha GRADUAL según la distancia de color al fondo → bordes suaves
+//      (antialiasing), no "recortados" ni opacos.
+//   3) Conserva el color de la tinta (azul sigue azul, negro sigue negro);
+//      solo profundiza un poco para que no quede lavada sobre el blanco.
+//   4) Umbral adaptativo: refuerza automáticamente las firmas muy débiles.
+//   5) Nunca lanza excepción: si algo falla, devuelve null y el certificado
+//      se genera igual (con el respaldo de texto del firmante).
 // ─────────────────────────────────────────────────────────────────────────────
-Future<Uint8List> _removeWhiteBackground(
-  Uint8List srcBytes, {
-  int threshold = 60,
-}) async {
-  final codec    = await ui.instantiateImageCodec(srcBytes);
-  final frame    = await codec.getNextFrame();
-  final uiImage  = frame.image;
-  final w        = uiImage.width;
-  final h        = uiImage.height;
-  final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
-  final pixels   = byteData!.buffer.asUint8List();
-  final out      = Uint8List.fromList(pixels);
-
-  for (int i = 0; i < out.length; i += 4) {
-    final brightness = (out[i] + out[i + 1] + out[i + 2]) ~/ 3;
-    out[i + 3] = brightness > (255 - threshold) ? 0 : 255;
-  }
-
-  final completer = Completer<ui.Image>();
-  ui.decodeImageFromPixels(out, w, h, ui.PixelFormat.rgba8888,
-      (img) => completer.complete(img));
-  final newImg = await completer.future;
-  final png    = await newImg.toByteData(format: ui.ImageByteFormat.png);
-  return png!.buffer.asUint8List();
-}
-
-Future<bool> _fondoEsOscuro(Uint8List srcBytes) async {
-  final codec    = await ui.instantiateImageCodec(srcBytes,
-      targetWidth: 50, targetHeight: 50);
-  final frame    = await codec.getNextFrame();
-  final byteData = await frame.image
-      .toByteData(format: ui.ImageByteFormat.rawRgba);
-  final pixels   = byteData!.buffer.asUint8List();
-
-  int oscuros = 0, total = pixels.length ~/ 4;
-  for (int i = 0; i < pixels.length; i += 4) {
-    final brightness = (pixels[i] + pixels[i+1] + pixels[i+2]) ~/ 3;
-    if (brightness < 80) oscuros++;
-  }
-  return oscuros / total > 0.40;
-}
-
-Future<Uint8List> _removeBlackBackgroundAndBoost(
-  Uint8List srcBytes, {
-  int bgThreshold = 55,
-}) async {
-  final codec    = await ui.instantiateImageCodec(srcBytes);
-  final frame    = await codec.getNextFrame();
-  final uiImage  = frame.image;
-  final w        = uiImage.width;
-  final h        = uiImage.height;
-  final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
-  final pixels   = byteData!.buffer.asUint8List();
-  final out      = Uint8List.fromList(pixels);
-
-  final visited = List<bool>.filled(w * h, false);
-  final queue   = Queue<int>();
-
-  bool isBg(int idx) {
-    final r = out[idx*4], g = out[idx*4+1], b = out[idx*4+2];
-    return (r + g + b) ~/ 3 < bgThreshold;
-  }
-
-  void enqueue(int x, int y) {
-    if (x < 0 || x >= w || y < 0 || y >= h) return;
-    final p = y * w + x;
-    if (visited[p] || !isBg(p)) return;
-    visited[p] = true;
-    queue.add(p);
-  }
-
-  for (int x = 0; x < w; x++) { enqueue(x, 0); enqueue(x, h - 1); }
-  for (int y = 0; y < h; y++) { enqueue(0, y); enqueue(w - 1, y); }
-
-  while (queue.isNotEmpty) {
-    final p = queue.removeFirst();
-    out[p * 4 + 3] = 0;
-    final x = p % w, y = p ~/ w;
-    enqueue(x+1, y); enqueue(x-1, y);
-    enqueue(x, y+1); enqueue(x, y-1);
-  }
-
-  for (int i = 0; i < out.length; i += 4) {
-    if (out[i+3] == 0) continue;
-    final brightness = (out[i] + out[i+1] + out[i+2]) ~/ 3;
-    if (brightness < 15) {
-      out[i + 3] = 0;
-    } else {
-      out[i]     = 13;
-      out[i + 1] = 37;
-      out[i + 2] = 74;
-      out[i + 3] = 255;
-    }
-  }
-
-  final completer = Completer<ui.Image>();
-  ui.decodeImageFromPixels(out, w, h, ui.PixelFormat.rgba8888,
-      (img) => completer.complete(img));
-  final newImg = await completer.future;
-  final png    = await newImg.toByteData(format: ui.ImageByteFormat.png);
-  return png!.buffer.asUint8List();
-}
-
-Future<Uint8List> _removeBlackBackground(
-  Uint8List srcBytes, {
-  int threshold = 60,
-}) async {
-  final codec    = await ui.instantiateImageCodec(srcBytes);
-  final frame    = await codec.getNextFrame();
-  final uiImage  = frame.image;
-  final w        = uiImage.width;
-  final h        = uiImage.height;
-  final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.rawRgba);
-  final pixels   = byteData!.buffer.asUint8List();
-  final out      = Uint8List.fromList(pixels);
-
-  final visited = List<bool>.filled(w * h, false);
-  final queue   = Queue<int>();
-
-  bool isBg(int idx) {
-    final r = out[idx*4], g = out[idx*4+1], b = out[idx*4+2];
-    return (r + g + b) ~/ 3 < threshold;
-  }
-
-  void enqueue(int x, int y) {
-    if (x < 0 || x >= w || y < 0 || y >= h) return;
-    final p = y * w + x;
-    if (visited[p] || !isBg(p)) return;
-    visited[p] = true;
-    queue.add(p);
-  }
-
-  for (int x = 0; x < w; x++) { enqueue(x, 0); enqueue(x, h - 1); }
-  for (int y = 0; y < h; y++) { enqueue(0, y); enqueue(w - 1, y); }
-
-  while (queue.isNotEmpty) {
-    final p = queue.removeFirst();
-    out[p * 4 + 3] = 0;
-    final x = p % w, y = p ~/ w;
-    enqueue(x+1, y); enqueue(x-1, y);
-    enqueue(x, y+1); enqueue(x, y-1);
-  }
-
-  for (int i = 0; i < out.length; i += 4) {
-    if (out[i+3] == 0) continue;
-    final brightness = (out[i] + out[i+1] + out[i+2]) ~/ 3;
-    if (brightness < threshold) out[i+3] = 0;
-  }
-
-  final completer = Completer<ui.Image>();
-  ui.decodeImageFromPixels(out, w, h, ui.PixelFormat.rgba8888,
-      (img) => completer.complete(img));
-  final newImg = await completer.future;
-  final png    = await newImg.toByteData(format: ui.ImageByteFormat.png);
-  return png!.buffer.asUint8List();
-}
-
-Future<bool> _trazoDebil(Uint8List srcBytes) async {
-  final codec    = await ui.instantiateImageCodec(srcBytes,
-      targetWidth: 100, targetHeight: 100);
-  final frame    = await codec.getNextFrame();
-  final byteData = await frame.image
-      .toByteData(format: ui.ImageByteFormat.rawRgba);
-  final pixels   = byteData!.buffer.asUint8List();
-
-  int grises = 0, noNegros = 0;
-  for (int i = 0; i < pixels.length; i += 4) {
-    final brightness = (pixels[i] + pixels[i+1] + pixels[i+2]) ~/ 3;
-    if (brightness > 55) noNegros++;
-    if (brightness > 40 && brightness < 200) grises++;
-  }
-  if (noNegros == 0) return false;
-  return (grises / noNegros) > 0.60;
-}
-
-Future<Uint8List> _invertirYRemover(Uint8List srcBytes) async {
-  final codec    = await ui.instantiateImageCodec(srcBytes);
-  final frame    = await codec.getNextFrame();
-  final uiImage  = frame.image;
-  final w        = uiImage.width;
-  final h        = uiImage.height;
-  final byteData = await uiImage
-      .toByteData(format: ui.ImageByteFormat.rawRgba);
-  final pixels   = byteData!.buffer.asUint8List();
-  final out      = Uint8List.fromList(pixels);
-
-  for (int i = 0; i < out.length; i += 4) {
-    final r = 255 - pixels[i];
-    final g = 255 - pixels[i + 1];
-    final b = 255 - pixels[i + 2];
-    final brightness = (r + g + b) ~/ 3;
-
-    if (brightness < 30) {
-      out[i + 3] = 0;
-    } else {
-      out[i]     = 13;
-      out[i + 1] = 37;
-      out[i + 2] = 74;
-      out[i + 3] = ((brightness / 255.0) * 255 * 2)
-          .clamp(0, 255).toInt();
-    }
-  }
-
-  final completer = Completer<ui.Image>();
-  ui.decodeImageFromPixels(out, w, h, ui.PixelFormat.rgba8888,
-      (img) => completer.complete(img));
-  final newImg = await completer.future;
-  final png    = await newImg.toByteData(format: ui.ImageByteFormat.png);
-  return png!.buffer.asUint8List();
-}
-
 Future<Uint8List?> _procesarFirma(Uint8List? srcBytes) async {
   if (srcBytes == null) return null;
-  final esOscuro = await _fondoEsOscuro(srcBytes);
-  if (esOscuro) {
-    final trazoDebil = await _trazoDebil(srcBytes);
-    if (trazoDebil) {
-      return _removeBlackBackgroundAndBoost(srcBytes);
-    }
-    return _removeBlackBackground(srcBytes, threshold: 55);
-  } else {
-    return _removeWhiteBackground(srcBytes, threshold: 55);
+  try {
+    return await _extraerFirma(srcBytes);
+  } catch (e) {
+    // Una firma defectuosa JAMÁS debe tumbar el certificado completo.
+    debugPrint('Firma omitida (no se pudo procesar): $e');
+    return null;
   }
+}
+
+Future<Uint8List> _extraerFirma(Uint8List srcBytes) async {
+  // 1) Decodificar. Si la imagen es enorme, la reducimos a un lado máximo
+  //    de 1600 px: procesa mucho más rápido y la firma en el PDF (~250 pt)
+  //    no pierde nitidez.
+  const maxSide = 1600;
+  var codec = await ui.instantiateImageCodec(srcBytes);
+  var frame = await codec.getNextFrame();
+  ui.Image img = frame.image;
+
+  final longSide = img.width > img.height ? img.width : img.height;
+  if (longSide > maxSide) {
+    final scale = maxSide / longSide;
+    codec = await ui.instantiateImageCodec(
+      srcBytes,
+      targetWidth:  (img.width  * scale).round(),
+      targetHeight: (img.height * scale).round(),
+    );
+    img = (await codec.getNextFrame()).image;
+  }
+
+  final w  = img.width;
+  final h  = img.height;
+  final bd = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+  final px = bd!.buffer.asUint8List();
+  final out = Uint8List.fromList(px);
+
+  // 2) Color de fondo: promedio de una banda de 2 px en los 4 bordes.
+  int sr = 0, sg = 0, sb = 0, n = 0;
+  void sample(int x, int y) {
+    final i = (y * w + x) * 4;
+    sr += px[i]; sg += px[i + 1]; sb += px[i + 2]; n++;
+  }
+  const band = 2;
+  for (int y = 0; y < h; y++) {
+    for (int b = 0; b < band && b < w; b++) {
+      sample(b, y); sample(w - 1 - b, y);
+    }
+  }
+  for (int x = 0; x < w; x++) {
+    for (int b = 0; b < band && b < h; b++) {
+      sample(x, b); sample(x, h - 1 - b);
+    }
+  }
+  if (n == 0) n = 1;
+  final bgR = sr / n, bgG = sg / n, bgB = sb / n;
+
+  // 3) Histograma de distancias al fondo (1 pasada) → umbral adaptativo.
+  final hist = List<int>.filled(444, 0);
+  for (int i = 0; i < px.length; i += 4) {
+    final dr = px[i] - bgR, dg = px[i + 1] - bgG, db = px[i + 2] - bgB;
+    var d = math.sqrt(dr * dr + dg * dg + db * db).round();
+    if (d > 443) d = 443;
+    hist[d]++;
+  }
+  final total = w * h;
+  final cut   = (total * 0.995).floor();   // percentil 99.5
+  int acc = 0;
+  double maxd = 1;
+  for (int d = 0; d < hist.length; d++) {
+    acc += hist[d];
+    if (acc >= cut) { maxd = d.toDouble(); break; }
+  }
+  if (maxd < 1) maxd = 1;
+
+  final lo    = math.max(18.0, maxd * 0.12);  // por debajo = fondo (alpha 0)
+  final hi    = math.max(45.0, maxd * 0.55);  // por encima = tinta sólida
+  final gamma = maxd < 150 ? 0.55 : 0.8;      // firmas débiles → más sólidas
+  final rango = (hi - lo) <= 0 ? 1.0 : (hi - lo);
+
+  // 4) Componer salida: alpha gradual + color de tinta conservado.
+  for (int i = 0; i < out.length; i += 4) {
+    final r = px[i], g = px[i + 1], b = px[i + 2];
+    final dr = r - bgR, dg = g - bgG, db = b - bgB;
+    final d  = math.sqrt(dr * dr + dg * dg + db * db);
+
+    var a = ((d - lo) / rango).clamp(0.0, 1.0);
+    if (a <= 0) { out[i + 3] = 0; continue; }
+    a = math.pow(a, gamma).toDouble();
+
+    final maxc   = math.max(r, math.max(g, b));
+    final minc   = math.min(r, math.min(g, b));
+    final chroma = maxc - minc;
+
+    if (chroma < 28) {
+      // Tinta gris / negra → negro de tinta legible.
+      out[i] = 20; out[i + 1] = 20; out[i + 2] = 20;
+    } else {
+      // Tinta de color → conserva el tono, profundiza un poco.
+      out[i]     = (r * 0.78).round().clamp(0, 255);
+      out[i + 1] = (g * 0.78).round().clamp(0, 255);
+      out[i + 2] = (b * 0.78).round().clamp(0, 255);
+    }
+    out[i + 3] = (a * 255).round().clamp(0, 255);
+  }
+
+  // 5) Re-codificar a PNG con transparencia.
+  final completer = Completer<ui.Image>();
+  ui.decodeImageFromPixels(out, w, h, ui.PixelFormat.rgba8888,
+      (im) => completer.complete(im));
+  final newImg = await completer.future;
+  final png    = await newImg.toByteData(format: ui.ImageByteFormat.png);
+  return png!.buffer.asUint8List();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -359,7 +264,9 @@ class CertificadoBuilder {
     // 1. Assets estáticos
     await _AssetCache.loadAssets();
 
-    // 2. Procesar bytes de firmas (ya descargados desde la pantalla)
+    // 2. Procesar bytes de firmas (ya descargados desde la pantalla).
+    //    Cada firma se procesa de forma aislada: si una falla, las demás
+    //    y el certificado completo siguen generándose.
     pw.MemoryImage? f1Image, f2Image, f3Image;
 
     final results = await Future.wait([

@@ -8,17 +8,11 @@ class FilialesService {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ CACHÉ EN MEMORIA (como PrefsHelper)
-  // ═══════════════════════════════════════════════════════════════
   static Map<String, dynamic>? _estructuraCache;
   static DateTime? _cacheTimestamp;
   static const Duration _cacheDuration = Duration(hours: 24);
   static bool _isInitialized = false;
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ ESTRUCTURA PREDEFINIDA (solo se usa para inicialización)
-  // ═══════════════════════════════════════════════════════════════
   static const Map<String, Map<String, dynamic>> estructuraBase = {
     'lima': {
       'nombre': 'Campus Lima',
@@ -110,31 +104,22 @@ class FilialesService {
     },
   };
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ INICIALIZACIÓN (SOLO UNA VEZ EN TODA LA APP)
-  // ═══════════════════════════════════════════════════════════════
   Future<bool> inicializarSiEsNecesario() async {
     if (_isInitialized) {
-      debugPrint('✅ Estructura ya inicializada, omitiendo...');
       return true;
     }
 
     try {
-      // Verificar si ya existe la estructura en Firebase
       final filialesSnapshot = await _firestore
           .collection('filiales')
           .limit(1)
           .get();
 
       if (filialesSnapshot.docs.isNotEmpty) {
-        debugPrint('✅ Estructura ya existe en Firebase');
         _isInitialized = true;
         return true;
       }
 
-      debugPrint('📝 Inicializando estructura por primera vez...');
-
-      // Crear estructura completa
       final batch = _firestore.batch();
       int operaciones = 0;
 
@@ -142,7 +127,6 @@ class FilialesService {
         final filialId = filialEntry.key;
         final filialData = filialEntry.value;
 
-        // Crear filial
         final filialRef = _firestore.collection('filiales').doc(filialId);
         batch.set(filialRef, {
           'nombre': filialData['nombre'],
@@ -151,7 +135,6 @@ class FilialesService {
         });
         operaciones++;
 
-        // Crear facultades y carreras
         final facultades = filialData['facultades'] as Map<String, dynamic>;
 
         for (var facultadEntry in facultades.entries) {
@@ -169,7 +152,6 @@ class FilialesService {
           });
           operaciones++;
 
-          // Crear carreras
           for (var carrera in carreras) {
             final carreraRef = facultadRef.collection('carreras').doc();
             batch.set(carreraRef, {
@@ -178,52 +160,39 @@ class FilialesService {
             });
             operaciones++;
 
-            // Firebase batch limit es 500, dividir si es necesario
             if (operaciones >= 450) {
               await batch.commit();
-              debugPrint('✅ Batch de $operaciones operaciones ejecutado');
               operaciones = 0;
             }
           }
         }
       }
 
-      // Commit final
       if (operaciones > 0) {
         await batch.commit();
-        debugPrint('✅ Batch final de $operaciones operaciones ejecutado');
       }
 
       _isInitialized = true;
-      debugPrint('✅ Estructura completa inicializada exitosamente');
       return true;
     } catch (e) {
-      debugPrint('❌ Error inicializando estructura: $e');
+      debugPrint('Error inicializando estructura: $e');
       return false;
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ OBTENER ESTRUCTURA COMPLETA CON CACHÉ
-  // ═══════════════════════════════════════════════════════════════
   Future<Map<String, dynamic>> getEstructuraCompleta({
     bool forceRefresh = false,
   }) async {
-    // Verificar caché
     if (!forceRefresh &&
         _estructuraCache != null &&
         _cacheTimestamp != null &&
         DateTime.now().difference(_cacheTimestamp!) < _cacheDuration) {
-      debugPrint('✅ Estructura obtenida del caché (válida por 24h)');
       return Map<String, dynamic>.from(_estructuraCache!);
     }
-
-    debugPrint('⚠️ Caché expirado o no disponible, cargando desde Firestore...');
 
     try {
       final Map<String, dynamic> estructura = {};
 
-      // Obtener todas las filiales (3 lecturas)
       final filialesSnapshot = await _firestore.collection('filiales').get();
 
       for (var filialDoc in filialesSnapshot.docs) {
@@ -236,7 +205,6 @@ class FilialesService {
           'facultades': <String, dynamic>{},
         };
 
-        // Obtener facultades de esta filial
         final facultadesSnapshot = await _firestore
             .collection('filiales')
             .doc(filialId)
@@ -247,7 +215,6 @@ class FilialesService {
           final facultadData = Map<String, dynamic>.from(facultadDoc.data());
           final facultadNombre = facultadData['nombre'] ?? '';
 
-          // Obtener carreras de esta facultad
           final carrerasSnapshot = await _firestore
               .collection('filiales')
               .doc(filialId)
@@ -271,34 +238,66 @@ class FilialesService {
         }
       }
 
-      // Guardar en caché
       _estructuraCache = estructura;
       _cacheTimestamp = DateTime.now();
 
-      debugPrint('✅ Estructura cargada y cacheada exitosamente');
       return estructura;
     } catch (e) {
-      debugPrint('❌ Error obteniendo estructura: $e');
+      debugPrint('Error obteniendo estructura: $e');
       return {};
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ AGREGAR NUEVA CARRERA
-  // ═══════════════════════════════════════════════════════════════
+  Future<bool> agregarFacultad({
+    required String filialId,
+    required String nombreFacultad,
+  }) async {
+    try {
+      if (nombreFacultad.trim().isEmpty) {
+        return false;
+      }
+
+      final facultadId = _generarId(nombreFacultad.trim());
+
+      final facultadDoc = await _firestore
+          .collection('filiales')
+          .doc(filialId)
+          .collection('facultades')
+          .doc(facultadId)
+          .get();
+
+      if (facultadDoc.exists) {
+        return false;
+      }
+
+      await _firestore
+          .collection('filiales')
+          .doc(filialId)
+          .collection('facultades')
+          .doc(facultadId)
+          .set({
+            'nombre': nombreFacultad.trim(),
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+
+      _invalidateCache();
+      return true;
+    } catch (e) {
+      debugPrint('Error agregando facultad: $e');
+      return false;
+    }
+  }
+
   Future<bool> agregarCarrera({
     required String filialId,
     required String facultadId,
     required String nombreCarrera,
   }) async {
     try {
-      // Validar que el nombre no esté vacío
       if (nombreCarrera.trim().isEmpty) {
-        debugPrint('❌ El nombre de la carrera no puede estar vacío');
         return false;
       }
 
-      // Verificar si la carrera ya existe
       final carrerasSnapshot = await _firestore
           .collection('filiales')
           .doc(filialId)
@@ -310,11 +309,9 @@ class FilialesService {
           .get();
 
       if (carrerasSnapshot.docs.isNotEmpty) {
-        debugPrint('⚠️ La carrera "$nombreCarrera" ya existe en esta facultad');
         return false;
       }
 
-      // Agregar la nueva carrera
       await _firestore
           .collection('filiales')
           .doc(filialId)
@@ -326,21 +323,14 @@ class FilialesService {
             'createdAt': FieldValue.serverTimestamp(),
           });
 
-      debugPrint('✅ Carrera "$nombreCarrera" agregada exitosamente');
-
-      // Invalidar caché para que se recargue
       _invalidateCache();
-
       return true;
     } catch (e) {
-      debugPrint('❌ Error agregando carrera: $e');
+      debugPrint('Error agregando carrera: $e');
       return false;
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ ELIMINAR CARRERA
-  // ═══════════════════════════════════════════════════════════════
   Future<bool> eliminarCarrera({
     required String filialId,
     required String facultadId,
@@ -356,21 +346,125 @@ class FilialesService {
           .doc(carreraId)
           .delete();
 
-      debugPrint('✅ Carrera eliminada exitosamente');
-
-      // Invalidar caché para que se recargue
       _invalidateCache();
-
       return true;
     } catch (e) {
-      debugPrint('❌ Error eliminando carrera: $e');
+      debugPrint('Error eliminando carrera: $e');
       return false;
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ MÉTODOS RÁPIDOS (usan caché)
-  // ═══════════════════════════════════════════════════════════════
+  Future<bool> editarFilial({
+    required String filialId,
+    required String nuevoNombre,
+    required String nuevaUbicacion,
+  }) async {
+    try {
+      if (nuevoNombre.trim().isEmpty || nuevaUbicacion.trim().isEmpty) {
+        return false;
+      }
+
+      await _firestore.collection('filiales').doc(filialId).update({
+        'nombre': nuevoNombre.trim(),
+        'ubicacion': nuevaUbicacion.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      _invalidateCache();
+      return true;
+    } catch (e) {
+      debugPrint('Error editando filial: $e');
+      return false;
+    }
+  }
+
+  Future<bool> editarFacultad({
+    required String filialId,
+    required String facultadId,
+    required String nuevoNombre,
+  }) async {
+    try {
+      if (nuevoNombre.trim().isEmpty) {
+        return false;
+      }
+
+      final nuevoId = _generarId(nuevoNombre.trim());
+
+      if (nuevoId != facultadId) {
+        final existente = await _firestore
+            .collection('filiales')
+            .doc(filialId)
+            .collection('facultades')
+            .doc(nuevoId)
+            .get();
+
+        if (existente.exists) {
+          return false;
+        }
+      }
+
+      await _firestore
+          .collection('filiales')
+          .doc(filialId)
+          .collection('facultades')
+          .doc(facultadId)
+          .update({
+            'nombre': nuevoNombre.trim(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      _invalidateCache();
+      return true;
+    } catch (e) {
+      debugPrint('Error editando facultad: $e');
+      return false;
+    }
+  }
+
+  Future<bool> editarCarrera({
+    required String filialId,
+    required String facultadId,
+    required String carreraId,
+    required String nuevoNombre,
+  }) async {
+    try {
+      if (nuevoNombre.trim().isEmpty) {
+        return false;
+      }
+
+      final duplicado = await _firestore
+          .collection('filiales')
+          .doc(filialId)
+          .collection('facultades')
+          .doc(facultadId)
+          .collection('carreras')
+          .where('nombre', isEqualTo: nuevoNombre.trim())
+          .limit(1)
+          .get();
+
+      if (duplicado.docs.isNotEmpty && duplicado.docs.first.id != carreraId) {
+        return false;
+      }
+
+      await _firestore
+          .collection('filiales')
+          .doc(filialId)
+          .collection('facultades')
+          .doc(facultadId)
+          .collection('carreras')
+          .doc(carreraId)
+          .update({
+            'nombre': nuevoNombre.trim(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      _invalidateCache();
+      return true;
+    } catch (e) {
+      debugPrint('Error editando carrera: $e');
+      return false;
+    }
+  }
 
   Future<List<String>> getFiliales() async {
     final estructura = await getEstructuraCompleta();
@@ -424,26 +518,15 @@ class FilialesService {
     return todasCarreras;
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ LIMPIAR CACHÉ (llamar al cerrar sesión)
-  // ═══════════════════════════════════════════════════════════════
   static void clearCache() {
     _estructuraCache = null;
     _cacheTimestamp = null;
-    debugPrint('🗑️ Caché de filiales limpiado');
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ INVALIDAR CACHÉ (forzar recarga en próxima consulta)
-  // ═══════════════════════════════════════════════════════════════
   void _invalidateCache() {
     _cacheTimestamp = null;
-    debugPrint('🔄 Caché invalidado, se recargará en la próxima consulta');
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ UTILIDADES
-  // ═══════════════════════════════════════════════════════════════
   String _generarId(String texto) {
     return texto
         .toLowerCase()

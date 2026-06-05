@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'ver_ganadores.dart';
 import 'participantes_completo_carrera.dart';
-// Importa aquí las futuras pantallas que vayas creando:
-// import 'historial_ganadores.dart';
 
-/// Pantalla intermedia que ofrece las rutas relacionadas a ganadores.
 class VentanasGanadoresScreen extends StatelessWidget {
   final String filialId;
   final String filialNombre;
@@ -41,14 +38,12 @@ class VentanasGanadoresScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Row(
               children: [
-                const Icon(Icons.location_city,
-                    color: Colors.white60, size: 13),
+                const Icon(Icons.location_city, color: Colors.white60, size: 13),
                 const SizedBox(width: 5),
                 Flexible(
                   child: Text(
                     '$filialNombre › $facultad › $carrera',
-                    style: const TextStyle(
-                        color: Colors.white60, fontSize: 12),
+                    style: const TextStyle(color: Colors.white60, fontSize: 12),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -57,161 +52,139 @@ class VentanasGanadoresScreen extends StatelessWidget {
           ),
         ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.only(top: 16),
-              decoration: const BoxDecoration(
-                color: Color(0xFFF5F7FA),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(30),
-                  topRight: Radius.circular(30),
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.only(top: 16),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF5F7FA),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
+                  ),
                 ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // ── Encabezado ─────────────────────────────────────
-                    _TweenCard(
-                      delay: 100,
-                      child: Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E3A5F),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF1E3A5F)
-                                  .withValues(alpha: 0.3),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(12),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _TweenCard(
+                        delay: 100,
+                        child: Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E3A5F),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF1E3A5F).withValues(alpha: 0.3),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
                               ),
-                              child: const Icon(
-                                Icons.emoji_events_rounded,
-                                size: 30,
-                                color: Colors.white,
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.emoji_events_rounded,
+                                  size: 30,
+                                  color: Colors.white,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Gestión de Ganadores',
-                                    style: TextStyle(
-                                      fontSize: 19,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Gestión de Ganadores',
+                                      style: TextStyle(
+                                        fontSize: 19,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    carrera,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.white70,
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      carrera,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.white70,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    const Text(
-                      '¿Qué deseas ver?',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1E3A5F),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // ── Opción 1: Top 3 ganadores ──────────────────────
-                    _TweenCard(
-                      delay: 200,
-                      child: _OpcionCard(
-                        icon: Icons.emoji_events_rounded,
-                        iconColor: const Color(0xFFF59E0B),
-                        title: 'Top 3 Ganadores',
-                        subtitle:
-                            'Consulta los tres primeros proyectos por categoría en cada evento',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const VerGanadoresScreen(),
+                            ],
                           ),
                         ),
                       ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // ── Opción 2: Todos los participantes ──────────────
-                    _TweenCard(
-                      delay: 320,
-                      child: _OpcionCard(
-                        icon: Icons.groups_rounded,
-                        iconColor: const Color(0xFF4A90E2),
-                        title: 'Todos los participantes',
-                        subtitle:
-                            'Ranking completo de todos los proyectos por categoría',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                const ParticipantesCompletoCarreraScreen(),
+                      const SizedBox(height: 28),
+                      const Text(
+                        '¿Qué deseas ver?',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1E3A5F),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _TweenCard(
+                        delay: 200,
+                        child: _OpcionCard(
+                          icon: Icons.emoji_events_rounded,
+                          iconColor: const Color(0xFFF59E0B),
+                          title: 'Top 3 Ganadores',
+                          subtitle:
+                              'Consulta los tres primeros proyectos por categoría en cada evento',
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const VerGanadoresScreen(),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-
-                    // ── Futuras opciones ───────────────────────────────
-                    // const SizedBox(height: 16),
-                    // _TweenCard(
-                    //   delay: 440,
-                    //   child: _OpcionCard(
-                    //     icon: Icons.history_rounded,
-                    //     iconColor: const Color(0xFF0D7377),
-                    //     title: 'Historial de ganadores',
-                    //     subtitle: 'Revisa ganadores de eventos anteriores',
-                    //     onTap: () => Navigator.push(...),
-                    //   ),
-                    // ),
-                  ],
+                      const SizedBox(height: 16),
+                      _TweenCard(
+                        delay: 320,
+                        child: _OpcionCard(
+                          icon: Icons.groups_rounded,
+                          iconColor: const Color(0xFF4A90E2),
+                          title: 'Todos los participantes',
+                          subtitle:
+                              'Ranking completo de todos los proyectos por categoría',
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ParticipantesCompletoCarreraScreen(),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-// ── Tarjeta de opción ──────────────────────────────────────────────
 class _OpcionCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
@@ -229,77 +202,91 @@ class _OpcionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.07),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(icon, size: 32, color: iconColor),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E3A5F),
-                          height: 1.2,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                          height: 1.4,
-                        ),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.arrow_forward_ios,
-                    size: 14,
-                    color: iconColor,
-                  ),
+    return Semantics(
+      button: true,
+      label: title,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Ink(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.07),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
                 ),
               ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  ExcludeSemantics(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: iconColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(icon, size: 32, color: iconColor),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E3A5F),
+                            height: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                            height: 1.4,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ExcludeSemantics(
+                    child: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: iconColor.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.arrow_forward_ios,
+                            size: 14,
+                            color: iconColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -308,7 +295,6 @@ class _OpcionCard extends StatelessWidget {
   }
 }
 
-// ── Animación de entrada por tarjeta ──────────────────────────────
 class _TweenCard extends StatelessWidget {
   final int delay;
   final Widget child;

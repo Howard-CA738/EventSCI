@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 
-
 class GestionSesionesScreen extends StatefulWidget {
   const GestionSesionesScreen({super.key});
 
@@ -10,30 +9,23 @@ class GestionSesionesScreen extends StatefulWidget {
   State<GestionSesionesScreen> createState() => _GestionSesionesScreenState();
 }
 
-class _GestionSesionesScreenState extends State<GestionSesionesScreen>
-    with SingleTickerProviderStateMixin {
+class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
   String _carreraPath = '';
   bool _isLoading = true;
   List<Map<String, dynamic>> _estudiantes = [];
   List<Map<String, dynamic>> _filtrados = [];
   final TextEditingController _searchController = TextEditingController();
-  late AnimationController _animController;
 
   String _filtroEstado = 'todos';
 
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
     _loadData();
   }
 
   @override
   void dispose() {
-    _animController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -43,8 +35,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
     try {
       final adminData = await PrefsHelper.getAdminCarreraData();
       if (adminData == null) {
-        debugPrint('❌ adminData es NULL');
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
         return;
       }
 
@@ -60,8 +51,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
           .get();
 
       if (usersSnap.docs.isEmpty) {
-        debugPrint('❌ No se encontró documento en users');
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
         return;
       }
 
@@ -87,7 +77,6 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
           'lastLogin': data['lastLogin'],
           'primeraVez': data['primeraVez'] ?? true,
           'deviceId': data['deviceId'] ?? '',
-          // ✅ NUEVO: campos para el nuevo sistema de bloqueo
           'bloqueadoPermanente': data['bloqueadoPermanente'] ?? false,
           'bloqueadoEn': data['bloqueadoEn'],
         };
@@ -96,15 +85,18 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
       lista.sort((a, b) =>
           a['nombre'].toString().compareTo(b['nombre'].toString()));
 
-      setState(() {
-        _estudiantes = lista;
-        _aplicarFiltro();
-      });
-      _animController.forward();
+      if (mounted) {
+        setState(() {
+          _estudiantes = lista;
+          _aplicarFiltro();
+        });
+      }
     } catch (e) {
-      debugPrint('❌ Error cargando sesiones: $e');
+      if (mounted) {
+        _showSnack('Error al cargar datos: $e', Colors.red);
+      }
     }
-    setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoading = false);
   }
 
   void _aplicarFiltro() {
@@ -117,7 +109,6 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
 
         bool matchEstado = true;
         if (_filtroEstado == 'bloqueado') {
-          // ✅ Bloqueado = bloqueadoPermanente O sessionActive:true
           matchEstado = e['bloqueadoPermanente'] == true ||
               e['sessionActive'] == true;
         } else if (_filtroEstado == 'sin_sesion') {
@@ -130,7 +121,6 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
     });
   }
 
-  // ✅ ACTUALIZADO: resetear también limpia bloqueadoPermanente y deviceId
   Future<void> _resetearSesion(Map<String, dynamic> estudiante) async {
     final confirm = await _showConfirmDialog(
       titulo: '¿Dar nueva oportunidad?',
@@ -155,14 +145,12 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
         'sessionToken': null,
         'primeraVez': true,
         'lastLogin': null,
-        // ✅ Limpiar bloqueo permanente y dispositivo vinculado
         'bloqueadoPermanente': false,
         'deviceId': null,
         'bloqueadoEn': null,
         'sessionResetAt': FieldValue.serverTimestamp(),
       });
 
-      // ✅ Limpiar también en blocked_devices si existía
       final deviceId = estudiante['deviceId'] as String?;
       if (deviceId != null && deviceId.isNotEmpty) {
         await FirebaseFirestore.instance
@@ -173,17 +161,16 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
 
       if (mounted) {
         _showSnack(
-          '✅ Sesión reseteada. ${estudiante['nombre']} puede ingresar de nuevo.',
+          'Sesión reseteada. ${estudiante['nombre']} puede ingresar de nuevo.',
           Colors.green,
         );
         await _loadData();
       }
     } catch (e) {
-      _showSnack('Error al resetear: $e', Colors.red);
+      if (mounted) _showSnack('Error al resetear: $e', Colors.red);
     }
   }
 
-  // ✅ ACTUALIZADO: bloquear también pone bloqueadoPermanente:true
   Future<void> _bloquearSesion(Map<String, dynamic> estudiante) async {
     final confirm = await _showConfirmDialog(
       titulo: '¿Bloquear acceso?',
@@ -206,18 +193,17 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
           .update({
         'sessionActive': false,
         'sessionToken': null,
-        // ✅ Bloqueo permanente por admin
         'bloqueadoPermanente': true,
         'bloqueadoEn': FieldValue.serverTimestamp(),
       });
 
       if (mounted) {
         _showSnack(
-            '🔒 ${estudiante['nombre']} ha sido bloqueado.', Colors.orange);
+            '${estudiante['nombre']} ha sido bloqueado.', Colors.orange);
         await _loadData();
       }
     } catch (e) {
-      _showSnack('Error al bloquear: $e', Colors.red);
+      if (mounted) _showSnack('Error al bloquear: $e', Colors.red);
     }
   }
 
@@ -243,24 +229,29 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
-                  color: colorBoton.withValues(alpha:0.1),
+                  color: colorBoton.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icono, color: colorBoton, size: 32),
               ),
               const SizedBox(height: 16),
-              Text(titulo,
-                  style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E3A5F))),
+              Text(
+                titulo,
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3A5F)),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 12),
-              Text(mensaje,
-                  style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF64748B),
-                      height: 1.5),
-                  textAlign: TextAlign.center),
+              Text(
+                mensaje,
+                style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF64748B),
+                    height: 1.5),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 24),
               Row(
                 children: [
@@ -270,6 +261,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                       style: OutlinedButton.styleFrom(
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
+                        minimumSize: const Size(0, 48),
                         padding:
                             const EdgeInsets.symmetric(vertical: 14),
                       ),
@@ -284,14 +276,18 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                       style: ElevatedButton.styleFrom(
                         backgroundColor: colorBoton,
                         foregroundColor: Colors.white,
+                        minimumSize: const Size(0, 48),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                         padding:
                             const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: Text(botonConfirmar,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w600)),
+                      child: Text(
+                        botonConfirmar,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ],
@@ -304,6 +300,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
   }
 
   void _showSnack(String msg, Color color) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
@@ -315,19 +312,14 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
     );
   }
 
-  // ✅ ACTUALIZADO: considera bloqueadoPermanente
   _EstadoSesion _getEstado(Map<String, dynamic> e) {
     final bloqueadoPermanente = e['bloqueadoPermanente'] == true;
     final active = e['sessionActive'] == true;
     final primeraVez = e['primeraVez'] != false;
 
-    // Bloqueado permanentemente (cerró sesión o admin bloqueó)
     if (bloqueadoPermanente) return _EstadoSesion.bloqueado;
-    // Sesión activa en otro dispositivo
     if (active) return _EstadoSesion.bloqueado;
-    // Nunca ingresó o fue reseteado y aún no entra
     if (primeraVez) return _EstadoSesion.sinSesion;
-    // Reseteado, esperando ingreso
     return _EstadoSesion.reseteado;
   }
 
@@ -356,116 +348,155 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loadData,
+            onPressed: _isLoading ? null : _loadData,
             tooltip: 'Actualizar',
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(
-              child:
-                  CircularProgressIndicator(color: Color(0xFF1E3A5F)))
-          : Column(
-              children: [
-                // ── Header ──────────────────────────────────────────
-                Container(
-                  color: const Color(0xFF1E3A5F),
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                  child: Column(
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: TextField(
-                          controller: _searchController,
-                          onChanged: (_) => _aplicarFiltro(),
-                          decoration: InputDecoration(
-                            hintText: 'Buscar estudiante...',
-                            hintStyle: TextStyle(
-                                color: Colors.grey[400], fontSize: 14),
-                            prefixIcon: const Icon(Icons.search,
-                                color: Color(0xFF1E3A5F)),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 14),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      Row(
-                        children: [
-                          _buildStatChip('${_estudiantes.length}',
-                              'Total', Colors.white70),
-                          const SizedBox(width: 8),
-                          _buildStatChip('$totalSinSesion', 'Sin sesión',
-                              Colors.green.shade300),
-                          const SizedBox(width: 8),
-                          _buildStatChip('$totalBloqueados', 'Bloqueados',
-                              Colors.red.shade300),
-                          const SizedBox(width: 8),
-                          _buildStatChip('$totalReseteados', 'Reseteados',
-                              Colors.blue.shade300),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            _buildFilterChip('todos', 'Todos'),
-                            const SizedBox(width: 8),
-                            _buildFilterChip('sin_sesion', 'Sin sesión'),
-                            const SizedBox(width: 8),
-                            _buildFilterChip('bloqueado', 'Bloqueados'),
-                          ],
-                        ),
-                      ),
-                    ],
+      body: SafeArea(
+        top: false,
+        child: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(
+                    color: Color(0xFF1E3A5F)),
+              )
+            : Column(
+                children: [
+                  _buildHeader(
+                    totalSinSesion: totalSinSesion,
+                    totalBloqueados: totalBloqueados,
+                    totalReseteados: totalReseteados,
                   ),
-                ),
+                  Expanded(
+                    child: _filtrados.isEmpty
+                        ? _buildEmptyState()
+                        : ListView.builder(
+                            padding: EdgeInsets.fromLTRB(
+                              16,
+                              16,
+                              16,
+                              MediaQuery.of(context).padding.bottom + 16,
+                            ),
+                            itemCount: _filtrados.length,
+                            itemBuilder: (ctx, i) {
+                              final e = _filtrados[i];
+                              return _buildEstudianteCard(e, i);
+                            },
+                          ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
 
-                // ── Lista ────────────────────────────────────────────
-                Expanded(
-                  child: _filtrados.isEmpty
-                      ? _buildEmptyState()
-                      : ListView.builder(
-                          padding:
-                              const EdgeInsets.fromLTRB(16, 16, 16, 80),
-                          itemCount: _filtrados.length,
-                          itemBuilder: (ctx, i) {
-                            final e = _filtrados[i];
-                            return _buildEstudianteCard(e, i);
-                          },
-                        ),
-                ),
+  Widget _buildHeader({
+    required int totalSinSesion,
+    required int totalBloqueados,
+    required int totalReseteados,
+  }) {
+    return Container(
+      color: const Color(0xFF1E3A5F),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+      child: Column(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (_) => _aplicarFiltro(),
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Buscar estudiante...',
+                hintStyle:
+                    TextStyle(color: Colors.grey[400], fontSize: 14),
+                prefixIcon: const Icon(Icons.search,
+                    color: Color(0xFF1E3A5F)),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear_rounded,
+                            color: Color(0xFF94A3B8)),
+                        onPressed: () {
+                          _searchController.clear();
+                          _aplicarFiltro();
+                        },
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 14),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              _buildStatChip(
+                  '${_estudiantes.length}', 'Total', Colors.white70),
+              const SizedBox(width: 8),
+              _buildStatChip(
+                  '$totalSinSesion', 'Sin sesión', Colors.green.shade300),
+              const SizedBox(width: 8),
+              _buildStatChip(
+                  '$totalBloqueados', 'Bloqueados', Colors.red.shade300),
+              const SizedBox(width: 8),
+              _buildStatChip(
+                  '$totalReseteados', 'Reseteados', Colors.blue.shade300),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterChip('todos', 'Todos'),
+                const SizedBox(width: 8),
+                _buildFilterChip('sin_sesion', 'Sin sesión'),
+                const SizedBox(width: 8),
+                _buildFilterChip('bloqueado', 'Bloqueados'),
               ],
             ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildStatChip(String count, String label, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha:0.1),
+          color: Colors.white.withOpacity(0.1),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withValues(alpha:0.2)),
+          border: Border.all(color: Colors.white.withOpacity(0.2)),
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(count,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                count,
                 style: TextStyle(
                     color: color,
                     fontWeight: FontWeight.bold,
-                    fontSize: 18)),
-            Text(label,
+                    fontSize: 18),
+              ),
+            ),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
                 style: const TextStyle(
-                    color: Colors.white60, fontSize: 10)),
+                    color: Colors.white60, fontSize: 10),
+                textAlign: TextAlign.center,
+              ),
+            ),
           ],
         ),
       ),
@@ -474,32 +505,37 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
 
   Widget _buildFilterChip(String value, String label) {
     final selected = _filtroEstado == value;
-    return GestureDetector(
-      onTap: () {
-        setState(() => _filtroEstado = value);
-        _aplicarFiltro();
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? Colors.white
-              : Colors.white.withValues(alpha:0.15),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-              color: selected
-                  ? Colors.white
-                  : Colors.white.withValues(alpha:0.3)),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color:
-                selected ? const Color(0xFF1E3A5F) : Colors.white,
-            fontWeight: FontWeight.w600,
-            fontSize: 13,
+    return Semantics(
+      label: 'Filtrar por $label',
+      button: true,
+      selected: selected,
+      child: GestureDetector(
+        onTap: () {
+          setState(() => _filtroEstado = value);
+          _aplicarFiltro();
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          constraints: const BoxConstraints(minHeight: 44),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected
+                ? Colors.white
+                : Colors.white.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+                color: selected
+                    ? Colors.white
+                    : Colors.white.withOpacity(0.3)),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? const Color(0xFF1E3A5F) : Colors.white,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
           ),
         ),
       ),
@@ -540,7 +576,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha:0.06),
+              color: Colors.black.withOpacity(0.06),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],
@@ -548,23 +584,20 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Avatar
             Container(
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: estadoColor.withValues(alpha:0.12),
+                color: estadoColor.withOpacity(0.12),
                 shape: BoxShape.circle,
                 border: Border.all(
-                    color: estadoColor.withValues(alpha:0.4), width: 1.5),
+                    color: estadoColor.withOpacity(0.4), width: 1.5),
               ),
-              child:
-                  Icon(Icons.person, color: estadoColor, size: 24),
+              child: Icon(Icons.person, color: estadoColor, size: 24),
             ),
             const SizedBox(width: 12),
-
-            // Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -584,6 +617,8 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                     e['usuario'],
                     style: const TextStyle(
                         fontSize: 12, color: Color(0xFF64748B)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   if (lastLogin != null) ...[
                     const SizedBox(height: 2),
@@ -591,9 +626,10 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                       'Último ingreso: ${_formatDate(lastLogin.toDate())}',
                       style: TextStyle(
                           fontSize: 11, color: Colors.grey[400]),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
-                  // ✅ NUEVO: mostrar cuándo fue bloqueado
                   if (bloqueadoEn != null &&
                       estado == _EstadoSesion.bloqueado) ...[
                     const SizedBox(height: 2),
@@ -601,24 +637,26 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                       'Bloqueado: ${_formatDate(bloqueadoEn.toDate())}',
                       style: TextStyle(
                           fontSize: 11, color: Colors.red[300]),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ],
               ),
             ),
-
-            // Badge + botones
+            const SizedBox(width: 8),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: estadoColor.withValues(alpha:0.12),
+                    color: estadoColor.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color: estadoColor.withValues(alpha:0.3)),
+                        color: estadoColor.withOpacity(0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -626,16 +664,17 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
                       Icon(estadoIcon,
                           size: 12, color: estadoColor),
                       const SizedBox(width: 4),
-                      Text(estadoLabel,
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: estadoColor,
-                              fontWeight: FontWeight.w600)),
+                      Text(
+                        estadoLabel,
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: estadoColor,
+                            fontWeight: FontWeight.w600),
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 8),
-
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -670,19 +709,23 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
     required String tooltip,
     required VoidCallback onTap,
   }) {
-    return Tooltip(
-      message: tooltip,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha:0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withValues(alpha:0.3)),
+    return Semantics(
+      label: tooltip,
+      button: true,
+      child: Tooltip(
+        message: tooltip,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: color.withOpacity(0.3)),
+            ),
+            child: Icon(icon, color: color, size: 20),
           ),
-          child: Icon(icon, color: color, size: 17),
         ),
       ),
     );
@@ -690,22 +733,30 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen>
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.manage_accounts_outlined,
-              size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 12),
-          Text('No hay estudiantes',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.manage_accounts_outlined,
+                size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 12),
+            Text(
+              'No hay estudiantes',
               style: TextStyle(
                   color: Colors.grey[500],
                   fontSize: 16,
-                  fontWeight: FontWeight.w500)),
-          const SizedBox(height: 6),
-          Text('Ajusta los filtros o la búsqueda',
-              style:
-                  TextStyle(color: Colors.grey[400], fontSize: 13)),
-        ],
+                  fontWeight: FontWeight.w500),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Ajusta los filtros o la búsqueda',
+              style: TextStyle(color: Colors.grey[400], fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

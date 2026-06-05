@@ -17,7 +17,7 @@ class _GruposScreenState extends State<GruposScreen>
   bool _isLoading = false;
   bool _isLoadingProjects = false;
   List<Map<String, dynamic>> _estudiantesImportados = [];
-  Map<String, String> _nombresCache = {}; // código → nombre
+  Map<String, String> _nombresCache = {};
   Map<String, List<Map<String, dynamic>>> _estudiantesPorCategoria = {};
   List<Map<String, dynamic>> _proyectosExistentes = [];
 
@@ -45,7 +45,8 @@ class _GruposScreenState extends State<GruposScreen>
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.3),
       end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
+    ).animate(
+        CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
 
     _fadeController.forward();
     _slideController.forward();
@@ -58,34 +59,38 @@ class _GruposScreenState extends State<GruposScreen>
     super.dispose();
   }
 
-  // ── Helper: convertir Integrantes a List<String> sin importar el origen ──
   List<String> _toIntegrantesList(dynamic raw) {
     if (raw == null) return [];
     if (raw is List) return raw.map((e) => e.toString()).toList();
     if (raw is String && raw.isNotEmpty) {
-      return raw.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      return raw
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
     }
     return [];
   }
-String _resolverNombre(String codigoONombre) {
-  return _nombresCache[codigoONombre] ?? codigoONombre;
-}
 
-// Helper: lista de integrantes resuelta a nombres
-List<String> _integrantesResueltos(dynamic raw) {
-  return _toIntegrantesList(raw)
-      .map((c) => _resolverNombre(c))
-      .toList();
-}
+  String _resolverNombre(String codigoONombre) {
+    return _nombresCache[codigoONombre] ?? codigoONombre;
+  }
+
+  List<String> _integrantesResueltos(dynamic raw) {
+    return _toIntegrantesList(raw).map((c) => _resolverNombre(c)).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final eventName = widget.eventData['name']?.toString() ?? '';
     return Scaffold(
       backgroundColor: const Color(0xFF2C5F7C),
       appBar: AppBar(
         title: Text(
-          'Grupos - ${widget.eventData['name']}',
+          'Grupos - $eventName',
           style: const TextStyle(fontWeight: FontWeight.w600),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         ),
         backgroundColor: const Color(0xFF2C5F7C),
         foregroundColor: Colors.white,
@@ -93,58 +98,57 @@ List<String> _integrantesResueltos(dynamic raw) {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
           onPressed: () => Navigator.of(context).pop(),
+          tooltip: 'Volver',
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: IconButton(
-              icon: const Icon(Icons.add_box),
-              onPressed: _navegarAAgregarProyecto,
-              tooltip: 'Agregar proyecto manualmente',
-            ),
+          IconButton(
+            icon: const Icon(Icons.add_box),
+            onPressed: _navegarAAgregarProyecto,
+            tooltip: 'Agregar proyecto manualmente',
           ),
           if (_proyectosExistentes.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: IconButton(
-                icon: const Icon(Icons.delete_sweep),
-                onPressed: _mostrarDialogoEliminarTodos,
-                tooltip: 'Eliminar todos los proyectos',
-              ),
+            IconButton(
+              icon: const Icon(Icons.delete_sweep),
+              onPressed: _mostrarDialogoEliminarTodos,
+              tooltip: 'Eliminar todos los proyectos',
             ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFFF5F7FA),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(30),
-            topRight: Radius.circular(30),
+      body: SafeArea(
+        top: false,
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFFF5F7FA),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(30),
+              topRight: Radius.circular(30),
+            ),
           ),
-        ),
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: SlideTransition(
-            position: _slideAnimation,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildImportCard(),
-                  const SizedBox(height: 20),
-                  if (_isLoadingProjects) ...[
-                    _buildLoadingIndicator(),
-                  ] else if (_proyectosExistentes.isNotEmpty) ...[
-                    _buildExistingProjectsCard(),
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildImportCard(),
                     const SizedBox(height: 20),
+                    if (_isLoadingProjects) ...[
+                      _buildLoadingIndicator(),
+                    ] else if (_proyectosExistentes.isNotEmpty) ...[
+                      _buildExistingProjectsCard(),
+                      const SizedBox(height: 20),
+                    ],
+                    if (_estudiantesPorCategoria.isNotEmpty) ...[
+                      _buildImportedProjectsCard(),
+                    ] else if (_proyectosExistentes.isEmpty &&
+                        !_isLoadingProjects) ...[
+                      _buildEmptyState(),
+                    ],
                   ],
-                  if (_estudiantesPorCategoria.isNotEmpty) ...[
-                    _buildImportedProjectsCard(),
-                  ] else if (_proyectosExistentes.isEmpty) ...[
-                    _buildEmptyState(),
-                  ],
-                ],
+                ),
               ),
             ),
           ),
@@ -152,33 +156,33 @@ List<String> _integrantesResueltos(dynamic raw) {
       ),
     );
   }
-Future<void> _resolverNombresDeProyectos(
-  List<Map<String, dynamic>> proyectos,
-) async {
-  // Recolectar todos los códigos únicos de todos los proyectos
-  final Set<String> todosLosCodigos = {};
-  for (final p in proyectos) {
-    final lista = _toIntegrantesList(p['Integrantes']);
-    // Heurística: si parece código numérico largo, es un código; si no, es nombre
-    for (final item in lista) {
-      if (RegExp(r'^\d{6,}$').hasMatch(item)) {
-        todosLosCodigos.add(item);
+
+  Future<void> _resolverNombresDeProyectos(
+    List<Map<String, dynamic>> proyectos,
+  ) async {
+    final Set<String> todosLosCodigos = {};
+    for (final p in proyectos) {
+      final lista = _toIntegrantesList(p['Integrantes']);
+      for (final item in lista) {
+        if (RegExp(r'^\d{6,}$').hasMatch(item)) {
+          todosLosCodigos.add(item);
+        }
       }
     }
+
+    if (todosLosCodigos.isEmpty) return;
+
+    final nombres = await _gruposService.resolverNombresPorCodigos(
+      todosLosCodigos.toList(),
+      filialId: widget.eventData['filialId'],
+      carreraId: widget.eventData['carreraId'],
+    );
+    if (!mounted) return;
+    setState(() {
+      _nombresCache.addAll(nombres);
+    });
   }
 
-  if (todosLosCodigos.isEmpty) return;
-
-  final nombres = await _gruposService.resolverNombresPorCodigos(
-    todosLosCodigos.toList(),
-    filialId: widget.eventData['filialId'],
-    carreraId: widget.eventData['carreraId'],
-  );
-  if (!mounted) return;
-  setState(() {
-    _nombresCache.addAll(nombres);
-  });
-}
   void _navegarAAgregarProyecto() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -192,280 +196,262 @@ Future<void> _resolverNombresDeProyectos(
   }
 
   Widget _buildImportCard() {
-    return TweenAnimationBuilder<double>(
-      duration: const Duration(milliseconds: 800),
-      tween: Tween(begin: 0.0, end: 1.0),
-      builder: (context, value, child) {
-        return Transform.scale(
-          scale: value,
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF4CAF50), Color(0xFF45A049)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF4CAF50).withValues(alpha: 0.3),
-                  blurRadius: 15,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(20),
-                onTap: _isLoading ? null : _importarExcel,
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(Icons.upload_file,
-                                color: Colors.white, size: 28),
-                          ),
-                          const SizedBox(width: 16),
-                          const Expanded(
-                            child: Text(
-                              'Importar Proyectos',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ],
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF4CAF50), Color(0xFF45A049)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF4CAF50).withValues(alpha: 0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: _isLoading ? null : _importarExcel,
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      const SizedBox(height: 20),
-                      Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
+                      child: const Icon(Icons.upload_file,
+                          color: Colors.white, size: 28),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Text(
+                        'Importar Proyectos',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.1),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
                         ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: _isLoading ? null : _importarExcel,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  if (_isLoading)
-                                    const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(
-                                            Color(0xFF4CAF50)),
-                                      ),
-                                    )
-                                  else
-                                    const Icon(Icons.cloud_upload,
-                                        color: Color(0xFF4CAF50)),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    _isLoading
-                                        ? 'Importando...'
-                                        : 'Seleccionar Archivo Excel',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF4CAF50),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: _isLoading ? null : _importarExcel,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (_isLoading)
+                              const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      Color(0xFF4CAF50)),
+                                ),
+                              )
+                            else
+                              const Icon(Icons.cloud_upload,
+                                  color: Color(0xFF4CAF50)),
+                            const SizedBox(width: 12),
+                            Flexible(
+                              child: Text(
+                                _isLoading
+                                    ? 'Importando...'
+                                    : 'Seleccionar Archivo Excel',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF4CAF50),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
   Widget _buildExistingProjectsCard() {
-    return TweenAnimationBuilder<double>(
-      duration: const Duration(milliseconds: 1000),
-      tween: Tween(begin: 0.0, end: 1.0),
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFF9800), Color(0xFFFF6F00)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.folder_open,
+                      color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Proyectos Existentes',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF2C3E50),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF9800).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${_proyectosExistentes.length}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFFF9800),
+                      fontSize: 16,
+                    ),
+                  ),
                 ),
               ],
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFFF9800), Color(0xFFFF6F00)],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.folder_open,
-                            color: Colors.white, size: 24),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Proyectos Existentes',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF2C3E50),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFF9800).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          '${_proyectosExistentes.length}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFFF9800),
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  _buildProyectosExistentes(),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+            const SizedBox(height: 20),
+            _buildProyectosExistentes(),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildImportedProjectsCard() {
-    return TweenAnimationBuilder<double>(
-      duration: const Duration(milliseconds: 1200),
-      tween: Tween(begin: 0.0, end: 1.0),
-      builder: (context, value, child) {
-        return Transform.translate(
-          offset: Offset(0, 30 * (1 - value)),
-          child: Opacity(
-            opacity: value,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.assignment_turned_in,
-                              color: Colors.white, size: 24),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Text(
-                            'Proyectos Recién Importados',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF2C3E50),
-                            ),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF2196F3).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${_estudiantesImportados.length}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF2196F3),
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    _buildCategoriesList(_estudiantesPorCategoria),
-                  ],
-                ),
-              ),
-            ),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
-        );
-      },
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.assignment_turned_in,
+                      color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Proyectos Importados',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF2C3E50),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2196F3).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${_estudiantesImportados.length}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF2196F3),
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _buildCategoriesList(_estudiantesPorCategoria),
+          ],
+        ),
+      ),
     );
   }
 
@@ -488,145 +474,149 @@ Future<void> _resolverNombresDeProyectos(
     List<Map<String, dynamic>> items,
     int index,
   ) {
-    return TweenAnimationBuilder<double>(
-      duration: Duration(milliseconds: 400 + (index * 100)),
-      tween: Tween(begin: 0.0, end: 1.0),
-      builder: (context, value, child) {
-        return Transform.scale(
-          scale: 0.8 + (0.2 * value),
-          child: Opacity(
-            opacity: value,
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 16),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _getColorForCategory(index).withValues(alpha: 0.3),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: _getColorForCategory(index).withValues(alpha: 0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Theme(
+        data:
+            Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          title: Text(
+            categoria,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+              color: Color(0xFF2C3E50),
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '${items.length} proyecto${items.length != 1 ? 's' : ''}',
+              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            ),
+          ),
+          leading: SizedBox(
+            width: 50,
+            height: 50,
+            child: DecoratedBox(
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _getColorForCategory(index).withValues(alpha: 0.3),
-                  width: 2,
+                gradient: LinearGradient(
+                  colors: [
+                    _getColorForCategory(index),
+                    _getColorForCategory(index).withValues(alpha: 0.7),
+                  ],
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: _getColorForCategory(index).withValues(alpha: 0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Theme(
-                data: Theme.of(context)
-                    .copyWith(dividerColor: Colors.transparent),
-                child: ExpansionTile(
-                  tilePadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  title: Text(
-                    categoria,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Color(0xFF2C3E50),
-                    ),
+              child: Center(
+                child: Text(
+                  items.length.toString(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
                   ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      '${items.length} proyecto${items.length != 1 ? 's' : ''}',
-                      style:
-                          TextStyle(color: Colors.grey[600], fontSize: 13),
-                    ),
-                  ),
-                  leading: Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          _getColorForCategory(index),
-                          _getColorForCategory(index).withValues(alpha: 0.7),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Text(
-                        items.length.toString(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ),
-                  ),
-                  children:
-                      items.map((item) => _buildProjectItem(item)).toList(),
                 ),
               ),
             ),
           ),
-        );
-      },
+          children: items.map((item) => _buildProjectItem(item)).toList(),
+        ),
+      ),
     );
   }
 
   Widget _buildProjectItem(Map<String, dynamic> item) {
     final integrantesList = _integrantesResueltos(item['Integrantes']);
-    final totalIntegrantes = item['totalIntegrantes'] ?? integrantesList.length;
+    final totalIntegrantes =
+        item['totalIntegrantes'] ?? integrantesList.length;
+    final codigo = item['Código']?.toString() ?? 'Sin código';
+    final titulo = item['Título']?.toString();
+    final integrantesPreview = integrantesList.take(3).join(', ');
+    final masIntegrantes = integrantesList.length > 3;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FA),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ListTile(
-        dense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8F9FA),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          minLeadingWidth: 36,
+          leading: Container(
+            width: 36,
+            height: 36,
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.assignment,
+                size: 18, color: Color(0xFF2C5F7C)),
           ),
-          child: const Icon(Icons.assignment, size: 20, color: Color(0xFF2C5F7C)),
-        ),
-        title: Text(
-          item['Código'] ?? 'Sin código',
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (item['Título'] != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                item['Título'],
-                style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-            if (integrantesList.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.people, size: 12, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      '$totalIntegrantes integrante${totalIntegrantes != 1 ? 's' : ''}: '
-                      '${integrantesList.take(3).join(', ')}'
-                      '${integrantesList.length > 3 ? '...' : ''}',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          title: Text(
+            codigo,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (titulo != null && titulo.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  titulo,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              if (integrantesList.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.people, size: 12, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        '$totalIntegrantes integrante${totalIntegrantes != 1 ? 's' : ''}: '
+                        '$integrantesPreview${masIntegrantes ? '...' : ''}',
+                        style:
+                            TextStyle(fontSize: 11, color: Colors.grey[600]),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -644,67 +634,73 @@ Future<void> _resolverNombresDeProyectos(
         final categoria = proyectosPorCategoria.keys.elementAt(index);
         final proyectos = proyectosPorCategoria[categoria]!;
 
-        return TweenAnimationBuilder<double>(
-          duration: Duration(milliseconds: 400 + (index * 100)),
-          tween: Tween(begin: 0.0, end: 1.0),
-          builder: (context, value, child) {
-            return Transform.scale(
-              scale: 0.8 + (0.2 * value),
-              child: Opacity(
-                opacity: value,
-                child: Theme(
-                  data: Theme.of(context)
-                      .copyWith(dividerColor: Colors.transparent),
-                  child: ExpansionTile(
-                    tilePadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
-                    title: Text(
-                      categoria,
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _getColorForCategory(index).withValues(alpha: 0.25),
+              width: 1.5,
+            ),
+          ),
+          child: Theme(
+            data:
+                Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              collapsedShape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              title: Text(
+                categoria,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                  color: Color(0xFF2C3E50),
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '${proyectos.length} proyecto${proyectos.length != 1 ? 's' : ''}',
+                  style:
+                      TextStyle(color: Colors.grey[600], fontSize: 13),
+                ),
+              ),
+              leading: SizedBox(
+                width: 50,
+                height: 50,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        _getColorForCategory(index),
+                        _getColorForCategory(index).withValues(alpha: 0.7),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      proyectos.length.toString(),
                       style: const TextStyle(
+                        color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: Color(0xFF2C3E50),
+                        fontSize: 18,
                       ),
                     ),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        '${proyectos.length} proyecto${proyectos.length != 1 ? 's' : ''}',
-                        style: TextStyle(
-                            color: Colors.grey[600], fontSize: 13),
-                      ),
-                    ),
-                    leading: Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            _getColorForCategory(index),
-                            _getColorForCategory(index).withValues(alpha: 0.7),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Center(
-                        child: Text(
-                          proyectos.length.toString(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                        ),
-                      ),
-                    ),
-                    children: proyectos
-                        .map((p) => _buildExistingProjectItem(p))
-                        .toList(),
                   ),
                 ),
               ),
-            );
-          },
+              children: proyectos
+                  .map((p) => _buildExistingProjectItem(p))
+                  .toList(),
+            ),
+          ),
         );
       },
     );
@@ -714,95 +710,114 @@ Future<void> _resolverNombresDeProyectos(
     final integrantesList = _integrantesResueltos(proyecto['Integrantes']);
     final totalIntegrantes =
         proyecto['totalIntegrantes'] ?? integrantesList.length;
+    final codigo = proyecto['Código']?.toString() ?? 'Sin código';
+    final titulo = proyecto['Título']?.toString();
+    final integrantesPreview = integrantesList.take(3).join(', ');
+    final masIntegrantes = integrantesList.length > 3;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FA),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ListTile(
-        dense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        onTap: () => _navegarADetallesProyecto(proyecto),
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8F9FA),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          minLeadingWidth: 36,
+          onTap: () => _navegarADetallesProyecto(proyecto),
+          leading: Container(
+            width: 36,
+            height: 36,
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.assignment,
+                size: 18, color: Color(0xFF2C5F7C)),
           ),
-          child: const Icon(Icons.assignment, size: 20, color: Color(0xFF2C5F7C)),
-        ),
-        title: Text(
-          proyecto['Código'] ?? 'Sin código',
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (proyecto['Título'] != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                proyecto['Título'],
-                style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-            if (integrantesList.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.people, size: 12, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      '$totalIntegrantes integrante${totalIntegrantes != 1 ? 's' : ''}: '
-                      '${integrantesList.take(3).join(', ')}'
-                      '${integrantesList.length > 3 ? '...' : ''}',
-                      style:
-                          TextStyle(fontSize: 11, color: Colors.grey[600]),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          title: Text(
+            codigo,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (titulo != null && titulo.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  titulo,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              if (integrantesList.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.people, size: 12, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        '$totalIntegrantes integrante${totalIntegrantes != 1 ? 's' : ''}: '
+                        '$integrantesPreview${masIntegrantes ? '...' : ''}',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey[600]),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
+              if (proyecto['importedAt'] != null) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(Icons.access_time,
+                        size: 11, color: Colors.grey[500]),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        _gruposService.formatDate(proyecto['importedAt']),
+                        style: TextStyle(
+                            fontSize: 10, color: Colors.grey[500]),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
-            if (proyecto['importedAt'] != null) ...[
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.access_time, size: 11, color: Colors.grey[500]),
-                  const SizedBox(width: 4),
-                  Text(
-                    _gruposService.formatDate(proyecto['importedAt']),
-                    style: TextStyle(fontSize: 10, color: Colors.grey[500]),
-                  ),
-                ],
-              ),
-            ],
-          ],
+          ),
+          trailing: const Icon(Icons.arrow_forward_ios,
+              size: 14, color: Colors.grey),
         ),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
       ),
     );
   }
 
   void _navegarADetallesProyecto(Map<String, dynamic> proyecto) {
-  Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (context) => DetalleProyectoScreen(
-        proyecto: proyecto,
-        eventData: widget.eventData,
-        gruposService: _gruposService,
-        onProyectoActualizado: _cargarProyectosExistentes,
-        nombresCache: _nombresCache, // NUEVO
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => DetalleProyectoScreen(
+          proyecto: proyecto,
+          eventData: widget.eventData,
+          gruposService: _gruposService,
+          onProyectoActualizado: _cargarProyectosExistentes,
+          nombresCache: _nombresCache,
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildLoadingIndicator() {
     return Center(
@@ -823,7 +838,8 @@ Future<void> _resolverNombresDeProyectos(
           mainAxisSize: MainAxisSize.min,
           children: [
             const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2C5F7C)),
+              valueColor:
+                  AlwaysStoppedAnimation<Color>(Color(0xFF2C5F7C)),
             ),
             const SizedBox(height: 20),
             Text(
@@ -841,67 +857,59 @@ Future<void> _resolverNombresDeProyectos(
   }
 
   Widget _buildEmptyState() {
-    return TweenAnimationBuilder<double>(
-      duration: const Duration(milliseconds: 1000),
-      tween: Tween(begin: 0.0, end: 1.0),
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value,
-          child: Container(
-            padding: const EdgeInsets.all(40),
+    return Container(
+      padding: const EdgeInsets.all(40),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
+              color: const Color(0xFF2C5F7C).withValues(alpha: 0.1),
+              shape: BoxShape.circle,
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2C5F7C).withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.cloud_upload_outlined,
-                    size: 60,
-                    color: const Color(0xFF2C5F7C).withValues(alpha: 0.6),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  'No hay proyectos importados',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2C3E50),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Importa un archivo Excel para comenzar',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+            child: Icon(
+              Icons.cloud_upload_outlined,
+              size: 60,
+              color: const Color(0xFF2C5F7C).withValues(alpha: 0.6),
             ),
           ),
-        );
-      },
+          const SizedBox(height: 24),
+          const Text(
+            'No hay proyectos importados',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF2C3E50),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Importa un archivo Excel para comenzar',
+            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 
   void _mostrarDialogoEliminarTodos() {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext ctx) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20)),
@@ -918,8 +926,12 @@ Future<void> _resolverNombresDeProyectos(
               ),
               const SizedBox(width: 12),
               const Expanded(
-                child: Text('Eliminar Todos',
-                    style: TextStyle(fontSize: 18)),
+                child: Text(
+                  'Eliminar Todos',
+                  style: TextStyle(fontSize: 18),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
               ),
             ],
           ),
@@ -931,12 +943,12 @@ Future<void> _resolverNombresDeProyectos(
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(ctx).pop(),
               child: const Text('Cancelar'),
             ),
             ElevatedButton(
               onPressed: () async {
-                Navigator.of(context).pop();
+                Navigator.of(ctx).pop();
                 await _eliminarTodosLosProyectos();
               },
               style: ElevatedButton.styleFrom(
@@ -957,31 +969,34 @@ Future<void> _resolverNombresDeProyectos(
   Future<void> _eliminarTodosLosProyectos() async {
     setState(() => _isLoadingProjects = true);
     try {
-      await _gruposService.eliminarTodosLosProyectos(widget.eventData['id']);
+      await _gruposService
+          .eliminarTodosLosProyectos(widget.eventData['id']);
       await _cargarProyectosExistentes();
-      _mostrarMensaje('Todos los proyectos han sido eliminados', Colors.orange);
+      _mostrarMensaje(
+          'Todos los proyectos han sido eliminados', Colors.orange);
     } catch (e) {
       _mostrarError('Error al eliminar los proyectos');
     } finally {
-      setState(() => _isLoadingProjects = false);
+      if (mounted) setState(() => _isLoadingProjects = false);
     }
   }
 
   Future<void> _cargarProyectosExistentes() async {
-  setState(() => _isLoadingProjects = true);
-  try {
-    final proyectos = await _gruposService
-        .cargarProyectosExistentes(widget.eventData['id']);
-    setState(() {
-      _proyectosExistentes = proyectos;
-      _isLoadingProjects = false;
-    });
-    // NUEVO: resolver nombres de integrantes
-    await _resolverNombresDeProyectos(proyectos);
-  } catch (e) {
-    setState(() => _isLoadingProjects = false);
+    setState(() => _isLoadingProjects = true);
+    try {
+      final proyectos = await _gruposService
+          .cargarProyectosExistentes(widget.eventData['id']);
+      if (!mounted) return;
+      setState(() {
+        _proyectosExistentes = proyectos;
+        _isLoadingProjects = false;
+      });
+      await _resolverNombresDeProyectos(proyectos);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingProjects = false);
+    }
   }
-}
 
   Future<void> _importarExcel() async {
     try {
@@ -1006,7 +1021,7 @@ Future<void> _resolverNombresDeProyectos(
     } catch (e) {
       _mostrarError('Error al importar archivo: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -1018,6 +1033,7 @@ Future<void> _resolverNombresDeProyectos(
         _estudiantesImportados,
         eventData: widget.eventData,
       );
+      if (!mounted) return;
       setState(() {
         _estudiantesImportados.clear();
         _estudiantesPorCategoria.clear();
@@ -1029,9 +1045,14 @@ Future<void> _resolverNombresDeProyectos(
 
   Color _getColorForCategory(int index) {
     const colors = [
-      Color(0xFF2196F3), Color(0xFF4CAF50), Color(0xFFFF9800),
-      Color(0xFF9C27B0), Color(0xFFF44336), Color(0xFF009688),
-      Color(0xFFFFEB3B), Color(0xFF3F51B5),
+      Color(0xFF2196F3),
+      Color(0xFF4CAF50),
+      Color(0xFFFF9800),
+      Color(0xFF9C27B0),
+      Color(0xFFF44336),
+      Color(0xFF009688),
+      Color(0xFFFFEB3B),
+      Color(0xFF3F51B5),
     ];
     return colors[index % colors.length];
   }
@@ -1046,13 +1067,16 @@ Future<void> _resolverNombresDeProyectos(
           child: Text(
             'Se importaron ${_estudiantesImportados.length} proyectos '
             'al evento "${widget.eventData['name']}"',
-            style: const TextStyle(fontSize: 15),
+            style: const TextStyle(fontSize: 14),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
           ),
         ),
       ]),
       backgroundColor: const Color(0xFF4CAF50),
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       duration: const Duration(seconds: 3),
       margin: const EdgeInsets.all(16),
     ));
@@ -1064,11 +1088,16 @@ Future<void> _resolverNombresDeProyectos(
       content: Row(children: [
         const Icon(Icons.info_outline, color: Colors.white),
         const SizedBox(width: 12),
-        Expanded(child: Text(mensaje, style: const TextStyle(fontSize: 15))),
+        Expanded(
+            child: Text(mensaje,
+                style: const TextStyle(fontSize: 14),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2)),
       ]),
       backgroundColor: color,
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       duration: const Duration(seconds: 3),
       margin: const EdgeInsets.all(16),
     ));
@@ -1080,26 +1109,28 @@ Future<void> _resolverNombresDeProyectos(
       content: Row(children: [
         const Icon(Icons.error_outline, color: Colors.white),
         const SizedBox(width: 12),
-        Expanded(child: Text(mensaje, style: const TextStyle(fontSize: 15))),
+        Expanded(
+            child: Text(mensaje,
+                style: const TextStyle(fontSize: 14),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2)),
       ]),
       backgroundColor: const Color(0xFFF44336),
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       duration: const Duration(seconds: 4),
       margin: const EdgeInsets.all(16),
     ));
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Detalle del Proyecto
-// ══════════════════════════════════════════════════════════════════════════════
 class DetalleProyectoScreen extends StatelessWidget {
   final Map<String, dynamic> proyecto;
   final Map<String, dynamic> eventData;
   final GruposService gruposService;
   final VoidCallback onProyectoActualizado;
-  final Map<String, String> nombresCache; // NUEVO
+  final Map<String, String> nombresCache;
 
   const DetalleProyectoScreen({
     super.key,
@@ -1107,19 +1138,21 @@ class DetalleProyectoScreen extends StatelessWidget {
     required this.eventData,
     required this.gruposService,
     required this.onProyectoActualizado,
-    this.nombresCache = const {}, // NUEVO con default vacío
+    this.nombresCache = const {},
   });
 
-  // Resolver nombre desde cache o devolver el código si no está
   String _resolverNombre(String codigoONombre) =>
       nombresCache[codigoONombre] ?? codigoONombre;
 
-  // ── Helper: normalizar integrantes ────────────────────────────────────────
   List<String> _toIntegrantesList(dynamic raw) {
     if (raw == null) return [];
     if (raw is List) return raw.map((e) => e.toString()).toList();
     if (raw is String && raw.isNotEmpty) {
-      return raw.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      return raw
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
     }
     return [];
   }
@@ -1127,22 +1160,28 @@ class DetalleProyectoScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final integrantesList = _toIntegrantesList(proyecto['Integrantes'])
-    .map((c) => _resolverNombre(c))
-    .toList();
+        .map((c) => _resolverNombre(c))
+        .toList();
     final totalIntegrantes =
         proyecto['totalIntegrantes'] ?? integrantesList.length;
+    final codigo = proyecto['Código']?.toString() ?? 'Sin código';
 
     return Scaffold(
       backgroundColor: const Color(0xFF2C5F7C),
       appBar: AppBar(
-        title: const Text('Detalles del Proyecto',
-            style: TextStyle(fontWeight: FontWeight.w600)),
+        title: const Text(
+          'Detalles del Proyecto',
+          style: TextStyle(fontWeight: FontWeight.w600),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+        ),
         backgroundColor: const Color(0xFF2C5F7C),
         foregroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
           onPressed: () => Navigator.of(context).pop(),
+          tooltip: 'Volver',
         ),
         actions: [
           IconButton(
@@ -1155,73 +1194,75 @@ class DetalleProyectoScreen extends StatelessWidget {
               tooltip: 'Eliminar'),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFFF5F7FA),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(30),
-            topRight: Radius.circular(30),
+      body: SafeArea(
+        top: false,
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFFF5F7FA),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(30),
+              topRight: Radius.circular(30),
+            ),
           ),
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildHeaderCard(),
-              const SizedBox(height: 20),
-              _buildDetailCard(
-                icon: Icons.qr_code,
-                label: 'Código del Proyecto',
-                value: proyecto['Código'] ?? 'Sin código',
-                color: const Color(0xFF2196F3),
-              ),
-              const SizedBox(height: 16),
-              _buildDetailCard(
-                icon: Icons.title,
-                label: 'Título del Proyecto',
-                value: proyecto['Título'] ?? 'Sin título',
-                color: const Color(0xFF4CAF50),
-              ),
-              const SizedBox(height: 16),
-              // ── Integrantes como lista de chips ──────────────────────────
-              _buildIntegrantesCard(integrantesList, totalIntegrantes),
-              const SizedBox(height: 16),
-              _buildDetailCard(
-                icon: Icons.category,
-                label: 'Clasificación',
-                value: proyecto['Clasificación'] ?? 'Sin clasificación',
-                color: const Color(0xFF9C27B0),
-              ),
-              if (proyecto['Sala'] != null &&
-                  proyecto['Sala'].toString().isNotEmpty) ...[
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildHeaderCard(codigo),
+                const SizedBox(height: 20),
+                _buildDetailCard(
+                  icon: Icons.qr_code,
+                  label: 'Código del Proyecto',
+                  value: codigo,
+                  color: const Color(0xFF2196F3),
+                ),
                 const SizedBox(height: 16),
                 _buildDetailCard(
-                  icon: Icons.meeting_room,
-                  label: 'Sala Asignada',
-                  value: proyecto['Sala'],
-                  color: const Color(0xFF009688),
+                  icon: Icons.title,
+                  label: 'Título del Proyecto',
+                  value: proyecto['Título']?.toString() ?? 'Sin título',
+                  color: const Color(0xFF4CAF50),
                 ),
-              ],
-              if (proyecto['importedAt'] != null) ...[
+                const SizedBox(height: 16),
+                _buildIntegrantesCard(integrantesList, totalIntegrantes),
                 const SizedBox(height: 16),
                 _buildDetailCard(
-                  icon: Icons.access_time,
-                  label: 'Fecha de Importación',
-                  value: gruposService.formatDate(proyecto['importedAt']),
-                  color: const Color(0xFF607D8B),
+                  icon: Icons.category,
+                  label: 'Clasificación',
+                  value: proyecto['Clasificación']?.toString() ??
+                      'Sin clasificación',
+                  color: const Color(0xFF9C27B0),
                 ),
+                if (proyecto['Sala'] != null &&
+                    proyecto['Sala'].toString().isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _buildDetailCard(
+                    icon: Icons.meeting_room,
+                    label: 'Sala Asignada',
+                    value: proyecto['Sala'].toString(),
+                    color: const Color(0xFF009688),
+                  ),
+                ],
+                if (proyecto['importedAt'] != null) ...[
+                  const SizedBox(height: 16),
+                  _buildDetailCard(
+                    icon: Icons.access_time,
+                    label: 'Fecha de Importación',
+                    value: gruposService.formatDate(proyecto['importedAt']),
+                    color: const Color(0xFF607D8B),
+                  ),
+                ],
+                const SizedBox(height: 32),
+                _buildActionButtons(context),
               ],
-              const SizedBox(height: 32),
-              _buildActionButtons(context),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // ── Card de integrantes con chips ─────────────────────────────────────────
   Widget _buildIntegrantesCard(List<String> integrantes, int total) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1245,7 +1286,8 @@ class DetalleProyectoScreen extends StatelessWidget {
               color: const Color(0xFFFF9800).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.people, color: Color(0xFFFF9800), size: 24),
+            child: const Icon(Icons.people,
+                color: Color(0xFFFF9800), size: 24),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -1263,25 +1305,33 @@ class DetalleProyectoScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 if (integrantes.isEmpty)
-                  Text('Sin integrantes registrados',
-                      style: TextStyle(fontSize: 14, color: Colors.grey[500]))
+                  Text(
+                    'Sin integrantes registrados',
+                    style:
+                        TextStyle(fontSize: 14, color: Colors.grey[500]),
+                  )
                 else
                   Wrap(
                     spacing: 8,
                     runSpacing: 6,
-                    children: integrantes.map((codigo) {
+                    children: integrantes.map((nombre) {
+                      final displayName = nombre.length > 30
+                          ? '${nombre.substring(0, 28)}…'
+                          : nombre;
                       return Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2C5F7C).withValues(alpha: 0.08),
+                          color: const Color(0xFF2C5F7C)
+                              .withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: const Color(0xFF2C5F7C).withValues(alpha: 0.2),
+                            color: const Color(0xFF2C5F7C)
+                                .withValues(alpha: 0.2),
                           ),
                         ),
                         child: Text(
-                          codigo,
+                          displayName,
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -1299,7 +1349,7 @@ class DetalleProyectoScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHeaderCard() {
+  Widget _buildHeaderCard(String codigo) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -1325,26 +1375,32 @@ class DetalleProyectoScreen extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Icon(Icons.assignment, color: Colors.white, size: 40),
+            child: const Icon(Icons.assignment,
+                color: Colors.white, size: 36),
           ),
           const SizedBox(width: 20),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Proyecto',
-                    style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500)),
+                const Text(
+                  'Proyecto',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Text(
-                  proyecto['Código'] ?? 'Sin código',
+                  codigo,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 24,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
                 ),
               ],
             ),
@@ -1389,21 +1445,25 @@ class DetalleProyectoScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey[600],
-                      letterSpacing: 0.5,
-                    )),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[600],
+                    letterSpacing: 0.5,
+                  ),
+                ),
                 const SizedBox(height: 8),
-                Text(value,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF2C3E50),
-                      height: 1.4,
-                    )),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF2C3E50),
+                    height: 1.4,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1414,18 +1474,22 @@ class DetalleProyectoScreen extends StatelessWidget {
 
   Widget _buildActionButtons(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
-          width: double.infinity,
+          height: 52,
           child: ElevatedButton.icon(
             onPressed: () => _actualizarScansExistentes(context),
             icon: const Icon(Icons.sync, size: 20),
-            label: const Text('Actualizar Asistencias Registradas',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            label: const Text(
+              'Actualizar Asistencias',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFFF9800),
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
               elevation: 0,
@@ -1436,37 +1500,45 @@ class DetalleProyectoScreen extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () => _editarProyecto(context),
-                icon: const Icon(Icons.edit, size: 20),
-                label: const Text('Editar',
+              child: SizedBox(
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: () => _editarProyecto(context),
+                  icon: const Icon(Icons.edit, size: 20),
+                  label: const Text(
+                    'Editar',
                     style: TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2196F3),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
+                        fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2196F3),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
                 ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () => _eliminarProyecto(context),
-                icon: const Icon(Icons.delete, size: 20),
-                label: const Text('Eliminar',
+              child: SizedBox(
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: () => _eliminarProyecto(context),
+                  icon: const Icon(Icons.delete, size: 20),
+                  label: const Text(
+                    'Eliminar',
                     style: TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF44336),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
+                        fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF44336),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
                 ),
               ),
             ),
@@ -1480,7 +1552,8 @@ class DetalleProyectoScreen extends StatelessWidget {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(children: [
           Container(
             padding: const EdgeInsets.all(8),
@@ -1491,7 +1564,13 @@ class DetalleProyectoScreen extends StatelessWidget {
             child: const Icon(Icons.sync, color: Color(0xFFFF9800)),
           ),
           const SizedBox(width: 12),
-          const Expanded(child: Text('Actualizar Asistencias')),
+          const Expanded(
+            child: Text(
+              'Actualizar Asistencias',
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
         ]),
         content: Text(
           '¿Deseas actualizar todas las asistencias del proyecto '
@@ -1518,24 +1597,29 @@ class DetalleProyectoScreen extends StatelessWidget {
 
     if (confirmar != true) return;
 
-    if (context.mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          content: const Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 20),
-              Text('Actualizando asistencias...',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            ],
-          ),
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 20),
+            Text(
+              'Actualizando asistencias...',
+              style:
+                  TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
-      );
-    }
+      ),
+    );
 
     try {
       await gruposService.actualizarCategoriaDeScansPorProyecto(
@@ -1546,8 +1630,8 @@ class DetalleProyectoScreen extends StatelessWidget {
       if (context.mounted) {
         Navigator.of(context).pop();
         onProyectoActualizado();
-        _mostrarMensaje(context,
-            'Asistencias actualizadas exitosamente', Colors.green);
+        _mostrarMensaje(
+            context, 'Asistencias actualizadas exitosamente', Colors.green);
       }
     } catch (e) {
       if (context.mounted) {
@@ -1561,82 +1645,97 @@ class DetalleProyectoScreen extends StatelessWidget {
     final integrantesList = _toIntegrantesList(proyecto['Integrantes']);
 
     final codigoCtrl =
-        TextEditingController(text: proyecto['Código'] ?? '');
+        TextEditingController(text: proyecto['Código']?.toString() ?? '');
     final tituloCtrl =
-        TextEditingController(text: proyecto['Título'] ?? '');
-    // Editar integrantes como texto separado por comas
+        TextEditingController(text: proyecto['Título']?.toString() ?? '');
     final integrantesCtrl =
         TextEditingController(text: integrantesList.join(', '));
-    final clasificacionCtrl =
-        TextEditingController(text: proyecto['Clasificación'] ?? '');
+    final clasificacionCtrl = TextEditingController(
+        text: proyecto['Clasificación']?.toString() ?? '');
     final salaCtrl =
-        TextEditingController(text: proyecto['Sala'] ?? '');
+        TextEditingController(text: proyecto['Sala']?.toString() ?? '');
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2196F3).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.edit, color: Color(0xFF2196F3)),
-          ),
-          const SizedBox(width: 12),
-          const Text('Editar Proyecto'),
-        ]),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildTextField(codigoCtrl, 'Código', Icons.qr_code),
-              const SizedBox(height: 16),
-              _buildTextField(tituloCtrl, 'Título', Icons.title, maxLines: 2),
-              const SizedBox(height: 16),
-              _buildTextField(
-                integrantesCtrl,
-                'Códigos de integrantes (separados por coma)',
-                Icons.people,
-                maxLines: 3,
-              ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                  clasificacionCtrl, 'Clasificación', Icons.category),
-              const SizedBox(height: 16),
-              _buildTextField(
-                  salaCtrl, 'Sala (Opcional)', Icons.meeting_room),
-            ],
-          ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(ctx).bottom,
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancelar',
-                  style: TextStyle(color: Colors.grey))),
-          ElevatedButton(
-            onPressed: () async {
-              await _actualizarProyecto(context, {
-                'Código'        : codigoCtrl.text.trim(),
-                'Título'        : tituloCtrl.text.trim(),
-                'Integrantes'   : integrantesCtrl.text.trim(),
-                'Clasificación' : clasificacionCtrl.text.trim(),
-                'Sala'          : salaCtrl.text.trim(),
-              });
-              Navigator.pop(ctx);
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2196F3),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
+          title: Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2196F3).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.edit, color: Color(0xFF2196F3)),
             ),
-            child: const Text('Guardar'),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Editar Proyecto',
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+          ]),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildTextField(codigoCtrl, 'Código', Icons.qr_code),
+                const SizedBox(height: 16),
+                _buildTextField(tituloCtrl, 'Título', Icons.title,
+                    maxLines: 3),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  integrantesCtrl,
+                  'Códigos de integrantes (separados por coma)',
+                  Icons.people,
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(
+                    clasificacionCtrl, 'Clasificación', Icons.category),
+                const SizedBox(height: 16),
+                _buildTextField(
+                    salaCtrl, 'Sala (Opcional)', Icons.meeting_room),
+              ],
+            ),
           ),
-        ],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancelar',
+                    style: TextStyle(color: Colors.grey))),
+            ElevatedButton(
+              onPressed: () async {
+                final nuevosDatos = {
+                  'Código': codigoCtrl.text.trim(),
+                  'Título': tituloCtrl.text.trim(),
+                  'Integrantes': integrantesCtrl.text.trim(),
+                  'Clasificación': clasificacionCtrl.text.trim(),
+                  'Sala': salaCtrl.text.trim(),
+                };
+                Navigator.pop(ctx);
+                if (context.mounted) {
+                  await _actualizarProyecto(context, nuevosDatos);
+                  if (context.mounted) Navigator.pop(context);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2196F3),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1650,6 +1749,8 @@ class DetalleProyectoScreen extends StatelessWidget {
     return TextField(
       controller: controller,
       maxLines: maxLines,
+      textInputAction:
+          maxLines == 1 ? TextInputAction.next : TextInputAction.newline,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFF2C5F7C)),
@@ -1665,6 +1766,9 @@ class DetalleProyectoScreen extends StatelessWidget {
                 const BorderSide(color: Color(0xFF2C5F7C), width: 2)),
         filled: true,
         fillColor: Colors.grey.shade50,
+        isDense: false,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
     );
   }
@@ -1675,7 +1779,7 @@ class DetalleProyectoScreen extends StatelessWidget {
         proyecto['Clasificación'] != nuevosDatos['Clasificación'];
 
     try {
-      if (clasificacionCambio) {
+      if (clasificacionCambio && context.mounted) {
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -1687,13 +1791,18 @@ class DetalleProyectoScreen extends StatelessWidget {
               children: [
                 const CircularProgressIndicator(),
                 const SizedBox(height: 20),
-                const Text('Actualizando proyecto...',
-                    style: TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Actualizando proyecto...',
+                  style: TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w600),
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 8),
-                Text('También se actualizarán las asistencias registradas',
-                    style:
-                        TextStyle(fontSize: 13, color: Colors.grey[600])),
+                Text(
+                  'También se actualizarán las asistencias registradas',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
               ],
             ),
           ),
@@ -1708,18 +1817,22 @@ class DetalleProyectoScreen extends StatelessWidget {
       }
 
       onProyectoActualizado();
-      _mostrarMensaje(
-        context,
-        clasificacionCambio
-            ? 'Proyecto y asistencias actualizados exitosamente'
-            : 'Proyecto actualizado exitosamente',
-        Colors.green,
-      );
+      if (context.mounted) {
+        _mostrarMensaje(
+          context,
+          clasificacionCambio
+              ? 'Proyecto y asistencias actualizados exitosamente'
+              : 'Proyecto actualizado exitosamente',
+          Colors.green,
+        );
+      }
     } catch (e) {
       if (clasificacionCambio && context.mounted) {
         Navigator.of(context).pop();
       }
-      _mostrarError(context, 'Error al actualizar el proyecto');
+      if (context.mounted) {
+        _mostrarError(context, 'Error al actualizar el proyecto');
+      }
     }
   }
 
@@ -1727,7 +1840,8 @@ class DetalleProyectoScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
         title: Row(children: [
           Container(
             padding: const EdgeInsets.all(8),
@@ -1735,10 +1849,17 @@ class DetalleProyectoScreen extends StatelessWidget {
               color: const Color(0xFFF44336).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.delete_forever, color: Color(0xFFF44336)),
+            child: const Icon(Icons.delete_forever,
+                color: Color(0xFFF44336)),
           ),
           const SizedBox(width: 12),
-          const Text('Eliminar'),
+          const Expanded(
+            child: Text(
+              'Eliminar',
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
         ]),
         content: Text(
           '¿Estás seguro de eliminar el proyecto "${proyecto['Código']}"?\n\n'
@@ -1750,9 +1871,9 @@ class DetalleProyectoScreen extends StatelessWidget {
               child: const Text('Cancelar')),
           ElevatedButton(
             onPressed: () async {
-              await _eliminarProyectoConfirmado(context);
               Navigator.pop(ctx);
-              Navigator.pop(context);
+              await _eliminarProyectoConfirmado(context);
+              if (context.mounted) Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFF44336),
@@ -1772,9 +1893,14 @@ class DetalleProyectoScreen extends StatelessWidget {
       await gruposService.eliminarProyectoIndividual(
           eventData['id'], proyecto['docId']);
       onProyectoActualizado();
-      _mostrarMensaje(context, 'Proyecto eliminado exitosamente', Colors.orange);
+      if (context.mounted) {
+        _mostrarMensaje(
+            context, 'Proyecto eliminado exitosamente', Colors.orange);
+      }
     } catch (e) {
-      _mostrarError(context, 'Error al eliminar el proyecto');
+      if (context.mounted) {
+        _mostrarError(context, 'Error al eliminar el proyecto');
+      }
     }
   }
 
@@ -1783,11 +1909,18 @@ class DetalleProyectoScreen extends StatelessWidget {
       content: Row(children: [
         const Icon(Icons.info_outline, color: Colors.white),
         const SizedBox(width: 12),
-        Expanded(child: Text(mensaje, style: const TextStyle(fontSize: 15))),
+        Expanded(
+            child: Text(
+          mensaje,
+          style: const TextStyle(fontSize: 14),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
+        )),
       ]),
       backgroundColor: color,
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       duration: const Duration(seconds: 3),
       margin: const EdgeInsets.all(16),
     ));
@@ -1798,11 +1931,18 @@ class DetalleProyectoScreen extends StatelessWidget {
       content: Row(children: [
         const Icon(Icons.error_outline, color: Colors.white),
         const SizedBox(width: 12),
-        Expanded(child: Text(mensaje, style: const TextStyle(fontSize: 15))),
+        Expanded(
+            child: Text(
+          mensaje,
+          style: const TextStyle(fontSize: 14),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
+        )),
       ]),
       backgroundColor: const Color(0xFFF44336),
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       duration: const Duration(seconds: 4),
       margin: const EdgeInsets.all(16),
     ));

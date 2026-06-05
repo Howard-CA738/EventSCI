@@ -6,12 +6,9 @@ import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
 
 class _T {
-  // Paleta principal
   static const navy = Color(0xFF0F2342);
   static const accent = Color(0xFF3B82F6);
   static const accentLight = Color(0xFFDBEAFE);
-
-  // Estados
   static const success = Color(0xFF059669);
   static const successLight = Color(0xFFD1FAE5);
   static const warning = Color(0xFFD97706);
@@ -20,8 +17,6 @@ class _T {
   static const dangerLight = Color(0xFFFEE2E2);
   static const purple = Color(0xFF7C3AED);
   static const purpleLight = Color(0xFFEDE9FE);
-
-  // Neutros
   static const surface = Color(0xFFF8FAFC);
   static const card = Colors.white;
   static const border = Color(0xFFE2E8F0);
@@ -32,9 +27,6 @@ class _T {
   static const divider = Color(0xFFF1F5F9);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// PANTALLA PRINCIPAL
-// ═══════════════════════════════════════════════════════════════════════
 class DetalleEvaluacionesCarreraScreen extends StatefulWidget {
   final String eventoId;
   final String eventoNombre;
@@ -75,15 +67,11 @@ class _DetalleEvaluacionesCarreraScreenState
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _evaluaciones = List<Map<String, dynamic>>.from(widget.evaluaciones);
-
     _headerAnim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    _headerFade = CurvedAnimation(
-      parent: _headerAnim,
-      curve: Curves.easeOut,
-    );
+    _headerFade = CurvedAnimation(parent: _headerAnim, curve: Curves.easeOut);
     _headerAnim.forward();
   }
 
@@ -100,7 +88,6 @@ class _DetalleEvaluacionesCarreraScreenState
   List<Map<String, dynamic>> get _evaluadas =>
       _evaluaciones.where((e) => e['evaluada'] as bool).toList();
 
-  // ── BLOQUEAR / DESBLOQUEAR ─────────────────────────────────────
   Future<void> _toggleBloqueo(Map<String, dynamic> evaluacion) async {
     final bloqueada = evaluacion['bloqueada'] as bool;
     final nuevoEstado = !bloqueada;
@@ -163,151 +150,154 @@ class _DetalleEvaluacionesCarreraScreenState
       builder: (_) => _DetalleBottomSheet(evaluacion: evaluacion),
     );
   }
-Future<void> _exportarExcel() async {
-  if (_evaluaciones.isEmpty) return;
-  setState(() => _isGeneratingExcel = true);
 
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const CircularProgressIndicator(color: _T.purple),
-          const SizedBox(height: 20),
-          const Text(
-            'Generando reporte Excel...',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '${_evaluaciones.length} evaluaciones',
-            style: const TextStyle(fontSize: 12, color: _T.textSecondary),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    ),
-  );
-
-  try {
-    // Obtener filial/facultad/carrera del evento desde los datos disponibles
-    final filialNombre = widget.filialNombre;
-final facultad = widget.facultad;
-final carrera = widget.carrera;
-
-    final ruta = await _excelService.generarReporteEvaluaciones(
-      evaluaciones: _evaluaciones,
-      eventoNombre: widget.eventoNombre,
-      filialNombre: filialNombre,
-      facultad: facultad,
-      carrera: carrera,
-    );
+  Future<void> _exportarExcel() async {
+    if (_evaluaciones.isEmpty) return;
 
     if (!mounted) return;
-    Navigator.of(context, rootNavigator: true).pop();
-    setState(() => _isGeneratingExcel = false);
+    setState(() => _isGeneratingExcel = true);
 
-    if (ruta == null) {
-      _showSnack('Error al generar el reporte', _T.danger, Icons.error_outline_rounded);
-      return;
-    }
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: _T.purple),
+            const SizedBox(height: 20),
+            const Text(
+              'Generando reporte Excel...',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${_evaluaciones.length} evaluaciones',
+              style: const TextStyle(fontSize: 12, color: _T.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
 
-    _mostrarOpcionesArchivo(ruta);
-  } catch (e) {
-    if (mounted) {
+    try {
+      final ruta = await _excelService.generarReporteEvaluaciones(
+        evaluaciones: _evaluaciones,
+        eventoNombre: widget.eventoNombre,
+        filialNombre: widget.filialNombre,
+        facultad: widget.facultad,
+        carrera: widget.carrera,
+      );
+
+      if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
       setState(() => _isGeneratingExcel = false);
-      _showSnack('Error: $e', _T.danger, Icons.error_outline_rounded);
+
+      if (ruta == null) {
+        _showSnack(
+            'Error al generar el reporte', _T.danger, Icons.error_outline_rounded);
+        return;
+      }
+
+      _mostrarOpcionesArchivo(ruta);
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        setState(() => _isGeneratingExcel = false);
+        _showSnack('Error: $e', _T.danger, Icons.error_outline_rounded);
+      }
     }
   }
-}
 
-void _mostrarOpcionesArchivo(String ruta) {
-  showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: _T.success.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
+  void _mostrarOpcionesArchivo(String ruta) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: _T.success.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.check_circle_rounded,
+                  color: _T.success, size: 22),
             ),
-            child: const Icon(Icons.check_circle_rounded,
-                color: _T.success, size: 22),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text('Reporte generado',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+        content: const Text(
+          '¿Qué deseas hacer con el archivo Excel?',
+          style: TextStyle(fontSize: 14, color: _T.textSecondary),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                final result = await OpenFilex.open(ruta);
+                if (result.type != ResultType.done && mounted) {
+                  _showSnack(
+                    'No se encontró app para abrir Excel. Prueba compartirlo.',
+                    _T.warning,
+                    Icons.warning_rounded,
+                  );
+                }
+              },
+              icon: const Icon(Icons.open_in_new, size: 20),
+              label: const Text('Abrir archivo',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _T.navy,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
           ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text('Reporte generado',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await Share.shareXFiles(
+                  [XFile(ruta)],
+                  subject:
+                      'Reporte de Evaluaciones – ${widget.eventoNombre}',
+                );
+              },
+              icon: const Icon(Icons.share, size: 20),
+              label: const Text('Compartir',
+                  style:
+                      TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _T.navy,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                side: const BorderSide(color: _T.navy, width: 1.5),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
           ),
         ],
       ),
-      content: const Text(
-        '¿Qué deseas hacer con el archivo Excel?',
-        style: TextStyle(fontSize: 14, color: _T.textSecondary),
-      ),
-      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      actions: [
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final result = await OpenFilex.open(ruta);
-              if (result.type != ResultType.done && mounted) {
-                _showSnack(
-                  'No se encontró app para abrir Excel. Prueba compartirlo.',
-                  _T.warning,
-                  Icons.warning_rounded,
-                );
-              }
-            },
-            icon: const Icon(Icons.open_in_new, size: 20),
-            label: const Text('Abrir archivo',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _T.navy,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 13),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await Share.shareXFiles(
-                [XFile(ruta)],
-                subject: 'Reporte de Evaluaciones – ${widget.eventoNombre}',
-              );
-            },
-            icon: const Icon(Icons.share, size: 20),
-            label: const Text('Compartir',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _T.navy,
-              padding: const EdgeInsets.symmetric(vertical: 13),
-              side: const BorderSide(color: _T.navy, width: 1.5),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-}
+    );
+  }
+
   Future<void> _editarNotas(Map<String, dynamic> evaluacion) async {
     final rubrica = evaluacion['rubrica'] as Rubrica?;
     if (rubrica == null) {
@@ -351,21 +341,22 @@ void _mostrarOpcionesArchivo(String ruta) {
             Icon(icon, color: Colors.white, size: 18),
             const SizedBox(width: 10),
             Expanded(
-                child: Text(msg,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w500, fontSize: 13))),
+              child: Text(msg,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w500, fontSize: 13)),
+            ),
           ],
         ),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 3),
       ),
     );
   }
 
-  // ── BUILD ──────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -373,31 +364,21 @@ void _mostrarOpcionesArchivo(String ruta) {
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ────────────────────────────────────────────
             FadeTransition(
               opacity: _headerFade,
               child: _buildHeader(),
             ),
-
             const SizedBox(height: 8),
-
-            // ── Stats row ─────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: _buildStatsRow(),
             ),
-
             const SizedBox(height: 16),
-
-            // ── Tab bar ───────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: _buildTabBar(),
             ),
-
             const SizedBox(height: 12),
-
-            // ── Tab content ───────────────────────────────────────
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -429,105 +410,110 @@ void _mostrarOpcionesArchivo(String ruta) {
   }
 
   Widget _buildHeader() {
-  return Padding(
-    padding: const EdgeInsets.fromLTRB(8, 12, 20, 8),
-    child: Row(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: Colors.white, size: 20),
-          onPressed: () => Navigator.pop(context),
-          style: IconButton.styleFrom(
-            backgroundColor: Colors.white.withValues(alpha: 0.12),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
-            padding: const EdgeInsets.all(10),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 12, 16, 8),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                color: Colors.white, size: 20),
+            onPressed: () => Navigator.pop(context),
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.all(10),
+            ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Evaluaciones',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  letterSpacing: -0.3,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Evaluaciones',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: -0.3,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                widget.eventoNombre,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white.withValues(alpha: 0.65),
-                  fontWeight: FontWeight.w400,
+                const SizedBox(height: 2),
+                Text(
+                  widget.eventoNombre,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.65),
+                    fontWeight: FontWeight.w400,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-
-        // ── Botón Excel ──────────────────────────────────────────
-        GestureDetector(
-          onTap: _isGeneratingExcel ? null : _exportarExcel,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            decoration: BoxDecoration(
-              color: _isGeneratingExcel
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : _T.success.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _isGeneratingExcel
-                    ? Colors.white.withValues(alpha: 0.15)
-                    : _T.success.withValues(alpha: 0.5),
+          const SizedBox(width: 8),
+          Semantics(
+            button: true,
+            label: 'Exportar Excel',
+            child: GestureDetector(
+              onTap: _isGeneratingExcel ? null : _exportarExcel,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                decoration: BoxDecoration(
+                  color: _isGeneratingExcel
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : _T.success.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _isGeneratingExcel
+                        ? Colors.white.withValues(alpha: 0.15)
+                        : _T.success.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: _isGeneratingExcel
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.file_download_rounded,
+                              color: Colors.white, size: 17),
+                          SizedBox(width: 5),
+                          Text(
+                            'Excel',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
               ),
             ),
-            child: _isGeneratingExcel
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.file_download_rounded,
-                          color: Colors.white, size: 17),
-                      SizedBox(width: 5),
-                      Text(
-                        'Excel',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 
   Widget _buildStatsRow() {
     final total = _evaluaciones.length;
     final pct = total > 0 ? (_evaluadas.length / total) : 0.0;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
@@ -540,7 +526,7 @@ void _mostrarOpcionesArchivo(String ruta) {
           _statPill('Pendientes', _pendientes.length, _T.warning),
           _dividerV(),
           _statPill('Evaluadas', _evaluadas.length, _T.success),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -548,7 +534,7 @@ void _mostrarOpcionesArchivo(String ruta) {
                 Text(
                   '${(pct * 100).toStringAsFixed(0)}%',
                   style: const TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
                   ),
@@ -559,7 +545,8 @@ void _mostrarOpcionesArchivo(String ruta) {
                   child: LinearProgressIndicator(
                     value: pct,
                     minHeight: 5,
-                    backgroundColor: Colors.white.withValues(alpha: 0.15),
+                    backgroundColor:
+                        Colors.white.withValues(alpha: 0.15),
                     valueColor: AlwaysStoppedAnimation<Color>(
                       pct == 1.0 ? _T.success : _T.accent,
                     ),
@@ -575,13 +562,14 @@ void _mostrarOpcionesArchivo(String ruta) {
 
   Widget _statPill(String label, int valor, Color color) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             valor.toString(),
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.w700,
               color: color,
             ),
@@ -589,7 +577,7 @@ void _mostrarOpcionesArchivo(String ruta) {
           Text(
             label,
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 9,
               color: Colors.white.withValues(alpha: 0.6),
               fontWeight: FontWeight.w500,
             ),
@@ -609,7 +597,7 @@ void _mostrarOpcionesArchivo(String ruta) {
 
   Widget _buildTabBar() {
     return Container(
-      height: 44,
+      height: 48,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.1),
@@ -634,33 +622,39 @@ void _mostrarOpcionesArchivo(String ruta) {
         unselectedLabelColor: Colors.white.withValues(alpha: 0.7),
         labelStyle: const TextStyle(
           fontWeight: FontWeight.w600,
-          fontSize: 13,
+          fontSize: 12,
         ),
         unselectedLabelStyle: const TextStyle(
           fontWeight: FontWeight.w500,
-          fontSize: 13,
+          fontSize: 12,
         ),
         tabs: [
           Tab(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.pending_actions_rounded, size: 16),
-                const SizedBox(width: 6),
-                Text('Pendientes (${_pendientes.length})'),
-              ],
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.pending_actions_rounded, size: 15),
+                  const SizedBox(width: 5),
+                  Text('Pendientes (${_pendientes.length})'),
+                ],
+              ),
             ),
           ),
           Tab(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.check_circle_rounded, size: 16),
-                const SizedBox(width: 6),
-                Text('Evaluadas (${_evaluadas.length})'),
-              ],
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.check_circle_rounded, size: 15),
+                  const SizedBox(width: 5),
+                  Text('Evaluadas (${_evaluadas.length})'),
+                ],
+              ),
             ),
           ),
         ],
@@ -668,52 +662,69 @@ void _mostrarOpcionesArchivo(String ruta) {
     );
   }
 
-  // ── LISTA ──────────────────────────────────────────────────────
   Widget _buildLista(List<Map<String, dynamic>> lista,
       {required bool esPendiente}) {
     if (lista.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: esPendiente ? _T.warningLight : _T.successLight,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                esPendiente
-                    ? Icons.pending_actions_rounded
-                    : Icons.assignment_turned_in_rounded,
-                size: 44,
-                color: esPendiente ? _T.warning : _T.success,
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 32, vertical: 24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(22),
+                        decoration: BoxDecoration(
+                          color: esPendiente
+                              ? _T.warningLight
+                              : _T.successLight,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          esPendiente
+                              ? Icons.pending_actions_rounded
+                              : Icons.assignment_turned_in_rounded,
+                          size: 40,
+                          color: esPendiente ? _T.warning : _T.success,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        esPendiente
+                            ? 'Sin evaluaciones pendientes'
+                            : 'Sin evaluaciones completadas',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: _T.textPrimary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        esPendiente
+                            ? 'Todos los jurados han evaluado'
+                            : 'Aún no hay evaluaciones completadas',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: _T.textTertiary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 20),
-            Text(
-              esPendiente
-                  ? 'Sin evaluaciones pendientes'
-                  : 'Sin evaluaciones completadas',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: _T.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              esPendiente
-                  ? 'Todos los jurados han evaluado'
-                  : 'Aún no hay evaluaciones completadas',
-              style: const TextStyle(
-                fontSize: 13,
-                color: _T.textTertiary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+          );
+        },
       );
     }
 
@@ -742,9 +753,6 @@ void _mostrarOpcionesArchivo(String ruta) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// CARD DE EVALUACIÓN
-// ═══════════════════════════════════════════════════════════════════════
 class _EvaluacionCard extends StatelessWidget {
   final Map<String, dynamic> evaluacion;
   final bool esPendiente;
@@ -767,7 +775,6 @@ class _EvaluacionCard extends StatelessWidget {
     final integrantes = evaluacion['integrantes']?.toString() ?? '';
     final rubricaNombre = evaluacion['rubricaNombre']?.toString() ?? '';
 
-    // Colores de estado
     final Color estadoColor;
     final IconData estadoIcon;
     final String estadoLabel;
@@ -810,11 +817,10 @@ class _EvaluacionCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Fila superior ──────────────────────────────────
               Row(
                 children: [
-                  // Código badge
                   Container(
+                    constraints: const BoxConstraints(maxWidth: 100),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
@@ -829,44 +835,48 @@ class _EvaluacionCard extends StatelessWidget {
                         color: Colors.white,
                         letterSpacing: 0.5,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const SizedBox(width: 8),
-
-                  // Estado badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: estadoColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border:
-                          Border.all(color: estadoColor.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(estadoIcon, size: 11, color: estadoColor),
-                        const SizedBox(width: 4),
-                        Text(
-                          estadoLabel,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: estadoColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const Spacer(),
-
-                  // Nota total
-                  if (!esPendiente)
-                    Container(
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: estadoColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: estadoColor.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(estadoIcon, size: 11, color: estadoColor),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              estadoLabel,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: estadoColor,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (!esPendiente) ...[
+                    Container(
+                      constraints: const BoxConstraints(maxWidth: 90),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 5),
                       decoration: BoxDecoration(
                         color: _T.successLight,
                         borderRadius: BorderRadius.circular(10),
@@ -874,34 +884,38 @@ class _EvaluacionCard extends StatelessWidget {
                       child: Text(
                         '${notaTotal.toStringAsFixed(1)} pts',
                         style: const TextStyle(
-                          fontSize: 13,
+                          fontSize: 12,
                           fontWeight: FontWeight.w700,
                           color: _T.success,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-
-                  // Bloqueo toggle
-                  const SizedBox(width: 6),
-                  GestureDetector(
-                    onTap: onToggleBloqueo,
-                    child: Tooltip(
-                      message: bloqueada
-                          ? 'Desbloquear evaluación'
-                          : 'Bloquear evaluación',
+                    const SizedBox(width: 6),
+                  ],
+                  Semantics(
+                    button: true,
+                    label: bloqueada
+                        ? 'Desbloquear evaluación'
+                        : 'Bloquear evaluación',
+                    child: GestureDetector(
+                      onTap: onToggleBloqueo,
                       child: Container(
-                        padding: const EdgeInsets.all(7),
+                        width: 44,
+                        height: 44,
+                        alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: bloqueada
                               ? _T.dangerLight
                               : _T.border.withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                         child: Icon(
                           bloqueada
                               ? Icons.lock_rounded
                               : Icons.lock_open_rounded,
-                          size: 16,
+                          size: 18,
                           color: bloqueada ? _T.danger : _T.textTertiary,
                         ),
                       ),
@@ -909,10 +923,7 @@ class _EvaluacionCard extends StatelessWidget {
                   ),
                 ],
               ),
-
               const SizedBox(height: 12),
-
-              // ── Título ──────────────────────────────────────────
               Text(
                 evaluacion['titulo']?.toString() ?? 'Sin título',
                 style: const TextStyle(
@@ -924,10 +935,7 @@ class _EvaluacionCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-
               const SizedBox(height: 10),
-
-              // ── Meta rows ───────────────────────────────────────
               _MetaRow(
                 icon: Icons.person_rounded,
                 text: evaluacion['juradoNombre']?.toString() ?? '—',
@@ -945,17 +953,11 @@ class _EvaluacionCard extends StatelessWidget {
                   icon: Icons.group_rounded,
                   text: integrantes,
                 ),
-
               const SizedBox(height: 14),
-
-              // ── Divider ─────────────────────────────────────────
               Container(height: 1, color: _T.divider),
               const SizedBox(height: 12),
-
-              // ── Acciones ────────────────────────────────────────
               Row(
                 children: [
-                  // Ver detalle
                   Expanded(
                     child: _ActionButton(
                       label: 'Ver detalle',
@@ -964,7 +966,6 @@ class _EvaluacionCard extends StatelessWidget {
                       style: _ActionStyle.outlined,
                     ),
                   ),
-
                   if (!esPendiente) ...[
                     const SizedBox(width: 8),
                     Expanded(
@@ -1004,33 +1005,42 @@ class _ActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isOutlined = style == _ActionStyle.outlined;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: isOutlined ? Colors.transparent : _T.purple,
-          borderRadius: BorderRadius.circular(10),
-          border: isOutlined ? Border.all(color: _T.borderMed) : null,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 15,
-              color: isOutlined ? _T.textSecondary : Colors.white,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+    return Semantics(
+      button: true,
+      label: label,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          constraints: const BoxConstraints(minHeight: 44),
+          decoration: BoxDecoration(
+            color: isOutlined ? Colors.transparent : _T.purple,
+            borderRadius: BorderRadius.circular(10),
+            border: isOutlined ? Border.all(color: _T.borderMed) : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 15,
                 color: isOutlined ? _T.textSecondary : Colors.white,
               ),
-            ),
-          ],
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isOutlined ? _T.textSecondary : Colors.white,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1048,7 +1058,10 @@ class _MetaRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 13, color: _T.textTertiary),
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(icon, size: 13, color: _T.textTertiary),
+        ),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
@@ -1067,9 +1080,6 @@ class _MetaRow extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// DIÁLOGO DE CONFIRMACIÓN REUTILIZABLE
-// ═══════════════════════════════════════════════════════════════════════
 class _ConfirmDialog extends StatelessWidget {
   final String title;
   final String message;
@@ -1130,6 +1140,7 @@ class _ConfirmDialog extends StatelessWidget {
                     onPressed: () => Navigator.pop(context, false),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 13),
+                      minimumSize: const Size(0, 44),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                         side: const BorderSide(color: _T.border),
@@ -1152,6 +1163,7 @@ class _ConfirmDialog extends StatelessWidget {
                       backgroundColor: confirmColor,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 13),
+                      minimumSize: const Size(0, 44),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
@@ -1171,9 +1183,6 @@ class _ConfirmDialog extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// BOTTOM SHEET: Detalle de evaluación
-// ═══════════════════════════════════════════════════════════════════════
 class _DetalleBottomSheet extends StatelessWidget {
   final Map<String, dynamic> evaluacion;
 
@@ -1190,6 +1199,7 @@ class _DetalleBottomSheet extends StatelessWidget {
       initialChildSize: 0.92,
       minChildSize: 0.5,
       maxChildSize: 0.95,
+      expand: false,
       builder: (context, scrollController) {
         return Container(
           decoration: const BoxDecoration(
@@ -1201,7 +1211,6 @@ class _DetalleBottomSheet extends StatelessWidget {
           ),
           child: Column(
             children: [
-              // Handle
               Container(
                 margin: const EdgeInsets.only(top: 10, bottom: 4),
                 width: 36,
@@ -1211,8 +1220,6 @@ class _DetalleBottomSheet extends StatelessWidget {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-
-              // ── Header del sheet ────────────────────────────────
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                 child: Row(
@@ -1225,6 +1232,8 @@ class _DetalleBottomSheet extends StatelessWidget {
                           Row(
                             children: [
                               Container(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 90),
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
@@ -1239,10 +1248,12 @@ class _DetalleBottomSheet extends StatelessWidget {
                                     color: Colors.white,
                                     letterSpacing: 0.5,
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              Flexible(
+                              Expanded(
                                 child: Text(
                                   'Jurado: ${evaluacion['juradoNombre'] ?? '—'}',
                                   style: const TextStyle(
@@ -1259,31 +1270,33 @@ class _DetalleBottomSheet extends StatelessWidget {
                           Text(
                             evaluacion['titulo']?.toString() ?? 'Sin título',
                             style: const TextStyle(
-                              fontSize: 17,
+                              fontSize: 16,
                               fontWeight: FontWeight.w700,
                               color: _T.textPrimary,
                               height: 1.3,
                             ),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(width: 12),
-
-                    // Nota badge
                     Container(
+                      constraints: const BoxConstraints(minWidth: 64),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
+                          horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
                         color: evaluada ? _T.successLight : _T.warningLight,
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
                             notaTotal.toStringAsFixed(1),
                             style: TextStyle(
-                              fontSize: 22,
+                              fontSize: 20,
                               fontWeight: FontWeight.w800,
                               color: evaluada ? _T.success : _T.warning,
                             ),
@@ -1302,21 +1315,15 @@ class _DetalleBottomSheet extends StatelessWidget {
                   ],
                 ),
               ),
-
               const SizedBox(height: 16),
               Container(height: 1, color: _T.divider),
-
-              // ── Contenido scrollable ────────────────────────────
               Expanded(
                 child: ListView(
                   controller: scrollController,
                   padding: const EdgeInsets.all(20),
                   children: [
-                    // Info del proyecto
                     _buildInfoCard(),
                     const SizedBox(height: 20),
-
-                    // Criterios
                     if (rubrica != null) ...[
                       const Text(
                         'Criterios evaluados',
@@ -1357,7 +1364,6 @@ class _DetalleBottomSheet extends StatelessWidget {
                           ],
                         ),
                       ),
-
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -1413,21 +1419,31 @@ class _DetalleBottomSheet extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 14, color: _T.accent),
-        const SizedBox(width: 8),
-        Text(
-          '$label: ',
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: _T.textPrimary,
-          ),
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(icon, size: 14, color: _T.accent),
         ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 12, color: _T.textSecondary),
-            maxLines: 3,
+        const SizedBox(width: 8),
+        Flexible(
+          child: RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: '$label: ',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: _T.textPrimary,
+                  ),
+                ),
+                TextSpan(
+                  text: value,
+                  style: const TextStyle(
+                      fontSize: 12, color: _T.textSecondary),
+                ),
+              ],
+            ),
+            maxLines: 4,
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -1436,9 +1452,6 @@ class _DetalleBottomSheet extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// SECCIÓN DE RÚBRICA (solo lectura)
-// ═══════════════════════════════════════════════════════════════════════
 class _SeccionDetalleWidget extends StatelessWidget {
   final SeccionRubrica seccion;
   final Map<String, dynamic> notas;
@@ -1477,7 +1490,8 @@ class _SeccionDetalleWidget extends StatelessWidget {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          tilePadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           shape: const Border(),
           collapsedShape: const Border(),
@@ -1488,7 +1502,9 @@ class _SeccionDetalleWidget extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
-              completo ? Icons.folder_special_rounded : Icons.folder_open_rounded,
+              completo
+                  ? Icons.folder_special_rounded
+                  : Icons.folder_open_rounded,
               color: completo ? _T.success : _T.warning,
               size: 18,
             ),
@@ -1500,6 +1516,8 @@ class _SeccionDetalleWidget extends StatelessWidget {
               fontWeight: FontWeight.w600,
               color: _T.textPrimary,
             ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
           subtitle: Text(
             '$evaluados/${seccion.criterios.length} criterios  ·  ${puntaje.toStringAsFixed(1)} / ${seccion.pesoTotal.toStringAsFixed(0)} pts',
@@ -1514,7 +1532,9 @@ class _SeccionDetalleWidget extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: tiene ? _T.successLight.withValues(alpha: 0.5) : _T.surface,
+                color: tiene
+                    ? _T.successLight.withValues(alpha: 0.5)
+                    : _T.surface,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
                   color: tiene
@@ -1523,6 +1543,7 @@ class _SeccionDetalleWidget extends StatelessWidget {
                 ),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: Column(
@@ -1550,8 +1571,9 @@ class _SeccionDetalleWidget extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Container(
+                    constraints: const BoxConstraints(minWidth: 44),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                        horizontal: 10, vertical: 8),
                     decoration: BoxDecoration(
                       color: tiene ? _T.success : _T.textTertiary,
                       borderRadius: BorderRadius.circular(8),
@@ -1559,7 +1581,7 @@ class _SeccionDetalleWidget extends StatelessWidget {
                     child: Text(
                       tiene ? notaVal.toStringAsFixed(1) : '—',
                       style: const TextStyle(
-                        fontSize: 15,
+                        fontSize: 14,
                         fontWeight: FontWeight.w700,
                         color: Colors.white,
                       ),
@@ -1575,9 +1597,6 @@ class _SeccionDetalleWidget extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// PANTALLA: Editar notas
-// ═══════════════════════════════════════════════════════════════════════
 class _EditarNotasScreen extends StatefulWidget {
   final String eventoId;
   final Map<String, dynamic> evaluacion;
@@ -1631,10 +1650,10 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
       _totalCriterios > 0 ? _criteriosCompletos / _totalCriterios : 0.0;
 
   Future<void> _guardarCambios() async {
-    // Verificar completitud
     for (var seccion in widget.rubrica.secciones) {
       for (var criterio in seccion.criterios) {
         if (_notasEditadas[criterio.id] == null) {
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Row(
               children: [
@@ -1645,14 +1664,16 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
                   child: Text(
                     'Faltan criterios en "${seccion.nombre}"',
                     style: const TextStyle(fontSize: 13),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
             backgroundColor: _T.warning,
             behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
             margin: const EdgeInsets.all(16),
           ));
           return;
@@ -1703,8 +1724,10 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
                 Icon(Icons.check_circle_rounded,
                     color: Colors.white, size: 16),
                 SizedBox(width: 8),
-                Text('Notas actualizadas correctamente',
-                    style: TextStyle(fontSize: 13)),
+                Expanded(
+                  child: Text('Notas actualizadas correctamente',
+                      style: TextStyle(fontSize: 13)),
+                ),
               ],
             ),
             backgroundColor: _T.success,
@@ -1723,7 +1746,21 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al guardar: $e'),
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded,
+                    color: Colors.white, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Error al guardar: $e',
+                    style: const TextStyle(fontSize: 13),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
             backgroundColor: _T.danger,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
@@ -1744,9 +1781,8 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 12, 20, 12),
+              padding: const EdgeInsets.fromLTRB(8, 12, 16, 12),
               child: Row(
                 children: [
                   IconButton(
@@ -1754,7 +1790,8 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
                         color: Colors.white, size: 20),
                     onPressed: () => Navigator.pop(context),
                     style: IconButton.styleFrom(
-                      backgroundColor: Colors.white.withValues(alpha: 0.12),
+                      backgroundColor:
+                          Colors.white.withValues(alpha: 0.12),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                       padding: const EdgeInsets.all(10),
@@ -1768,17 +1805,20 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
                         Text(
                           'Editar · ${widget.evaluacion['codigo'] ?? ''}',
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: 16,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
                             letterSpacing: -0.3,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         Text(
                           widget.rubrica.nombre,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.6),
+                            color:
+                                Colors.white.withValues(alpha: 0.6),
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1786,39 +1826,44 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(width: 8),
                   if (!_isGuardando)
-                    GestureDetector(
-                      onTap: _guardarCambios,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 9),
-                        decoration: BoxDecoration(
-                          color: _T.purple,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.save_rounded,
-                                color: Colors.white, size: 16),
-                            SizedBox(width: 6),
-                            Text(
-                              'Guardar',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
+                    Semantics(
+                      button: true,
+                      label: 'Guardar cambios',
+                      child: GestureDetector(
+                        onTap: _guardarCambios,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
+                          constraints: const BoxConstraints(
+                              minWidth: 44, minHeight: 44),
+                          decoration: BoxDecoration(
+                            color: _T.purple,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.save_rounded,
+                                  color: Colors.white, size: 16),
+                              SizedBox(width: 6),
+                              Text(
+                                'Guardar',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
                 ],
               ),
             ),
-
-            // ── Contenido ─────────────────────────────────────────
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -1832,12 +1877,14 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
                     ? const Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             CircularProgressIndicator(color: _T.purple),
                             SizedBox(height: 16),
                             Text('Guardando cambios...',
                                 style: TextStyle(
-                                    color: _T.textSecondary, fontSize: 14)),
+                                    color: _T.textSecondary,
+                                    fontSize: 14)),
                           ],
                         ),
                       )
@@ -1847,7 +1894,8 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
                           topRight: Radius.circular(28),
                         ),
                         child: ListView(
-                          padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
+                          padding:
+                              const EdgeInsets.fromLTRB(16, 20, 16, 100),
                           children: [
                             _buildProgresoCard(),
                             const SizedBox(height: 16),
@@ -1887,12 +1935,16 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
                     color: _T.purple, size: 18),
               ),
               const SizedBox(width: 10),
-              const Text(
-                'Progreso de edición',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: _T.purple,
+              const Expanded(
+                child: Text(
+                  'Progreso de edición',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: _T.purple,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -1908,7 +1960,10 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
                 ),
               ),
               Container(
-                  width: 1, height: 36, color: _T.purple.withValues(alpha: 0.2)),
+                width: 1,
+                height: 36,
+                color: _T.purple.withValues(alpha: 0.2),
+              ),
               Expanded(
                 child: _progresoStat(
                   'Nota total',
@@ -1937,12 +1992,16 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
                 const Icon(Icons.check_circle_rounded,
                     color: _T.success, size: 14),
                 const SizedBox(width: 6),
-                Text(
-                  'Todos los criterios completados',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: _T.success,
-                    fontWeight: FontWeight.w600,
+                const Expanded(
+                  child: Text(
+                    'Todos los criterios completados',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _T.success,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -1963,12 +2022,16 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
               style:
                   const TextStyle(fontSize: 11, color: _T.textTertiary)),
           const SizedBox(height: 2),
-          Text(
-            valor,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: color,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              valor,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
             ),
           ),
         ],
@@ -2008,7 +2071,8 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
           initiallyExpanded: true,
           shape: const Border(),
           collapsedShape: const Border(),
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          tilePadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           leading: Container(
             padding: const EdgeInsets.all(8),
@@ -2031,6 +2095,8 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
               fontWeight: FontWeight.w600,
               color: _T.textPrimary,
             ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
           subtitle: Text(
             '$evaluados/${seccion.criterios.length} criterios  ·  ${puntajeSeccion.toStringAsFixed(1)} / ${seccion.pesoTotal.toStringAsFixed(0)} pts',
@@ -2054,7 +2120,8 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
       opciones.add(double.parse(valor.toStringAsFixed(1)));
       valor += 0.5;
     }
-    if (opciones.isEmpty || (opciones.last - pesoMaximo).abs() > 0.001) {
+    if (opciones.isEmpty ||
+        (opciones.last - pesoMaximo).abs() > 0.001) {
       opciones.add(pesoMaximo);
     }
 
@@ -2076,7 +2143,6 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Descripción + peso máximo
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2093,8 +2159,8 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
               ),
               const SizedBox(width: 8),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: _T.navy.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(6),
@@ -2110,13 +2176,11 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
               ),
             ],
           ),
-
           const SizedBox(height: 10),
-
-          // Estado actual
           AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: notaSeleccionada != null
                   ? _T.success.withValues(alpha: 0.1)
@@ -2131,26 +2195,31 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
                       ? Icons.check_circle_rounded
                       : Icons.radio_button_unchecked_rounded,
                   size: 13,
-                  color: notaSeleccionada != null ? _T.success : _T.warning,
+                  color: notaSeleccionada != null
+                      ? _T.success
+                      : _T.warning,
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  notaSeleccionada != null
-                      ? 'Nota: ${notaSeleccionada.toStringAsFixed(1)} pts'
-                      : 'Sin calificar',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: notaSeleccionada != null ? _T.success : _T.warning,
+                Flexible(
+                  child: Text(
+                    notaSeleccionada != null
+                        ? 'Nota: ${notaSeleccionada.toStringAsFixed(1)} pts'
+                        : 'Sin calificar',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: notaSeleccionada != null
+                          ? _T.success
+                          : _T.warning,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
           ),
-
           const SizedBox(height: 10),
-
-          // Selector chips / dropdown
           opciones.length <= 10
               ? _buildChips(criterio, opciones, notaSeleccionada)
               : _buildDropdown(criterio, opciones, notaSeleccionada),
@@ -2159,43 +2228,52 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
     );
   }
 
-  Widget _buildChips(
-      Criterio criterio, List<double> opciones, double? notaSeleccionada) {
+  Widget _buildChips(Criterio criterio, List<double> opciones,
+      double? notaSeleccionada) {
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: 6,
+      runSpacing: 6,
       children: opciones.map((nota) {
         final sel = notaSeleccionada == nota;
-        return GestureDetector(
-          onTap: () => setState(() => _notasEditadas[criterio.id] = nota),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-            decoration: BoxDecoration(
-              color: sel ? _T.purple : _T.card,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: sel ? _T.purple : _T.borderMed,
-                width: sel ? 1.5 : 1,
+        return Semantics(
+          button: true,
+          selected: sel,
+          label: 'Nota ${nota.toStringAsFixed(1)}',
+          child: GestureDetector(
+            onTap: () =>
+                setState(() => _notasEditadas[criterio.id] = nota),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              constraints:
+                  const BoxConstraints(minWidth: 44, minHeight: 44),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: sel ? _T.purple : _T.card,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: sel ? _T.purple : _T.borderMed,
+                  width: sel ? 1.5 : 1,
+                ),
+                boxShadow: sel
+                    ? [
+                        BoxShadow(
+                          color: _T.purple.withValues(alpha: 0.25),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        )
+                      ]
+                    : null,
               ),
-              boxShadow: sel
-                  ? [
-                      BoxShadow(
-                        color: _T.purple.withValues(alpha: 0.25),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      )
-                    ]
-                  : null,
-            ),
-            child: Text(
-              nota.toStringAsFixed(
-                  nota.truncateToDouble() == nota ? 0 : 1),
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: sel ? Colors.white : _T.purple,
+              child: Text(
+                nota.toStringAsFixed(
+                    nota.truncateToDouble() == nota ? 0 : 1),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: sel ? Colors.white : _T.purple,
+                ),
+                textAlign: TextAlign.center,
               ),
             ),
           ),
@@ -2204,8 +2282,8 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
     );
   }
 
-  Widget _buildDropdown(
-      Criterio criterio, List<double> opciones, double? notaSeleccionada) {
+  Widget _buildDropdown(Criterio criterio, List<double> opciones,
+      double? notaSeleccionada) {
     return Container(
       decoration: BoxDecoration(
         color: _T.card,
@@ -2220,8 +2298,8 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
           value: notaSeleccionada,
           isExpanded: true,
           borderRadius: BorderRadius.circular(12),
-          hint: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+          hint: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 14),
             child: Text(
               'Selecciona una nota',
               style: TextStyle(fontSize: 13, color: _T.textTertiary),
@@ -2250,7 +2328,9 @@ class _EditarNotasScreenState extends State<_EditarNotasScreen> {
             );
           }).toList(),
           onChanged: (v) {
-            if (v != null) setState(() => _notasEditadas[criterio.id] = v);
+            if (v != null) {
+              setState(() => _notasEditadas[criterio.id] = v);
+            }
           },
         ),
       ),

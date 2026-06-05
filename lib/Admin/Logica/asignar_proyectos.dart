@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'crear_jurados.dart';
 import 'gestion_criterios.dart';
-import 'filiales_service.dart';
 
 class AsignarProyectosScreen extends StatefulWidget {
   const AsignarProyectosScreen({super.key});
@@ -14,29 +13,23 @@ class AsignarProyectosScreen extends StatefulWidget {
 class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final RubricasService _rubricasService = RubricasService();
-  final FilialesService _filialesService = FilialesService();
 
-  // ✅ NUEVO: Filtros con sistema de filiales
   String? _filialSeleccionada;
   String? _facultadSeleccionada;
   String? _carreraSeleccionada;
 
-  // ✅ NUEVO: Listas dinámicas
   List<String> _filialesDisponibles = [];
   List<String> _facultadesDisponibles = [];
   List<Map<String, dynamic>> _carrerasDisponibles = [];
 
-  // Selección
   String? _eventoSeleccionado;
   Map<String, dynamic>? _eventoData;
   String? _juradoSeleccionado;
   Map<String, dynamic>? _juradoData;
 
-  // Variables para manejar múltiples rúbricas
   List<Rubrica> _rubricasDelJurado = [];
   Rubrica? _rubricaSeleccionada;
 
-  // Listas dinámicas
   List<Map<String, dynamic>> _eventosDisponibles = [];
   List<Map<String, dynamic>> _eventosFiltrados = [];
   List<Map<String, dynamic>> _juradosDisponibles = [];
@@ -44,65 +37,49 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
   Map<String, List<Map<String, dynamic>>> _proyectosPorCategoria = {};
   Set<String> _proyectosSeleccionados = {};
 
-  // ✅ OPTIMIZACIÓN: Estado de carga inicial
   bool _isLoadingInitial = true;
-  bool _isLoadingEventos = false;
   bool _isLoadingJurados = false;
   bool _isLoadingProyectos = false;
   bool _isAsignando = false;
 
   String _nombreFilialSeleccionada = '';
 
+  final Map<String, String> _filialNombresCache = {};
+
   @override
   void initState() {
     super.initState();
-    // ✅ OPTIMIZACIÓN: Carga inmediata
     _cargarDatosIniciales();
   }
 
-  // ✅ OPTIMIZACIÓN: Función mejorada que muestra loading
   Future<void> _cargarDatosIniciales() async {
     if (!mounted) return;
-
-    setState(() {
-      _isLoadingInitial = true;
-    });
-
+    setState(() => _isLoadingInitial = true);
     try {
-      // Cargar filiales primero (rápido)
       final filiales = await _rubricasService.getFiliales();
-
       if (mounted) {
-        setState(() {
-          _filialesDisponibles = filiales;
-        });
+        setState(() => _filialesDisponibles = filiales);
       }
-
-      // Cargar todos los eventos en segundo plano
       await _cargarEventos();
-
-      if (mounted) {
-        setState(() {
-          _isLoadingInitial = false;
-        });
-      }
     } catch (e) {
       debugPrint('Error al cargar datos iniciales: $e');
       if (mounted) {
-        setState(() {
-          _isLoadingInitial = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al cargar datos: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _mostrarSnackBar('Error al cargar datos: $e', isError: true);
       }
+    } finally {
+      if (mounted) setState(() => _isLoadingInitial = false);
     }
   }
 
-  // ✅ NUEVO: Cuando cambia la filial
+  Future<String> _getNombreFilialCached(String filialId) async {
+    if (_filialNombresCache.containsKey(filialId)) {
+      return _filialNombresCache[filialId]!;
+    }
+    final nombre = await _rubricasService.getNombreFilial(filialId);
+    _filialNombresCache[filialId] = nombre;
+    return nombre;
+  }
+
   Future<void> _onFilialChanged(String? filial) async {
     setState(() {
       _filialSeleccionada = filial;
@@ -123,20 +100,15 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
     });
 
     if (filial != null) {
-      _nombreFilialSeleccionada = await _rubricasService.getNombreFilial(
-        filial,
-      );
+      _nombreFilialSeleccionada = await _getNombreFilialCached(filial);
       final facultades = await _rubricasService.getFacultadesByFilial(filial);
       if (mounted) {
-        setState(() {
-          _facultadesDisponibles = facultades;
-        });
+        setState(() => _facultadesDisponibles = facultades);
       }
       _filtrarEventos();
     }
   }
 
-  // ✅ NUEVO: Cuando cambia la facultad
   Future<void> _onFacultadChanged(String? facultad) async {
     setState(() {
       _facultadSeleccionada = facultad;
@@ -160,12 +132,9 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         facultad,
       );
       if (mounted) {
-        setState(() {
-          _carrerasDisponibles = carreras;
-        });
+        setState(() => _carrerasDisponibles = carreras);
       }
     }
-
     _filtrarEventos();
   }
 
@@ -183,7 +152,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       _proyectosPorCategoria.clear();
       _juradosDisponibles.clear();
     });
-
     _filtrarEventos();
   }
 
@@ -193,22 +161,15 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       return;
     }
 
-    List<Map<String, dynamic>> filtrados = _eventosDisponibles.where((evento) {
-      final filialMatch = evento['filialId'] == _filialSeleccionada;
-
-      if (!filialMatch) return false;
-
+    final filtrados = _eventosDisponibles.where((evento) {
+      if (evento['filialId'] != _filialSeleccionada) return false;
       if (_facultadSeleccionada != null) {
-        final facultadMatch = evento['facultad'] == _facultadSeleccionada;
-        if (!facultadMatch) return false;
-
+        if (evento['facultad'] != _facultadSeleccionada) return false;
         if (_carreraSeleccionada != null) {
           return evento['carreraNombre'] == _carreraSeleccionada;
         }
-
         return true;
       }
-
       return true;
     }).toList();
 
@@ -217,7 +178,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
 
   Future<void> _cargarEventos() async {
     setState(() {
-      _isLoadingEventos = true;
       _eventosDisponibles = [];
     });
 
@@ -241,23 +201,20 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       }).toList();
 
       if (mounted) {
-        setState(() {
-          _eventosDisponibles = eventos;
-          _isLoadingEventos = false;
-        });
+        setState(() => _eventosDisponibles = eventos);
       }
     } catch (e) {
       debugPrint('Error al cargar eventos: $e');
-      if (mounted) {
-        setState(() => _isLoadingEventos = false);
-      }
     }
   }
 
   Future<void> _onEventoChanged(String? eventoId) async {
     if (eventoId == null) return;
 
-    final eventoData = _eventosFiltrados.firstWhere((e) => e['id'] == eventoId);
+    final eventoIndex = _eventosFiltrados.indexWhere((e) => e['id'] == eventoId);
+    if (eventoIndex == -1) return;
+
+    final eventoData = _eventosFiltrados[eventoIndex];
 
     setState(() {
       _eventoSeleccionado = eventoId;
@@ -284,14 +241,9 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
     });
 
     try {
-      final filialEvento = _eventoData!['filialId'];
-      final facultadEvento = _eventoData!['facultad'];
-      final carreraEvento = _eventoData!['carreraNombre'];
-
-      debugPrint('🔍 Buscando jurados para:');
-      debugPrint('   Filial: $filialEvento');
-      debugPrint('   Facultad: $facultadEvento');
-      debugPrint('   Carrera: $carreraEvento');
+      final filialEvento = _eventoData!['filialId'] as String? ?? '';
+      final facultadEvento = _eventoData!['facultad'] as String? ?? '';
+      final carreraEvento = _eventoData!['carreraNombre'] as String? ?? '';
 
       final jurados = await _rubricasService.obtenerJurados(
         filial: filialEvento,
@@ -306,29 +258,27 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         });
 
         if (jurados.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No hay jurados disponibles para esta ubicación'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 2),
-            ),
+          _mostrarSnackBar(
+            'No hay jurados disponibles para esta ubicación',
+            isWarning: true,
           );
         }
       }
     } catch (e) {
       debugPrint('Error al cargar jurados: $e');
-      if (mounted) {
-        setState(() => _isLoadingJurados = false);
-      }
+      if (mounted) setState(() => _isLoadingJurados = false);
     }
   }
 
   Future<void> _onJuradoChanged(String? juradoId) async {
     if (juradoId == null) return;
 
+    final juradoIndex = _juradosDisponibles.indexWhere((j) => j['id'] == juradoId);
+    if (juradoIndex == -1) return;
+
     setState(() {
       _juradoSeleccionado = juradoId;
-      _juradoData = _juradosDisponibles.firstWhere((j) => j['id'] == juradoId);
+      _juradoData = _juradosDisponibles[juradoIndex];
       _rubricasDelJurado = [];
       _rubricaSeleccionada = null;
       _proyectosSeleccionados.clear();
@@ -341,62 +291,41 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
 
   Future<void> _cargarRubricasDelJurado(String juradoId) async {
     try {
-      debugPrint('🔍 Buscando rúbricas del jurado...');
-
       final todasRubricas = await _rubricasService.obtenerRubricas();
       final rubricasJurado = todasRubricas
           .where((r) => r.juradosAsignados.contains(juradoId))
           .toList();
 
-      debugPrint('📚 Rúbricas encontradas: ${rubricasJurado.length}');
-
       if (rubricasJurado.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Este jurado no tiene rúbricas asignadas.'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 3),
-            ),
+          _mostrarSnackBar(
+            'Este jurado no tiene rúbricas asignadas.',
+            isWarning: true,
           );
         }
         return;
       }
 
-      // Filtrar rúbricas compatibles con el evento
-      final eventoFilial = _eventoData!['filialId'];
-      final eventoFacultad = _eventoData!['facultad'];
-      final eventoCarrera = _eventoData!['carreraNombre'];
+      final eventoFilial = _eventoData!['filialId'] as String? ?? '';
+      final eventoFacultad = _eventoData!['facultad'] as String? ?? '';
+      final eventoCarrera = _eventoData!['carreraNombre'] as String? ?? '';
 
       final rubricasCompatibles = rubricasJurado.where((rubrica) {
-        final filialMatch = eventoFilial == rubrica.filial;
-        if (!filialMatch) return false;
-
-        final facultadMatch =
-            eventoFacultad.trim().toLowerCase() ==
-            rubrica.facultad.trim().toLowerCase();
-        if (!facultadMatch) return false;
-
+        if (eventoFilial != rubrica.filial) return false;
+        if (eventoFacultad.trim().toLowerCase() !=
+            rubrica.facultad.trim().toLowerCase()) return false;
         if (rubrica.carrera != null && rubrica.carrera!.isNotEmpty) {
           return eventoCarrera.trim().toLowerCase() ==
               rubrica.carrera!.trim().toLowerCase();
         }
-
         return true;
       }).toList();
 
-      debugPrint('✅ Rúbricas compatibles: ${rubricasCompatibles.length}');
-
       if (rubricasCompatibles.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                '⚠️ El jurado tiene rúbricas pero ninguna es compatible con el evento',
-              ),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 4),
-            ),
+          _mostrarSnackBar(
+            'El jurado tiene rúbricas pero ninguna es compatible con el evento',
+            isWarning: true,
           );
         }
         return;
@@ -405,7 +334,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       if (mounted) {
         setState(() {
           _rubricasDelJurado = rubricasCompatibles;
-
           if (rubricasCompatibles.length == 1) {
             _rubricaSeleccionada = rubricasCompatibles.first;
             _cargarProyectosConRubrica(_rubricaSeleccionada!);
@@ -413,14 +341,9 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         });
       }
     } catch (e) {
-      debugPrint('❌ Error al cargar rúbricas: $e');
+      debugPrint('Error al cargar rúbricas: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al cargar rúbricas: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _mostrarSnackBar('Error al cargar rúbricas: $e', isError: true);
       }
     }
   }
@@ -428,7 +351,10 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
   Future<void> _onRubricaChanged(String? rubricaId) async {
     if (rubricaId == null) return;
 
-    final rubrica = _rubricasDelJurado.firstWhere((r) => r.id == rubricaId);
+    final rubricaIndex = _rubricasDelJurado.indexWhere((r) => r.id == rubricaId);
+    if (rubricaIndex == -1) return;
+
+    final rubrica = _rubricasDelJurado[rubricaIndex];
 
     setState(() {
       _rubricaSeleccionada = rubrica;
@@ -446,9 +372,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
     setState(() => _isLoadingProyectos = true);
 
     try {
-      debugPrint('📦 Cargando proyectos del evento con rúbrica: ${rubrica.nombre}');
-
-      // Obtener las categorías del jurado
       final juradoDoc = await _firestore
           .collection('users')
           .doc(_juradoSeleccionado)
@@ -458,20 +381,22 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       if (juradoDoc.exists) {
         final juradoData = juradoDoc.data();
         if (juradoData != null && juradoData.containsKey('categorias')) {
-          categoriasJurado = List<String>.from(juradoData['categorias'] ?? []);
-          debugPrint('🏷️ Categorías del jurado: $categoriasJurado');
+          final rawCats = juradoData['categorias'];
+          categoriasJurado = rawCats is List
+              ? rawCats
+                  .map((e) => e?.toString() ?? '')
+                  .where((e) => e.isNotEmpty)
+                  .toList()
+              : [];
         }
       }
 
       if (categoriasJurado.isEmpty) {
         if (mounted) {
           setState(() => _isLoadingProyectos = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Este jurado no tiene categorías asignadas'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 3),
-            ),
+          _mostrarSnackBar(
+            'Este jurado no tiene categorías asignadas',
+            isWarning: true,
           );
         }
         return;
@@ -483,9 +408,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
           .collection('proyectos')
           .get();
 
-      debugPrint('✅ ${proyectosSnapshot.docs.length} proyectos encontrados');
-
-      // Cargar evaluaciones del jurado CON ESTA RÚBRICA
       final evaluacionesSnapshot = await _firestore
           .collectionGroup('evaluaciones')
           .where('juradoId', isEqualTo: _juradoSeleccionado)
@@ -494,33 +416,26 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
 
       final proyectosAsignados = <String>{};
       for (var doc in evaluacionesSnapshot.docs) {
-        final path = doc.reference.path;
-        final parts = path.split('/');
+        final parts = doc.reference.path.split('/');
         if (parts.length >= 4) {
-          final proyectoId = parts[3];
-          proyectosAsignados.add(proyectoId);
+          proyectosAsignados.add(parts[3]);
         }
       }
 
-      debugPrint(
-        '🔒 ${proyectosAsignados.length} proyectos ya asignados con esta rúbrica',
-      );
-
-      // Construir lista de proyectos
       final Map<String, Map<String, dynamic>> proyectosMap = {};
-      final eventoFilial = _eventoData!['filialId'];
-      final eventoFacultad = _eventoData!['facultad'];
-      final eventoCarrera = _eventoData!['carreraNombre'];
+      final eventoFilial = (_eventoData!['filialId'] ?? '').toString();
+      final eventoFacultad = (_eventoData!['facultad'] ?? '').toString();
+      final eventoCarrera = (_eventoData!['carreraNombre'] ?? '').toString();
       int proyectosFiltrados = 0;
 
       for (var proyectoDoc in proyectosSnapshot.docs) {
         final data = proyectoDoc.data();
-        final codigo = data['Código'] ?? '';
-        final clasificacion = data['Clasificación'] ?? 'Sin categoría';
+        final codigo = (data['Código'] ?? '').toString();
+        final clasificacion =
+            (data['Clasificación'] ?? 'Sin categoría').toString();
 
         if (codigo.isEmpty) continue;
 
-        // Filtrar por categorías del jurado
         if (!categoriasJurado.contains(clasificacion)) {
           proyectosFiltrados++;
           continue;
@@ -533,9 +448,9 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
             'id': proyectoDoc.id,
             'eventId': _eventoSeleccionado,
             'codigo': codigo,
-            'titulo': data['Título'] ?? '',
-            'integrantes': data['Integrantes'] ?? '',
-            'sala': data['Sala'] ?? '',
+            'titulo': (data['Título'] ?? '').toString(),
+            'integrantes': (data['Integrantes'] ?? '').toString(),
+            'sala': (data['Sala'] ?? '').toString(),
             'clasificacion': clasificacion,
             'filialId': eventoFilial,
             'facultad': eventoFacultad,
@@ -545,30 +460,21 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
         }
       }
 
-      debugPrint(
-        '🚫 $proyectosFiltrados proyectos filtrados (categorías no asignadas)',
-      );
-
-      // Agrupar proyectos por categoría
       final proyectosList = proyectosMap.values.toList()
-        ..sort(
-          (a, b) => (a['codigo'] as String).compareTo(b['codigo'] as String),
-        );
+        ..sort((a, b) =>
+            a['codigo'].toString().compareTo(b['codigo'].toString()));
 
       final Map<String, List<Map<String, dynamic>>> grupos = {};
       for (final proyecto in proyectosList) {
-        final categoria = proyecto['clasificacion'] as String;
-        if (!grupos.containsKey(categoria)) {
-          grupos[categoria] = [];
-        }
-        grupos[categoria]!.add(proyecto);
+        final categoria = proyecto['clasificacion'].toString();
+        grupos.putIfAbsent(categoria, () => []).add(proyecto);
       }
 
       if (mounted) {
         _proyectosSeleccionados.clear();
         for (var proyecto in proyectosList) {
           if (proyecto['yaAsignado'] == true) {
-            _proyectosSeleccionados.add(proyecto['codigo'] as String);
+            _proyectosSeleccionados.add(proyecto['codigo'].toString());
           }
         }
 
@@ -578,183 +484,52 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
           _isLoadingProyectos = false;
         });
 
-        debugPrint('✅ ${_proyectosDisponibles.length} proyectos disponibles');
-        debugPrint('📂 ${_proyectosPorCategoria.length} categorías');
-
         if (proyectosList.isEmpty && proyectosFiltrados > 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'No hay proyectos de las categorías: ${categoriasJurado.join(", ")}',
-              ),
-              backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 3),
-            ),
+          _mostrarSnackBar(
+            'No hay proyectos de las categorías: ${categoriasJurado.join(", ")}',
+            isWarning: true,
           );
         }
       }
     } catch (e) {
-      debugPrint('❌ Error: $e');
+      debugPrint('Error: $e');
       if (mounted) {
         setState(() => _isLoadingProyectos = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al cargar proyectos: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _mostrarSnackBar('Error al cargar proyectos: $e', isError: true);
       }
     }
   }
 
   Future<void> _asignarProyectos() async {
     if (_proyectosSeleccionados.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Debes seleccionar al menos un proyecto'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      _mostrarSnackBar('Debes seleccionar al menos un proyecto',
+          isWarning: true);
       return;
     }
 
     if (_rubricaSeleccionada == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Debes seleccionar una rúbrica'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      _mostrarSnackBar('Debes seleccionar una rúbrica', isWarning: true);
       return;
     }
 
     final proyectosReasignados = _proyectosDisponibles
-        .where(
-          (p) =>
-              _proyectosSeleccionados.contains(p['codigo']) &&
-              p['yaAsignado'] == true,
-        )
+        .where((p) =>
+            _proyectosSeleccionados.contains(p['codigo']) &&
+            p['yaAsignado'] == true)
         .length;
+
     final proyectosAEliminar = _proyectosDisponibles
-        .where(
-          (p) =>
-              !_proyectosSeleccionados.contains(p['codigo']) &&
-              p['yaAsignado'] == true,
-        )
+        .where((p) =>
+            !_proyectosSeleccionados.contains(p['codigo']) &&
+            p['yaAsignado'] == true)
         .length;
 
     final confirmar = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Confirmar Asignación'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '¿Asignar ${_proyectosSeleccionados.length} proyecto(s) a ${_juradoData!['nombre']}?',
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.assignment, color: Colors.blue.shade700, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Rúbrica: ${_rubricaSeleccionada!.nombre}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade900,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (proyectosReasignados > 0) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      color: Colors.orange[700],
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '⚠️ $proyectosReasignados ya asignados',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.orange[900],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            if (proyectosAEliminar > 0) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.delete_outline,
-                      color: Colors.red[700],
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '⚠️ $proyectosAEliminar se eliminarán',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.red[900],
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1E3A5F),
-            ),
-            child: const Text('Asignar'),
-          ),
-        ],
+      barrierDismissible: false,
+      builder: (context) => _buildConfirmDialog(
+        proyectosReasignados: proyectosReasignados,
+        proyectosAEliminar: proyectosAEliminar,
       ),
     );
 
@@ -769,15 +544,15 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       int eliminados = 0;
 
       for (var proyecto in _proyectosDisponibles) {
-        final codigo = proyecto['codigo'] as String;
-        final yaAsignado = proyecto['yaAsignado'] as bool;
+        final codigo = proyecto['codigo'].toString();
+        final yaAsignado = proyecto['yaAsignado'] == true;
         final estaSeleccionado = _proyectosSeleccionados.contains(codigo);
 
         final docRef = _firestore
             .collection('events')
-            .doc(proyecto['eventId'])
+            .doc(proyecto['eventId'] as String)
             .collection('proyectos')
-            .doc(proyecto['id'])
+            .doc(proyecto['id'] as String)
             .collection('evaluaciones')
             .doc(_juradoSeleccionado);
 
@@ -814,21 +589,13 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       if (mounted) {
         setState(() => _isAsignando = false);
 
-        List<String> mensajes = [];
+        final mensajes = <String>[];
         if (asignados > 0) mensajes.add('$asignados nuevo(s)');
         if (actualizados > 0) mensajes.add('$actualizados actualizado(s)');
         if (eliminados > 0) mensajes.add('$eliminados eliminado(s)');
 
-        String mensajeExito = mensajes.isEmpty
-            ? '✅ Sin cambios'
-            : '✅ ${mensajes.join(' + ')}';
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(mensajeExito),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
+        _mostrarSnackBar(
+          mensajes.isEmpty ? 'Sin cambios' : mensajes.join(' + '),
         );
 
         await _cargarProyectosConRubrica(_rubricaSeleccionada!);
@@ -837,23 +604,49 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       debugPrint('Error al asignar proyectos: $e');
       if (mounted) {
         setState(() => _isAsignando = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+        _mostrarSnackBar('Error: $e', isError: true);
       }
     }
   }
 
+  void _mostrarSnackBar(
+    String mensaje, {
+    bool isError = false,
+    bool isWarning = false,
+  }) {
+    if (!mounted) return;
+    final color = isError
+        ? Colors.red
+        : isWarning
+            ? Colors.orange
+            : Colors.green;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          mensaje,
+          style: const TextStyle(fontSize: 13),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   Color _getColorForCategory(int index) {
-    final colors = [
-      const Color(0xFF2196F3),
-      const Color(0xFF4CAF50),
-      const Color(0xFFFF9800),
-      const Color(0xFF9C27B0),
-      const Color(0xFFF44336),
-      const Color(0xFF009688),
-      const Color(0xFFFFEB3B),
-      const Color(0xFF3F51B5),
+    const colors = [
+      Color(0xFF1565C0),
+      Color(0xFF2E7D32),
+      Color(0xFFE65100),
+      Color(0xFF6A1B9A),
+      Color(0xFFC62828),
+      Color(0xFF00695C),
+      Color(0xFFF9A825),
+      Color(0xFF283593),
     ];
     return colors[index % colors.length];
   }
@@ -875,72 +668,45 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
                     topRight: Radius.circular(30),
                   ),
                 ),
-                // ✅ OPTIMIZACIÓN: Mostrar loading mientras carga datos iniciales
                 child: _isLoadingInitial
-                    ? const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(color: Color(0xFF1A5490)),
-                            SizedBox(height: 16),
-                            Text(
-                              'Cargando datos...',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
+                    ? const _LoadingWidget(mensaje: 'Cargando datos...')
                     : SingleChildScrollView(
+                        primary: false,
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
                         child: Padding(
-                          padding: const EdgeInsets.all(20.0),
+                          padding: EdgeInsets.fromLTRB(
+                            16,
+                            16,
+                            16,
+                            MediaQuery.of(context).viewPadding.bottom + 32,
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // PASO 1: Filtros
                               _buildFiltrosCard(),
-
-                              // PASO 2: Evento
                               if (_filialSeleccionada != null &&
                                   _facultadSeleccionada != null) ...[
                                 const SizedBox(height: 16),
                                 _buildEventoCard(),
                               ],
-
-                              // PASO 3: Jurado
                               if (_eventoSeleccionado != null) ...[
                                 const SizedBox(height: 16),
                                 _buildJuradoCard(),
                               ],
-
-                              // PASO 4: Selector de Rúbrica
                               if (_rubricasDelJurado.isNotEmpty) ...[
                                 const SizedBox(height: 16),
                                 _buildRubricasCard(),
                               ],
-
-                              // Info Rúbrica seleccionada
                               if (_rubricaSeleccionada != null) ...[
                                 const SizedBox(height: 16),
                                 _buildRubricaInfoCard(),
-                              ],
-
-                              // Proyectos
-                              if (_rubricaSeleccionada != null) ...[
                                 const SizedBox(height: 16),
                                 _buildProyectosPorCategoriaCard(),
                               ],
-
                               const SizedBox(height: 24),
-
-                              // Botón Asignar
                               if (_rubricaSeleccionada != null)
                                 _buildBotonAsignar(),
-
-                              const SizedBox(height: 20),
                             ],
                           ),
                         ),
@@ -955,34 +721,48 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.all(20.0),
+      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 12.0),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
-            onPressed: () => Navigator.of(context).pop(),
+          SizedBox(
+            width: 44,
+            height: 44,
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 26),
+              onPressed: () => Navigator.of(context).pop(),
+              tooltip: 'Volver',
+              padding: EdgeInsets.zero,
+            ),
           ),
-          const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
               'Asignar Proyectos a Jurados',
-              style: TextStyle(
-                fontSize: 20,
+              style: const TextStyle(
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
+              textAlign: TextAlign.center,
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.people, color: Colors.white, size: 28),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const CrearJuradosScreen(),
-                ),
-              );
-            },
+          SizedBox(
+            width: 44,
+            height: 44,
+            child: IconButton(
+              icon: const Icon(Icons.people, color: Colors.white, size: 26),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CrearJuradosScreen(),
+                  ),
+                );
+              },
+              tooltip: 'Gestionar jurados',
+              padding: EdgeInsets.zero,
+            ),
           ),
         ],
       ),
@@ -990,542 +770,401 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
   }
 
   Widget _buildFiltrosCard() {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1E3A5F), Color(0xFF2C5F7C)],
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.filter_list,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  '1. Filtrar Ubicación',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A5F),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // ✅ Filial
-            DropdownButtonFormField<String>(
-              value: _filialSeleccionada,
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: 'Filial',
-                prefixIcon: const Icon(Icons.location_city),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                filled: true,
-                fillColor: Colors.white,
-              ),
-              items: _filialesDisponibles.map((filialId) {
-                return DropdownMenuItem(
-                  value: filialId,
-                  child: FutureBuilder<String>(
-                    future: _rubricasService.getNombreFilial(filialId),
-                    builder: (context, snapshot) {
-                      return Text(
-                        snapshot.data ?? filialId,
-                        style: const TextStyle(fontSize: 14),
-                      );
-                    },
-                  ),
-                );
-              }).toList(),
-              onChanged: _onFilialChanged,
-            ),
-
-            // ✅ Facultad
-            if (_filialSeleccionada != null) ...[
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _facultadSeleccionada,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: 'Facultad',
-                  prefixIcon: const Icon(Icons.school),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-                items: _facultadesDisponibles.map((facultad) {
-                  return DropdownMenuItem(
-                    value: facultad,
-                    child: Text(
-                      facultad,
-                      style: const TextStyle(fontSize: 14),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  );
-                }).toList(),
-                onChanged: _onFacultadChanged,
-              ),
-            ],
-
-            // ✅ Carrera (opcional)
-            if (_facultadSeleccionada != null &&
-                _carrerasDisponibles.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _carreraSeleccionada,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: 'Carrera (opcional)',
-                  prefixIcon: const Icon(Icons.menu_book),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-                items: _carrerasDisponibles.map((carrera) {
-                  return DropdownMenuItem(
-                    value: carrera['nombre'] as String,
-                    child: Text(
-                      carrera['nombre'] as String,
-                      style: const TextStyle(fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  );
-                }).toList(),
-                onChanged: _onCarreraChanged,
-              ),
-            ],
-
-            // Info
-            if (_filialSeleccionada != null &&
-                _facultadSeleccionada != null) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, size: 18, color: Colors.blue[700]),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '${_eventosFiltrados.length} evento(s) disponible(s)',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.blue[900],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+    return _StepCard(
+      gradientColors: const [Color(0xFF1E3A5F), Color(0xFF2C5F7C)],
+      icon: Icons.filter_list,
+      titulo: '1. Filtrar Ubicación',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildDropdownFilial(),
+          if (_filialSeleccionada != null) ...[
+            const SizedBox(height: 14),
+            _buildDropdownFacultad(),
           ],
-        ),
+          if (_facultadSeleccionada != null &&
+              _carrerasDisponibles.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _buildDropdownCarrera(),
+          ],
+          if (_filialSeleccionada != null &&
+              _facultadSeleccionada != null) ...[
+            const SizedBox(height: 12),
+            _buildInfoEventos(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDropdownFilial() {
+    return DropdownButtonFormField<String>(
+      value: _filialSeleccionada,
+      isExpanded: true,
+      menuMaxHeight: 300,
+      decoration: _inputDecoration('Filial', Icons.location_city),
+      items: _filialesDisponibles.map((filialId) {
+        final nombre = _filialNombresCache[filialId] ?? filialId;
+        return DropdownMenuItem<String>(
+          value: filialId,
+          child: Text(
+            nombre,
+            style: const TextStyle(fontSize: 14),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        );
+      }).toList(),
+      onChanged: _onFilialChanged,
+    );
+  }
+
+  Widget _buildDropdownFacultad() {
+    return DropdownButtonFormField<String>(
+      value: _facultadSeleccionada,
+      isExpanded: true,
+      menuMaxHeight: 300,
+      decoration: _inputDecoration('Facultad', Icons.school),
+      items: _facultadesDisponibles.map((facultad) {
+        return DropdownMenuItem<String>(
+          value: facultad,
+          child: Text(
+            facultad,
+            style: const TextStyle(fontSize: 14),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        );
+      }).toList(),
+      onChanged: _onFacultadChanged,
+    );
+  }
+
+  Widget _buildDropdownCarrera() {
+    return DropdownButtonFormField<String>(
+      value: _carreraSeleccionada,
+      isExpanded: true,
+      menuMaxHeight: 300,
+      decoration: _inputDecoration('Carrera (opcional)', Icons.menu_book),
+      items: _carrerasDisponibles.map((carrera) {
+        return DropdownMenuItem<String>(
+          value: carrera['nombre'] as String,
+          child: Text(
+            carrera['nombre'] as String,
+            style: const TextStyle(fontSize: 13),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        );
+      }).toList(),
+      onChanged: _onCarreraChanged,
+    );
+  }
+
+  Widget _buildInfoEventos() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, size: 18, color: Colors.blue[700]),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${_eventosFiltrados.length} evento(s) disponible(s)',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.blue[900],
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildEventoCard() {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF4CAF50), Color(0xFF45A049)],
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.event, color: Colors.white, size: 20),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  '2. Seleccionar Evento',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A5F),
-                  ),
-                ),
-              ],
+    return _StepCard(
+      gradientColors: const [Color(0xFF4CAF50), Color(0xFF45A049)],
+      icon: Icons.event,
+      titulo: '2. Seleccionar Evento',
+      child: DropdownButtonFormField<String>(
+        value: _eventoSeleccionado,
+        isExpanded: true,
+        menuMaxHeight: 300,
+        decoration: _inputDecoration('Evento', Icons.event_note),
+        items: _eventosFiltrados.map((evento) {
+          return DropdownMenuItem<String>(
+            value: evento['id'] as String,
+            child: Text(
+              evento['name'] as String,
+              style: const TextStyle(fontSize: 14),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _eventoSeleccionado,
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: 'Evento',
-                prefixIcon: const Icon(Icons.event_note),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                filled: true,
-                fillColor: Colors.white,
-              ),
-              items: _eventosFiltrados.map((evento) {
-                return DropdownMenuItem(
-                  value: evento['id'] as String,
-                  child: Text(
-                    evento['name'] as String,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                );
-              }).toList(),
-              onChanged: _eventosFiltrados.isEmpty ? null : _onEventoChanged,
-            ),
-          ],
-        ),
+          );
+        }).toList(),
+        onChanged: _eventosFiltrados.isEmpty ? null : _onEventoChanged,
       ),
     );
   }
 
   Widget _buildJuradoCard() {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFFF9800), Color(0xFFFF6F00)],
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.person,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  '3. Seleccionar Jurado',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A5F),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _juradoSeleccionado,
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: 'Jurado',
-                prefixIcon: const Icon(Icons.badge),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                filled: true,
-                fillColor: Colors.white,
-              ),
-              items: _juradosDisponibles.map((jurado) {
-                return DropdownMenuItem<String>(
-                  value: jurado['id'] as String,
-                  child: Text(
-                    jurado['nombre'] as String,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                );
-              }).toList(),
-              onChanged: _juradosDisponibles.isEmpty ? null : _onJuradoChanged,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRubricasCard() {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF9C27B0), Color(0xFF7B1FA2)],
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.checklist,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    _rubricasDelJurado.length > 1
-                        ? '4. Seleccionar Rúbrica (${_rubricasDelJurado.length} disponibles)'
-                        : '4. Rúbrica del Jurado',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E3A5F),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            if (_rubricasDelJurado.length == 1)
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.green.shade200, width: 2),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.check_circle,
-                      color: Colors.green[700],
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _rubricasDelJurado.first.nombre,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green[900],
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${_rubricasDelJurado.first.totalCriterios} criterios • ${_rubricasDelJurado.first.puntajeMaximo.toStringAsFixed(0)} pts',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.green[800],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else
-              DropdownButtonFormField<String>(
-                value: _rubricaSeleccionada?.id,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: 'Selecciona una rúbrica',
-                  prefixIcon: const Icon(Icons.assignment),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-                selectedItemBuilder: (BuildContext context) {
-                  return _rubricasDelJurado.map((rubrica) {
-                    return Align(
-                      alignment: Alignment.centerLeft,
+    return _StepCard(
+      gradientColors: const [Color(0xFFFF9800), Color(0xFFFF6F00)],
+      icon: Icons.person,
+      titulo: '3. Seleccionar Jurado',
+      child: _isLoadingJurados
+          ? const _LoadingWidget(mensaje: 'Cargando jurados...')
+          : _juradosDisponibles.isEmpty
+              ? _buildEmptyState(
+                  icon: Icons.person_off_outlined,
+                  mensaje: 'No hay jurados para este evento',
+                )
+              : DropdownButtonFormField<String>(
+                  value: _juradoSeleccionado,
+                  isExpanded: true,
+                  menuMaxHeight: 300,
+                  decoration: _inputDecoration('Jurado', Icons.badge),
+                  items: _juradosDisponibles.map((jurado) {
+                    return DropdownMenuItem<String>(
+                      value: jurado['id'] as String,
                       child: Text(
-                        rubrica.nombre,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        (jurado['nombre'] as String?) ?? '',
+                        style: const TextStyle(fontSize: 14),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
                     );
-                  }).toList();
-                },
-                items: _rubricasDelJurado.map((rubrica) {
-                  return DropdownMenuItem<String>(
-                    value: rubrica.id,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            rubrica.nombre,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${rubrica.totalCriterios} criterios • ${rubrica.facultad}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[600],
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-                onChanged: _onRubricaChanged,
-                menuMaxHeight: 300,
-              ),
-          ],
-        ),
+                  }).toList(),
+                  onChanged: _onJuradoChanged,
+                ),
+    );
+  }
+
+  Widget _buildRubricasCard() {
+    final titulo = _rubricasDelJurado.length > 1
+        ? '4. Seleccionar Rúbrica (${_rubricasDelJurado.length})'
+        : '4. Rúbrica del Jurado';
+
+    return _StepCard(
+      gradientColors: const [Color(0xFF9C27B0), Color(0xFF7B1FA2)],
+      icon: Icons.checklist,
+      titulo: titulo,
+      child: _rubricasDelJurado.length == 1
+          ? _buildRubricaUnica()
+          : _buildDropdownRubricas(),
+    );
+  }
+
+  Widget _buildRubricaUnica() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.shade200, width: 2),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(Icons.check_circle, color: Colors.green[700], size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _rubricasDelJurado.first.nombre,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green[900],
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${_rubricasDelJurado.first.totalCriterios} criterios · '
+                  '${_rubricasDelJurado.first.puntajeMaximo.toStringAsFixed(0)} pts',
+                  style: TextStyle(fontSize: 12, color: Colors.green[800]),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
+  Widget _buildDropdownRubricas() {
+    return DropdownButtonFormField<String>(
+      value: _rubricaSeleccionada?.id,
+      isExpanded: true,
+      menuMaxHeight: 300,
+      decoration: _inputDecoration('Selecciona una rúbrica', Icons.assignment),
+      selectedItemBuilder: (BuildContext context) {
+        return _rubricasDelJurado.map((rubrica) {
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              rubrica.nombre,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          );
+        }).toList();
+      },
+      items: _rubricasDelJurado.map((rubrica) {
+        return DropdownMenuItem<String>(
+          value: rubrica.id,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                rubrica.nombre,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${rubrica.totalCriterios} criterios · ${rubrica.facultad}',
+                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+      onChanged: _onRubricaChanged,
+    );
+  }
+
   Widget _buildRubricaInfoCard() {
-    return Card(
-      elevation: 2,
-      color: Colors.green.shade50,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.green[700]),
-                const SizedBox(width: 8),
-                Text(
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.green.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green[700], size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
                   'Rúbrica Seleccionada',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
                     color: Colors.green[900],
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _buildInfoRow(
-              Icons.assignment,
-              'Rúbrica',
-              _rubricaSeleccionada!.nombre,
-            ),
-            const SizedBox(height: 6),
-            _buildInfoRow(
-              Icons.checklist,
-              'Criterios',
-              '${_rubricaSeleccionada!.totalCriterios} criterios',
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildInfoRow(
+            Icons.assignment,
+            'Rúbrica',
+            _rubricaSeleccionada!.nombre,
+          ),
+          const SizedBox(height: 6),
+          _buildInfoRow(
+            Icons.checklist,
+            'Criterios',
+            '${_rubricaSeleccionada!.totalCriterios} criterios',
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildProyectosPorCategoriaCard() {
+    final stepTitle = _rubricasDelJurado.length > 1
+        ? '5. Seleccionar Proyectos'
+        : '4. Seleccionar Proyectos';
+
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(
-                    Icons.folder_open,
-                    color: Colors.white,
-                    size: 20,
+                  child: const Center(
+                    child: Icon(
+                      Icons.folder_open,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    _rubricasDelJurado.length > 1
-                        ? '5. Seleccionar Proyectos'
-                        : '4. Seleccionar Proyectos',
+                    stepTitle,
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF1E3A5F),
                     ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
                 ),
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
+                    horizontal: 10,
+                    vertical: 5,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2196F3).withValues(alpha:0.1),
+                    color: const Color(0xFF2196F3).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    '${_proyectosSeleccionados.length} seleccionados',
+                    '${_proyectosSeleccionados.length} sel.',
                     style: const TextStyle(
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: Color(0xFF2196F3),
                     ),
@@ -1535,36 +1174,9 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
             ),
             const SizedBox(height: 16),
             if (_isLoadingProyectos)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(20.0),
-                  child: CircularProgressIndicator(),
-                ),
-              )
+              const _LoadingWidget(mensaje: 'Cargando proyectos...')
             else if (_proyectosPorCategoria.isEmpty)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.folder_open,
-                        size: 48,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No hay proyectos disponibles',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
+              _buildEmptyProyectos()
             else
               _buildCategoriasList(),
           ],
@@ -1573,13 +1185,65 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
     );
   }
 
+  Widget _buildEmptyProyectos() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.folder_open, size: 48, color: Colors.grey[400]),
+            const SizedBox(height: 12),
+            Text(
+              'No hay proyectos disponibles',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String mensaje,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16.0),
+      child: Row(
+        children: [
+          Icon(icon, size: 22, color: Colors.grey[500]),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              mensaje,
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 13,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCategoriasList() {
+    final categorias = _proyectosPorCategoria.keys.toList();
     return ListView.builder(
       shrinkWrap: true,
+      primary: false,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: _proyectosPorCategoria.keys.length,
+      itemCount: categorias.length,
       itemBuilder: (context, index) {
-        final categoria = _proyectosPorCategoria.keys.elementAt(index);
+        final categoria = categorias[index];
         final proyectos = _proyectosPorCategoria[categoria]!;
         return _buildCategoryCard(categoria, proyectos, index);
       },
@@ -1591,54 +1255,63 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
     List<Map<String, dynamic>> proyectos,
     int index,
   ) {
+    final color = _getColorForCategory(index);
+    final count = proyectos.length;
+    final countLabel = count > 99 ? '99+' : count.toString();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _getColorForCategory(index).withValues(alpha:0.3),
-          width: 2,
-        ),
+        border: Border.all(color: color.withOpacity(0.3), width: 2),
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          tilePadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          collapsedShape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Text(
             categoria,
             style: const TextStyle(
               fontWeight: FontWeight.bold,
-              fontSize: 16,
+              fontSize: 14,
               color: Color(0xFF2C3E50),
             ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
           ),
           subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.only(top: 2),
             child: Text(
-              '${proyectos.length} proyecto${proyectos.length != 1 ? 's' : ''}',
-              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+              '$count proyecto${count != 1 ? 's' : ''}',
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
             ),
           ),
-          leading: Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  _getColorForCategory(index),
-                  _getColorForCategory(index).withValues(alpha:0.7),
-                ],
+          leading: SizedBox(
+            width: 40,
+            height: 40,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [color, color.withOpacity(0.75)],
+                ),
+                borderRadius: BorderRadius.circular(10),
               ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Center(
-              child: Text(
-                proyectos.length.toString(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+              child: Center(
+                child: Text(
+                  countLabel,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
               ),
             ),
@@ -1652,136 +1325,164 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
   }
 
   Widget _buildProjectItem(Map<String, dynamic> proyecto) {
-    final codigo = proyecto['codigo'] as String;
-    final yaAsignado = proyecto['yaAsignado'] as bool;
+    final codigo = proyecto['codigo'].toString();
+    final yaAsignado = proyecto['yaAsignado'] == true;
     final isSelected = _proyectosSeleccionados.contains(codigo);
+    final integrantes = (proyecto['integrantes'] ?? '').toString();
+    final titulo = (proyecto['titulo'] ?? '').toString();
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8, left: 8, right: 8),
-      color: yaAsignado
-          ? Colors.amber.shade50
-          : (isSelected ? Colors.blue.shade50 : const Color(0xFFF8F9FA)),
-      child: CheckboxListTile(
-        value: isSelected,
-        onChanged: (bool? value) {
-          setState(() {
-            if (value == true) {
-              _proyectosSeleccionados.add(codigo);
-            } else {
-              _proyectosSeleccionados.remove(codigo);
-            }
-          });
-        },
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                proyecto['titulo'] as String,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                  color: yaAsignado
-                      ? Colors.amber[900]
-                      : const Color(0xFF2C3E50),
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (yaAsignado)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.amber,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.edit, size: 10, color: Colors.white),
-                    SizedBox(width: 4),
-                    Text(
-                      'Ya asignado',
+    return Semantics(
+      label: 'Proyecto $titulo, código $codigo${yaAsignado ? ', ya asignado' : ''}',
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        color: yaAsignado
+            ? Colors.amber.shade50
+            : (isSelected ? Colors.blue.shade50 : const Color(0xFFF8F9FA)),
+        child: CheckboxListTile(
+          value: isSelected,
+          onChanged: (bool? value) {
+            setState(() {
+              if (value == true) {
+                _proyectosSeleccionados.add(codigo);
+              } else {
+                _proyectosSeleccionados.remove(codigo);
+              }
+            });
+          },
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      titulo,
                       style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        color: yaAsignado
+                            ? Colors.amber[900]
+                            : const Color(0xFF2C3E50),
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (yaAsignado) ...[
+                    const SizedBox(width: 6),
+                    Flexible(
+                      flex: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.amber[700],
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          'Asignado',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
-          ],
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(Icons.qr_code, size: 12, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Text(
-                  codigo,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-                ),
-              ],
-            ),
-            if ((proyecto['integrantes'] as String).isNotEmpty) ...[
+            ],
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(Icons.people, size: 12, color: Colors.grey[600]),
+                  Icon(Icons.qr_code, size: 12, color: Colors.grey[600]),
                   const SizedBox(width: 4),
-                  Expanded(
+                  Flexible(
                     child: Text(
-                      proyecto['integrantes'] as String,
-                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                      maxLines: 1,
+                      codigo,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[700]),
                       overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   ),
                 ],
               ),
+              if (integrantes.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.people, size: 12, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        integrantes,
+                        style:
+                            TextStyle(fontSize: 11, color: Colors.grey[600]),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
-          ],
+          ),
+          activeColor: const Color(0xFF1E3A5F),
+          controlAffinity: ListTileControlAffinity.leading,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 4,
+          ),
+          minVerticalPadding: 8,
         ),
-        activeColor: const Color(0xFF1E3A5F),
-        controlAffinity: ListTileControlAffinity.leading,
       ),
     );
   }
 
   Widget _buildBotonAsignar() {
+    final seleccionados = _proyectosSeleccionados.length;
+
     return SizedBox(
       width: double.infinity,
-      height: 56,
+      height: 52,
       child: ElevatedButton.icon(
-        onPressed: _isAsignando || _proyectosSeleccionados.isEmpty
-            ? null
-            : _asignarProyectos,
+        onPressed:
+            _isAsignando || seleccionados == 0 ? null : _asignarProyectos,
         icon: _isAsignando
             ? const SizedBox(
-                width: 20,
-                height: 20,
+                width: 18,
+                height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: Colors.white,
                 ),
               )
-            : const Icon(Icons.check_circle, size: 24),
-        label: Text(
-          _isAsignando
-              ? 'Asignando...'
-              : 'Asignar ${_proyectosSeleccionados.length} Proyecto(s)',
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            : const Icon(Icons.check_circle, size: 22),
+        label: Flexible(
+          child: Text(
+            _isAsignando
+                ? 'Asignando...'
+                : 'Asignar $seleccionados Proyecto${seleccionados != 1 ? 's' : ''}',
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF1E3A5F),
           foregroundColor: Colors.white,
           disabledBackgroundColor: Colors.grey[300],
           disabledForegroundColor: Colors.grey[500],
-          elevation: _proyectosSeleccionados.isNotEmpty ? 4 : 0,
+          elevation: seleccionados > 0 ? 4 : 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -1792,8 +1493,12 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
 
   Widget _buildInfoRow(IconData icon, String label, String value) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: Colors.green[700]),
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(icon, size: 16, color: Colors.green[700]),
+        ),
         const SizedBox(width: 8),
         Text(
           '$label: ',
@@ -1807,9 +1512,244 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
           child: Text(
             value,
             style: TextStyle(fontSize: 13, color: Colors.green[800]),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildConfirmDialog({
+    required int proyectosReasignados,
+    required int proyectosAEliminar,
+  }) {
+    final nombreJurado = _juradoData?['nombre'] as String? ?? 'jurado';
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return AlertDialog(
+      scrollable: true,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      title: const Text(
+        'Confirmar Asignación',
+        style: TextStyle(fontSize: 17),
+      ),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 400,
+          maxHeight: screenHeight * 0.5,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '¿Asignar ${_proyectosSeleccionados.length} proyecto(s) a $nombreJurado?',
+                style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.assignment,
+                        color: Colors.blue.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Rúbrica: ${_rubricaSeleccionada!.nombre}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade900,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (proyectosReasignados > 0) ...[
+                const SizedBox(height: 10),
+                _buildDialogWarningBox(
+                  icon: Icons.info_outline,
+                  backgroundColor: Colors.orange.shade50,
+                  borderColor: Colors.orange.shade200,
+                  iconColor: Colors.orange.shade700,
+                  textColor: Colors.orange.shade900,
+                  texto: '$proyectosReasignados ya asignado(s)',
+                ),
+              ],
+              if (proyectosAEliminar > 0) ...[
+                const SizedBox(height: 10),
+                _buildDialogWarningBox(
+                  icon: Icons.delete_outline,
+                  backgroundColor: Colors.red.shade50,
+                  borderColor: Colors.red.shade200,
+                  iconColor: Colors.red.shade700,
+                  textColor: Colors.red.shade900,
+                  texto: '$proyectosAEliminar se eliminarán',
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF1E3A5F),
+          ),
+          child: const Text('Asignar'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDialogWarningBox({
+    required IconData icon,
+    required Color backgroundColor,
+    required Color borderColor,
+    required Color iconColor,
+    required Color textColor,
+    required String texto,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: iconColor, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              texto,
+              style: TextStyle(fontSize: 12, color: textColor),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 14,
+      ),
+    );
+  }
+}
+
+class _StepCard extends StatelessWidget {
+  const _StepCard({
+    required this.gradientColors,
+    required this.icon,
+    required this.titulo,
+    required this.child,
+  });
+
+  final List<Color> gradientColors;
+  final IconData icon;
+  final String titulo;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: gradientColors),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Icon(icon, color: Colors.white, size: 20),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    titulo,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E3A5F),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadingWidget extends StatelessWidget {
+  const _LoadingWidget({required this.mensaje});
+
+  final String mensaje;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: Color(0xFF1A5490)),
+            const SizedBox(height: 12),
+            Text(
+              mensaje,
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

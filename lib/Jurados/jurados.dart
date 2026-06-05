@@ -16,7 +16,6 @@ class JuradosScreen extends StatefulWidget {
 
 class _JuradosScreenState extends State<JuradosScreen>
     with SingleTickerProviderStateMixin {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final _resolverNombres = ResolverNombresService();
   final RubricasService _rubricasService = RubricasService();
 
@@ -28,7 +27,6 @@ class _JuradosScreenState extends State<JuradosScreen>
   Map<String, List<Map<String, dynamic>>> _proyectosPorRubrica = {};
   Map<String, Rubrica> _rubricasMap = {};
 
-  // ── Tabs ─────────────────────────────────────────────────────────────────
   late TabController _tabController;
   int _tabIndex = 0;
 
@@ -55,24 +53,29 @@ class _JuradosScreenState extends State<JuradosScreen>
   }
 
   Future<void> _loadUserData() async {
-    final userName = await PrefsHelper.getUserName();
-    final userId = await PrefsHelper.getCurrentUserId();
-    final filial = await PrefsHelper.getJuradoFilial();
-    final facultad = await PrefsHelper.getJuradoFacultad();
+    try {
+      final userName = await PrefsHelper.getUserName();
+      final userId = await PrefsHelper.getCurrentUserId();
+      final filial = await PrefsHelper.getJuradoFilial();
+      final facultad = await PrefsHelper.getJuradoFacultad();
 
-    setState(() {
-      _userName = userName ?? 'Jurado';
-      _userId = userId ?? '';
-      _juradoFilial = filial ?? '';
-      _juradoFacultad = facultad ?? '';
-    });
+      setState(() {
+        _userName = userName ?? 'Jurado';
+        _userId = userId ?? '';
+        _juradoFilial = filial ?? '';
+        _juradoFacultad = facultad ?? '';
+      });
 
-    if (_userId.isNotEmpty) {
-      await Future.wait([
-        _cargarProyectosAsignados(),
-        _cargarCacheNombres(),
-      ]);
-    } else {
+      if (_userId.isNotEmpty) {
+        await Future.wait([
+          _cargarProyectosAsignados(),
+          _cargarCacheNombres(),
+        ]);
+      } else {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      debugPrint('Error en _loadUserData: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -166,7 +169,7 @@ class _JuradosScreenState extends State<JuradosScreen>
         });
       }
     } catch (e) {
-      debugPrint('❌ Error al cargar proyectos: $e');
+      debugPrint('Error al cargar proyectos: $e');
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -204,10 +207,10 @@ class _JuradosScreenState extends State<JuradosScreen>
         if (rubricaEncontrada == null) return;
       }
 
-      final rubricaFinal = rubricaId != null &&
-              rubricasMapFinal.containsKey(rubricaId)
-          ? rubricasMapFinal[rubricaId]!
-          : rubricasMapFinal.values.first;
+      final rubricaFinal =
+          rubricaId != null && rubricasMapFinal.containsKey(rubricaId)
+              ? rubricasMapFinal[rubricaId]!
+              : rubricasMapFinal.values.first;
 
       final proyectoRef = evalDoc.reference.parent.parent;
       if (proyectoRef == null) return;
@@ -293,12 +296,10 @@ class _JuradosScreenState extends State<JuradosScreen>
 
   int get _totalProyectos =>
       _proyectosPorRubrica.values.fold(0, (s, l) => s + l.length);
+
   int get _totalEvaluados => _proyectosPorRubrica.values.fold(
       0, (s, l) => s + l.where((p) => p['evaluada'] as bool).length);
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // BUILD PRINCIPAL
-  // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -307,7 +308,6 @@ class _JuradosScreenState extends State<JuradosScreen>
         child: Column(
           children: [
             _buildHeader(),
-            // TabBar
             _buildTabBar(),
             Expanded(
               child: Container(
@@ -321,9 +321,7 @@ class _JuradosScreenState extends State<JuradosScreen>
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    // Tab 0: Proyectos a evaluar
                     _buildProyectosTab(),
-                    // Tab 1: Mis certificados
                     JuradoCertificadosTab(
                       juradoId: _userId,
                       juradoNombre: _userName,
@@ -338,9 +336,6 @@ class _JuradosScreenState extends State<JuradosScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // HEADER (sin cambios en lógica, adaptado para tabs)
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     final progreso =
         _totalProyectos > 0 ? _totalEvaluados / _totalProyectos : 0.0;
@@ -351,6 +346,7 @@ class _JuradosScreenState extends State<JuradosScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
@@ -385,26 +381,41 @@ class _JuradosScreenState extends State<JuradosScreen>
                   ],
                 ),
               ),
-              // Botón refresh solo visible en el tab de proyectos
               if (_tabIndex == 0)
-                IconButton(
-                  icon: const Icon(Icons.refresh, color: Colors.white, size: 24),
-                  onPressed: _isLoading ? null : _cargarProyectosAsignados,
-                  tooltip: 'Actualizar proyectos',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                Semantics(
+                  label: 'Actualizar proyectos',
+                  button: true,
+                  child: SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: IconButton(
+                      icon: const Icon(Icons.refresh,
+                          color: Colors.white, size: 24),
+                      onPressed:
+                          _isLoading ? null : _cargarProyectosAsignados,
+                      tooltip: 'Actualizar proyectos',
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
                 ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.logout, color: Colors.white, size: 24),
-                onPressed: _logout,
-                tooltip: 'Cerrar Sesión',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
+              const SizedBox(width: 4),
+              Semantics(
+                label: 'Cerrar sesión',
+                button: true,
+                child: SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: IconButton(
+                    icon: const Icon(Icons.logout,
+                        color: Colors.white, size: 24),
+                    onPressed: _logout,
+                    tooltip: 'Cerrar Sesión',
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
               ),
             ],
           ),
-          // Barra de progreso de evaluaciones (solo en tab proyectos)
           if (!_isLoading && _totalProyectos > 0 && _tabIndex == 0) ...[
             const SizedBox(height: 12),
             Row(
@@ -438,14 +449,11 @@ class _JuradosScreenState extends State<JuradosScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // TAB BAR
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildTabBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       child: Container(
-        height: 42,
+        height: 44,
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.12),
           borderRadius: BorderRadius.circular(12),
@@ -460,28 +468,42 @@ class _JuradosScreenState extends State<JuradosScreen>
           dividerColor: Colors.transparent,
           labelColor: const Color(0xFF1E3A5F),
           unselectedLabelColor: Colors.white.withOpacity(0.75),
-          labelStyle: const TextStyle(
-              fontSize: 13, fontWeight: FontWeight.bold),
-          unselectedLabelStyle: const TextStyle(
-              fontSize: 13, fontWeight: FontWeight.w500),
+          labelStyle:
+              const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+          unselectedLabelStyle:
+              const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
           tabs: const [
             Tab(
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.assignment_outlined, size: 16),
                   SizedBox(width: 6),
-                  Text('Evaluaciones'),
+                  Flexible(
+                    child: Text(
+                      'Evaluaciones',
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
                 ],
               ),
             ),
             Tab(
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.workspace_premium_outlined, size: 16),
                   SizedBox(width: 6),
-                  Text('Certificados'),
+                  Flexible(
+                    child: Text(
+                      'Certificados',
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -491,9 +513,6 @@ class _JuradosScreenState extends State<JuradosScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // TAB PROYECTOS (contenido original)
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildProyectosTab() {
     if (_isLoading) {
       return const Center(
@@ -515,7 +534,7 @@ class _JuradosScreenState extends State<JuradosScreen>
 
     if (_proyectosPorRubrica.isEmpty) {
       return Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(40.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -525,6 +544,7 @@ class _JuradosScreenState extends State<JuradosScreen>
               const SizedBox(height: 20),
               Text(
                 'Sin proyectos asignados',
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -560,9 +580,6 @@ class _JuradosScreenState extends State<JuradosScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SECCIÓN DE RÚBRICA
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildRubricaSection(
       Rubrica rubrica, List<Map<String, dynamic>> proyectos) {
     final evaluados = proyectos.where((p) => p['evaluada'] as bool).toList();
@@ -662,24 +679,22 @@ class _JuradosScreenState extends State<JuradosScreen>
                   ),
                 ),
                 const SizedBox(height: 6),
-                Row(
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
                   children: [
                     if (pendientes.isNotEmpty)
                       _miniTag(
                           '${pendientes.length} pendiente${pendientes.length > 1 ? 's' : ''}',
                           Colors.orange),
-                    if (pendientes.isNotEmpty && evaluados.isNotEmpty)
-                      const SizedBox(width: 6),
                     if (evaluados.isNotEmpty)
                       _miniTag(
                           '${evaluados.length} evaluado${evaluados.length > 1 ? 's' : ''}',
                           Colors.green),
-                    if (bloqueados.isNotEmpty) ...[
-                      const SizedBox(width: 6),
+                    if (bloqueados.isNotEmpty)
                       _miniTag(
                           '${bloqueados.length} bloqueado${bloqueados.length > 1 ? 's' : ''}',
                           Colors.red),
-                    ],
                   ],
                 ),
               ],
@@ -789,19 +804,23 @@ class _JuradosScreenState extends State<JuradosScreen>
             children: [
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E3A5F),
-                      borderRadius: BorderRadius.circular(7),
-                    ),
-                    child: Text(
-                      proyecto['codigo'],
-                      style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white),
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E3A5F),
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Text(
+                        proyecto['codigo'],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white),
+                      ),
                     ),
                   ),
                   const Spacer(),
@@ -938,9 +957,6 @@ class _JuradosScreenState extends State<JuradosScreen>
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BADGE PILL
-// ─────────────────────────────────────────────────────────────────────────────
 class _BadgePill extends StatelessWidget {
   final String label;
   final Color color;
@@ -963,9 +979,6 @@ class _BadgePill extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BOTÓN DE NOTA RÁPIDA
-// ─────────────────────────────────────────────────────────────────────────────
 class _BotonNota extends StatelessWidget {
   final String label;
   final bool seleccionado;
@@ -981,28 +994,36 @@ class _BotonNota extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: soloLectura ? null : onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        decoration: BoxDecoration(
-          color: seleccionado
-              ? const Color(0xFF1E3A5F)
-              : const Color(0xFFEEF4FF),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
+    return Semantics(
+      button: true,
+      label: 'Nota rápida $label',
+      child: GestureDetector(
+        onTap: soloLectura ? null : onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 36),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
             color: seleccionado
                 ? const Color(0xFF1E3A5F)
-                : const Color(0xFF1E3A5F).withOpacity(0.2),
+                : const Color(0xFFEEF4FF),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: seleccionado
+                  ? const Color(0xFF1E3A5F)
+                  : const Color(0xFF1E3A5F).withOpacity(0.2),
+            ),
           ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: seleccionado ? Colors.white : const Color(0xFF1E3A5F),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color:
+                    seleccionado ? Colors.white : const Color(0xFF1E3A5F),
+              ),
+            ),
           ),
         ),
       ),
@@ -1010,9 +1031,6 @@ class _BotonNota extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PANTALLA DE EVALUACIÓN DE PROYECTO
-// ─────────────────────────────────────────────────────────────────────────────
 class EvaluacionProyectoScreen extends StatefulWidget {
   final Map<String, dynamic> proyecto;
   final String juradoId;
@@ -1232,8 +1250,10 @@ class _EvaluacionProyectoScreenState
   }
 
   int get _totalCriterios => _rubrica.totalCriterios;
+
   int get _criteriosEvaluados =>
       _notasSeleccionadas.values.where((v) => v != null).length;
+
   double get _notaActual =>
       _notasSeleccionadas.values.fold(0.0, (s, v) => s + (v ?? 0.0));
 
@@ -1252,10 +1272,19 @@ class _EvaluacionProyectoScreenState
               padding: const EdgeInsets.fromLTRB(8, 12, 16, 12),
               child: Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back,
-                        color: Colors.white, size: 26),
-                    onPressed: () => Navigator.pop(context),
+                  Semantics(
+                    label: 'Regresar',
+                    button: true,
+                    child: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_back,
+                            color: Colors.white, size: 26),
+                        onPressed: () => Navigator.pop(context),
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
                   ),
                   Expanded(
                     child: Column(
@@ -1316,12 +1345,16 @@ class _EvaluacionProyectoScreenState
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Text(
-                      '$_criteriosEvaluados/$_totalCriterios · ${_notaActual.toStringAsFixed(2)} / ${_rubrica.puntajeMaximo.toStringAsFixed(2)} pts',
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white.withOpacity(0.85),
-                          fontWeight: FontWeight.w600),
+                    Flexible(
+                      child: Text(
+                        '$_criteriosEvaluados/$_totalCriterios · ${_notaActual.toStringAsFixed(2)} / ${_rubrica.puntajeMaximo.toStringAsFixed(2)} pts',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withOpacity(0.85),
+                            fontWeight: FontWeight.w600),
+                      ),
                     ),
                   ],
                 ),
@@ -1338,7 +1371,7 @@ class _EvaluacionProyectoScreenState
                 child: _isCargando
                     ? const Center(child: CircularProgressIndicator())
                     : ListView(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
                         children: [
                           if (soloLectura) _buildEstadoAlert(),
                           _buildInfoProyecto(),
@@ -1352,19 +1385,18 @@ class _EvaluacionProyectoScreenState
           ],
         ),
       ),
-      floatingActionButton: (_isCargando ||
-              _isGuardando ||
-              soloLectura ||
-              _guardadoEnProceso)
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _guardarEvaluacion,
-              backgroundColor: const Color(0xFF1E3A5F),
-              icon: const Icon(Icons.save, color: Colors.white),
-              label: const Text('Guardar Evaluación',
-                  style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w600)),
-            ),
+      floatingActionButton:
+          (_isCargando || _isGuardando || soloLectura || _guardadoEnProceso)
+              ? null
+              : FloatingActionButton.extended(
+                  onPressed: _guardarEvaluacion,
+                  backgroundColor: const Color(0xFF1E3A5F),
+                  icon: const Icon(Icons.save, color: Colors.white),
+                  label: const Text('Guardar Evaluación',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600)),
+                ),
     );
   }
 
@@ -1384,6 +1416,7 @@ class _EvaluacionProyectoScreenState
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(_estaBloqueado ? Icons.lock : Icons.check_circle,
               color: _estaBloqueado ? Colors.red : Colors.green, size: 20),
@@ -1393,8 +1426,6 @@ class _EvaluacionProyectoScreenState
               _estaBloqueado
                   ? 'Bloqueada por el administrador.'
                   : 'Evaluación completada. Modo solo lectura.',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -1448,10 +1479,9 @@ class _EvaluacionProyectoScreenState
         const SizedBox(width: 6),
         Expanded(
           child: Text(text,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style:
-                  TextStyle(fontSize: 13, color: Colors.grey[700])),
+              style: TextStyle(fontSize: 13, color: Colors.grey[700])),
         ),
       ],
     );
@@ -1480,14 +1510,12 @@ class _EvaluacionProyectoScreenState
         ),
       ),
       child: Theme(
-        data:
-            Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           initiallyExpanded: !soloLectura || !seccionCompleta,
           tilePadding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          childrenPadding:
-              const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
           leading: Container(
             padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
@@ -1497,17 +1525,13 @@ class _EvaluacionProyectoScreenState
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
-              seccionCompleta
-                  ? Icons.check_circle
-                  : Icons.folder_open,
-              color: seccionCompleta
-                  ? Colors.green
-                  : const Color(0xFF1E3A5F),
+              seccionCompleta ? Icons.check_circle : Icons.folder_open,
+              color: seccionCompleta ? Colors.green : const Color(0xFF1E3A5F),
               size: 20,
             ),
           ),
           title: Text(seccion.nombre,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                   fontSize: 14,
@@ -1517,8 +1541,9 @@ class _EvaluacionProyectoScreenState
             padding: const EdgeInsets.only(top: 2),
             child: Text(
               '$criteriosEv/${seccion.criterios.length} evaluados · ${puntajeSeccion.toStringAsFixed(2)}/${seccion.pesoTotal.toStringAsFixed(2)} pts',
-              style: TextStyle(
-                  fontSize: 11, color: Colors.grey[500]),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
             ),
           ),
           children: seccion.criterios
@@ -1565,14 +1590,14 @@ class _EvaluacionProyectoScreenState
               ),
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 7, vertical: 3),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
                   color: const Color(0xFFEEF4FF),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  'Máx ${criterio.peso.toStringAsFixed(2)} pts',
+                  'Máx ${criterio.peso.toStringAsFixed(2)}',
                   style: const TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
@@ -1589,12 +1614,16 @@ class _EvaluacionProyectoScreenState
                 children: [
                   const Icon(Icons.stars, size: 16, color: Colors.green),
                   const SizedBox(width: 6),
-                  Text(
-                    '${nota.toStringAsFixed(2)} pts seleccionados',
-                    style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green),
+                  Flexible(
+                    child: Text(
+                      '${nota.toStringAsFixed(2)} pts seleccionados',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green),
+                    ),
                   ),
                 ],
               ),
@@ -1604,8 +1633,9 @@ class _EvaluacionProyectoScreenState
               padding: const EdgeInsets.only(bottom: 10),
               child: Text(
                 'Ingresa una calificación (0 – ${criterio.peso.toStringAsFixed(2)} pts)',
-                style: TextStyle(
-                    fontSize: 12, color: Colors.orange[700]),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: Colors.orange[700]),
               ),
             ),
           _buildNotaSelector(criterio, nota, soloLectura),
@@ -1624,16 +1654,15 @@ class _EvaluacionProyectoScreenState
     );
 
     if (notaSeleccionada != null) {
-      final valorActualEnCampo =
-          double.tryParse(controller.text);
+      final valorActualEnCampo = double.tryParse(controller.text);
       final difiere = valorActualEnCampo == null ||
           (notaSeleccionada - valorActualEnCampo).abs() >= 0.001;
       if (difiere) {
         final texto = notaSeleccionada.toStringAsFixed(2);
         controller.value = TextEditingValue(
           text: texto,
-          selection: TextSelection.fromPosition(
-              TextPosition(offset: texto.length)),
+          selection:
+              TextSelection.fromPosition(TextPosition(offset: texto.length)),
         );
       }
     } else if (controller.text.isNotEmpty && soloLectura) {
@@ -1641,8 +1670,7 @@ class _EvaluacionProyectoScreenState
     }
 
     final botones = [0.0, 0.25, 0.50, 0.75, 1.0].map((pct) {
-      final valor =
-          double.parse((pesoMaximo * pct).toStringAsFixed(2));
+      final valor = double.parse((pesoMaximo * pct).toStringAsFixed(2));
       final seleccionado = notaSeleccionada != null &&
           (notaSeleccionada - valor).abs() < 0.001;
       return _BotonNota(
@@ -1664,21 +1692,18 @@ class _EvaluacionProyectoScreenState
           keyboardType:
               const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [
-            FilteringTextInputFormatter.allow(
-                RegExp(r'^\d*\.?\d{0,2}')),
+            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
           ],
           decoration: InputDecoration(
-            hintText:
-                'Ej: ${(pesoMaximo * 0.75).toStringAsFixed(2)}',
-            hintStyle: TextStyle(
-                fontSize: 13, color: Colors.grey[400]),
+            hintText: 'Ej: ${(pesoMaximo * 0.75).toStringAsFixed(2)}',
+            hintStyle: TextStyle(fontSize: 13, color: Colors.grey[400]),
             suffixText: '/ ${pesoMaximo.toStringAsFixed(2)} pts',
             suffixStyle: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF1E3A5F)),
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10)),
+            border:
+                OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(
@@ -1686,30 +1711,27 @@ class _EvaluacionProyectoScreenState
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                  color: Color(0xFF1E3A5F), width: 1.5),
+              borderSide:
+                  const BorderSide(color: Color(0xFF1E3A5F), width: 1.5),
             ),
             disabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(
-                  color: Colors.grey.withOpacity(0.2)),
+              borderSide:
+                  BorderSide(color: Colors.grey.withOpacity(0.2)),
             ),
             filled: true,
-            fillColor:
-                soloLectura ? Colors.grey[100] : Colors.white,
-            contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14, vertical: 12),
+            fillColor: soloLectura ? Colors.grey[100] : Colors.white,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           ),
           onChanged: (val) {
             final parsed = double.tryParse(val);
             if (parsed == null) {
-              setState(
-                  () => _notasSeleccionadas[criterio.id] = null);
+              setState(() => _notasSeleccionadas[criterio.id] = null);
               return;
             }
             final clamped = parsed.clamp(0.0, pesoMaximo);
-            setState(
-                () => _notasSeleccionadas[criterio.id] = clamped);
+            setState(() => _notasSeleccionadas[criterio.id] = clamped);
             if (parsed > pesoMaximo) {
               final corregido = pesoMaximo.toStringAsFixed(2);
               controller.value = TextEditingValue(

@@ -3,8 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 import 'informe_word.dart';
 
-// Archivo: lib/admin/interfaz/informe_evento_carrera.dart
-
 class InformeEventoCarreraScreen extends StatefulWidget {
   const InformeEventoCarreraScreen({super.key});
 
@@ -17,18 +15,12 @@ class _InformeEventoCarreraScreenState
     extends State<InformeEventoCarreraScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ═══════════════════════════════════════════════════════════════
-  // DATOS DE SESIÓN
-  // ═══════════════════════════════════════════════════════════════
   String? _filialId;
   String? _filialNombre;
   String? _facultad;
   String? _carrera;
   String? _carreraId;
 
-  // ═══════════════════════════════════════════════════════════════
-  // ESTADO
-  // ═══════════════════════════════════════════════════════════════
   List<Map<String, dynamic>> _eventos = [];
   Map<String, dynamic>? _eventoSeleccionado;
 
@@ -43,9 +35,6 @@ class _InformeEventoCarreraScreenState
     _init();
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // INICIALIZAR
-  // ═══════════════════════════════════════════════════════════════
   Future<void> _init() async {
     setState(() => _isLoadingInit = true);
     try {
@@ -72,17 +61,15 @@ class _InformeEventoCarreraScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Error al iniciar: $e'),
-              backgroundColor: Colors.red),
+            content: Text('Error al iniciar: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
     if (mounted) setState(() => _isLoadingInit = false);
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // CARGAR EVENTOS
-  // ═══════════════════════════════════════════════════════════════
   Future<void> _cargarEventos() async {
     setState(() => _isLoadingEventos = true);
     try {
@@ -117,16 +104,14 @@ class _InformeEventoCarreraScreenState
         setState(() => _isLoadingEventos = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Error al cargar eventos: $e'),
-              backgroundColor: Colors.red),
+            content: Text('Error al cargar eventos: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // GENERAR INFORME — delega toda la lógica a InformeWordGenerator
-  // ═══════════════════════════════════════════════════════════════
   Future<void> _generarInforme() async {
     if (_eventoSeleccionado == null) return;
 
@@ -137,14 +122,14 @@ class _InformeEventoCarreraScreenState
 
     try {
       await InformeWordGenerator.generarYCompartir(
-  evento: _eventoSeleccionado!,
-  adminData: {
-    'facultad':    _facultad,
-    'carrera':     _carrera,
-    'filialNombre': _filialNombre,
-    'filial':      _filialId,      // ← faltaba, lo usa como filialId
-  },
-);
+        evento: _eventoSeleccionado!,
+        adminData: {
+          'facultad': _facultad,
+          'carrera': _carrera,
+          'filialNombre': _filialNombre,
+          'filial': _filialId,
+        },
+      );
 
       if (mounted) {
         setState(() {
@@ -153,11 +138,18 @@ class _InformeEventoCarreraScreenState
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Row(children: [
-              Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-              SizedBox(width: 10),
-              Text('Informe generado exitosamente'),
-            ]),
+            content: Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+                SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    'Informe generado exitosamente',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
             backgroundColor: Color(0xFF009688),
           ),
         );
@@ -170,7 +162,11 @@ class _InformeEventoCarreraScreenState
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al generar informe: $e'),
+            content: Text(
+              'Error al generar informe: $e',
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -178,9 +174,6 @@ class _InformeEventoCarreraScreenState
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // BUILD
-  // ═══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -188,7 +181,6 @@ class _InformeEventoCarreraScreenState
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ──────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 16, 16, 16),
               child: Row(
@@ -207,14 +199,18 @@ class _InformeEventoCarreraScreenState
                         Text(
                           'Informe Completo',
                           style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white),
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         Text(
                           'Generación de informe por evento',
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.white60),
+                          style: TextStyle(fontSize: 12, color: Colors.white60),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
@@ -230,8 +226,6 @@ class _InformeEventoCarreraScreenState
                 ],
               ),
             ),
-
-            // ── Content ─────────────────────────────────────────
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -249,9 +243,13 @@ class _InformeEventoCarreraScreenState
                             CircularProgressIndicator(
                                 color: Color(0xFF1E3A5F)),
                             SizedBox(height: 16),
-                            Text('Cargando datos...',
-                                style: TextStyle(
-                                    color: Color(0xFF1E3A5F), fontSize: 16)),
+                            Text(
+                              'Cargando datos...',
+                              style: TextStyle(
+                                color: Color(0xFF1E3A5F),
+                                fontSize: 16,
+                              ),
+                            ),
                           ],
                         ),
                       )
@@ -280,9 +278,6 @@ class _InformeEventoCarreraScreenState
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // CARD: Info del admin de carrera
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildInfoAdminCard() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -291,11 +286,12 @@ class _InformeEventoCarreraScreenState
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha:0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.description_rounded,
@@ -309,47 +305,58 @@ class _InformeEventoCarreraScreenState
                 Text(
                   _carrera ?? '—',
                   style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15),
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
-                Text(_facultad ?? '—',
-                    style: const TextStyle(
-                        color: Colors.white70, fontSize: 12)),
+                Text(
+                  _facultad ?? '—',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 2),
                 Row(
                   children: [
                     const Icon(Icons.location_on,
                         color: Colors.white54, size: 12),
                     const SizedBox(width: 4),
-                    Text(_filialNombre ?? '—',
+                    Flexible(
+                      child: Text(
+                        _filialNombre ?? '—',
                         style: const TextStyle(
-                            color: Colors.white54, fontSize: 11)),
+                            color: Colors.white54, fontSize: 11),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 8),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha:0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.white30),
             ),
-            child: const Text('Tu carrera',
-                style: TextStyle(color: Colors.white70, fontSize: 11)),
+            child: const Text(
+              'Tu carrera',
+              style: TextStyle(color: Colors.white70, fontSize: 11),
+            ),
           ),
         ],
       ),
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // SECCIÓN: Selector de evento
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildSelectorEvento() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -359,28 +366,34 @@ class _InformeEventoCarreraScreenState
             const Icon(Icons.event_note_rounded,
                 color: Color(0xFF1E3A5F), size: 20),
             const SizedBox(width: 8),
-            const Text(
-              'Selecciona un evento',
-              style: TextStyle(
+            const Flexible(
+              child: Text(
+                'Selecciona un evento',
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E3A5F)),
+                  color: Color(0xFF1E3A5F),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             const SizedBox(width: 8),
             if (!_isLoadingEventos)
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 2),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E3A5F).withValues(alpha:0.1),
+                  color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   '${_eventos.length}',
                   style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF1E3A5F),
-                      fontWeight: FontWeight.bold),
+                    fontSize: 12,
+                    color: Color(0xFF1E3A5F),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
           ],
@@ -388,14 +401,14 @@ class _InformeEventoCarreraScreenState
         const SizedBox(height: 10),
         Container(
           margin: const EdgeInsets.only(bottom: 14),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.teal.withValues(alpha:0.08),
+            color: Colors.teal.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.teal.withValues(alpha:0.25)),
+            border: Border.all(color: Colors.teal.withValues(alpha: 0.25)),
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(Icons.info_outline, size: 16, color: Colors.teal[700]),
               const SizedBox(width: 10),
@@ -403,6 +416,7 @@ class _InformeEventoCarreraScreenState
                 child: Text(
                   'Los eventos mostrados corresponden únicamente a tu carrera asignada.',
                   style: TextStyle(fontSize: 12, color: Colors.teal[700]),
+                  overflow: TextOverflow.visible,
                 ),
               ),
             ],
@@ -425,7 +439,8 @@ class _InformeEventoCarreraScreenState
 
   Widget _buildEventoItem(Map<String, dynamic> evento) {
     final isSelected = _eventoSeleccionado?['id'] == evento['id'];
-    final nombre = evento['name'] as String;
+    final nombre = (evento['name'] as String?) ?? '';
+    final inicial = nombre.isNotEmpty ? nombre[0].toUpperCase() : '?';
 
     return GestureDetector(
       onTap: _isGenerando
@@ -447,8 +462,8 @@ class _InformeEventoCarreraScreenState
           boxShadow: [
             BoxShadow(
               color: isSelected
-                  ? const Color(0xFF1E3A5F).withValues(alpha:0.25)
-                  : Colors.black.withValues(alpha:0.05),
+                  ? const Color(0xFF1E3A5F).withValues(alpha: 0.25)
+                  : Colors.black.withValues(alpha: 0.05),
               blurRadius: isSelected ? 16 : 8,
               offset: const Offset(0, 4),
             ),
@@ -463,8 +478,8 @@ class _InformeEventoCarreraScreenState
                 gradient: LinearGradient(
                   colors: isSelected
                       ? [
-                          Colors.white.withValues(alpha:0.3),
-                          Colors.white.withValues(alpha:0.1),
+                          Colors.white.withValues(alpha: 0.3),
+                          Colors.white.withValues(alpha: 0.1),
                         ]
                       : [
                           const Color(0xFF009688),
@@ -477,11 +492,12 @@ class _InformeEventoCarreraScreenState
               ),
               child: Center(
                 child: Text(
-                  nombre.substring(0, 1).toUpperCase(),
+                  inicial,
                   style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20),
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
                 ),
               ),
             ),
@@ -491,13 +507,16 @@ class _InformeEventoCarreraScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    nombre,
+                    nombre.isNotEmpty ? nombre : 'Sin nombre',
                     style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: isSelected
-                            ? Colors.white
-                            : const Color(0xFF1E3A5F)),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: isSelected
+                          ? Colors.white
+                          : const Color(0xFF1E3A5F),
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
                   Row(
@@ -505,26 +524,30 @@ class _InformeEventoCarreraScreenState
                       Icon(
                         Icons.summarize_rounded,
                         size: 13,
-                        color: isSelected
-                            ? Colors.white60
-                            : Colors.teal[400],
+                        color: isSelected ? Colors.white60 : Colors.teal[400],
                       ),
                       const SizedBox(width: 4),
-                      Text(
-                        isSelected
-                            ? 'Evento seleccionado'
-                            : 'Tap para seleccionar',
-                        style: TextStyle(
+                      Flexible(
+                        child: Text(
+                          isSelected
+                              ? 'Evento seleccionado'
+                              : 'Tap para seleccionar',
+                          style: TextStyle(
                             fontSize: 12,
                             color: isSelected
                                 ? Colors.white60
-                                : Colors.teal[400]),
+                                : Colors.teal[400],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
                 ],
               ),
             ),
+            const SizedBox(width: 8),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 200),
               child: isSelected
@@ -532,7 +555,7 @@ class _InformeEventoCarreraScreenState
                       key: const ValueKey('check'),
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha:0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.check_rounded,
@@ -542,7 +565,7 @@ class _InformeEventoCarreraScreenState
                       key: const ValueKey('arrow'),
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: Colors.teal.withValues(alpha:0.1),
+                        color: Colors.teal.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
@@ -580,25 +603,31 @@ class _InformeEventoCarreraScreenState
           const Text(
             'No hay eventos disponibles',
             style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1E3A5F)),
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E3A5F),
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 8),
           Text(
             'No se encontraron eventos para tu carrera.',
             style: TextStyle(
-                fontSize: 13, color: Colors.grey[500], height: 1.5),
+              fontSize: 13,
+              color: Colors.grey[500],
+              height: 1.5,
+            ),
             textAlign: TextAlign.center,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // BOTÓN: Generar informe
-  // ═══════════════════════════════════════════════════════════════
   Widget _buildBotonGenerarInforme() {
     final listo = _eventoSeleccionado != null && !_isGenerando;
 
@@ -616,44 +645,54 @@ class _InformeEventoCarreraScreenState
             : const Icon(Icons.download_rounded),
         label: Text(
           _isGenerando ? 'Generando...' : 'Generar Informe Word',
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF009688),
           foregroundColor: Colors.white,
           disabledBackgroundColor: Colors.grey[300],
           disabledForegroundColor: Colors.grey[500],
+          minimumSize: const Size(double.infinity, 52),
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14)),
+            borderRadius: BorderRadius.circular(14),
+          ),
           elevation: listo ? 4 : 0,
         ),
       ),
     );
   }
 
-  // ── Mensaje de estado ────────────────────────────────────────
   Widget _buildEstadoMessage() {
     final esError = _mensajeEstado!.startsWith('Error');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: esError
-            ? Colors.red.withValues(alpha:0.1)
-            : const Color(0xFF009688).withValues(alpha:0.1),
+            ? Colors.red.withValues(alpha: 0.1)
+            : const Color(0xFF009688).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: esError
-              ? Colors.red.withValues(alpha:0.3)
-              : const Color(0xFF009688).withValues(alpha:0.3),
+              ? Colors.red.withValues(alpha: 0.3)
+              : const Color(0xFF009688).withValues(alpha: 0.3),
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            esError ? Icons.error_outline : Icons.info_outline,
-            size: 16,
-            color: esError ? Colors.red : const Color(0xFF009688),
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(
+              esError ? Icons.error_outline : Icons.info_outline,
+              size: 16,
+              color: esError ? Colors.red : const Color(0xFF009688),
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -661,8 +700,10 @@ class _InformeEventoCarreraScreenState
               _mensajeEstado!,
               style: TextStyle(
                 fontSize: 13,
-                color: esError ? Colors.red[700] : const Color(0xFF00695C),
+                color:
+                    esError ? Colors.red[700] : const Color(0xFF00695C),
               ),
+              overflow: TextOverflow.visible,
             ),
           ),
         ],

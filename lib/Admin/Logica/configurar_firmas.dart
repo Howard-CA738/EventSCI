@@ -1,14 +1,10 @@
+import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// COLORES
-// ─────────────────────────────────────────────────────────────────────────────
 const _kPrimario   = Color(0xFF1E3A5F);
 const _kPrimario10 = Color(0x1A1E3A5F);
 const _kTextoGris  = Color(0xFF64748B);
@@ -18,25 +14,19 @@ const _kVerde      = Color(0xFF10B981);
 const _kRojo       = Color(0xFFEF4444);
 const _kAmbar      = Color(0xFFF59E0B);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// UTILIDAD MIME
-// ─────────────────────────────────────────────────────────────────────────────
 ({String mime, String ext}) _mimeDesdeExtension(String rutaOExtension) {
   final e = rutaOExtension.split('.').last.toLowerCase();
   if (e == 'jpg' || e == 'jpeg') return (mime: 'image/jpeg', ext: 'jpeg');
   return (mime: 'image/png', ext: 'png');
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MODELO
-// ─────────────────────────────────────────────────────────────────────────────
 class FirmanteModel {
   final String docId;
   final String grado;
   final String nombre;
   final String cargo;
   final String storageUrl;
-  final String storagePath; // ruta BASE sin extensión, ej: "firmas/vicerrector"
+  final String storagePath;
 
   const FirmanteModel({
     required this.docId,
@@ -88,9 +78,6 @@ class FirmanteModel {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PANTALLA PRINCIPAL
-// ─────────────────────────────────────────────────────────────────────────────
 class ConfigurarFirmasScreen extends StatefulWidget {
   const ConfigurarFirmasScreen({super.key});
 
@@ -104,7 +91,7 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
 
   FirmanteModel? _vicerrector;
   FirmanteModel? _directorInv;
-  Map<String, FirmanteModel> _decanos   = {};
+  Map<String, FirmanteModel> _decanos    = {};
   Map<String, String>        _facultades = {};
 
   bool   _cargando = true;
@@ -123,22 +110,16 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // CARGA
-  // ─────────────────────────────────────────────────────────────────────────
   Future<void> _cargarTodo() async {
     setState(() { _cargando = true; _errorMsg = null; });
     try {
       final db = FirebaseFirestore.instance;
 
-      // ── Vicerrector ── ruta base sin extensión
       final vSnap = await db.collection('config_firmas').doc('vicerrector').get();
       _vicerrector = vSnap.exists
-          ? FirmanteModel.fromMap(vSnap.data()!, 'vicerrector',
-              'firmas/vicerrector')
+          ? FirmanteModel.fromMap(vSnap.data()!, 'vicerrector', 'firmas/vicerrector')
           : FirmanteModel.vacio('vicerrector', 'firmas/vicerrector');
 
-      // ── Director de Investigación ── ruta base sin extensión
       final dSnap = await db
           .collection('config_firmas')
           .doc('director_investigacion')
@@ -149,7 +130,6 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
           : FirmanteModel.vacio('director_investigacion',
               'firmas/director_investigacion');
 
-      // ── Decanos ── ruta base sin extensión
       final decSnap = await db
           .collection('config_firmas')
           .doc('decanos')
@@ -161,7 +141,6 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
               doc.data(), doc.id, 'firmas/decanos/${doc.id}'),
       };
 
-      // ── Facultades desde filiales ────────────────────────────────────────
       final filialesSnap = await db.collection('filiales').get();
       final Map<String, String> facMap = {};
 
@@ -191,9 +170,6 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // BUILD
-  // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -231,44 +207,61 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
         child: const Icon(Icons.draw_outlined, color: _kPrimario, size: 24),
       ),
       const SizedBox(width: 14),
-      const Expanded(
+      Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Configurar Firmas',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white)),
-          Text('Firmantes del certificado académico',
-              style: TextStyle(fontSize: 11, color: Colors.white60)),
+          const Text(
+            'Configurar Firmas',
+            style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const Text(
+            'Firmantes del certificado academico',
+            style: TextStyle(fontSize: 11, color: Colors.white60),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ]),
       ),
       IconButton(
         icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 22),
         onPressed: _cargarTodo,
+        tooltip: 'Recargar',
       ),
       IconButton(
         icon: const Icon(Icons.close, color: Colors.white, size: 24),
         onPressed: () => Navigator.pop(context),
+        tooltip: 'Cerrar',
       ),
     ]),
   );
 
   Widget _buildError() => Center(
-    child: Column(mainAxisSize: MainAxisSize.min, children: [
-      const Icon(Icons.error_outline, color: _kRojo, size: 52),
-      const SizedBox(height: 12),
-      Text(_errorMsg!,
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.error_outline, color: _kRojo, size: 52),
+        const SizedBox(height: 12),
+        Text(
+          _errorMsg!,
           style: const TextStyle(color: _kTextoGris),
-          textAlign: TextAlign.center),
-      const SizedBox(height: 16),
-      ElevatedButton.icon(
-        onPressed: _cargarTodo,
-        icon: const Icon(Icons.refresh, size: 18),
-        label: const Text('Reintentar'),
-        style: ElevatedButton.styleFrom(
-            backgroundColor: _kPrimario, foregroundColor: Colors.white),
-      ),
-    ]),
+          textAlign: TextAlign.center,
+          maxLines: 6,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 16),
+        ElevatedButton.icon(
+          onPressed: _cargarTodo,
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('Reintentar'),
+          style: ElevatedButton.styleFrom(
+              backgroundColor: _kPrimario, foregroundColor: Colors.white),
+        ),
+      ]),
+    ),
   );
 
   Widget _buildCuerpo() => Column(children: [
@@ -285,7 +278,7 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
         tabs: const [
           Tab(icon: Icon(Icons.account_balance, size: 18), text: 'Globales'),
           Tab(icon: Icon(Icons.school_outlined,  size: 18), text: 'Decanos'),
-          Tab(icon: Icon(Icons.info_outline,     size: 18), text: 'Guía'),
+          Tab(icon: Icon(Icons.info_outline,     size: 18), text: 'Guia'),
         ],
       ),
     ),
@@ -298,9 +291,6 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
     ),
   ]);
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // TAB 1 — FIRMANTES GLOBALES
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildTabGlobales() => ListView(
     padding: const EdgeInsets.all(16),
     children: [
@@ -308,12 +298,12 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
           'Estos firmantes aparecen en TODOS los certificados de cualquier filial y facultad.'),
       const SizedBox(height: 16),
       _TarjetaFirmante(
-        etiqueta:           'Firma 1',
-        titulo:             'Vicerrector',
-        descripcion:        'Global · Aparece en toda la universidad',
-        color:              const Color(0xFF7C3AED),
-        icono:              Icons.verified_outlined,
-        firmante:           _vicerrector!,
+        etiqueta:          'Firma 1',
+        titulo:            'Vicerrector',
+        descripcion:       'Global - Aparece en toda la universidad',
+        color:             const Color(0xFF7C3AED),
+        icono:             Icons.verified_outlined,
+        firmante:          _vicerrector!,
         gradosDisponibles: const ['Dr.', 'Dra.', 'Mg.', 'Lic.', 'Ing.'],
         onGuardado: (f) {
           setState(() => _vicerrector = f);
@@ -322,12 +312,12 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
       ),
       const SizedBox(height: 14),
       _TarjetaFirmante(
-        etiqueta:           'Firma 3',
-        titulo:             'Director General de Investigación e Innovación',
-        descripcion:        'Global · Aparece en toda la universidad',
-        color:              const Color(0xFF059669),
-        icono:              Icons.science_outlined,
-        firmante:           _directorInv!,
+        etiqueta:          'Firma 3',
+        titulo:            'Director General de Investigacion e Innovacion',
+        descripcion:       'Global - Aparece en toda la universidad',
+        color:             const Color(0xFF059669),
+        icono:             Icons.science_outlined,
+        firmante:          _directorInv!,
         gradosDisponibles: const ['Dr.', 'Dra.', 'Mg.', 'Lic.', 'Ing.'],
         onGuardado: (f) {
           setState(() => _directorInv = f);
@@ -337,21 +327,27 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
     ],
   );
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // TAB 2 — DECANOS
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildTabDecanos() {
     if (_facultades.isEmpty) {
       return Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.domain_outlined, color: _kTextoClaro, size: 52),
-          const SizedBox(height: 12),
-          const Text('No hay facultades registradas',
-              style: TextStyle(color: _kTextoGris, fontSize: 14)),
-          const SizedBox(height: 4),
-          const Text('Primero crea facultades en "Gestión de Filiales"',
-              style: TextStyle(color: _kTextoClaro, fontSize: 12)),
-        ]),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.domain_outlined, color: _kTextoClaro, size: 52),
+            const SizedBox(height: 12),
+            const Text(
+              'No hay facultades registradas',
+              style: TextStyle(color: _kTextoGris, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Primero crea facultades en "Gestion de Filiales"',
+              style: TextStyle(color: _kTextoClaro, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ]),
+        ),
       );
     }
 
@@ -371,7 +367,7 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
             padding: const EdgeInsets.only(bottom: 14),
             child: _TarjetaFirmante(
               etiqueta:          'Firma 2',
-              titulo:            'Decano — $facNombre',
+              titulo:            'Decano - $facNombre',
               descripcion:       'Aplica a todas las filiales de $facNombre',
               color:             const Color(0xFF0D9488),
               icono:             Icons.school_outlined,
@@ -388,21 +384,18 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // TAB 3 — GUÍA
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildTabGuia() => ListView(
     padding: const EdgeInsets.all(16),
     children: [
       _buildGuiaCard(
-        '1. Prepara las imágenes de firma',
+        '1. Prepara las imagenes de firma',
         Icons.image_outlined,
         const Color(0xFF7C3AED),
         [
           'Formatos aceptados: PNG, JPG o JPEG',
-          'Fondo transparente (PNG) o fondo blanco/negro — la app lo elimina automáticamente',
-          'Tamaño ideal: 400×150 px o similar proporción horizontal',
-          'Peso máximo: 2 MB por imagen',
+          'Fondo transparente (PNG) o fondo blanco/negro',
+          'Tamano ideal: 400x150 px o similar proporcion horizontal',
+          'Peso maximo: 2 MB por imagen',
           'Nombres sugeridos: vicerrector.png, decano_fia.jpg, etc.',
         ],
       ),
@@ -416,7 +409,7 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
           'firmas/director_investigacion.png  (o .jpeg)',
           'firmas/decanos/{facultadId}.png  (o .jpeg)',
           '',
-          '⚠️  No es necesario subir manualmente — la app lo hace al guardar.',
+          'No es necesario subir manualmente - la app lo hace al guardar.',
         ],
       ),
       const SizedBox(height: 12),
@@ -425,7 +418,7 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
         Icons.lock_outline,
         const Color(0xFF059669),
         [
-          'Ve a Firebase Console → Storage → Rules',
+          'Ve a Firebase Console > Storage > Rules',
           'Copia y pega estas reglas:',
           '',
           'match /firmas/{allPaths=**} {',
@@ -443,27 +436,27 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
         const Color(0xFFD97706),
         [
           'config_firmas/',
-          '  vicerrector          → grado, nombre, cargo, storageUrl',
-          '  director_investigacion → grado, nombre, cargo, storageUrl',
+          '  vicerrector          > grado, nombre, cargo, storageUrl',
+          '  director_investigacion > grado, nombre, cargo, storageUrl',
           '  decanos/',
           '    facultades/',
-          '      {facultadId}     → grado, nombre, cargo, storageUrl',
+          '      {facultadId}     > grado, nombre, cargo, storageUrl',
         ],
         esCode: true,
       ),
       const SizedBox(height: 12),
       _buildGuiaCard(
-        '5. Cómo actualizar una firma',
+        '5. Como actualizar una firma',
         Icons.edit_outlined,
         const Color(0xFF7C3AED),
         [
-          '① Abre la tarjeta del firmante que quieres cambiar',
-          '② Toca el ícono de edición (lápiz)',
-          '③ Actualiza nombre, grado y/o cargo',
-          '④ Para cambiar la imagen toca "Cambiar imagen"',
-          '⑤ Selecciona un archivo PNG, JPG o JPEG (máx 2 MB)',
-          '⑥ Toca GUARDAR — se sube a Storage y guarda en Firestore',
-          '⑦ Los certificados nuevos usarán la firma actualizada',
+          '1 Abre la tarjeta del firmante que quieres cambiar',
+          '2 Toca el icono de edicion (lapiz)',
+          '3 Actualiza nombre, grado y/o cargo',
+          '4 Para cambiar la imagen toca "Cambiar imagen"',
+          '5 Selecciona un archivo PNG, JPG o JPEG (max 2 MB)',
+          '6 Toca GUARDAR - se sube a Storage y guarda en Firestore',
+          '7 Los certificados nuevos usaran la firma actualizada',
         ],
       ),
     ],
@@ -488,11 +481,15 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(titulo,
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: color)),
+                child: Text(
+                  titulo,
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: color),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ]),
             const SizedBox(height: 12),
@@ -513,13 +510,17 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
                           const SizedBox(width: 8),
                         ],
                         Expanded(
-                          child: Text(l,
-                              style: TextStyle(
-                                fontSize: esCode ? 11 : 12,
-                                color: esCode ? _kPrimario : _kTextoGris,
-                                fontFamily: esCode ? 'monospace' : null,
-                                height: 1.5,
-                              )),
+                          child: Text(
+                            l,
+                            style: TextStyle(
+                              fontSize: esCode ? 11 : 12,
+                              color: esCode ? _kPrimario : _kTextoGris,
+                              fontFamily: esCode ? 'monospace' : null,
+                              height: 1.5,
+                            ),
+                            overflow: TextOverflow.visible,
+                            softWrap: true,
+                          ),
                         ),
                       ],
                     ),
@@ -528,9 +529,6 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
         ),
       );
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // GUARDAR EN FIRESTORE
-  // ─────────────────────────────────────────────────────────────────────────
   Future<void> _guardarFirmanteGlobal(FirmanteModel f) async {
     await FirebaseFirestore.instance
         .collection('config_firmas')
@@ -558,25 +556,23 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
       Icon(icono, color: _kPrimario, size: 16),
       const SizedBox(width: 10),
       Expanded(
-        child: Text(texto,
-            style: const TextStyle(
-                fontSize: 11.5, color: _kPrimario, height: 1.5)),
+        child: Text(
+          texto,
+          style: const TextStyle(fontSize: 11.5, color: _kPrimario, height: 1.5),
+        ),
       ),
     ]),
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// WIDGET: TARJETA DE FIRMANTE
-// ─────────────────────────────────────────────────────────────────────────────
 class _TarjetaFirmante extends StatefulWidget {
   final String   etiqueta;
   final String   titulo;
   final String   descripcion;
   final Color    color;
   final IconData icono;
-  final FirmanteModel         firmante;
-  final List<String>          gradosDisponibles;
+  final FirmanteModel              firmante;
+  final List<String>               gradosDisponibles;
   final ValueChanged<FirmanteModel> onGuardado;
 
   const _TarjetaFirmante({
@@ -605,8 +601,10 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
   late FirmanteModel _firmanteLocal;
 
   File?   _imgLocal;
-  String  _imgExt  = 'png'; // extensión real del archivo elegido
+  String  _imgExt   = 'png';
   double  _progreso = 0;
+
+  StreamSubscription<TaskSnapshot>? _uploadSubscription;
 
   @override
   void initState() {
@@ -621,12 +619,12 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
 
   @override
   void dispose() {
+    _uploadSubscription?.cancel();
     _nombreCtrl.dispose();
     _cargoCtrl.dispose();
     super.dispose();
   }
 
-  // ── Elegir imagen (PNG, JPG o JPEG, máx 2 MB) ────────────────────────────
   Future<void> _elegirImagen() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -637,13 +635,12 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
     final path = result.files.single.path!;
     final info = _mimeDesdeExtension(path);
 
-    // Validar tamaño ≤ 2 MB
     final file      = File(path);
     final sizeBytes = await file.length();
     if (sizeBytes > 2 * 1024 * 1024) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('La imagen supera 2 MB. Elige una más pequeña.'),
+          content: Text('La imagen supera 2 MB. Elige una mas pequena.'),
           backgroundColor: _kAmbar,
         ));
       }
@@ -652,11 +649,10 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
 
     setState(() {
       _imgLocal = file;
-      _imgExt   = info.ext; // 'png' o 'jpeg'
+      _imgExt   = info.ext;
     });
   }
 
-  // ── Subir imagen a Storage con MIME y ruta correctos ─────────────────────
   Future<String?> _subirImagen() async {
     if (_imgLocal == null) return _firmanteLocal.storageUrl;
 
@@ -668,12 +664,14 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
       final ref  = FirebaseStorage.instance.ref(storagePath);
       final task = ref.putFile(
         _imgLocal!,
-        SettableMetadata(contentType: info.mime), // ← MIME correcto
+        SettableMetadata(contentType: info.mime),
       );
-      task.snapshotEvents.listen((s) {
+
+      _uploadSubscription = task.snapshotEvents.listen((s) {
         final p = s.bytesTransferred / (s.totalBytes == 0 ? 1 : s.totalBytes);
         if (mounted) setState(() => _progreso = p);
       });
+
       await task;
       final url = await ref.getDownloadURL();
       return url;
@@ -686,15 +684,16 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
       }
       return null;
     } finally {
+      _uploadSubscription?.cancel();
+      _uploadSubscription = null;
       if (mounted) setState(() => _subiendoImg = false);
     }
   }
 
-  // ── Guardar todo ──────────────────────────────────────────────────────────
   Future<void> _guardar() async {
     if (_nombreCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('El nombre no puede estar vacío'),
+        content: Text('El nombre no puede estar vacio'),
         backgroundColor: _kAmbar,
       ));
       return;
@@ -726,7 +725,7 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('✅ ${actualizado.nombreCompleto} guardado'),
+          content: Text('${actualizado.nombreCompleto} guardado'),
           backgroundColor: _kVerde,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -737,9 +736,6 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // BUILD
-  // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final completo = _firmanteLocal.tieneDatos && _firmanteLocal.tieneImagen;
@@ -762,7 +758,6 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // ── Cabecera ────────────────────────────────────────────────────
           Row(children: [
             Container(
               padding: const EdgeInsets.all(8),
@@ -773,40 +768,49 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Row(children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                        color: widget.color,
-                        borderRadius: BorderRadius.circular(6)),
-                    child: Text(widget.etiqueta,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                          color: widget.color,
+                          borderRadius: BorderRadius.circular(6)),
+                      child: Text(
+                        widget.etiqueta,
                         style: const TextStyle(
                             fontSize: 9,
                             color: Colors.white,
-                            fontWeight: FontWeight.bold)),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(widget.titulo,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        widget.titulo,
                         style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                             color: _kPrimario),
                         maxLines: 2,
-                        overflow: TextOverflow.ellipsis),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.descripcion,
+                    style: const TextStyle(fontSize: 10, color: _kTextoClaro),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ]),
-                const SizedBox(height: 2),
-                Text(widget.descripcion,
-                    style:
-                        const TextStyle(fontSize: 10, color: _kTextoClaro)),
-              ]),
+                ],
+              ),
             ),
             _buildEstadoBadge(completo, parcial),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
             if (!_editando)
               IconButton(
                 icon: const Icon(Icons.edit_rounded, size: 20),
@@ -853,8 +857,7 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
               )),
               const SizedBox(width: 8),
               Text('${(_progreso * 100).toInt()}%',
-                  style: const TextStyle(
-                      fontSize: 10, color: _kTextoGris)),
+                  style: const TextStyle(fontSize: 10, color: _kTextoGris)),
             ]),
           ],
         ]),
@@ -862,9 +865,6 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // VISTA
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildVista() {
     if (!_firmanteLocal.tieneDatos) {
       return Container(
@@ -873,11 +873,17 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
             children: [
           Icon(Icons.add_circle_outline, color: _kTextoClaro, size: 20),
           SizedBox(width: 8),
-          Text('Toca el lápiz para configurar este firmante',
+          Flexible(
+            child: Text(
+              'Toca el lapiz para configurar este firmante',
               style: TextStyle(
                   fontSize: 12,
                   color: _kTextoClaro,
-                  fontStyle: FontStyle.italic)),
+                  fontStyle: FontStyle.italic),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ]),
       );
     }
@@ -887,21 +893,35 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
       const SizedBox(width: 14),
       Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(_firmanteLocal.nombreCompleto,
-              style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: _kPrimario)),
+          Text(
+            _firmanteLocal.nombreCompleto,
+            style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: _kPrimario),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
           const SizedBox(height: 3),
-          Text(_firmanteLocal.cargo,
-              style: const TextStyle(fontSize: 11, color: _kTextoGris)),
+          Text(
+            _firmanteLocal.cargo,
+            style: const TextStyle(fontSize: 11, color: _kTextoGris),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
           if (!_firmanteLocal.tieneImagen) ...[
             const SizedBox(height: 6),
             const Row(children: [
               Icon(Icons.warning_amber_rounded, color: _kAmbar, size: 14),
               SizedBox(width: 4),
-              Text('Sin imagen de firma',
-                  style: TextStyle(fontSize: 10, color: _kAmbar)),
+              Flexible(
+                child: Text(
+                  'Sin imagen de firma',
+                  style: TextStyle(fontSize: 10, color: _kAmbar),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ]),
           ],
         ]),
@@ -929,172 +949,172 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
                     : const Center(
                         child: SizedBox(
                             width: 18, height: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2))),
+                            child: CircularProgressIndicator(strokeWidth: 2))),
                 errorBuilder: (_, __, ___) => const Icon(
                     Icons.broken_image_outlined,
                     color: _kTextoClaro, size: 22),
               ),
             )
-          : const Icon(Icons.draw_outlined,
-              color: _kTextoClaro, size: 24),
+          : const Icon(Icons.draw_outlined, color: _kTextoClaro, size: 24),
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // FORMULARIO
-  // ─────────────────────────────────────────────────────────────────────────
-  Widget _buildFormulario() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text('Grado académico',
+  Widget _buildFormulario() => SingleChildScrollView(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Grado academico',
           style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: _kPrimario)),
-      const SizedBox(height: 6),
-      Wrap(
-        spacing: 8, runSpacing: 6,
-        children: widget.gradosDisponibles
-            .map((g) => ChoiceChip(
-                  label: Text(g,
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: _gradoSeleccionado == g
-                              ? Colors.white
-                              : _kPrimario)),
-                  selected: _gradoSeleccionado == g,
-                  selectedColor: widget.color,
-                  backgroundColor: Colors.grey.shade100,
-                  onSelected: (_) =>
-                      setState(() => _gradoSeleccionado = g),
-                ))
-            .toList(),
-      ),
-      const SizedBox(height: 12),
-
-      _campoTexto(
-        controller: _nombreCtrl,
-        label: 'Nombre completo (sin grado)',
-        hint: 'Ej: Carlos Coaquira Tuco',
-        icono: Icons.person_outline,
-      ),
-      const SizedBox(height: 10),
-
-      _campoTexto(
-        controller: _cargoCtrl,
-        label: 'Cargo / título del puesto',
-        hint: 'Ej: VICERRECTOR DE INVESTIGACIÓN',
-        icono: Icons.badge_outlined,
-        maxLines: 2,
-      ),
-      const SizedBox(height: 14),
-
-      const Text('Imagen de la firma',
-          style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: _kPrimario)),
-      const SizedBox(height: 8),
-
-      Row(children: [
-        // Preview
-        Container(
-          width: 100, height: 58,
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: _imgLocal != null
-              ? ClipRRect(
-                  borderRadius: BorderRadius.circular(9),
-                  child: Image.file(_imgLocal!, fit: BoxFit.contain))
-              : _firmanteLocal.tieneImagen
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(9),
-                      child: Image.network(
-                          _firmanteLocal.storageUrl,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => const Icon(
-                              Icons.broken_image_outlined,
-                              color: _kTextoClaro, size: 22)))
-                  : const Icon(Icons.draw_outlined,
-                      color: _kTextoClaro, size: 26),
+              color: _kPrimario),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-            OutlinedButton.icon(
-              onPressed: _guardando ? null : _elegirImagen,
-              icon: const Icon(Icons.upload_file_outlined, size: 16),
-              label: Text(_imgLocal != null
-                  ? 'Imagen seleccionada ✓'
-                  : _firmanteLocal.tieneImagen
-                      ? 'Cambiar imagen'
-                      : 'Subir imagen'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: widget.color,
-                side: BorderSide(color: widget.color),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 8),
-                textStyle: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w600),
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'PNG, JPG o JPEG · máx 2 MB\nFondo blanco/negro se elimina automáticamente',
-              style: TextStyle(fontSize: 9, color: _kTextoClaro),
-            ),
-          ]),
-        ),
-      ]),
-      const SizedBox(height: 16),
-
-      SizedBox(
-        width: double.infinity, height: 48,
-        child: ElevatedButton(
-          onPressed: _guardando ? null : _guardar,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: widget.color,
-            foregroundColor: Colors.white,
-            disabledBackgroundColor: widget.color.withOpacity(0.5),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
-          ),
-          child: _guardando
-              ? const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                        width: 18, height: 18,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2)),
-                    SizedBox(width: 10),
-                    Text('Guardando...',
-                        style: TextStyle(fontSize: 14)),
-                  ])
-              : const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.save_rounded, size: 18),
-                    SizedBox(width: 8),
-                    Text('GUARDAR FIRMANTE',
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8, runSpacing: 6,
+          children: widget.gradosDisponibles
+              .map((g) => ChoiceChip(
+                    label: Text(g,
                         style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5)),
-                  ]),
+                            fontSize: 11,
+                            color: _gradoSeleccionado == g
+                                ? Colors.white
+                                : _kPrimario)),
+                    selected: _gradoSeleccionado == g,
+                    selectedColor: widget.color,
+                    backgroundColor: Colors.grey.shade100,
+                    onSelected: (_) =>
+                        setState(() => _gradoSeleccionado = g),
+                  ))
+              .toList(),
         ),
-      ),
-    ],
+        const SizedBox(height: 12),
+
+        _campoTexto(
+          controller: _nombreCtrl,
+          label: 'Nombre completo (sin grado)',
+          hint: 'Ej: Carlos Coaquira Tuco',
+          icono: Icons.person_outline,
+        ),
+        const SizedBox(height: 10),
+
+        _campoTexto(
+          controller: _cargoCtrl,
+          label: 'Cargo / titulo del puesto',
+          hint: 'Ej: VICERRECTOR DE INVESTIGACION',
+          icono: Icons.badge_outlined,
+          maxLines: 2,
+        ),
+        const SizedBox(height: 14),
+
+        const Text(
+          'Imagen de la firma',
+          style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: _kPrimario),
+        ),
+        const SizedBox(height: 8),
+
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: 100, height: 58,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: _imgLocal != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(9),
+                    child: Image.file(_imgLocal!, fit: BoxFit.contain))
+                : _firmanteLocal.tieneImagen
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(9),
+                        child: Image.network(
+                            _firmanteLocal.storageUrl,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(
+                                Icons.broken_image_outlined,
+                                color: _kTextoClaro, size: 22)))
+                    : const Icon(Icons.draw_outlined,
+                        color: _kTextoClaro, size: 26),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              OutlinedButton.icon(
+                onPressed: _guardando ? null : _elegirImagen,
+                icon: const Icon(Icons.upload_file_outlined, size: 16),
+                label: Text(_imgLocal != null
+                    ? 'Imagen seleccionada'
+                    : _firmanteLocal.tieneImagen
+                        ? 'Cambiar imagen'
+                        : 'Subir imagen'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: widget.color,
+                  side: BorderSide(color: widget.color),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  textStyle: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'PNG, JPG o JPEG - max 2 MB',
+                style: TextStyle(fontSize: 9, color: _kTextoClaro),
+                maxLines: 2,
+                overflow: TextOverflow.visible,
+              ),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 16),
+
+        SizedBox(
+          width: double.infinity, height: 48,
+          child: ElevatedButton(
+            onPressed: _guardando ? null : _guardar,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: widget.color,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: widget.color.withOpacity(0.5),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: _guardando
+                ? const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                          width: 18, height: 18,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2)),
+                      SizedBox(width: 10),
+                      Text('Guardando...',
+                          style: TextStyle(fontSize: 14)),
+                    ])
+                : const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.save_rounded, size: 18),
+                      SizedBox(width: 8),
+                      Text('GUARDAR FIRMANTE',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5)),
+                    ]),
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
+    ),
   );
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // HELPERS
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildEstadoBadge(bool completo, bool parcial) {
     final color = completo ? _kVerde : parcial ? _kAmbar : _kRojo;
     final icono = completo
@@ -1114,11 +1134,13 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(icono, color: color, size: 12),
         const SizedBox(width: 4),
-        Text(texto,
-            style: TextStyle(
-                fontSize: 10,
-                color: color,
-                fontWeight: FontWeight.bold)),
+        Text(
+          texto,
+          style: TextStyle(
+              fontSize: 10,
+              color: color,
+              fontWeight: FontWeight.bold),
+        ),
       ]),
     );
   }
@@ -1141,22 +1163,18 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
               const TextStyle(fontSize: 11, color: _kTextoGris),
           hintStyle:
               const TextStyle(fontSize: 11, color: _kTextoClaro),
-          prefixIcon:
-              Icon(icono, size: 18, color: _kTextoClaro),
+          prefixIcon: Icon(icono, size: 18, color: _kTextoClaro),
           filled: true,
-          fillColor: const Color(0xFFF8FAFC),
+          fillColor: Colors.white,
           border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: Color(0xFFE2E8F0))),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
           enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: Color(0xFFE2E8F0))),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
           focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(
-                  color: _kPrimario, width: 1.5)),
+              borderSide: const BorderSide(color: _kPrimario, width: 1.5)),
           contentPadding: const EdgeInsets.symmetric(
               horizontal: 12, vertical: 10),
         ),

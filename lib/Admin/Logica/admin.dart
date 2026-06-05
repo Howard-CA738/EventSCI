@@ -6,11 +6,9 @@ import '/admin/interfaz/crear_eventos_screen.dart';
 import 'gestion_grupos.dart';
 import 'control_pagos.dart';
 import 'configurar_firmas.dart';
-import 'reportes.dart';
 import 'asignar_proyectos.dart';
 import 'periodos.dart';
 import 'gestion_rubricas.dart';
-import 'evaluaciones.dart';
 import 'editar_admin.dart';
 import 'crear_filiales.dart';
 import '/super_admin_login.dart';
@@ -24,7 +22,7 @@ class AdminScreen extends StatefulWidget {
 }
 
 class _AdminScreenState extends State<AdminScreen> {
-  String _adminName = '';
+  String _adminName = 'Administrador';
 
   @override
   void initState() {
@@ -34,34 +32,53 @@ class _AdminScreenState extends State<AdminScreen> {
 
   Future<void> _loadAdminData() async {
     final name = await PrefsHelper.getUserName();
-    setState(() {
-      _adminName = name ?? 'Administrador';
-    });
+    if (mounted) {
+      setState(() {
+        _adminName = name ?? 'Administrador';
+      });
+    }
   }
 
   Future<void> _logout() async {
-  await SuperAdminAuthService.logout(); // cierra Firebase Auth + PrefsHelper
-  if (mounted) {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-    );
+    await SuperAdminAuthService.logout();
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+    }
   }
-}
+
+  int _crossAxisCount(double screenWidth) {
+    if (screenWidth >= 768) return 3;
+    return 2;
+  }
+
+  double _childAspectRatio(double screenWidth) {
+    if (screenWidth < 360) return 0.88;
+    if (screenWidth >= 768) return 0.90;
+    return 0.82;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final horizontalPadding = screenWidth < 360 ? 14.0 : 20.0;
+
     return Scaffold(
       backgroundColor: const Color(0xFF1E3A5F),
       body: SafeArea(
         child: Column(
           children: [
-            // Header
             Padding(
-              padding: const EdgeInsets.all(20.0),
+              padding: EdgeInsets.symmetric(
+                horizontal: horizontalPadding,
+                vertical: 16.0,
+              ),
               child: Row(
                 children: [
                   Container(
-                    width: 50,
-                    height: 50,
+                    width: 46,
+                    height: 46,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
@@ -73,35 +90,41 @@ class _AdminScreenState extends State<AdminScreen> {
                         return const Icon(
                           Icons.school,
                           color: Color(0xFF1E3A5F),
-                          size: 30,
+                          size: 28,
                         );
                       },
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  const Expanded(
+                  const SizedBox(width: 12),
+                  Expanded(
                     child: Text(
                       'Panel de Administrador',
                       style: TextStyle(
-                        fontSize: 22,
+                        fontSize: screenWidth < 360 ? 18 : 20,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   ),
                   IconButton(
                     icon: const Icon(
                       Icons.logout,
                       color: Colors.white,
-                      size: 28,
+                      size: 26,
                     ),
                     onPressed: _logout,
                     tooltip: 'Cerrar Sesión',
+                    padding: const EdgeInsets.all(8),
+                    constraints: const BoxConstraints(
+                      minWidth: 44,
+                      minHeight: 44,
+                    ),
                   ),
                 ],
               ),
             ),
-            // Content Area
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -111,169 +134,159 @@ class _AdminScreenState extends State<AdminScreen> {
                     topRight: Radius.circular(30),
                   ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: GridView.count(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    childAspectRatio: 0.80,
-                    children: [
-                      _buildMenuCard(
-                        imagePath: 'assets/icons/usuario.png',
-                        title: 'Registrar\nEstudiantes',
-                        subtitle: 'Crear cuentas de estudiantes',
-                        onTap: () {
-                          Navigator.of(context).push(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(horizontalPadding),
+                    child: GridView.count(
+                      crossAxisCount: _crossAxisCount(screenWidth),
+                      crossAxisSpacing: 14,
+                      mainAxisSpacing: 14,
+                      childAspectRatio: _childAspectRatio(screenWidth),
+                      children: [
+                        _buildMenuCard(
+                          imagePath: 'assets/icons/usuario.png',
+                          title: 'Registrar\nEstudiantes',
+                          subtitle: 'Crear cuentas de estudiantes',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const RegistroEstudiantesScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuCard(
+                          imagePath: 'assets/icons/pagos.png',
+                          title: 'Control de\nPagos',
+                          subtitle: 'Ver pagos por evento',
+                          onTap: () => Navigator.push(
+                            context,
                             MaterialPageRoute(
-                              builder: (context) =>
-                                  const RegistroEstudiantesScreen(),
+                              builder: (_) => const ControlPagosScreen(),
                             ),
-                          );
-                        },
-                      ),
-                      _buildMenuCard(
-                        imagePath: 'assets/icons/pagos.png', 
-                        title: 'Control de\nPagos',
-                        subtitle: 'Ver pagos por evento',
-                        onTap: () => Navigator.push(context,
-                            MaterialPageRoute(builder: (_) => const ControlPagosScreen())),
-                      ),
-                      _buildMenuCard(
-                        imagePath: 'assets/icons/evento.png',
-                        title: 'Gestión de\nEventos',
-                        subtitle: 'Crear y administrar eventos',
-                        onTap: () {
-                          Navigator.of(context).push(
+                          ),
+                        ),
+                        _buildMenuCard(
+                          imagePath: 'assets/icons/evento.png',
+                          title: 'Gestión de\nEventos',
+                          subtitle: 'Crear y administrar eventos',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const CrearEventosScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuCard(
+                          imagePath: 'assets/icons/admin_carrera.png',
+                          title: 'Admins de\nCarrera',
+                          subtitle: 'Gestionar administradores',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const GestionAdminsCarreraScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuCard(
+                          imagePath: 'assets/icons/reunion.png',
+                          title: 'Gestión de\nGrupos',
+                          subtitle: 'Organizar estudiantes en grupos',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const GestionGruposScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuCard(
+                          imagePath: 'assets/icons/criterios.png',
+                          title: 'Gestión de\nRúbricas',
+                          subtitle: 'Crear y editar rúbricas',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const GestionCriteriosScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuCard(
+                          imagePath: 'assets/icons/notas.png',
+                          title: 'Asignar\nProyectos',
+                          subtitle: 'Asignar proyectos a jurados',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const AsignarProyectosScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuCard(
+                          imagePath: 'assets/icons/periodos.png',
+                          title: 'Gestión de\nPeríodos',
+                          subtitle: 'Administrar períodos académicos',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => const PeriodosScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuCard(
+                          imagePath: 'assets/icons/filiales.png',
+                          title: 'Gestión de\nFiliales',
+                          subtitle: 'Administrar filiales y carreras',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const CrearFilialesScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuCard(
+                          imagePath: 'assets/icons/firma.png',
+                          title: 'Configurar\nFirmas',
+                          subtitle: 'Gestionar firmantes del certificado',
+                          onTap: () => Navigator.push(
+                            context,
                             MaterialPageRoute(
-                              builder: (context) => const CrearEventosScreen(),
+                              builder: (_) => const ConfigurarFirmasScreen(),
                             ),
-                          );
-                        },
-                      ),
-                      _buildMenuCard(
-                        imagePath:
-                            'assets/icons/admin_carrera.png', // Puedes usar otro icono si no tienes este
-                        title: 'Admins de\nCarrera',
-                        subtitle: 'Gestionar administradores',
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const GestionAdminsCarreraScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildMenuCard(
-                        imagePath: 'assets/icons/reunion.png',
-                        title: 'Gestión de\nGrupos',
-                        subtitle: 'Organizar estudiantes en grupos',
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => const GestionGruposScreen(),
-                            ),
-                          );
-                        },
-                      ),
-
-                      _buildMenuCard(
-                        imagePath: 'assets/icons/criterios.png',
-                        title: 'Gestión de\nRúbricas',
-                        subtitle: 'Crear y editar rúbricas',
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const GestionCriteriosScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildMenuCard(
-                        imagePath: 'assets/icons/notas.png',
-                        title: 'Asignar\nProyectos',
-                        subtitle: 'Asignar proyectos a jurados',
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const AsignarProyectosScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildMenuCard(
-                        imagePath: 'assets/icons/evaluaciones.png',
-                        title: 'Ver\nEvaluaciones',
-                        subtitle: 'Revisar evaluaciones de jurados',
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => const EvaluacionesScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildMenuCard(
-                        imagePath: 'assets/icons/periodos.png',
-                        title: 'Gestión de\nPeríodos',
-                        subtitle: 'Administrar períodos académicos',
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => const PeriodosScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildMenuCard(
-                        imagePath: 'assets/icons/reporte.png',
-                        title: 'Reportes',
-                        subtitle: 'Ver estadísticas y reportes',
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => const ReportesScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildMenuCard(
-                        imagePath: 'assets/icons/filiales.png',
-                        title: 'Gestión de\nFiliales',
-                        subtitle: 'Administrar filiales y carreras',
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => const CrearFilialesScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildMenuCard(
-                        imagePath: 'assets/icons/firma.png', // o cualquier ícono que tengas
-                        title: 'Configurar\nFirmas',
-                        subtitle: 'Gestionar firmantes del certificado',
-                        onTap: () => Navigator.push(context,
-                          MaterialPageRoute(builder: (_) => const ConfigurarFirmasScreen())),
-                      ),
-                      
-                      
-                      _buildMenuCard(
-                        imagePath: 'assets/icons/admin.png',
-                        title: 'Editar\nCuenta',
-                        subtitle: 'Modificar datos de administrador',
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => const EditarAdminScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+                          ),
+                        ),
+                        _buildMenuCard(
+                          imagePath: 'assets/icons/admin.png',
+                          title: 'Editar\nCuenta',
+                          subtitle: 'Modificar datos de administrador',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const EditarAdminScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -290,6 +303,10 @@ class _AdminScreenState extends State<AdminScreen> {
     required String subtitle,
     required VoidCallback onTap,
   }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final iconSize = screenWidth < 360 ? 54.0 : 62.0;
+    final iconPadding = screenWidth < 360 ? 10.0 : 12.0;
+
     return Card(
       elevation: 2,
       shadowColor: Colors.black26,
@@ -299,28 +316,26 @@ class _AdminScreenState extends State<AdminScreen> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Contenedor circular para la imagen
               Container(
-                width: 65,
-                height: 65,
+                width: iconSize,
+                height: iconSize,
                 decoration: const BoxDecoration(
-                  color: const Color(0xFFF5F5F5),
+                  color: Color(0xFFF5F5F5),
                   shape: BoxShape.circle,
                 ),
-                padding: const EdgeInsets.all(13),
+                padding: EdgeInsets.all(iconPadding),
                 child: Image.asset(
                   imagePath,
                   fit: BoxFit.contain,
                   errorBuilder: (context, error, stackTrace) {
-                    // Fallback a un icono de Material si la imagen no existe
                     return Icon(
                       Icons.image_not_supported,
-                      size: 32,
+                      size: 28,
                       color: Colors.grey[400],
                     );
                   },
@@ -329,25 +344,27 @@ class _AdminScreenState extends State<AdminScreen> {
               const SizedBox(height: 8),
               Text(
                 title,
-                style: const TextStyle(
-                  fontSize: 12.5,
+                style: TextStyle(
+                  fontSize: screenWidth < 360 ? 11.5 : 12.5,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF1E3A5F),
+                  color: const Color(0xFF1E3A5F),
                   height: 1.2,
                 ),
                 textAlign: TextAlign.center,
                 maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
               Text(
                 subtitle,
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: Color(0xFF64748B),
+                style: TextStyle(
+                  fontSize: screenWidth < 360 ? 9.5 : 10,
+                  color: const Color(0xFF64748B),
                   height: 1.2,
                 ),
                 textAlign: TextAlign.center,
                 maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
