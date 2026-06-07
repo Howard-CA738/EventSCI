@@ -94,10 +94,11 @@ class ReporteEvaluacionFinalExcelService {
     try {
       final excel = Excel.createExcel();
 
-      final seleccionados  = notas.where((n) => n.seleccionado).toList()
-        ..sort((a, b) => b.notaFinal.compareTo(a.notaFinal));
+      // Orden: ciclo → grupo (numérico) → grupo único al final → nombre
+      final seleccionados = notas.where((n) => n.seleccionado).toList()
+        ..sort(_ordenCicloGrupo);
       final noSeleccionados = notas.where((n) => !n.seleccionado).toList()
-        ..sort((a, b) => b.notaFinal.compareTo(a.notaFinal));
+        ..sort(_ordenCicloGrupo);
 
       _crearHoja(
         excel:       excel,
@@ -134,7 +135,14 @@ class ReporteEvaluacionFinalExcelService {
 
       final dir = await getTemporaryDirectory();
       final fecha = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
-      final file  = File('${dir.path}/EvalFinal_${_sanitizar(carrera)}_$fecha.xlsx');
+
+      // Nombre del archivo: prioriza el evento; si está vacío usa carrera;
+      // si todo falla, un nombre genérico.
+      final base = eventoNombre.trim().isNotEmpty
+          ? eventoNombre
+          : (carrera.trim().isNotEmpty ? carrera : 'Reporte');
+
+      final file = File('${dir.path}/EvalFinal_${_sanitizar(base)}_$fecha.xlsx');
       await file.writeAsBytes(bytes);
       return file.path;
     } catch (e, st) {
@@ -365,7 +373,32 @@ class ReporteEvaluacionFinalExcelService {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // HELPERS
+  // HELPERS DE ORDEN (ciclo → grupo → único al final → nombre)
+  // ═══════════════════════════════════════════════════════════════════════════
+  int _ciclo(String c) {
+    if (c.trim().isEmpty || c == 'N/A') return 999;
+    final m = RegExp(r'\d+').firstMatch(c);
+    return m != null ? int.parse(m.group(0)!) : 999;
+  }
+
+  int _grupo(String g) {
+    final s = g.toLowerCase().trim();
+    if (s.isEmpty || s == 'n/a') return 9999;
+    if (s.contains('único') || s.contains('unico')) return 9998; // único al final
+    final m = RegExp(r'\d+').firstMatch(g);
+    return m != null ? int.parse(m.group(0)!) : 9999;
+  }
+
+  int _ordenCicloGrupo(NotaFinalItem a, NotaFinalItem b) {
+    final ca = _ciclo(a.ciclo), cb = _ciclo(b.ciclo);
+    if (ca != cb) return ca.compareTo(cb);
+    final ga = _grupo(a.grupo), gb = _grupo(b.grupo);
+    if (ga != gb) return ga.compareTo(gb);
+    return a.nombre.compareTo(b.nombre);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HELPERS DE CELDAS
   // ═══════════════════════════════════════════════════════════════════════════
   void _cel(Sheet sheet, int row, int col, String value, CellStyle style) {
     final cell = sheet.cell(
@@ -399,6 +432,7 @@ class ReporteEvaluacionFinalExcelService {
     final s = texto
         .replaceAll(RegExp(r'[<>:"/\\|?*]'), '')
         .replaceAll(' ', '_');
+    if (s.trim().isEmpty) return 'Reporte';
     return s.substring(0, s.length > 30 ? 30 : s.length);
   }
 }
@@ -550,7 +584,7 @@ class _BotonExportarEvaluacionFinalState
                 await Share.shareXFiles(
                   [XFile(path)],
                   subject:
-                      'Reporte Evaluación Final — ${widget.carrera}',
+                      'Reporte Evaluación Final — ${widget.eventoNombre}',
                 );
               },
               icon: const Icon(Icons.share, size: 20),

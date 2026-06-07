@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:convert';
+import '/admin_carrera/codigo_asistencia_service.dart';
 
 class ProyectosCategoriaAsistenteScreen extends StatefulWidget {
   final String eventId;
@@ -35,6 +36,7 @@ class _ProyectosCategoriaAsistenteScreenState
   bool _isLoading = true;
 
   String? _qrDataGenerado;
+  String? _codigoGenerado; // código de 6 dígitos ligado al QR activo
   Map<String, dynamic>? _proyectoSeleccionado;
   String? _qrId;
   bool _qrFinalizado = false;
@@ -79,6 +81,10 @@ class _ProyectosCategoriaAsistenteScreenState
         'activo': false,
         'finalizadoAt': FieldValue.serverTimestamp(),
       });
+      // Limpiamos también el código manual para no dejarlo huérfano.
+      if (_codigoGenerado != null) {
+        await CodigoAsistenciaService.eliminar(_codigoGenerado!);
+      }
     } catch (e) {
       debugPrint('Error al auto-finalizar QR: $e');
     }
@@ -155,6 +161,17 @@ class _ProyectosCategoriaAsistenteScreenState
     };
 
     try {
+      final qrJson = jsonEncode(qrPayload);
+
+      // Código de 6 dígitos ligado a este QR (lleva el MISMO qrData).
+      // Al escribirlo, el alumno cae en la misma lógica que al escanear.
+      final codigo = await CodigoAsistenciaService.generarYRegistrar(
+        eventId: widget.eventId,
+        qrId: qrId,
+        type: 'proyecto',
+        qrData: qrJson,
+      );
+
       await qrDocRef.set({
         'filialId': widget.filialId,
         'filialNombre': widget.filialNombre,
@@ -166,16 +183,16 @@ class _ProyectosCategoriaAsistenteScreenState
         'codigoProyecto': codigoProyecto,
         'tituloProyecto': tituloProyecto,
         'grupo': grupo,
+        'codigo': codigo,
         'activo': true,
         'createdAt': FieldValue.serverTimestamp(),
         'finalizadoAt': null,
         'generadoPor': 'asistente_qr',
       });
 
-      final qrJson = jsonEncode(qrPayload);
-
       setState(() {
         _qrDataGenerado = qrJson;
+        _codigoGenerado = codigo;
         _proyectoSeleccionado = proyecto;
         _qrId = qrId;
         _qrFinalizado = false;
@@ -204,6 +221,11 @@ class _ProyectosCategoriaAsistenteScreenState
         'finalizadoAt': FieldValue.serverTimestamp(),
       });
 
+      // Limpiamos el código manual asociado.
+      if (_codigoGenerado != null) {
+        await CodigoAsistenciaService.eliminar(_codigoGenerado!);
+      }
+
       setState(() {
         _qrFinalizado = true;
         _finalizando = false;
@@ -223,6 +245,7 @@ class _ProyectosCategoriaAsistenteScreenState
     await _finalizarQRSiActivo();
     setState(() {
       _qrDataGenerado = null;
+      _codigoGenerado = null;
       _proyectoSeleccionado = null;
       _qrId = null;
       _qrFinalizado = false;
@@ -757,6 +780,13 @@ class _ProyectosCategoriaAsistenteScreenState
                             ),
                         ],
                       ),
+
+                      // ── CÓDIGO PARA INGRESO MANUAL ──────────────────
+                      if (_codigoGenerado != null && !_qrFinalizado) ...[
+                        const SizedBox(height: 18),
+                        _buildCodigoManual(_codigoGenerado!),
+                      ],
+
                       const SizedBox(height: 20),
 
                       Container(
@@ -806,6 +836,9 @@ class _ProyectosCategoriaAsistenteScreenState
                               ),
                             const Divider(height: 20, thickness: 0.6),
                             _buildSectionLabel('Control'),
+                            if (_codigoGenerado != null)
+                              _buildInfoRow(Icons.dialpad, 'Código manual:',
+                                  _codigoGenerado!),
                             _buildInfoRow(Icons.fingerprint, 'ID QR:',
                                 _qrId ?? 'N/A'),
                             _buildInfoRow(
@@ -906,6 +939,53 @@ class _ProyectosCategoriaAsistenteScreenState
             ),
           );
         },
+      ),
+    );
+  }
+
+  // Caja grande con el código de 6 dígitos para ingreso manual.
+  Widget _buildCodigoManual(String codigo) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _accent.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Icon(Icons.dialpad_rounded, size: 16, color: _accent),
+              SizedBox(width: 6),
+              Text(
+                'Código para ingreso manual',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _accent),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            codigo,
+            style: const TextStyle(
+              fontSize: 34,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 8,
+              color: _primary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'El alumno puede escanear el QR o escribir este número.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+        ],
       ),
     );
   }

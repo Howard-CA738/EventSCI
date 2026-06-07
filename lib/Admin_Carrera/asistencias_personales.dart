@@ -1,12 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '/prefs_helper.dart';
 import 'configuracion_asistencias_personales.dart';
 import 'dart:convert';
+import 'codigo_asistencia_service.dart';
 
 class AsistenciasPersonalesScreen extends StatefulWidget {
-  const AsistenciasPersonalesScreen({super.key});
+  // Sesión opcional: si se pasa (p. ej. desde el asistente) se usa directo;
+  // si es null (admin de carrera) se carga desde PrefsHelper como antes.
+  final String? filialId;
+  final String? filialNombre;
+  final String? facultad;
+  final String? carreraId;
+  final String? carreraNombre;
+
+  const AsistenciasPersonalesScreen({
+    super.key,
+    this.filialId,
+    this.filialNombre,
+    this.facultad,
+    this.carreraId,
+    this.carreraNombre,
+  });
 
   @override
   State<AsistenciasPersonalesScreen> createState() =>
@@ -50,9 +67,25 @@ class _AsistenciasPersonalesScreenState
   late AnimationController _fadeCtrl;
   late AnimationController _qrScaleCtrl;
 
+  // ─────────────────────────────────────────────────────────────
+  // DESIGN TOKENS — fuente única de verdad para colores y sombras.
+  // ─────────────────────────────────────────────────────────────
   static const Color _primary = Color(0xFF1E3A5F);
+  static const Color _primaryLight = Color(0xFF2D5F8D);
   static const Color _danger = Color(0xFFE53935);
   static const Color _success = Color(0xFF43A047);
+  static const Color _bg = Color(0xFFF5F7FA);
+  static const Color _surface = Colors.white;
+  static const Color _muted = Color(0xFF64748B);
+
+  // Una sola "voz" de sombra: suave, tintada con el primario, sutil.
+  static final List<BoxShadow> _cardShadow = [
+    BoxShadow(
+      color: _primary.withValues(alpha: 0.06),
+      blurRadius: 14,
+      offset: const Offset(0, 4),
+    ),
+  ];
 
   @override
   void initState() {
@@ -84,51 +117,89 @@ class _AsistenciasPersonalesScreenState
   }
 
   Future<void> _loadSessionData() async {
-    setState(() => _isLoadingSession = true);
-    try {
-      final adminData = await PrefsHelper.getAdminCarreraData();
-      if (adminData != null) {
-        setState(() {
-          _filialId = adminData['filial'];
-          _filialNombre = adminData['filialNombre'];
-          _facultad = adminData['facultad'];
-          _carreraId = adminData['carreraId'] ?? adminData['carrera'];
-          _carreraNombre = adminData['carrera'];
-        });
-        await _cargarEventos();
-      }
-    } catch (e) {
-      _snack('Error al cargar la sesión', error: true);
-    } finally {
-      setState(() => _isLoadingSession = false);
+  setState(() => _isLoadingSession = true);
+  try {
+    // Si la pantalla recibió datos de sesión, los usamos sin consultar Prefs.
+    final tieneSesionExterna = widget.facultad != null ||
+        widget.carreraId != null ||
+        widget.filialId != null;
+
+    if (tieneSesionExterna) {
+      setState(() {
+        _filialId = widget.filialId;
+        _filialNombre = widget.filialNombre;
+        _facultad = widget.facultad;
+        _carreraId = widget.carreraId;
+        _carreraNombre = widget.carreraNombre;
+      });
+      await _cargarEventos();
+      return;
     }
+
+    final adminData = await PrefsHelper.getAdminCarreraData();
+    if (adminData != null) {
+      setState(() {
+        _filialId = adminData['filial'];
+        _filialNombre = adminData['filialNombre'];
+        _facultad = adminData['facultad'];
+        _carreraId = adminData['carreraId'] ?? adminData['carrera'];
+        _carreraNombre = adminData['carrera'];
+      });
+      await _cargarEventos();
+    }
+  } catch (e) {
+    _snack('Error al cargar la sesión', error: true);
+  } finally {
+    setState(() => _isLoadingSession = false);
   }
+}
 
   Future<void> _cargarEventos() async {
-    if (_filialId == null || _facultad == null || _carreraId == null) return;
-    setState(() => _cargandoEventos = true);
-    try {
-      final snap = await _firestore
-          .collection('events')
-          .where('filialId', isEqualTo: _filialId)
-          .where('facultad', isEqualTo: _facultad)
-          .where('carreraId', isEqualTo: _carreraId)
-          .orderBy('createdAt', descending: true)
-          .get();
+  // Necesitamos al menos facultad o carrera para filtrar (evita mostrar todo).
+  if (_facultad == null && _carreraNombre == null) return;
+  setState(() => _cargandoEventos = true);
+  try {
+    // Traemos los eventos ordenados y filtramos en cliente por NOMBRE,
+    // igual que AsistenteQRScreen, para que coincida en ambos roles.
+    final snap = await _firestore
+        .collection('events')
+        .orderBy('createdAt', descending: true)
+        .get();
 
-      setState(() {
-        _eventos = snap.docs.map((doc) {
-          final data = doc.data();
-          data['id'] = doc.id;
-          return data;
-        }).toList();
-        _cargandoEventos = false;
-      });
-    } catch (e) {
-      setState(() => _cargandoEventos = false);
-      _snack('Error al cargar eventos: $e', error: true);
-    }
+    final filtrados = snap.docs.where((doc) {
+      final data = doc.data();
+
+      if (_filialNombre != null && _filialNombre!.isNotEmpty) {
+        final eventoFilial = data['filialNombre']?.toString() ??
+            data['filialId']?.toString() ??
+            '';
+        if (eventoFilial != _filialNombre) return false;
+      }
+
+      if (_facultad != null && _facultad!.isNotEmpty) {
+        if (data['facultad'] != _facultad) return false;
+      }
+
+      if (_carreraNombre != null && _carreraNombre!.isNotEmpty) {
+        if (data['carreraNombre'] != _carreraNombre) return false;
+      }
+
+      return true;
+    }).map((doc) {
+      final data = doc.data();
+      data['id'] = doc.id;
+      return data;
+    }).toList();
+
+    setState(() {
+      _eventos = filtrados;
+      _cargandoEventos = false;
+    });
+  } catch (e) {
+    setState(() => _cargandoEventos = false);
+    _snack('Error al cargar eventos: $e', error: true);
   }
+}
 
   Future<void> _cargarMisAsistencias() async {
     if (_eventos.isEmpty) return;
@@ -168,11 +239,181 @@ class _AsistenciasPersonalesScreenState
     }
   }
 
+  // Devuelve el QR guardado, o lo reconstruye si la asistencia es antigua.
+  String _obtenerQrData(Map<String, dynamic> a) {
+    final guardado = a['qrData'] as String?;
+    if (guardado != null && guardado.isNotEmpty) return guardado;
+
+    final payload = {
+      'filialId': a['filialId'],
+      'filialNombre': a['filialNombre'],
+      'facultad': a['facultad'],
+      'carreraId': a['carreraId'],
+      'carrera': a['carrera'],
+      'eventId': a['eventId'],
+      'eventName': a['eventName'],
+      'asistenciaId': a['docId'], // el docId ES el asistenciaId
+      'nombre': a['nombre'],
+      'descripcion': a['descripcion'],
+      'qrId': a['qrId'],
+      'timestamp': DateTime.now().toIso8601String(),
+      'type': 'asistencia_personal',
+    };
+    return jsonEncode(payload);
+  }
+
+  void _mostrarQR(Map<String, dynamic> a) {
+    HapticFeedback.selectionClick();
+    final data = _obtenerQrData(a);
+    final nombre = (a['nombre'] as String?) ?? 'Asistencia';
+    final eventName = (a['eventName'] as String?) ?? '';
+    final codigo = (a['codigo'] as String?) ?? '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: BoxDecoration(
+                  color: _success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: const [
+                  Icon(Icons.qr_code_2_rounded, color: _success, size: 16),
+                  SizedBox(width: 6),
+                  Text('Código QR',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: _success)),
+                ]),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                nombre,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                    color: _primary),
+              ),
+              if (eventName.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  eventName,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12.5, color: _muted),
+                ),
+              ],
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE0E7ED), width: 2),
+                ),
+                child: QrImageView(
+                  data: data,
+                  version: QrVersions.auto,
+                  size: 240,
+                  backgroundColor: Colors.white,
+                ),
+              ),
+
+              // ── CÓDIGO PARA INGRESO MANUAL ──────────────────────────
+              if (codigo.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                _buildCodigoManualBox(codigo),
+              ],
+
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(ctx),
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  label: const Text('Cerrar',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(13)),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Caja grande con el código de 6 dígitos para ingreso manual.
+  Widget _buildCodigoManualBox(String codigo) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _primary.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Icon(Icons.dialpad_rounded, size: 16, color: _primary),
+              SizedBox(width: 6),
+              Text(
+                'Código para ingreso manual',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _primary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            codigo,
+            style: const TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 8,
+              color: _primary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'El alumno puede escanear el QR o escribir este número.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _confirmarEliminar(Map<String, dynamic> asistencia) async {
     final nombre = asistencia['nombre'] ?? 'esta asistencia';
     final docId = asistencia['docId'] as String;
     final eventId = asistencia['eventId'] as String;
     final qrId = asistencia['qrId'] as String? ?? '';
+    final codigo = asistencia['codigo'] as String? ?? '';
 
     final mq = MediaQuery.of(context);
     final maxH = (mq.size.height
@@ -248,7 +489,7 @@ class _AsistenciasPersonalesScreenState
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
-                        'Se eliminará el QR y todos los datos asociados. Esta acción no se puede deshacer.',
+                        'Se eliminará el QR, el código y todos los datos asociados. Esta acción no se puede deshacer.',
                         style: TextStyle(fontSize: 12, color: _danger),
                       ),
                     ),
@@ -297,8 +538,13 @@ class _AsistenciasPersonalesScreenState
     );
 
     if (confirmado == true) {
+      HapticFeedback.mediumImpact();
       await _eliminarAsistencia(
-          docId: docId, eventId: eventId, qrId: qrId, nombre: nombre);
+          docId: docId,
+          eventId: eventId,
+          qrId: qrId,
+          codigo: codigo,
+          nombre: nombre);
     }
   }
 
@@ -306,6 +552,7 @@ class _AsistenciasPersonalesScreenState
     required String docId,
     required String eventId,
     required String qrId,
+    required String codigo,
     required String nombre,
   }) async {
     try {
@@ -325,6 +572,11 @@ class _AsistenciasPersonalesScreenState
             .delete();
       }
 
+      // Limpiamos también el código manual asociado.
+      if (codigo.isNotEmpty) {
+        await CodigoAsistenciaService.eliminar(codigo);
+      }
+
       setState(() {
         _misAsistencias.removeWhere((a) => a['docId'] == docId);
       });
@@ -338,6 +590,7 @@ class _AsistenciasPersonalesScreenState
   Future<void> _crearAsistenciaYQR() async {
     if (!_formKey.currentState!.validate()) return;
     if (_eventoSeleccionado == null) return;
+    HapticFeedback.lightImpact();
     setState(() => _creandoQR = true);
 
     try {
@@ -378,6 +631,18 @@ class _AsistenciasPersonalesScreenState
         'type': 'asistencia_personal',
       };
 
+      final qrDataJson = jsonEncode(payload);
+
+      // Código de 6 dígitos ligado a este QR (lleva el MISMO qrData).
+      // Al escribirlo, el alumno cae en la misma lógica que al escanear.
+      final codigo = await CodigoAsistenciaService.generarYRegistrar(
+        eventId: eventId,
+        qrId: qrId,
+        type: 'asistencia_personal',
+        asistenciaId: asistenciaId,
+        qrData: qrDataJson,
+      );
+
       await asistenciaRef.set({
         'filialId': _filialId,
         'filialNombre': _filialNombre,
@@ -389,6 +654,8 @@ class _AsistenciasPersonalesScreenState
         'nombre': _nombreCtrl.text.trim(),
         'descripcion': _descripcionCtrl.text.trim(),
         'qrId': qrId,
+        'qrData': qrDataJson,
+        'codigo': codigo,
         'createdAt': FieldValue.serverTimestamp(),
         'generadoPor': 'admin_carrera',
         'activo': true,
@@ -412,6 +679,7 @@ class _AsistenciasPersonalesScreenState
         'nombre': _nombreCtrl.text.trim(),
         'descripcion': _descripcionCtrl.text.trim(),
         'asistenciaId': asistenciaId,
+        'codigo': codigo,
         'activo': true,
         'type': 'asistencia_personal',
         'createdAt': FieldValue.serverTimestamp(),
@@ -425,7 +693,7 @@ class _AsistenciasPersonalesScreenState
       });
 
       setState(() {
-        _qrData = jsonEncode(payload);
+        _qrData = qrDataJson;
         _qrId = qrId;
         _asistenciaDocId = asistenciaId;
         _asistenciaCreada = {
@@ -435,6 +703,7 @@ class _AsistenciasPersonalesScreenState
           'eventId': eventId,
           'asistenciaId': asistenciaId,
           'qrId': qrId,
+          'codigo': codigo,
         };
         _creandoQR = false;
         _paso = 2;
@@ -497,7 +766,7 @@ class _AsistenciasPersonalesScreenState
                 ? EdgeInsets.zero
                 : const EdgeInsets.only(top: 16),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F7FA),
+              color: _bg,
               borderRadius: _paso == 0
                   ? BorderRadius.zero
                   : const BorderRadius.only(
@@ -547,7 +816,9 @@ class _AsistenciasPersonalesScreenState
             Text(
               titulos[_paso]!,
               style: const TextStyle(
-                  fontWeight: FontWeight.w700, fontSize: 17),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 17,
+                  letterSpacing: -0.3),
             ),
             const Text(
               'Asistencias Personales',
@@ -622,7 +893,7 @@ class _AsistenciasPersonalesScreenState
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: Colors.blue.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(
                       color: Colors.blue.withValues(alpha: 0.25)),
                 ),
@@ -633,8 +904,10 @@ class _AsistenciasPersonalesScreenState
                   Expanded(
                     child: Text(
                       'Crea una asistencia con el nombre que quieras, luego configura cuándo funciona el QR desde "Mis asistencias".',
-                      style:
-                          TextStyle(fontSize: 12, color: Colors.blue[700]),
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.blue[700],
+                          height: 1.4),
                     ),
                   ),
                 ]),
@@ -654,22 +927,18 @@ class _AsistenciasPersonalesScreenState
   Widget _buildSelectorEventoTarjeta() {
     return GestureDetector(
       onTap: () {
+        HapticFeedback.selectionClick();
         setState(() => _paso = 1);
         _fadeCtrl.forward(from: 0);
       },
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: _surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
               color: _primary.withValues(alpha: 0.3), width: 1.5),
-          boxShadow: [
-            BoxShadow(
-                color: _primary.withValues(alpha: 0.06),
-                blurRadius: 10,
-                offset: const Offset(0, 3))
-          ],
+          boxShadow: _cardShadow,
         ),
         child: Row(children: [
           Container(
@@ -693,8 +962,7 @@ class _AsistenciasPersonalesScreenState
                   SizedBox(height: 4),
                   Text(
                       'Toca para elegir el evento al que pertenecerá',
-                      style: TextStyle(
-                          fontSize: 12, color: Color(0xFF64748B))),
+                      style: TextStyle(fontSize: 12, color: _muted)),
                 ]),
           ),
           Container(
@@ -717,7 +985,13 @@ class _AsistenciasPersonalesScreenState
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-          color: _primary, borderRadius: BorderRadius.circular(14)),
+        gradient: const LinearGradient(
+            colors: [_primary, _primaryLight],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: _cardShadow,
+      ),
       child: Row(children: [
         const Icon(Icons.event_rounded, color: Colors.white70, size: 20),
         const SizedBox(width: 10),
@@ -741,6 +1015,7 @@ class _AsistenciasPersonalesScreenState
         const SizedBox(width: 8),
         GestureDetector(
           onTap: () {
+            HapticFeedback.selectionClick();
             setState(() => _paso = 1);
             _fadeCtrl.forward(from: 0);
           },
@@ -773,7 +1048,7 @@ class _AsistenciasPersonalesScreenState
                 hintText: 'Ej: Ingreso Mañana, Control Tarde, Cierre...',
                 prefixIcon: const Icon(Icons.edit_rounded),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: _surface,
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide:
@@ -802,7 +1077,7 @@ class _AsistenciasPersonalesScreenState
                   child: Icon(Icons.notes_rounded),
                 ),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: _surface,
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide:
@@ -858,12 +1133,12 @@ class _AsistenciasPersonalesScreenState
               if (_eventos.isNotEmpty) _buildFiltroEvento(),
               const SizedBox(height: 16),
               Row(children: [
-                Flexible(
-                  child: const Text(
+                const Flexible(
+                  child: Text(
                     'Asistencias creadas',
                     style: TextStyle(
                         fontSize: 15,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         color: _primary),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -883,7 +1158,10 @@ class _AsistenciasPersonalesScreenState
                 ),
                 const Spacer(),
                 GestureDetector(
-                  onTap: _cargarMisAsistencias,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    _cargarMisAsistencias();
+                  },
                   child: Container(
                     padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
@@ -896,13 +1174,9 @@ class _AsistenciasPersonalesScreenState
               ]),
               const SizedBox(height: 12),
               if (_cargandoAsistencias)
-                const Center(
-                    child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 48),
-                  child: CircularProgressIndicator(
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(_primary)),
-                ))
+                Column(
+                    children: List.generate(
+                        4, (_) => _buildSkeletonCard()))
               else if (_misAsistencias.isEmpty)
                 _buildEmptyAsistencias()
               else
@@ -964,13 +1238,16 @@ class _AsistenciasPersonalesScreenState
     required VoidCallback onTap,
   }) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: seleccionado ? _primary : Colors.white,
+          color: seleccionado ? _primary : _surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
               color: seleccionado ? _primary : const Color(0xFFDDE3EA)),
@@ -996,11 +1273,41 @@ class _AsistenciasPersonalesScreenState
     );
   }
 
+  // Skeleton de carga (placeholder animado) en lugar de un spinner.
+  Widget _buildSkeletonCard() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: _cardShadow,
+      ),
+      child: Row(children: [
+        const _Skeleton(height: 46, width: 46, radius: 12),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              _Skeleton(height: 13, width: 170, radius: 6),
+              SizedBox(height: 9),
+              _Skeleton(height: 10, width: 110, radius: 6),
+            ],
+          ),
+        ),
+      ]),
+    );
+  }
+
   Widget _buildEmptyAsistencias() {
     return Container(
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
-          color: Colors.white, borderRadius: BorderRadius.circular(16)),
+          color: _surface,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: _cardShadow),
       child: Column(children: [
         Container(
           padding: const EdgeInsets.all(20),
@@ -1013,7 +1320,7 @@ class _AsistenciasPersonalesScreenState
         const Text('Sin asistencias aún',
             style: TextStyle(
                 fontSize: 16,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
                 color: _primary)),
         const SizedBox(height: 8),
         Text(
@@ -1034,6 +1341,7 @@ class _AsistenciasPersonalesScreenState
                 borderRadius: BorderRadius.circular(10)),
             padding: const EdgeInsets.symmetric(
                 horizontal: 20, vertical: 10),
+            elevation: 0,
           ),
         ),
       ]),
@@ -1044,11 +1352,9 @@ class _AsistenciasPersonalesScreenState
     final nombre = (asistencia['nombre'] as String?) ?? 'Sin nombre';
     final inicial =
         nombre.isNotEmpty ? nombre.substring(0, 1).toUpperCase() : '?';
-    final eventName =
-        (asistencia['eventName'] as String?) ?? '';
+    final eventName = (asistencia['eventName'] as String?) ?? '';
     final activo = asistencia['activo'] == true;
-    final descripcion =
-        (asistencia['descripcion'] as String?) ?? '';
+    final descripcion = (asistencia['descripcion'] as String?) ?? '';
     final docId = asistencia['docId'] as String;
     final eventId = asistencia['eventId'] as String;
     final qrId = asistencia['qrId'] as String? ?? '';
@@ -1073,11 +1379,10 @@ class _AsistenciasPersonalesScreenState
         padding: const EdgeInsets.only(right: 24),
         child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.delete_rounded,
-                  color: Colors.white, size: 28),
-              const SizedBox(height: 4),
-              const Text('Eliminar',
+            children: const [
+              Icon(Icons.delete_rounded, color: Colors.white, size: 28),
+              SizedBox(height: 4),
+              Text('Eliminar',
                   style: TextStyle(
                       color: Colors.white,
                       fontSize: 12,
@@ -1087,26 +1392,20 @@ class _AsistenciasPersonalesScreenState
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: _surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2))
-          ],
+          boxShadow: _cardShadow,
         ),
         child: Column(children: [
           Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             child: Row(children: [
               Container(
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                      colors: [Color(0xFF1E3A5F), Color(0xFF2D5F8D)],
+                      colors: [_primary, _primaryLight],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight),
                   borderRadius: BorderRadius.circular(12),
@@ -1137,13 +1436,13 @@ class _AsistenciasPersonalesScreenState
                       const SizedBox(height: 3),
                       Row(children: [
                         const Icon(Icons.event_rounded,
-                            size: 11, color: Color(0xFF64748B)),
+                            size: 11, color: _muted),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             eventName,
                             style: const TextStyle(
-                                fontSize: 11, color: Color(0xFF64748B)),
+                                fontSize: 11, color: _muted),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -1198,21 +1497,52 @@ class _AsistenciasPersonalesScreenState
                   child: InkWell(
                     borderRadius: const BorderRadius.only(
                         bottomLeft: Radius.circular(16)),
-                    onTap: () => _abrirConfiguracion(
-                        asistencia: asistencia,
-                        docId: docId,
-                        eventId: eventId,
-                        qrId: qrId),
+                    onTap: () => _mostrarQR(asistencia),
                     child: const Padding(
                       padding: EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
+                          horizontal: 12, vertical: 12),
+                      child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.qr_code_2_rounded,
+                                color: _success, size: 15),
+                            SizedBox(width: 6),
+                            Text('Ver QR',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: _success)),
+                          ]),
+                    ),
+                  ),
+                ),
+              ),
+              Container(
+                  width: 1,
+                  height: 36,
+                  color: _primary.withValues(alpha: 0.08)),
+              Expanded(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      _abrirConfiguracion(
+                          asistencia: asistencia,
+                          docId: docId,
+                          eventId: eventId,
+                          qrId: qrId);
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
                       child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.tune_rounded,
                                 color: _primary, size: 15),
                             SizedBox(width: 6),
-                            Text('Configurar QR',
+                            Text('Configurar',
                                 style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
@@ -1234,18 +1564,9 @@ class _AsistenciasPersonalesScreenState
                   onTap: () => _confirmarEliminar(asistencia),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 12),
-                    child: Row(children: [
-                      Icon(Icons.delete_outline_rounded,
-                          color: _danger.withValues(alpha: 0.8),
-                          size: 15),
-                      const SizedBox(width: 6),
-                      Text('Eliminar',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: _danger.withValues(alpha: 0.8))),
-                    ]),
+                        horizontal: 16, vertical: 12),
+                    child: Icon(Icons.delete_outline_rounded,
+                        color: _danger.withValues(alpha: 0.8), size: 17),
                   ),
                 ),
               ),
@@ -1259,11 +1580,20 @@ class _AsistenciasPersonalesScreenState
   Widget _buildConfigResumen(Map<String, dynamic> a) {
     final tiempoActivo = a['tiempoLimiteActivo'] == true;
     final ventanaActiva = a['ventanaHorariaActiva'] == true;
-    if (!tiempoActivo && !ventanaActiva) return const SizedBox.shrink();
+    final codigo = (a['codigo'] as String?) ?? '';
+    if (!tiempoActivo && !ventanaActiva && codigo.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       child: Wrap(spacing: 6, runSpacing: 6, children: [
+        if (codigo.isNotEmpty)
+          _buildMiniChip(
+            Icons.dialpad_rounded,
+            'Cód. $codigo',
+            _primary,
+          ),
         if (tiempoActivo)
           _buildMiniChip(
             Icons.timer_rounded,
@@ -1329,12 +1659,12 @@ class _AsistenciasPersonalesScreenState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                Flexible(
-                  child: const Text(
+                const Flexible(
+                  child: Text(
                     'Eventos de tu carrera',
                     style: TextStyle(
                         fontSize: 15,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         color: _primary),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1354,7 +1684,10 @@ class _AsistenciasPersonalesScreenState
                 ),
                 const Spacer(),
                 GestureDetector(
-                  onTap: _cargarEventos,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    _cargarEventos();
+                  },
                   child: Container(
                     padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
@@ -1367,13 +1700,9 @@ class _AsistenciasPersonalesScreenState
               ]),
               const SizedBox(height: 12),
               if (_cargandoEventos)
-                const Center(
-                    child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 48),
-                  child: CircularProgressIndicator(
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(_primary)),
-                ))
+                Column(
+                    children: List.generate(
+                        4, (_) => _buildSkeletonCard()))
               else if (_eventos.isEmpty)
                 _buildEmptyEventos()
               else
@@ -1399,7 +1728,9 @@ class _AsistenciasPersonalesScreenState
     return Container(
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
-          color: Colors.white, borderRadius: BorderRadius.circular(16)),
+          color: _surface,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: _cardShadow),
       child: Column(children: [
         Container(
           padding: const EdgeInsets.all(20),
@@ -1412,7 +1743,7 @@ class _AsistenciasPersonalesScreenState
         const Text('No hay eventos disponibles',
             style: TextStyle(
                 fontSize: 16,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
                 color: _primary)),
         const SizedBox(height: 8),
         Text(
@@ -1435,6 +1766,7 @@ class _AsistenciasPersonalesScreenState
 
     return GestureDetector(
       onTap: () {
+        HapticFeedback.selectionClick();
         setState(() {
           _eventoSeleccionado = evento;
           _paso = 0;
@@ -1443,17 +1775,11 @@ class _AsistenciasPersonalesScreenState
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: _surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2))
-          ],
+          boxShadow: _cardShadow,
         ),
         child: Row(children: [
           Container(
@@ -1461,7 +1787,7 @@ class _AsistenciasPersonalesScreenState
             height: 46,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                  colors: [Color(0xFF1E3A5F), Color(0xFF2D5F8D)],
+                  colors: [_primary, _primaryLight],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight),
               borderRadius: BorderRadius.circular(12),
@@ -1484,7 +1810,7 @@ class _AsistenciasPersonalesScreenState
                   Text(
                     nombre,
                     style: const TextStyle(
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         fontSize: 14,
                         color: _primary),
                     overflow: TextOverflow.ellipsis,
@@ -1493,13 +1819,13 @@ class _AsistenciasPersonalesScreenState
                     const SizedBox(height: 4),
                     Row(children: [
                       const Icon(Icons.calendar_today,
-                          size: 11, color: Color(0xFF64748B)),
+                          size: 11, color: _muted),
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
                           periodo,
                           style: const TextStyle(
-                              fontSize: 12, color: Color(0xFF64748B)),
+                              fontSize: 12, color: _muted),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -1533,7 +1859,7 @@ class _AsistenciasPersonalesScreenState
               Container(
                 padding: const EdgeInsets.all(22),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: _surface,
                   borderRadius: BorderRadius.circular(22),
                   boxShadow: [
                     BoxShadow(
@@ -1559,6 +1885,7 @@ class _AsistenciasPersonalesScreenState
                               style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
                                   color: Colors.white)),
                         ]),
                   ),
@@ -1578,6 +1905,16 @@ class _AsistenciasPersonalesScreenState
                       backgroundColor: Colors.white,
                     ),
                   ),
+
+                  // ── CÓDIGO PARA INGRESO MANUAL ────────────────────────
+                  if ((_asistenciaCreada?['codigo'] ?? '')
+                      .toString()
+                      .isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    _buildCodigoManualBox(
+                        _asistenciaCreada!['codigo'].toString()),
+                  ],
+
                   const SizedBox(height: 20),
                   Container(
                     padding: const EdgeInsets.all(14),
@@ -1618,7 +1955,9 @@ class _AsistenciasPersonalesScreenState
                         child: Text(
                           'Para configurar el tiempo límite, ventana horaria o desactivar el QR, ve a "Mis asistencias".',
                           style: TextStyle(
-                              fontSize: 12, color: Colors.blue[700]),
+                              fontSize: 12,
+                              color: Colors.blue[700],
+                              height: 1.4),
                         ),
                       ),
                     ]),
@@ -1694,6 +2033,63 @@ class _AsistenciasPersonalesScreenState
           ),
         ),
       ]),
+    );
+  }
+}
+
+// ───────────────────────────────────────────────────────────────
+// Widget de skeleton (placeholder de carga con pulso suave).
+// Autocontenido: maneja su propio AnimationController.
+// ───────────────────────────────────────────────────────────────
+class _Skeleton extends StatefulWidget {
+  final double height;
+  final double? width;
+  final double radius;
+
+  const _Skeleton({
+    required this.height,
+    this.width,
+    this.radius = 12,
+  });
+
+  @override
+  State<_Skeleton> createState() => _SkeletonState();
+}
+
+class _SkeletonState extends State<_Skeleton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _anim = Tween<double>(begin: 0.45, end: 1.0)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _anim,
+      child: Container(
+        height: widget.height,
+        width: widget.width,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE6EBF1),
+          borderRadius: BorderRadius.circular(widget.radius),
+        ),
+      ),
     );
   }
 }

@@ -9,18 +9,11 @@ class ParticipantesCarreraExcelService {
   static const _cobalt    = '#1A3A6E';
   static const _blue      = '#2563EB';
   static const _blueSoft  = '#DBEAFE';
-  static const _blueText  = '#1E40AF';
   static const _gray900   = '#111827';
   static const _gray700   = '#374151';
   static const _gray400   = '#9CA3AF';
   static const _gray100   = '#F3F4F6';
   static const _white     = '#FFFFFF';
-  static const _greenDark  = '#166534';
-  static const _greenLight = '#DCFCE7';
-  static const _yellowDark = '#854D0E';
-  static const _yellowLight = '#FEF9C3';
-  static const _redDark    = '#991B1B';
-  static const _redLight   = '#FEE2E2';
   static const _gold       = '#D97706';
   static const _goldBg     = '#FFFBEB';
   static const _silverBg   = '#F8FAFC';
@@ -52,8 +45,6 @@ class ParticipantesCarreraExcelService {
           });
         }
       }
-
-      debugPrint('✅ Proyectos para Excel: ${todos.length}');
 
       _crearHojaResumenCategorias(
         excel: excel,
@@ -102,6 +93,8 @@ class ParticipantesCarreraExcelService {
 
   // ═══════════════════════════════════════════════════════════════════════════
   // HOJA 1 — Resumen por Categoría
+  // Columnas: 0=CATEGORÍA, 1=POS, 2=CÓDIGO, 3=TÍTULO, 4=INTEGRANTES,
+  //           5=SALA, 6=PROMEDIO, 7=JURADOS  → total 8 cols (0-7)
   // ═══════════════════════════════════════════════════════════════════════════
   void _crearHojaResumenCategorias({
     required Excel excel,
@@ -211,15 +204,15 @@ class ParticipantesCarreraExcelService {
       fontColorHex: ExcelColor.fromHexString(_gray900),
       horizontalAlign: HorizontalAlign.Center,
     );
-    final sNota = CellStyle(
+    final sDatoPromedio = CellStyle(
       bold: true, fontSize: 9,
-      fontColorHex: ExcelColor.fromHexString(_blueText),
+      fontColorHex: ExcelColor.fromHexString(_gray900),
       horizontalAlign: HorizontalAlign.Center,
     );
-    final sNotaPar = CellStyle(
+    final sDatoPromedioP = CellStyle(
       bold: true, fontSize: 9,
       backgroundColorHex: ExcelColor.fromHexString(_blueSoft),
-      fontColorHex: ExcelColor.fromHexString(_blueText),
+      fontColorHex: ExcelColor.fromHexString(_gray900),
       horizontalAlign: HorizontalAlign.Center,
     );
     final sSinEval = CellStyle(
@@ -240,15 +233,13 @@ class ParticipantesCarreraExcelService {
     );
 
     // Banner
-    // Columnas: 0=CATEGORÍA, 1=POS, 2=CÓDIGO, 3=TÍTULO, 4=INTEGRANTES, 5=SALA,
-    //           6=PROMEDIO, 7=MÁX, 8=MÍN, 9=JURADOS  → total 10 cols (0-9)
     _cel(sheet, 0, 0, '  REPORTE DE PARTICIPANTES', sTitulo);
     _cel(sheet, 1, 0, '  ${eventoNombre.toUpperCase()}', sSubtitulo);
-    for (int c = 0; c <= 9; c++) _cel(sheet, 2, c, '', sSeparador);
+    for (int c = 0; c <= 7; c++) _cel(sheet, 2, c, '', sSeparador);
     sheet.setRowHeight(2, 4);
 
-    _merge(sheet, 0, 0, 0, 9);
-    _merge(sheet, 1, 0, 1, 9);
+    _merge(sheet, 0, 0, 0, 7);
+    _merge(sheet, 1, 0, 1, 7);
 
     // Metadatos
     final fechaGen = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
@@ -269,7 +260,7 @@ class ParticipantesCarreraExcelService {
     for (int i = 0; i < metas.length; i++) {
       _cel(sheet, i + 3, 0, metas[i][0], sMetaLabel);
       _cel(sheet, i + 3, 1, '  ${metas[i][1]}', sMetaValue);
-      _merge(sheet, i + 3, 1, i + 3, 9);
+      _merge(sheet, i + 3, 1, i + 3, 7);
       sheet.setRowHeight(i + 3, 16);
     }
     sheet.setRowHeight(9, 8);
@@ -279,7 +270,7 @@ class ParticipantesCarreraExcelService {
     final encabezados = [
       'CATEGORÍA', 'POS', 'CÓDIGO', 'TÍTULO DEL PROYECTO',
       'INTEGRANTES', 'SALA',
-      'PROMEDIO/${escalaBase.toStringAsFixed(0)}', 'MÁX', 'MÍN', 'JURADOS',
+      'PROMEDIO/${escalaBase.toStringAsFixed(0)}', 'JURADOS EVALUADORES',
     ];
     for (int c = 0; c < encabezados.length; c++) {
       _cel(sheet, fEnc, c, encabezados[c], sEncCol);
@@ -295,44 +286,40 @@ class ParticipantesCarreraExcelService {
       final proyectos = entry.value;
 
       _cel(sheet, fila, 0, '  $categoria', sEncCategoria);
-      _merge(sheet, fila, 0, fila, 9);
+      _merge(sheet, fila, 0, fila, 7);
       sheet.setRowHeight(fila, 22);
       fila++;
 
       for (int i = 0; i < proyectos.length; i++) {
         final p = proyectos[i];
-        final tieneEval = p['tieneEvaluaciones'] == true;
-        final promedio  = (p['promedio']  as num?)?.toDouble() ?? 0.0;
-        final notaMax   = (p['notaMax']   as num?)?.toDouble() ?? 0.0;
-        final notaMin   = (p['notaMin']   as num?)?.toDouble() ?? 0.0;
-        final jurados   = (p['cantidadJurados'] as int?) ?? 0;
+        final tieneEval      = p['tieneEvaluaciones'] == true;
+        final promedio       = (p['promedio']  as num?)?.toDouble() ?? 0.0;
+        final nombresJurados = _sv(p['nombresJurados']);
         final par = filaGlobal % 2 == 0;
 
         final CellStyle sFila;
         final CellStyle sFilaC;
-        final CellStyle sFilaNota;
+        final CellStyle sFilaPromedio;
         final String puestoStr;
 
         if (!tieneEval) {
-          sFila     = par ? sDatoIzqP : sDatoIzq;
-          sFilaC    = par ? sDatoCPar : sDatoC;
-          sFilaNota = sSinEval;
-          puestoStr = '—';
+          sFila         = par ? sDatoIzqP : sDatoIzq;
+          sFilaC        = par ? sDatoCPar : sDatoC;
+          sFilaPromedio = sSinEval;
+          puestoStr     = '—';
         } else if (i == 0) {
-          sFila = sOro;    sFilaC = sOroC;    sFilaNota = sOroC;    puestoStr = '🥇 1°';
+          sFila = sOro;    sFilaC = sOroC;    sFilaPromedio = sOroC;    puestoStr = '🥇 1°';
         } else if (i == 1) {
-          sFila = sPlata;  sFilaC = sPlataC;  sFilaNota = sPlataC;  puestoStr = '🥈 2°';
+          sFila = sPlata;  sFilaC = sPlataC;  sFilaPromedio = sPlataC;  puestoStr = '🥈 2°';
         } else if (i == 2) {
-          sFila = sBronce; sFilaC = sBronceC; sFilaNota = sBronceC; puestoStr = '🥉 3°';
+          sFila = sBronce; sFilaC = sBronceC; sFilaPromedio = sBronceC; puestoStr = '🥉 3°';
         } else {
-          sFila     = par ? sDatoIzqP : sDatoIzq;
-          sFilaC    = par ? sDatoCPar : sDatoC;
-          sFilaNota = par ? sNotaPar  : sNota;
-          puestoStr = '${i + 1}°';
+          sFila         = par ? sDatoIzqP : sDatoIzq;
+          sFilaC        = par ? sDatoCPar : sDatoC;
+          sFilaPromedio = par ? sDatoPromedioP : sDatoPromedio;
+          puestoStr     = '${i + 1}°';
         }
 
-        // col: 0=cat vacía, 1=pos, 2=código, 3=título, 4=integrantes, 5=sala
-        //      6=promedio, 7=máx, 8=mín, 9=jurados
         _cel(sheet, fila, 0, '', sFilaC);
         _cel(sheet, fila, 1, puestoStr, sFilaC);
         _cel(sheet, fila, 2, _sv(p['codigo']), sFilaC);
@@ -341,15 +328,11 @@ class ParticipantesCarreraExcelService {
         _cel(sheet, fila, 5, _sv(p['sala']), sFilaC);
 
         if (tieneEval) {
-          _celDouble(sheet, fila, 6, promedio, sFilaNota);
-          _celDouble(sheet, fila, 7, notaMax,  sFilaNota);
-          _celDouble(sheet, fila, 8, notaMin,  sFilaNota);
-          _celNum(sheet, fila, 9, jurados, sFilaNota);
+          _celDouble(sheet, fila, 6, promedio, sFilaPromedio);
+          _cel(sheet, fila, 7, nombresJurados == '—' ? '' : nombresJurados, sFila);
         } else {
           _cel(sheet, fila, 6, 'S/E', sSinEval);
-          _cel(sheet, fila, 7, 'S/E', sSinEval);
-          _cel(sheet, fila, 8, 'S/E', sSinEval);
-          _cel(sheet, fila, 9, '—',   sSinEval);
+          _cel(sheet, fila, 7, '',    sSinEval);
         }
 
         sheet.setRowHeight(fila, 18);
@@ -370,9 +353,7 @@ class ParticipantesCarreraExcelService {
             sStatLabel);
         _merge(sheet, fila, 0, fila, 5);
         _cel(sheet, fila, 6, avgCat.toStringAsFixed(2), sStatVal);
-        _cel(sheet, fila, 7, maxCat.toStringAsFixed(2), sStatVal);
-        _cel(sheet, fila, 8, minCat.toStringAsFixed(2), sStatVal);
-        _cel(sheet, fila, 9, '', sStatVal);
+        _cel(sheet, fila, 7, '', sStatVal);
         sheet.setRowHeight(fila, 18);
         fila++;
       }
@@ -389,9 +370,7 @@ class ParticipantesCarreraExcelService {
     sheet.setColumnWidth(4, 30);
     sheet.setColumnWidth(5, 7);
     sheet.setColumnWidth(6, 11);
-    sheet.setColumnWidth(7, 9);
-    sheet.setColumnWidth(8, 9);
-    sheet.setColumnWidth(9, 9);
+    sheet.setColumnWidth(7, 40);
 
     sheet.setRowHeight(0, 34);
     sheet.setRowHeight(1, 22);
@@ -399,6 +378,8 @@ class ParticipantesCarreraExcelService {
 
   // ═══════════════════════════════════════════════════════════════════════════
   // HOJA 2 — Lista Completa de Proyectos
+  // Columnas: 0=N°, 1=CÓDIGO, 2=TÍTULO, 3=CATEGORÍA, 4=INTEGRANTES,
+  //           5=SALA, 6=PROMEDIO, 7=JURADOS  → total 8 cols (0-7)
   // ═══════════════════════════════════════════════════════════════════════════
   void _crearHojaListaCompleta({
     required Excel excel,
@@ -456,28 +437,15 @@ class ParticipantesCarreraExcelService {
     final sCen  = CellStyle(fontSize: 9, fontColorHex: ExcelColor.fromHexString(_gray900), horizontalAlign: HorizontalAlign.Center);
     final sIzqP = CellStyle(fontSize: 9, backgroundColorHex: ExcelColor.fromHexString(_blueSoft), fontColorHex: ExcelColor.fromHexString(_gray900));
     final sCenP = CellStyle(fontSize: 9, backgroundColorHex: ExcelColor.fromHexString(_blueSoft), fontColorHex: ExcelColor.fromHexString(_gray900), horizontalAlign: HorizontalAlign.Center);
-    final sBadgeAlto = CellStyle(
+    final sPromedioNormal = CellStyle(
       bold: true, fontSize: 9,
-      backgroundColorHex: ExcelColor.fromHexString(_greenLight),
-      fontColorHex: ExcelColor.fromHexString(_greenDark),
+      fontColorHex: ExcelColor.fromHexString(_gray900),
       horizontalAlign: HorizontalAlign.Center,
     );
-    final sBadgeMedio = CellStyle(
+    final sPromedioNormalP = CellStyle(
       bold: true, fontSize: 9,
-      backgroundColorHex: ExcelColor.fromHexString(_yellowLight),
-      fontColorHex: ExcelColor.fromHexString(_yellowDark),
-      horizontalAlign: HorizontalAlign.Center,
-    );
-    final sBadgeBajo = CellStyle(
-      bold: true, fontSize: 9,
-      backgroundColorHex: ExcelColor.fromHexString(_redLight),
-      fontColorHex: ExcelColor.fromHexString(_redDark),
-      horizontalAlign: HorizontalAlign.Center,
-    );
-    final sBadgeEstado = CellStyle(
-      bold: true, fontSize: 9,
-      backgroundColorHex: ExcelColor.fromHexString(_greenLight),
-      fontColorHex: ExcelColor.fromHexString(_greenDark),
+      backgroundColorHex: ExcelColor.fromHexString(_blueSoft),
+      fontColorHex: ExcelColor.fromHexString(_gray900),
       horizontalAlign: HorizontalAlign.Center,
     );
     final sSinEval = CellStyle(
@@ -485,23 +453,15 @@ class ParticipantesCarreraExcelService {
       fontColorHex: ExcelColor.fromHexString(_gray400),
       horizontalAlign: HorizontalAlign.Center,
     );
-    final sSinEvalEstado = CellStyle(
-      fontSize: 9,
-      backgroundColorHex: ExcelColor.fromHexString(_gray100),
-      fontColorHex: ExcelColor.fromHexString(_gray400),
-      horizontalAlign: HorizontalAlign.Center,
-    );
 
     // Banner
-    // Columnas: 0=N°, 1=CÓDIGO, 2=TÍTULO, 3=CATEGORÍA, 4=INTEGRANTES,
-    //           5=SALA, 6=PROMEDIO, 7=JURADOS, 8=ESTADO  → total 9 cols (0-8)
     _cel(sheet, 0, 0, '  LISTA COMPLETA DE PROYECTOS', sTitulo);
     _cel(sheet, 1, 0, '  ${eventoNombre.toUpperCase()}', sSubtitulo);
-    for (int c = 0; c <= 8; c++) _cel(sheet, 2, c, '', sSeparador);
+    for (int c = 0; c <= 7; c++) _cel(sheet, 2, c, '', sSeparador);
     sheet.setRowHeight(2, 4);
 
-    _merge(sheet, 0, 0, 0, 8);
-    _merge(sheet, 1, 0, 1, 8);
+    _merge(sheet, 0, 0, 0, 7);
+    _merge(sheet, 1, 0, 1, 7);
 
     // Metadatos
     final fechaGen = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
@@ -517,7 +477,7 @@ class ParticipantesCarreraExcelService {
     for (int i = 0; i < metas.length; i++) {
       _cel(sheet, i + 3, 0, metas[i][0], sMetaLabel);
       _cel(sheet, i + 3, 1, '  ${metas[i][1]}', sMetaValue);
-      _merge(sheet, i + 3, 1, i + 3, 8);
+      _merge(sheet, i + 3, 1, i + 3, 7);
       sheet.setRowHeight(i + 3, 16);
     }
     sheet.setRowHeight(9, 8);
@@ -527,36 +487,26 @@ class ParticipantesCarreraExcelService {
     final encabezados = [
       'N°', 'CÓDIGO', 'TÍTULO DEL PROYECTO',
       'CATEGORÍA', 'INTEGRANTES',
-      'SALA', 'PROMEDIO/${escalaBase.toStringAsFixed(0)}', 'JURADOS', 'ESTADO',
+      'SALA', 'PROMEDIO/${escalaBase.toStringAsFixed(0)}', 'JURADOS EVALUADORES',
     ];
     for (int c = 0; c < encabezados.length; c++) {
       _cel(sheet, fEnc, c, encabezados[c], c == 6 ? sEncPromedio : sEnc);
     }
     sheet.setRowHeight(fEnc, 28);
 
-    // Nota máxima para badge relativo
-    final maxPromedio = todos.isEmpty
-        ? 1.0
-        : todos
-            .where((p) => p['tieneEvaluaciones'] == true)
-            .map((p) => (p['promedio'] as num?)?.toDouble() ?? 0.0)
-            .fold(0.0, (a, b) => a > b ? a : b)
-            .clamp(0.1, 999.0);
-
     // Filas de datos
     for (int i = 0; i < todos.length; i++) {
       final p = todos[i];
       final fila = fEnc + 1 + i;
       final par = i % 2 == 0;
-      final tieneEval = p['tieneEvaluaciones'] == true;
-      final promedio  = (p['promedio'] as num?)?.toDouble() ?? 0.0;
-      final jurados   = (p['cantidadJurados'] as int?) ?? 0;
+      final tieneEval      = p['tieneEvaluaciones'] == true;
+      final promedio       = (p['promedio'] as num?)?.toDouble() ?? 0.0;
+      final nombresJurados = _sv(p['nombresJurados']);
 
       final sI = par ? sIzqP : sIzq;
       final sC = par ? sCenP : sCen;
+      final sProm = par ? sPromedioNormalP : sPromedioNormal;
 
-      // col: 0=N°, 1=código, 2=título, 3=categoría, 4=integrantes,
-      //      5=sala, 6=promedio, 7=jurados, 8=estado
       _cel(sheet, fila, 0, '${i + 1}', sC);
       _cel(sheet, fila, 1, _sv(p['codigo']), sC);
       _cel(sheet, fila, 2, _sv(p['titulo']), sI);
@@ -565,17 +515,11 @@ class ParticipantesCarreraExcelService {
       _cel(sheet, fila, 5, _sv(p['sala']), sC);
 
       if (tieneEval) {
-        final ratio  = promedio / maxPromedio;
-        final sBadge = ratio >= 0.66 ? sBadgeAlto
-            : ratio >= 0.33 ? sBadgeMedio
-            : sBadgeBajo;
-        _celDouble(sheet, fila, 6, promedio, sBadge);
-        _celNum(sheet, fila, 7, jurados, sC);
-        _cel(sheet, fila, 8, '✓ Evaluado', sBadgeEstado);
+        _celDouble(sheet, fila, 6, promedio, sProm);
+        _cel(sheet, fila, 7, nombresJurados == '—' ? '' : nombresJurados, sI);
       } else {
         _cel(sheet, fila, 6, 'S/E', sSinEval);
-        _cel(sheet, fila, 7, '—',   sSinEval);
-        _cel(sheet, fila, 8, 'Pendiente', sSinEvalEstado);
+        _cel(sheet, fila, 7, '',    sSinEval);
       }
 
       sheet.setRowHeight(fila, 18);
@@ -589,8 +533,7 @@ class ParticipantesCarreraExcelService {
     sheet.setColumnWidth(4, 30);
     sheet.setColumnWidth(5, 7);
     sheet.setColumnWidth(6, 11);
-    sheet.setColumnWidth(7, 9);
-    sheet.setColumnWidth(8, 13);
+    sheet.setColumnWidth(7, 40);
 
     sheet.setRowHeight(0, 34);
     sheet.setRowHeight(1, 22);
@@ -739,6 +682,7 @@ class ParticipantesCarreraExcelService {
         {'label': 'Título',       'key': 'titulo'},
         {'label': 'Código',       'key': 'codigo'},
         {'label': 'Integrantes',  'key': 'integrantes'},
+        {'label': 'Jurados',      'key': 'nombresJurados'},
         {'label': 'Prom./${escalaBase.toStringAsFixed(0)}', 'key': 'promedio'},
       ];
 

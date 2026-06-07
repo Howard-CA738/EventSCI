@@ -124,10 +124,6 @@ class _ParticipantesCompletoCarreraScreenState
       _carrera      = adminData['carrera']      as String?;
       _carreraId    = adminData['carreraId'] ?? adminData['carrera'];
 
-      debugPrint('🔑 filialNombre: $_filialNombre');
-      debugPrint('🔑 carrera: $_carrera');
-      debugPrint('🔑 docKey que se usará: ${_filialNombre}_$_carrera');
-
       await _resolverNombres.cargarEstudiantes(
         filialNombre: _filialNombre ?? '',
         carrera: _carrera ?? '',
@@ -223,8 +219,6 @@ class _ParticipantesCompletoCarreraScreenState
           .collection('proyectos')
           .get();
 
-      debugPrint('📦 Proyectos encontrados: ${proyectosSnap.docs.length}');
-
       if (proyectosSnap.docs.isEmpty) return [];
 
       const batchSize = 10;
@@ -237,7 +231,6 @@ class _ParticipantesCompletoCarreraScreenState
           batch.map((doc) => _procesarProyecto(eventoId, doc)),
         );
         results.addAll(batchResults);
-        debugPrint('✅ Lote procesado: ${i ~/ batchSize + 1} — total acumulado: ${results.length}');
       }
 
       final Map<String, List<Map<String, dynamic>>> porCategoria = {};
@@ -250,8 +243,6 @@ class _ParticipantesCompletoCarreraScreenState
         lista.sort((a, b) =>
             (b['promedio'] as double).compareTo(a['promedio'] as double));
       }
-
-      debugPrint('📊 Categorías generadas: ${porCategoria.length}');
 
       return porCategoria.entries
           .map((e) => _CategoriaData(nombre: e.key, proyectos: e.value))
@@ -267,9 +258,7 @@ class _ParticipantesCompletoCarreraScreenState
       String eventoId, QueryDocumentSnapshot doc) async {
     try {
       final d = doc.data() as Map<String, dynamic>;
-      debugPrint('🔍 Integrantes raw: ${d['Integrantes']}');
-      debugPrint('🔍 Tipo: ${d['Integrantes'].runtimeType}');
-      debugPrint('🔍 Resuelto: ${_resolverNombres.resolver(d['Integrantes'])}');
+
       final evalSnap = await _firestore
           .collection('events')
           .doc(eventoId)
@@ -284,7 +273,7 @@ class _ParticipantesCompletoCarreraScreenState
           'proyectoId':        doc.id,
           'codigo':            _s(d['Código'],       'Sin código'),
           'titulo':            _s(d['Título'],        'Sin título'),
-          'integrantes': _resolverNombres.resolver(d['Integrantes']),
+          'integrantes':       _resolverNombres.resolver(d['Integrantes']),
           'sala':              _s(d['Sala'],           ''),
           'clasificacion':     _s(d['Clasificación'], 'Sin categoría'),
           'asesor':            _s(d['Asesor'],         ''),
@@ -294,6 +283,7 @@ class _ParticipantesCompletoCarreraScreenState
           'notaMax':           0.0,
           'notaMin':           0.0,
           'cantidadJurados':   0,
+          'nombresJurados':    '',
           'notas':             <double>[],
           'notasRaw':          <double>[],
           'escalaBase':        _C.escalaBase,
@@ -303,18 +293,21 @@ class _ParticipantesCompletoCarreraScreenState
 
       final notasNormalizadas = <double>[];
       final notasRaw          = <double>[];
+      final nombresJurados    = <String>[];
 
       for (final e in evalSnap.docs) {
         final data      = e.data() as Map<String, dynamic>;
         final notaTotal = (data['notaTotal'] ?? 0.0 as num).toDouble();
 
-        if (!data.containsKey('puntajeMaximo')) {
-          debugPrint('⚠️ Evaluación ${e.id} sin puntajeMaximo — omitida del ranking');
-          continue;
+        final nombreJurado = _s(data['juradoNombre'], '');
+        if (nombreJurado.isNotEmpty) {
+          nombresJurados.add(nombreJurado);
         }
 
-        final puntajeMax = (data['puntajeMaximo'] as num).toDouble();
-        final maxSeguro  = puntajeMax > 0 ? puntajeMax : _C.escalaBase;
+        if (!data.containsKey('puntajeMaximo')) continue;
+
+        final puntajeMax  = (data['puntajeMaximo'] as num).toDouble();
+        final maxSeguro   = puntajeMax > 0 ? puntajeMax : _C.escalaBase;
         final normalizada =
             ((notaTotal / maxSeguro) * _C.escalaBase).clamp(0.0, _C.escalaBase);
 
@@ -337,6 +330,7 @@ class _ParticipantesCompletoCarreraScreenState
           'notaMax':           0.0,
           'notaMin':           0.0,
           'cantidadJurados':   0,
+          'nombresJurados':    nombresJurados.join(', '),
           'notas':             <double>[],
           'notasRaw':          <double>[],
           'escalaBase':        _C.escalaBase,
@@ -353,7 +347,7 @@ class _ParticipantesCompletoCarreraScreenState
         'proyectoId':        doc.id,
         'codigo':            _s(d['Código'],       'Sin código'),
         'titulo':            _s(d['Título'],        'Sin título'),
-        'integrantes': _resolverNombres.resolver(d['Integrantes']),
+        'integrantes':       _resolverNombres.resolver(d['Integrantes']),
         'sala':              _s(d['Sala'],           ''),
         'clasificacion':     _s(d['Clasificación'], 'Sin categoría'),
         'asesor':            _s(d['Asesor'],         ''),
@@ -363,6 +357,7 @@ class _ParticipantesCompletoCarreraScreenState
         'notaMax':           notaMax,
         'notaMin':           notaMin,
         'cantidadJurados':   notasNormalizadas.length,
+        'nombresJurados':    nombresJurados.join(', '),
         'notas':             notasNormalizadas,
         'notasRaw':          notasRaw,
         'escalaBase':        _C.escalaBase,
@@ -385,6 +380,7 @@ class _ParticipantesCompletoCarreraScreenState
         'notaMax':           0.0,
         'notaMin':           0.0,
         'cantidadJurados':   0,
+        'nombresJurados':    '',
         'notas':             <double>[],
         'notasRaw':          <double>[],
         'escalaBase':        _C.escalaBase,
@@ -1949,15 +1945,16 @@ class _DetalleProyectoSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final promedio    = (proyecto['promedio']    as num?)?.toDouble() ?? 0.0;
-    final promedioRaw = (proyecto['promedioRaw'] as num?)?.toDouble() ?? 0.0;
-    final notaMax     = (proyecto['notaMax']     as num?)?.toDouble() ?? 0.0;
-    final notaMin     = (proyecto['notaMin']     as num?)?.toDouble() ?? 0.0;
-    final jurados     = (proyecto['cantidadJurados'] as int?) ?? 0;
-    final notas       = (proyecto['notas']    as List?)?.cast<double>() ?? [];
-    final notasRaw    = (proyecto['notasRaw'] as List?)?.cast<double>() ?? [];
-    final tieneEval   = proyecto['tieneEvaluaciones'] == true;
-    final escala      = (proyecto['escalaBase'] as num?)?.toDouble() ?? _C.escalaBase;
+    final promedio      = (proyecto['promedio']    as num?)?.toDouble() ?? 0.0;
+    final promedioRaw   = (proyecto['promedioRaw'] as num?)?.toDouble() ?? 0.0;
+    final notaMax       = (proyecto['notaMax']     as num?)?.toDouble() ?? 0.0;
+    final notaMin       = (proyecto['notaMin']     as num?)?.toDouble() ?? 0.0;
+    final jurados       = (proyecto['cantidadJurados'] as int?) ?? 0;
+    final nombresJurados = _s(proyecto['nombresJurados'], '');
+    final notas         = (proyecto['notas']    as List?)?.cast<double>() ?? [];
+    final notasRaw      = (proyecto['notasRaw'] as List?)?.cast<double>() ?? [];
+    final tieneEval     = proyecto['tieneEvaluaciones'] == true;
+    final escala        = (proyecto['escalaBase'] as num?)?.toDouble() ?? _C.escalaBase;
 
     final color    = _posColor(posicion, tieneEval);
     final icono    = _posIcono(posicion, tieneEval);
@@ -2206,6 +2203,27 @@ class _DetalleProyectoSheet extends StatelessWidget {
                           ),
                         );
                       }).toList(),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  if (nombresJurados.isNotEmpty) ...[
+                    const _SheetSection(
+                        titulo: 'Jurados evaluadores',
+                        icon:   Icons.gavel_rounded),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Text(nombresJurados,
+                          style: const TextStyle(
+                              fontSize: 13,
+                              color:    _C.textSecondary,
+                              height:   1.5)),
                     ),
                     const SizedBox(height: 20),
                   ],

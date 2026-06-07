@@ -1,6 +1,6 @@
 name: eventos
 description: "Sistema de Gestión de Eventos UPEU"
-version: 1.0.0+20
+version: 1.0.0+21
 
 environment:
   sdk: ^3.8.1
@@ -46,9 +46,15 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
+  remove_alpha_ios: true
   image_path: "assets/images/eventsci_logo.png"
   adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/images/eventsci_logo.png"
+  web:
+    generate: true
+    image_path: "assets/images/eventsci_logo.png"
+    background_color: "#FFFFFF"
+    theme_color: "#1E3A5F"
 
 flutter_native_splash:
   color: "#FFFFFF"

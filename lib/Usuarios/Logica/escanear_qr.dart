@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'dart:convert';
@@ -6,6 +7,7 @@ import '/prefs_helper.dart';
 import '/usuarios/logica/asistencias.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+import '/admin_carrera/codigo_asistencia_service.dart';
 
 class EscanearQRScreen extends StatefulWidget {
   const EscanearQRScreen({super.key});
@@ -17,7 +19,6 @@ class EscanearQRScreen extends StatefulWidget {
 class _EscanearQRScreenState extends State<EscanearQRScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  StreamSubscription<Object?>? _barcodeSub;
   MobileScannerController cameraController = MobileScannerController();
   String? _currentUserId;
   String? _currentUserName;
@@ -28,12 +29,10 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
 
   double _currentZoom = 0.0;
 
-  static const int _cooldownMinutos = 5;
+  static const int _cooldownSegundos = 3;
   static const String _keyCooldown = 'ultimo_escaneo_global';
 
   Map<String, dynamic>? _cachedUserData;
-  int _escaneosDeSesion = 0;
-  static const int _intervaloActualizacionResumen = 3;
 
   late AnimationController _animationController;
   late Animation<double> _scanLineAnimation;
@@ -55,20 +54,10 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
-        unawaited(_barcodeSub?.cancel());
-        _barcodeSub = cameraController.barcodes.listen((capture) {
-          for (final barcode in capture.barcodes) {
-            if (barcode.rawValue != null && !_hasScanned && !_isProcessing) {
-              _procesarQR(barcode.rawValue!);
-              break;
-            }
-          }
-        });
         unawaited(cameraController.start());
         break;
       case AppLifecycleState.inactive:
-        unawaited(_barcodeSub?.cancel());
-        _barcodeSub = null;
+      case AppLifecycleState.paused:
         unawaited(cameraController.stop());
         break;
       default:
@@ -98,7 +87,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
       vsync: this,
     )..repeat(reverse: true);
 
-    _scanLineAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+    _scanLineAnimation = Tween<double>(begin: 0.0, end: 0.95).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
@@ -107,20 +96,19 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
   }
 
   Future<bool> _verificarYGuardarCooldown() async {
+    if (_cooldownSegundos <= 0) return true;
+
     final prefs = await SharedPreferences.getInstance();
-    final ultimoMs = prefs.getInt('${_keyCooldown}_${_currentUserId}');
+    final ultimoMs = prefs.getInt('${_keyCooldown}_$_currentUserId');
 
     if (ultimoMs != null) {
       final ultimo = DateTime.fromMillisecondsSinceEpoch(ultimoMs);
       final diferencia = DateTime.now().difference(ultimo);
 
-      if (diferencia.inMinutes < _cooldownMinutos) {
-        final restanteTotal =
-            (_cooldownMinutos * 60) - diferencia.inSeconds;
-        final minutos = restanteTotal ~/ 60;
-        final segundos = restanteTotal % 60;
+      if (diferencia.inSeconds < _cooldownSegundos) {
+        final restante = _cooldownSegundos - diferencia.inSeconds;
         _showSnackBar(
-          '⏳ Debes esperar ${minutos}m ${segundos}s para escanear de nuevo',
+          '⏳ Espera ${restante}s para escanear de nuevo',
           isError: true,
         );
         return false;
@@ -128,7 +116,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
     }
 
     await prefs.setInt(
-      '${_keyCooldown}_${_currentUserId}',
+      '${_keyCooldown}_$_currentUserId',
       DateTime.now().millisecondsSinceEpoch,
     );
     return true;
@@ -198,13 +186,239 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
     return studentFilial.isEmpty || studentFilial == qrFilial;
   }
 
-  Future<void> _procesarQR(String qrData) async {
-    if (_isProcessing || _hasScanned) return;
+  void _mostrarDialogoCodigo() async {
+    await cameraController.stop();
 
-    setState(() {
-      _isProcessing = true;
-      _hasScanned = true;
-    });
+    final codigoCtrl = TextEditingController();
+    bool buscando = false;
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 40,
+              ),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(22)),
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(
+                  left: 24,
+                  right: 24,
+                  top: 24,
+                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E3A5F).withValues(alpha: 0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.dialpad_rounded,
+                          color: Color(0xFF1E3A5F), size: 32),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Ingresar código',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1E3A5F),
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Escribe el código de 6 dígitos\nque te proporcionó el asistente.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                          height: 1.4),
+                    ),
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: codigoCtrl,
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.center,
+                      autofocus: true,
+                      maxLength: 6,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
+                      style: const TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 10,
+                        color: Color(0xFF1E3A5F),
+                      ),
+                      decoration: InputDecoration(
+                        counterText: '',
+                        hintText: '······',
+                        hintStyle: TextStyle(
+                          fontSize: 32,
+                          letterSpacing: 10,
+                          color: Colors.grey.shade300,
+                          fontWeight: FontWeight.w800,
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF5F7FA),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(
+                              color: Color(0xFF1E3A5F), width: 2),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 16),
+                      ),
+                      onSubmitted: (_) async {
+                        if (codigoCtrl.text.trim().length == 6 && !buscando) {
+                          await _procesarCodigoManual(
+                            codigoCtrl.text.trim(),
+                            ctx,
+                            setDialogState,
+                            () => buscando = true,
+                            () => buscando = false,
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 22),
+                    Row(children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 48,
+                          child: OutlinedButton(
+                            onPressed: buscando
+                                ? null
+                                : () {
+                                    Navigator.pop(ctx);
+                                  },
+                            style: OutlinedButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 13),
+                              side: const BorderSide(
+                                  color: Color(0xFF1E3A5F)),
+                              foregroundColor: const Color(0xFF1E3A5F),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: const Text('Cancelar',
+                                style:
+                                    TextStyle(fontWeight: FontWeight.w600)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SizedBox(
+                          height: 48,
+                          child: ElevatedButton(
+                            onPressed: buscando
+                                ? null
+                                : () async {
+                                    final c = codigoCtrl.text.trim();
+                                    if (c.length != 6) {
+                                      _showSnackBar(
+                                          'El código debe tener 6 dígitos',
+                                          isError: true);
+                                      return;
+                                    }
+                                    await _procesarCodigoManual(
+                                      c,
+                                      ctx,
+                                      setDialogState,
+                                      () => setDialogState(
+                                          () => buscando = true),
+                                      () => setDialogState(
+                                          () => buscando = false),
+                                    );
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1E3A5F),
+                              foregroundColor: Colors.white,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 13),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              elevation: 0,
+                            ),
+                            child: buscando
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        color: Colors.white, strokeWidth: 2),
+                                  )
+                                : const Text('Confirmar',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ),
+                    ]),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (mounted && !_isProcessing && !_hasScanned) {
+      await cameraController.start();
+    }
+  }
+
+  Future<void> _procesarCodigoManual(
+    String codigo,
+    BuildContext dialogCtx,
+    StateSetter setDialogState,
+    VoidCallback onStart,
+    VoidCallback onEnd,
+  ) async {
+    onStart();
+    try {
+      final qrData = await CodigoAsistenciaService.buscarQrData(codigo);
+      if (qrData == null || qrData.isEmpty) {
+        onEnd();
+        _showSnackBar('⚠️ Código no encontrado o inválido', isError: true);
+        return;
+      }
+      if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+      setState(() {
+        _hasScanned = true;
+        _isProcessing = true;
+      });
+      await _procesarQR(qrData);
+    } catch (e) {
+      onEnd();
+      _showSnackBar('Error al buscar el código: $e', isError: true);
+    }
+  }
+
+  Future<void> _procesarQR(String qrData) async {
+    if (_isProcessing && !_hasScanned) return;
+    if (!_hasScanned) {
+      setState(() {
+        _isProcessing = true;
+        _hasScanned = true;
+      });
+    }
 
     try {
       await cameraController.stop();
@@ -389,12 +603,10 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
       final grupoFinal = _esBlancoONulo(grupo) ? null : grupo;
 
       final cooldownOk = await _verificarYGuardarCooldown();
-      if (!cooldownOk) return;
-
-      _escaneosDeSesion++;
-      final debeActualizarResumen =
-          (_escaneosDeSesion % _intervaloActualizacionResumen == 0) ||
-          (_escaneosDeSesion == 1);
+      if (!cooldownOk) {
+        _resetScanner();
+        return;
+      }
 
       final batch = _firestore.batch();
 
@@ -423,23 +635,21 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         'registrationMethod': 'qr_scan',
       });
 
-      if (debeActualizarResumen) {
-        batch.set(resumenRef, {
-          'studentName': _currentUserName,
-          'studentUsername': _cachedUserData!['username'],
-          'studentDNI': _cachedUserData!['dni'],
-          'studentCodigo': _cachedUserData!['codigoUniversitario'],
-          'facultad': _cachedUserData!['facultad'],
-          'carrera': _cachedUserData!['carrera'],
-          'filial': _studentFilial ?? '',
-          'ciclo': _cachedUserData!['ciclo'],
-          'grupo': _cachedUserData!['grupo'],
-          'eventId': qrInfo['eventId'],
-          'eventName': qrInfo['eventName'],
-          'lastScan': FieldValue.serverTimestamp(),
-          'totalScans': FieldValue.increment(1),
-        }, SetOptions(merge: true));
-      }
+      batch.set(resumenRef, {
+        'studentName': _currentUserName,
+        'studentUsername': _cachedUserData!['username'],
+        'studentDNI': _cachedUserData!['dni'],
+        'studentCodigo': _cachedUserData!['codigoUniversitario'],
+        'facultad': _cachedUserData!['facultad'],
+        'carrera': _cachedUserData!['carrera'],
+        'filial': _studentFilial ?? '',
+        'ciclo': _cachedUserData!['ciclo'],
+        'grupo': _cachedUserData!['grupo'],
+        'eventId': qrInfo['eventId'],
+        'eventName': qrInfo['eventName'],
+        'lastScan': FieldValue.serverTimestamp(),
+        'totalScans': FieldValue.increment(1),
+      }, SetOptions(merge: true));
 
       await batch.commit();
 
@@ -665,11 +875,9 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
 
       final cooldownOk = await _verificarYGuardarCooldown();
       if (!cooldownOk) {
-        if (mounted) setState(() => _hasScanned = false);
+        _resetScanner();
         return;
       }
-
-      final batch = _firestore.batch();
 
       final registroRef = _firestore
           .collection('events')
@@ -679,7 +887,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
           .collection('registros')
           .doc(studentId);
 
-      batch.set(registroRef, {
+      await registroRef.set({
         'studentId': studentId,
         'studentName': _currentUserName,
         'studentUsername': _cachedUserData!['username'],
@@ -698,21 +906,22 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
         'qrId': qrId,
         'type': 'asistencia_personal',
         'timestamp': FieldValue.serverTimestamp(),
-        'registrationMethod': 'qr_scan',
+        'registrationMethod': 'codigo_manual',
       });
 
-      final resumenRef = _firestore
-          .collection('events')
-          .doc(eventId)
-          .collection('asistencias_personales')
-          .doc(asistenciaId);
-
-      batch.set(resumenRef, {
-        'totalRegistros': FieldValue.increment(1),
-        'lastScan': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      await batch.commit();
+      unawaited(
+        _firestore
+            .collection('events')
+            .doc(eventId)
+            .collection('asistencias_personales')
+            .doc(asistenciaId)
+            .set({
+          'totalRegistros': FieldValue.increment(1),
+          'lastScan': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)).catchError((Object e) {
+          debugPrint('totalRegistros no actualizado (contención esperada): $e');
+        }),
+      );
 
       _showResult(
         success: true,
@@ -755,308 +964,323 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 32,
+          ),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           elevation: 5,
-          child: Container(
+          child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.9,
-              maxHeight: MediaQuery.of(context).size.height * 0.85,
+              maxHeight: MediaQuery.of(dialogContext).size.height * 0.82,
             ),
-            decoration: BoxDecoration(
+            child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: success
-                    ? [Colors.green.shade50, Colors.white]
-                    : [Colors.red.shade50, Colors.white],
-              ),
-            ),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TweenAnimationBuilder<double>(
-                    duration: const Duration(milliseconds: 600),
-                    tween: Tween<double>(begin: 0, end: 1),
-                    builder: (context, double value, child) {
-                      return Transform.scale(
-                        scale: value,
-                        child: Container(
-                          width: 70,
-                          height: 70,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: success
+                        ? [Colors.green.shade50, Colors.white]
+                        : [Colors.red.shade50, Colors.white],
+                  ),
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TweenAnimationBuilder<double>(
+                        duration: const Duration(milliseconds: 600),
+                        tween: Tween<double>(begin: 0, end: 1),
+                        builder: (context, double value, child) {
+                          return Transform.scale(
+                            scale: value,
+                            child: Container(
+                              width: 70,
+                              height: 70,
+                              decoration: BoxDecoration(
+                                color: success ? Colors.green : Colors.red,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: (success ? Colors.green : Colors.red)
+                                        .withValues(alpha: 0.3),
+                                    blurRadius: 20,
+                                    spreadRadius: 5,
+                                  ),
+                                ],
+                              ),
+                              child: Icon(
+                                success ? Icons.check_circle : Icons.error,
+                                color: Colors.white,
+                                size: 40,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        success ? '¡Éxito!' : 'No permitido',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: success
+                              ? Colors.green.shade700
+                              : Colors.red.shade700,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        message,
+                        style: const TextStyle(
+                            fontSize: 15, color: Color(0xFF64748B)),
+                        textAlign: TextAlign.center,
+                        softWrap: true,
+                      ),
+                      if (success && eventName != null) ...[
+                        const SizedBox(height: 20),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: success ? Colors.green : Colors.red,
-                            shape: BoxShape.circle,
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.green.shade200),
                             boxShadow: [
                               BoxShadow(
-                                color: (success ? Colors.green : Colors.red)
-                                    .withValues(alpha: 0.3),
-                                blurRadius: 20,
-                                spreadRadius: 5,
+                                color: Colors.grey.shade200,
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
                               ),
                             ],
                           ),
-                          child: Icon(
-                            success ? Icons.check_circle : Icons.error,
-                            color: Colors.white,
-                            size: 40,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    success ? '¡Éxito!' : 'No permitido',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: success
-                          ? Colors.green.shade700
-                          : Colors.red.shade700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    message,
-                    style: const TextStyle(
-                        fontSize: 15, color: Color(0xFF64748B)),
-                    textAlign: TextAlign.center,
-                    softWrap: true,
-                  ),
-
-                  if (success && eventName != null) ...[
-                    const SizedBox(height: 20),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.green.shade200),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.shade200,
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade50,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Icon(Icons.event_available,
-                                    color: Colors.green.shade600, size: 20),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  eventName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15,
-                                    color: Color(0xFF1E3A5F),
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          if (esPersonal) ...[
-                            const SizedBox(height: 10),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: Colors.deepPurple.shade600,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Icon(Icons.how_to_reg_rounded,
-                                      color: Colors.white, size: 14),
-                                  SizedBox(width: 6),
-                                  Text(
-                                    'ASISTENCIA PERSONAL',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.5,
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(Icons.event_available,
+                                        color: Colors.green.shade600, size: 20),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      eventName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                        color: Color(0xFF1E3A5F),
+                                      ),
+                                      maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
-                          ],
-
-                          if (filial != null && filial.isNotEmpty) ...[
-                            const SizedBox(height: 10),
-                            _buildResultRow(
-                              icon: Icons.location_city,
-                              iconColor: Colors.blue.shade600,
-                              label: 'Filial: $filial',
-                            ),
-                          ],
-
-                          if (categoria != null) ...[
-                            const SizedBox(height: 10),
-                            _buildResultRow(
-                              icon: esPersonal
-                                  ? Icons.how_to_reg_rounded
-                                  : Icons.category,
-                              iconColor: esPersonal
-                                  ? Colors.deepPurple.shade600
-                                  : Colors.blue.shade600,
-                              label: esPersonal
-                                  ? 'Tipo: $categoria'
-                                  : 'Categoría: $categoria',
-                            ),
-                          ],
-
-                          if (!esPersonal &&
-                              codigoProyecto != null &&
-                              codigoProyecto != 'Sin código') ...[
-                            const SizedBox(height: 10),
-                            _buildResultRow(
-                              icon: Icons.qr_code,
-                              iconColor: Colors.purple.shade600,
-                              label: 'Código: $codigoProyecto',
-                              bold: true,
-                            ),
-                          ],
-
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Icon(Icons.person,
-                                  color: Colors.grey.shade600, size: 16),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _currentUserName ?? '',
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF1E3A5F),
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    if (_currentUsername != null)
-                                      Text(
-                                        '@$_currentUsername',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Color(0xFF64748B),
+                              if (esPersonal) ...[
+                                const SizedBox(height: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.deepPurple.shade600,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.how_to_reg_rounded,
+                                          color: Colors.white, size: 14),
+                                      SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          'ASISTENCIA PERSONAL',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.5,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                    if (_studentFilial != null)
-                                      Text(
-                                        '🏛️ $_studentFilial',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.blue.shade700,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
+                              ],
+                              if (filial != null && filial.isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                _buildResultRow(
+                                  icon: Icons.location_city,
+                                  iconColor: Colors.blue.shade600,
+                                  label: 'Filial: $filial',
+                                ),
+                              ],
+                              if (categoria != null) ...[
+                                const SizedBox(height: 10),
+                                _buildResultRow(
+                                  icon: esPersonal
+                                      ? Icons.how_to_reg_rounded
+                                      : Icons.category,
+                                  iconColor: esPersonal
+                                      ? Colors.deepPurple.shade600
+                                      : Colors.blue.shade600,
+                                  label: esPersonal
+                                      ? 'Tipo: $categoria'
+                                      : 'Categoría: $categoria',
+                                ),
+                              ],
+                              if (!esPersonal &&
+                                  codigoProyecto != null &&
+                                  codigoProyecto != 'Sin código') ...[
+                                const SizedBox(height: 10),
+                                _buildResultRow(
+                                  icon: Icons.qr_code,
+                                  iconColor: Colors.purple.shade600,
+                                  label: 'Código: $codigoProyecto',
+                                  bold: true,
+                                ),
+                              ],
+                              const SizedBox(height: 10),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(Icons.person,
+                                      color: Colors.grey.shade600, size: 16),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _currentUserName ?? '',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF1E3A5F),
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 2,
+                                        ),
+                                        if (_currentUsername != null)
+                                          Text(
+                                            '@$_currentUsername',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF64748B),
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        if (_studentFilial != null)
+                                          Text(
+                                            '🏛️ $_studentFilial',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.blue.shade700,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                    ),
-                  ],
-
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      if (!success)
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                              Navigator.of(context).pop();
-                            },
-                            style: OutlinedButton.styleFrom(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
-                              side: const BorderSide(
-                                  color: Color(0xFF64748B)),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text(
-                              'Cancelar',
-                              style: TextStyle(
-                                color: Color(0xFF64748B),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
                         ),
-                      if (!success) const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                            if (success) {
-                              Navigator.of(context).pushReplacement(
-                                MaterialPageRoute(
-                                  builder: (_) => const AsistenciasScreen(),
+                      ],
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          if (!success)
+                            Expanded(
+                              child: SizedBox(
+                                height: 50,
+                                child: OutlinedButton(
+                                  onPressed: () {
+                                    Navigator.of(dialogContext).pop();
+                                    Navigator.of(context).pop();
+                                  },
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14),
+                                    side: const BorderSide(
+                                        color: Color(0xFF64748B)),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Cancelar',
+                                    style: TextStyle(
+                                      color: Color(0xFF64748B),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                 ),
-                              );
-                            } else {
-                              _resetScanner();
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: success
-                                ? Colors.green
-                                : const Color(0xFF1E3A5F),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
-                            elevation: 0,
-                          ),
-                          child: Text(
-                            success ? 'Ver Asistencias' : 'Reintentar',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
+                          if (!success) const SizedBox(width: 12),
+                          Expanded(
+                            child: SizedBox(
+                              height: 50,
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  Navigator.of(dialogContext).pop();
+                                  if (success) {
+                                    Navigator.of(context).pushReplacement(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const AsistenciasScreen(),
+                                      ),
+                                    );
+                                  } else {
+                                    _resetScanner();
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: success
+                                      ? Colors.green
+                                      : const Color(0xFF1E3A5F),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: Text(
+                                  success ? 'Ver Asistencias' : 'Reintentar',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -1072,8 +1296,12 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
     bool bold = false,
   }) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: iconColor, size: 16),
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(icon, color: iconColor, size: 16),
+        ),
         const SizedBox(width: 8),
         Flexible(
           child: Text(
@@ -1086,7 +1314,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                   : const Color(0xFF64748B),
             ),
             overflow: TextOverflow.ellipsis,
-            maxLines: 2,
+            maxLines: 3,
           ),
         ),
       ],
@@ -1123,7 +1351,11 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 380;
+
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       backgroundColor: const Color(0xFF1E3A5F),
       body: SafeArea(
         child: _currentUserId == null
@@ -1132,73 +1364,92 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
             : Column(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.all(20.0),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isSmallScreen ? 12.0 : 20.0,
+                      vertical: isSmallScreen ? 12.0 : 20.0,
+                    ),
                     child: Row(
                       children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: IconButton(
-                            icon: const Icon(Icons.arrow_back_ios_new,
-                                color: Colors.white, size: 22),
-                            onPressed: () => Navigator.of(context).pop(),
-                            tooltip: 'Regresar',
+                        Semantics(
+                          label: 'Regresar',
+                          button: true,
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(Icons.arrow_back_ios_new,
+                                  color: Colors.white, size: 22),
+                              onPressed: () => Navigator.of(context).pop(),
+                              tooltip: 'Regresar',
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Container(
-                          width: 50,
-                          height: 50,
+                          width: 46,
+                          height: 46,
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Icon(Icons.qr_code_scanner,
-                              color: Color(0xFF1E3A5F), size: 28),
+                              color: Color(0xFF1E3A5F), size: 26),
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 12),
                         const Expanded(
                           child: Text(
-                            'Escanear QR',
+                            'Registrar Asistencia',
                             style: TextStyle(
-                              fontSize: 22,
+                              fontSize: 18,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
                             ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ),
-                        AnimatedBuilder(
-                          animation: _pulseAnimation,
-                          builder: (context, child) {
-                            return Transform.scale(
-                              scale: _pulseAnimation.value,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color:
-                                      Colors.white.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: IconButton(
-                                  icon: Icon(
-                                    _isFlashOn
-                                        ? Icons.flash_on
-                                        : Icons.flash_off,
-                                    color: Colors.white,
-                                    size: 28,
+                        const SizedBox(width: 8),
+                        Semantics(
+                          label: 'Activar o desactivar flash',
+                          button: true,
+                          child: AnimatedBuilder(
+                            animation: _pulseAnimation,
+                            builder: (context, child) {
+                              return Transform.scale(
+                                scale: _pulseAnimation.value,
+                                child: Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color:
+                                        Colors.white.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                  onPressed: _toggleFlash,
-                                  tooltip: 'Flash',
+                                  child: IconButton(
+                                    padding: EdgeInsets.zero,
+                                    icon: Icon(
+                                      _isFlashOn
+                                          ? Icons.flash_on
+                                          : Icons.flash_off,
+                                      color: Colors.white,
+                                      size: 26,
+                                    ),
+                                    onPressed: _toggleFlash,
+                                    tooltip: 'Flash',
+                                  ),
                                 ),
-                              ),
-                            );
-                          },
+                              );
+                            },
+                          ),
                         ),
                       ],
                     ),
                   ),
-
                   Expanded(
                     child: Container(
                       decoration: const BoxDecoration(
@@ -1210,102 +1461,20 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                       ),
                       child: Column(
                         children: [
-                          Container(
-                            margin:
-                                const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color:
-                                      Colors.black.withValues(alpha: 0.05),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 50,
-                                  height: 50,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        const Color(0xFF1E3A5F),
-                                        Colors.blue.shade700,
-                                      ],
-                                    ),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(Icons.person,
-                                      color: Colors.white, size: 28),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _currentUserName ?? 'Cargando...',
-                                        style: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF1E3A5F),
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      if (_currentUsername != null)
-                                        Text(
-                                          '@$_currentUsername',
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            color: Color(0xFF64748B),
-                                          ),
-                                        ),
-                                      if (_studentFilial != null ||
-                                          _studentCarrera != null)
-                                        const SizedBox(height: 6),
-                                      Wrap(
-                                        spacing: 6,
-                                        runSpacing: 4,
-                                        children: [
-                                          if (_studentFilial != null)
-                                            _buildMiniChip(
-                                              icon: Icons.location_city,
-                                              label: _studentFilial!,
-                                              color:
-                                                  const Color(0xFF1565C0),
-                                            ),
-                                          if (_studentCarrera != null)
-                                            _buildMiniChip(
-                                              icon: Icons.menu_book,
-                                              label: _studentCarrera!,
-                                              color:
-                                                  const Color(0xFF00897B),
-                                            ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
                           Expanded(
                             child: Container(
-                              margin: const EdgeInsets.all(20),
+                              margin: EdgeInsets.fromLTRB(
+                                isSmallScreen ? 12 : 20,
+                                isSmallScreen ? 12 : 20,
+                                isSmallScreen ? 12 : 20,
+                                8,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.black,
                                 borderRadius: BorderRadius.circular(20),
                                 boxShadow: [
                                   BoxShadow(
-                                    color:
-                                        Colors.black.withValues(alpha: 0.3),
+                                    color: Colors.black.withValues(alpha: 0.3),
                                     blurRadius: 15,
                                     offset: const Offset(0, 5),
                                   ),
@@ -1315,6 +1484,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                               child: Stack(
                                 children: [
                                   GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
                                     onScaleStart: _handleScaleStart,
                                     onScaleUpdate: _handleScaleUpdate,
                                     child: MobileScanner(
@@ -1332,16 +1502,13 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                       },
                                     ),
                                   ),
-
                                   if (_currentZoom > 0.0)
                                     Positioned(
                                       top: 16,
                                       right: 16,
                                       child: Container(
-                                        padding:
-                                            const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 8),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 8),
                                         decoration: BoxDecoration(
                                           color: Colors.black
                                               .withValues(alpha: 0.6),
@@ -1352,15 +1519,13 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             const Icon(Icons.zoom_in,
-                                                color: Colors.white,
-                                                size: 18),
+                                                color: Colors.white, size: 18),
                                             const SizedBox(width: 6),
                                             Text(
                                               '${(_currentZoom * 100).toInt()}%',
                                               style: const TextStyle(
                                                 color: Colors.white,
-                                                fontWeight:
-                                                    FontWeight.bold,
+                                                fontWeight: FontWeight.bold,
                                                 fontSize: 14,
                                               ),
                                             ),
@@ -1368,51 +1533,42 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                         ),
                                       ),
                                     ),
-
                                   Center(
                                     child: SizedBox(
-                                      width: 250,
-                                      height: 250,
+                                      width: isSmallScreen ? 200 : 250,
+                                      height: isSmallScreen ? 200 : 250,
                                       child: Stack(
+                                        clipBehavior: Clip.none,
                                         children: [
                                           ...List.generate(4, (index) {
                                             return Positioned(
                                               top: index < 2 ? 0 : null,
-                                              bottom:
-                                                  index >= 2 ? 0 : null,
-                                              left: index % 2 == 0
-                                                  ? 0
-                                                  : null,
-                                              right: index % 2 == 1
-                                                  ? 0
-                                                  : null,
+                                              bottom: index >= 2 ? 0 : null,
+                                              left: index % 2 == 0 ? 0 : null,
+                                              right: index % 2 == 1 ? 0 : null,
                                               child: Container(
-                                                width: 40,
-                                                height: 40,
+                                                width: 36,
+                                                height: 36,
                                                 decoration: BoxDecoration(
                                                   border: Border(
                                                     top: index < 2
                                                         ? const BorderSide(
-                                                            color:
-                                                                Colors.white,
+                                                            color: Colors.white,
                                                             width: 4)
                                                         : BorderSide.none,
                                                     bottom: index >= 2
                                                         ? const BorderSide(
-                                                            color:
-                                                                Colors.white,
+                                                            color: Colors.white,
                                                             width: 4)
                                                         : BorderSide.none,
                                                     left: index % 2 == 0
                                                         ? const BorderSide(
-                                                            color:
-                                                                Colors.white,
+                                                            color: Colors.white,
                                                             width: 4)
                                                         : BorderSide.none,
                                                     right: index % 2 == 1
                                                         ? const BorderSide(
-                                                            color:
-                                                                Colors.white,
+                                                            color: Colors.white,
                                                             width: 4)
                                                         : BorderSide.none,
                                                   ),
@@ -1423,17 +1579,17 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                           AnimatedBuilder(
                                             animation: _scanLineAnimation,
                                             builder: (context, child) {
+                                              final boxSize =
+                                                  isSmallScreen ? 200.0 : 250.0;
                                               return Positioned(
-                                                top: 250 *
+                                                top: boxSize *
                                                     _scanLineAnimation.value,
                                                 left: 0,
                                                 right: 0,
                                                 child: Container(
                                                   height: 2,
-                                                  decoration:
-                                                      BoxDecoration(
-                                                    gradient:
-                                                        LinearGradient(
+                                                  decoration: BoxDecoration(
+                                                    gradient: LinearGradient(
                                                       colors: [
                                                         Colors.transparent,
                                                         Colors.green.shade400,
@@ -1459,7 +1615,6 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                       ),
                                     ),
                                   ),
-
                                   if (_isProcessing)
                                     Container(
                                       color: Colors.black87,
@@ -1471,19 +1626,23 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                             SizedBox(
                                               width: 60,
                                               height: 60,
-                                              child:
-                                                  CircularProgressIndicator(
+                                              child: CircularProgressIndicator(
                                                 color: Colors.white,
                                                 strokeWidth: 3,
                                               ),
                                             ),
                                             SizedBox(height: 24),
-                                            Text(
-                                              'Registrando asistencia...',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w600,
+                                            Padding(
+                                              padding: EdgeInsets.symmetric(
+                                                  horizontal: 24),
+                                              child: Text(
+                                                'Registrando asistencia...',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                                textAlign: TextAlign.center,
                                               ),
                                             ),
                                           ],
@@ -1494,56 +1653,250 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                               ),
                             ),
                           ),
-
                           Container(
-                            margin:
-                                const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                            padding: const EdgeInsets.all(16),
+                            margin: EdgeInsets.fromLTRB(
+                              isSmallScreen ? 12 : 20,
+                              0,
+                              isSmallScreen ? 12 : 20,
+                              isSmallScreen ? 12 : 20,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color:
-                                      Colors.black.withValues(alpha: 0.05),
+                                  color: Colors.black.withValues(alpha: 0.05),
                                   blurRadius: 10,
                                   offset: const Offset(0, 4),
                                 ),
                               ],
                             ),
-                            child: Row(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF1E3A5F)
-                                        .withValues(alpha: 0.1),
-                                    borderRadius:
-                                        BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(Icons.qr_code_2,
-                                      color: Color(0xFF1E3A5F), size: 32),
-                                ),
-                                const SizedBox(width: 16),
-                                const Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                      16, 14, 16, 10),
+                                  child: Row(
                                     children: [
-                                      Text(
-                                        'Coloca el código QR dentro del marco',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF1E3A5F),
+                                      Container(
+                                        width: 4,
+                                        height: 18,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF1E3A5F),
+                                          borderRadius:
+                                              BorderRadius.circular(2),
                                         ),
                                       ),
-                                      SizedBox(height: 4),
-                                      Text(
-                                        'Usa dos dedos para hacer zoom',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Color(0xFF64748B),
+                                      const SizedBox(width: 8),
+                                      const Flexible(
+                                        child: Text(
+                                          'Elige cómo registrar tu asistencia',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF1E3A5F),
+                                            letterSpacing: -0.2,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 2,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Divider(
+                                  height: 1,
+                                  thickness: 1,
+                                  color: Colors.grey.shade100,
+                                  indent: 16,
+                                  endIndent: 16,
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                      12, 10, 12, 14),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Expanded(
+                                        child: Semantics(
+                                          label:
+                                              'Escanear QR, apunta la cámara al código QR',
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                vertical: 12, horizontal: 10),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF1E3A5F)
+                                                  .withValues(alpha: 0.05),
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                              border: Border.all(
+                                                color: const Color(0xFF1E3A5F)
+                                                    .withValues(alpha: 0.15),
+                                              ),
+                                            ),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.all(10),
+                                                  decoration: BoxDecoration(
+                                                    color:
+                                                        const Color(0xFF1E3A5F)
+                                                            .withValues(
+                                                                alpha: 0.1),
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.qr_code_2,
+                                                    color: Color(0xFF1E3A5F),
+                                                    size: 26,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                const Text(
+                                                  'Escanear QR',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: Color(0xFF1E3A5F),
+                                                  ),
+                                                  textAlign: TextAlign.center,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  'Apunta la cámara\nal código QR',
+                                                  textAlign: TextAlign.center,
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color:
+                                                        Colors.grey.shade500,
+                                                    height: 1.3,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 10),
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Container(
+                                              width: 1,
+                                              height: 20,
+                                              color: Colors.grey.shade300,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'ó',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.grey.shade400,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Container(
+                                              width: 1,
+                                              height: 20,
+                                              color: Colors.grey.shade300,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: Semantics(
+                                          label:
+                                              'Ingresar código manual de 6 dígitos',
+                                          button: true,
+                                          child: GestureDetector(
+                                            onTap: _isProcessing
+                                                ? null
+                                                : _mostrarDialogoCodigo,
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 12,
+                                                      horizontal: 10),
+                                              decoration: BoxDecoration(
+                                                gradient: const LinearGradient(
+                                                  colors: [
+                                                    Color(0xFF0D7377),
+                                                    Color(0xFF14919B),
+                                                  ],
+                                                  begin: Alignment.topLeft,
+                                                  end: Alignment.bottomRight,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: const Color(
+                                                            0xFF0D7377)
+                                                        .withValues(alpha: 0.3),
+                                                    blurRadius: 8,
+                                                    offset:
+                                                        const Offset(0, 3),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                            10),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.white
+                                                          .withValues(
+                                                              alpha: 0.2),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.dialpad_rounded,
+                                                      color: Colors.white,
+                                                      size: 26,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  const Text(
+                                                    'Código manual',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color: Colors.white,
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                  const SizedBox(height: 3),
+                                                  Text(
+                                                    'Ingresa el código\nde 6 dígitos',
+                                                    textAlign: TextAlign.center,
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: Colors.white
+                                                          .withValues(
+                                                              alpha: 0.8),
+                                                      height: 1.3,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -1562,44 +1915,9 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
     );
   }
 
-  Widget _buildMiniChip({
-    required IconData icon,
-    required String label,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 10, color: color),
-          const SizedBox(width: 4),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 100),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                color: color,
-                fontWeight: FontWeight.w600,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _barcodeSub?.cancel();
     _animationController.dispose();
     cameraController.dispose();
     super.dispose();

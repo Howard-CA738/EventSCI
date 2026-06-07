@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 import 'proyectos_categoria_asistente_screen.dart';
+import '/admin_carrera/asistencias_personales.dart';
 
 class AsistenteQRScreen extends StatefulWidget {
   final VoidCallback? logoutCallback;
@@ -223,7 +224,79 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
       ),
     );
   }
-
+void _abrirCrearAsistenciaPersonal() {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => AsistenciasPersonalesScreen(
+        filialId: _filialId,
+        filialNombre: _filialNombre,
+        facultad: _facultad,
+        carreraId: _carreraId,
+        carreraNombre: _carreraNombre,
+      ),
+    ),
+  );
+}
+Widget _buildCrearAsistenciaButton() {
+  return GestureDetector(
+    onTap: _abrirCrearAsistenciaPersonal,
+    child: Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0D7377), Color(0xFF14919B)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0D7377).withValues(alpha: 0.3),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.add_circle_outline,
+                color: Colors.white, size: 24),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Crear asistencia personal',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  'Genera un QR de asistencia con nombre propio',
+                  style: TextStyle(color: Colors.white70, fontSize: 11.5),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.arrow_forward_ios_rounded,
+              color: Colors.white70, size: 14),
+        ],
+      ),
+    ),
+  );
+}
   void _showSnackBar(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -335,6 +408,7 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
             if (_facultad == null && _carreraNombre == null)
               _buildSinDatosCard()
             else ...[
+              _buildCrearAsistenciaButton(), 
               if (_selectedEventId != null) ...[
                 _buildEventoSeleccionadoCard(),
                 const SizedBox(height: 16),
