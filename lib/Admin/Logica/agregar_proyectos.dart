@@ -2,6 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '/admin/logica/grupos.dart';
 
+// ═══════════════════════════════════════════════════════════════════
+// PALETA — alineada con la pantalla de Evaluación Final
+// ═══════════════════════════════════════════════════════════════════
+class _C {
+  static const navy    = Color(0xFF0F2342);
+  static const accent  = Color(0xFF3B82F6);
+  static const teal    = Color(0xFF0F9D58);
+  static const tealL   = Color(0xFFD7F5E6);
+  static const surface = Color(0xFFF8FAFC);
+  static const card    = Colors.white;
+  static const border  = Color(0xFFE2E8F0);
+  static const txt1    = Color(0xFF0F172A);
+  static const txt2    = Color(0xFF475569);
+  static const txt3    = Color(0xFF94A3B8);
+  static const red     = Color(0xFFDC2626);
+}
+
 class AgregarProyectoScreen extends StatefulWidget {
   final Map<String, dynamic> eventData;
   final GruposService gruposService;
@@ -29,6 +46,10 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
   final _salaController = TextEditingController();
 
   bool _isLoading = false;
+
+  // Clasificaciones reales tomadas de los proyectos ya importados del evento.
+  List<String> _clasificacionesExistentes = [];
+  bool _cargandoClasificaciones = true;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -65,6 +86,29 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
         );
 
     _animationController.forward();
+    _cargarClasificaciones();
+  }
+
+  // ── Cargar clasificaciones reales del evento ────────────────────────
+  Future<void> _cargarClasificaciones() async {
+    try {
+      final proyectos = await widget.gruposService
+          .cargarProyectosExistentes(widget.eventData['id']);
+      if (!mounted) return;
+
+      final set = <String>{};
+      for (final p in proyectos) {
+        final c = p['Clasificación']?.toString().trim() ?? '';
+        if (c.isNotEmpty) set.add(c);
+      }
+
+      setState(() {
+        _clasificacionesExistentes = set.toList()..sort();
+        _cargandoClasificaciones = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _cargandoClasificaciones = false);
+    }
   }
 
   @override
@@ -88,95 +132,136 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
         statusBarBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: const Color(0xFF2C5F7C),
-        appBar: AppBar(
-          title: const Text(
-            'Agregar Proyecto',
-            style: TextStyle(fontWeight: FontWeight.w600),
-            overflow: TextOverflow.ellipsis,
-          ),
-          backgroundColor: const Color(0xFF2C5F7C),
-          foregroundColor: Colors.white,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-            onPressed: () => Navigator.of(context).pop(),
-            tooltip: 'Regresar',
-          ),
-        ),
+        backgroundColor: _C.navy,
         body: SafeArea(
-          top: false,
-          child: Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFFF5F7FA),
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(30),
-                topRight: Radius.circular(30),
-              ),
-            ),
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: SlideTransition(
-                position: _slideAnimation,
-                child: KeyboardDismissOnScroll(
-                  child: SingleChildScrollView(
-                    controller: _scrollController,
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: EdgeInsets.only(
-                      left: 20.0,
-                      right: 20.0,
-                      top: 20.0,
-                      bottom:
-                          MediaQuery.of(context).viewInsets.bottom + 32.0,
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    color: _C.surface,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(28),
+                      topRight: Radius.circular(28),
                     ),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _buildHeaderCard(),
-                          const SizedBox(height: 24),
-                          _buildFormCard(),
-                          const SizedBox(height: 24),
-                          _buildActionButtons(),
-                          const SizedBox(height: 16),
-                        ],
+                  ),
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: SlideTransition(
+                      position: _slideAnimation,
+                      child: KeyboardDismissOnScroll(
+                        child: SingleChildScrollView(
+                          controller: _scrollController,
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
+                          padding: EdgeInsets.only(
+                            left: 20.0,
+                            right: 20.0,
+                            top: 22.0,
+                            bottom:
+                                MediaQuery.of(context).viewInsets.bottom + 32.0,
+                          ),
+                          child: Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildEventCard(),
+                                const SizedBox(height: 22),
+                                _buildFormCard(),
+                                const SizedBox(height: 22),
+                                _buildActionButtons(),
+                                const SizedBox(height: 12),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildHeaderCard() {
+  // ── Header navy (estilo Evaluación Final) ───────────────────────────
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 12, 20, 14),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                color: Colors.white, size: 20),
+            onPressed: () => Navigator.of(context).pop(),
+            tooltip: 'Regresar',
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.all(10),
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Agregar Proyecto',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+                letterSpacing: -0.3,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Tarjeta del evento (degradado navy→teal) ────────────────────────
+  Widget _buildEventCard() {
     final eventName =
         (widget.eventData['name'] as String? ?? 'Evento').trim();
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF4CAF50),
-        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(
+          colors: [_C.navy, _C.teal],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: _C.navy.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(16),
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: const Icon(
-              Icons.add_box,
+              Icons.add_box_rounded,
               color: Colors.white,
-              size: 36,
+              size: 30,
             ),
           ),
           const SizedBox(width: 16),
@@ -185,12 +270,13 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
+                Text(
                   'Nuevo Proyecto',
                   style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 12,
                     fontWeight: FontWeight.w500,
+                    letterSpacing: 0.3,
                   ),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
@@ -200,7 +286,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
                   eventName,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 17,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -217,13 +303,13 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
   Widget _buildFormCard() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        color: _C.card,
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -232,17 +318,25 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.edit_document, color: Color(0xFF2C5F7C), size: 24),
-                SizedBox(width: 12),
-                Expanded(
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: _C.teal.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.edit_document,
+                      color: _C.teal, size: 20),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
                   child: Text(
                     'Información del Proyecto',
                     style: TextStyle(
-                      fontSize: 17,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF2C3E50),
+                      color: _C.navy,
                     ),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
@@ -250,7 +344,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 22),
             _buildTextField(
               controller: _codigoController,
               label: 'Código del Proyecto',
@@ -258,7 +352,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
               hint: 'Ej: P001, INV-2024-001',
               isRequired: true,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
             _buildTextField(
               controller: _tituloController,
               label: 'Título del Proyecto',
@@ -268,7 +362,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
               isRequired: true,
               alignLabelWithHint: true,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
             _buildTextField(
               controller: _integrantesController,
               label: 'Integrantes',
@@ -278,9 +372,9 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
               isRequired: true,
               alignLabelWithHint: true,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
             _buildClasificacionField(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
             _buildTextField(
               controller: _salaController,
               label: 'Sala (Opcional)',
@@ -312,9 +406,9 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
               child: Text(
                 label,
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF2C3E50),
+                  color: _C.txt2,
                 ),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
@@ -324,7 +418,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
               const SizedBox(width: 4),
               const Text(
                 '*',
-                style: TextStyle(color: Colors.red, fontSize: 14),
+                style: TextStyle(color: _C.red, fontSize: 14),
               ),
             ],
           ],
@@ -333,42 +427,44 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
         TextFormField(
           controller: controller,
           maxLines: maxLines,
+          style: const TextStyle(fontSize: 14, color: _C.txt1),
           textInputAction:
               maxLines == 1 ? TextInputAction.next : TextInputAction.newline,
           decoration: InputDecoration(
             hintText: hint,
+            hintStyle: const TextStyle(color: _C.txt3, fontSize: 13),
             alignLabelWithHint: alignLabelWithHint,
             prefixIcon: Padding(
               padding: maxLines > 1
                   ? const EdgeInsets.only(bottom: 0)
                   : EdgeInsets.zero,
-              child: Icon(icon, color: const Color(0xFF2C5F7C)),
+              child: Icon(icon, color: _C.teal, size: 20),
             ),
             prefixIconConstraints: maxLines > 1
                 ? const BoxConstraints(minWidth: 48, minHeight: 48)
                 : null,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300),
+              borderSide: const BorderSide(color: _C.border),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300),
+              borderSide: const BorderSide(color: _C.border),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF2C5F7C), width: 2),
+              borderSide: const BorderSide(color: _C.teal, width: 2),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.red, width: 1),
+              borderSide: const BorderSide(color: _C.red, width: 1),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.red, width: 2),
+              borderSide: const BorderSide(color: _C.red, width: 2),
             ),
             filled: true,
-            fillColor: Colors.grey.shade50,
+            fillColor: _C.surface,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 16,
@@ -388,6 +484,13 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
   }
 
   Widget _buildClasificacionField() {
+    // Si el evento ya tiene proyectos importados, mostramos SUS clasificaciones.
+    // Si está vacío (sin importaciones aún), usamos las sugeridas como semilla.
+    final List<String> opciones = _clasificacionesExistentes.isNotEmpty
+        ? _clasificacionesExistentes
+        : _categoriasSugeridas;
+    final bool usandoExistentes = _clasificacionesExistentes.isNotEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -396,70 +499,89 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
             Text(
               'Clasificación',
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF2C3E50),
+                color: _C.txt2,
               ),
             ),
             SizedBox(width: 4),
-            Text('*', style: TextStyle(color: Colors.red, fontSize: 14)),
+            Text('*', style: TextStyle(color: _C.red, fontSize: 14)),
           ],
         ),
         const SizedBox(height: 8),
         TextFormField(
           controller: _clasificacionController,
           textInputAction: TextInputAction.next,
+          style: const TextStyle(fontSize: 14, color: _C.txt1),
           decoration: InputDecoration(
             hintText: 'Seleccione o escriba una categoría',
-            prefixIcon:
-                const Icon(Icons.category, color: Color(0xFF2C5F7C)),
-            suffixIcon: PopupMenuButton<String>(
-              icon: const Icon(Icons.arrow_drop_down,
-                  color: Color(0xFF2C5F7C)),
-              tooltip: 'Seleccionar categoría',
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-              onSelected: (String value) {
-                setState(() {
-                  _clasificacionController.text = value;
-                });
-              },
-              itemBuilder: (BuildContext context) {
-                return _categoriasSugeridas.map((String categoria) {
-                  return PopupMenuItem<String>(
-                    value: categoria,
-                    child: Text(
-                      categoria,
-                      style: const TextStyle(fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 2,
+            hintStyle: const TextStyle(color: _C.txt3, fontSize: 13),
+            prefixIcon: const Icon(Icons.category, color: _C.teal, size: 20),
+            suffixIcon: _cargandoClasificaciones
+                ? const Padding(
+                    padding: EdgeInsets.all(14),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(_C.teal),
+                      ),
                     ),
-                  );
-                }).toList();
-              },
-            ),
+                  )
+                : opciones.isEmpty
+                    ? null
+                    : PopupMenuButton<String>(
+                        icon: const Icon(Icons.arrow_drop_down,
+                            color: _C.teal),
+                        tooltip: 'Seleccionar categoría',
+                        constraints: const BoxConstraints(
+                            minWidth: 44, minHeight: 44),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        onSelected: (String value) {
+                          setState(() {
+                            _clasificacionController.text = value;
+                          });
+                        },
+                        itemBuilder: (BuildContext context) {
+                          return opciones.map((String categoria) {
+                            return PopupMenuItem<String>(
+                              value: categoria,
+                              child: Text(
+                                categoria,
+                                style: const TextStyle(
+                                    fontSize: 13, color: _C.txt1),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 2,
+                              ),
+                            );
+                          }).toList();
+                        },
+                      ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300),
+              borderSide: const BorderSide(color: _C.border),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300),
+              borderSide: const BorderSide(color: _C.border),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: Color(0xFF2C5F7C), width: 2),
+              borderSide: const BorderSide(color: _C.teal, width: 2),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.red, width: 1),
+              borderSide: const BorderSide(color: _C.red, width: 1),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.red, width: 2),
+              borderSide: const BorderSide(color: _C.red, width: 2),
             ),
             filled: true,
-            fillColor: Colors.grey.shade50,
+            fillColor: _C.surface,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 16,
@@ -472,36 +594,56 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
             return null;
           },
         ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _categoriasSugeridas.take(5).map((categoria) {
-            return InkWell(
-              onTap: () {
-                setState(() {
-                  _clasificacionController.text = categoria;
-                });
-              },
-              borderRadius: BorderRadius.circular(20),
-              child: Chip(
-                label: Text(
-                  categoria,
-                  style: const TextStyle(fontSize: 11),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
+        const SizedBox(height: 8),
+        // Etiqueta de contexto: deja claro de dónde salen las opciones.
+        if (!_cargandoClasificaciones)
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: 4),
+            child: Text(
+              usandoExistentes
+                  ? 'Clasificaciones del evento · también puedes escribir una nueva'
+                  : 'Sin proyectos aún · escribe la clasificación o usa una sugerencia',
+              style: const TextStyle(fontSize: 11, color: _C.txt3),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        if (!_cargandoClasificaciones && opciones.isNotEmpty)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: opciones.take(6).map((categoria) {
+              return InkWell(
+                onTap: () {
+                  setState(() {
+                    _clasificacionController.text = categoria;
+                  });
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: _C.tealL,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: _C.teal.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Text(
+                    categoria,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: _C.teal,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ),
-                backgroundColor:
-                    const Color(0xFF2C5F7C).withValues(alpha: 0.1),
-                labelStyle: const TextStyle(color: Color(0xFF2C5F7C)),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-              ),
-            );
-          }).toList(),
-        ),
+              );
+            }).toList(),
+          ),
       ],
     );
   }
@@ -544,8 +686,8 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
         maxLines: 1,
       ),
       style: OutlinedButton.styleFrom(
-        foregroundColor: const Color(0xFF64748B),
-        side: BorderSide(color: Colors.grey.shade300, width: 2),
+        foregroundColor: _C.txt2,
+        side: const BorderSide(color: _C.border, width: 1.5),
         padding: const EdgeInsets.symmetric(vertical: 16),
         minimumSize: const Size(0, 52),
         shape: RoundedRectangleBorder(
@@ -575,8 +717,9 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
         maxLines: 1,
       ),
       style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF4CAF50),
+        backgroundColor: _C.teal,
         foregroundColor: Colors.white,
+        disabledBackgroundColor: _C.teal.withValues(alpha: 0.5),
         padding: const EdgeInsets.symmetric(vertical: 16),
         minimumSize: const Size(0, 52),
         shape: RoundedRectangleBorder(
@@ -619,30 +762,30 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+                color: _C.teal.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child:
-                  const Icon(Icons.check_circle, color: Color(0xFF4CAF50)),
+              child: const Icon(Icons.check_circle, color: _C.teal),
             ),
             const SizedBox(width: 12),
-            const Text('Confirmar'),
+            const Text('Confirmar', style: TextStyle(color: _C.navy)),
           ],
         ),
         content: const Text(
           '¿Deseas guardar este proyecto?',
-          style: TextStyle(fontSize: 15),
+          style: TextStyle(fontSize: 15, color: _C.txt2),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
+            child: const Text('Cancelar', style: TextStyle(color: _C.txt2)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4CAF50),
+              backgroundColor: _C.teal,
               foregroundColor: Colors.white,
+              elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -668,9 +811,13 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
         'Sala': salaSnapshot,
       };
 
+      // FIX: se pasa eventData para que el proyecto manual guarde
+      // filialId/facultad/carreraId igual que la importación de Excel,
+      // y la resolución de nombres de integrantes funcione sin fallback.
       await widget.gruposService.guardarProyectosEnEvento(
         widget.eventData['id'],
         [proyectoData],
+        eventData: widget.eventData,
       );
 
       widget.onProyectoAgregado();
@@ -715,7 +862,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
             ),
           ],
         ),
-        backgroundColor: const Color(0xFF4CAF50),
+        backgroundColor: _C.teal,
         behavior: SnackBarBehavior.floating,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -743,7 +890,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
             ),
           ],
         ),
-        backgroundColor: const Color(0xFFF44336),
+        backgroundColor: _C.red,
         behavior: SnackBarBehavior.floating,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

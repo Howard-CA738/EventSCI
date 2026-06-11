@@ -29,8 +29,8 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
 
   double _currentZoom = 0.0;
 
-  static const int _cooldownSegundos = 3;
-  static const String _keyCooldown = 'ultimo_escaneo_global';
+static const int _cooldownSegundos = 600; // 10 minutos
+static const String _keyCooldown = 'ultimo_escaneo_global';
 
   Map<String, dynamic>? _cachedUserData;
 
@@ -96,31 +96,36 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
   }
 
   Future<bool> _verificarYGuardarCooldown() async {
-    if (_cooldownSegundos <= 0) return true;
+  if (_cooldownSegundos <= 0) return true;
 
-    final prefs = await SharedPreferences.getInstance();
-    final ultimoMs = prefs.getInt('${_keyCooldown}_$_currentUserId');
+  final prefs = await SharedPreferences.getInstance();
+  final ultimoMs = prefs.getInt('${_keyCooldown}_$_currentUserId');
 
-    if (ultimoMs != null) {
-      final ultimo = DateTime.fromMillisecondsSinceEpoch(ultimoMs);
-      final diferencia = DateTime.now().difference(ultimo);
+  if (ultimoMs != null) {
+    final ultimo = DateTime.fromMillisecondsSinceEpoch(ultimoMs);
+    final diferencia = DateTime.now().difference(ultimo);
 
-      if (diferencia.inSeconds < _cooldownSegundos) {
-        final restante = _cooldownSegundos - diferencia.inSeconds;
-        _showSnackBar(
-          '⏳ Espera ${restante}s para escanear de nuevo',
-          isError: true,
-        );
-        return false;
-      }
+    if (diferencia.inSeconds < _cooldownSegundos) {
+      final restante = _cooldownSegundos - diferencia.inSeconds;
+      final minutos = restante ~/ 60;
+      final segundos = restante % 60;
+      final texto = minutos > 0
+          ? '${minutos}m ${segundos}s'
+          : '${segundos}s';
+      _showSnackBar(
+        '⏳ Debes esperar $texto para escanear de nuevo',
+        isError: true,
+      );
+      return false;
     }
-
-    await prefs.setInt(
-      '${_keyCooldown}_$_currentUserId',
-      DateTime.now().millisecondsSinceEpoch,
-    );
-    return true;
   }
+
+  await prefs.setInt(
+    '${_keyCooldown}_$_currentUserId',
+    DateTime.now().millisecondsSinceEpoch,
+  );
+  return true;
+}
 
   Future<void> _getCurrentUser() async {
     try {
@@ -1717,7 +1722,7 @@ class _EscanearQRScreenState extends State<EscanearQRScreen>
                                       12, 10, 12, 14),
                                   child: Row(
                                     crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
+                                        CrossAxisAlignment.center,
                                     children: [
                                       Expanded(
                                         child: Semantics(

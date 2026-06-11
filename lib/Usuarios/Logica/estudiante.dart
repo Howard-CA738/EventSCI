@@ -8,6 +8,7 @@ import 'escanear_qr.dart';
 import 'asistencias.dart';
 import '/usuarios/interfaz/ver_certificados_screen.dart';
 import 'asistente_qr.dart';
+import 'ver_proyectos.dart';
 
 class EstudianteScreen extends StatefulWidget {
   const EstudianteScreen({super.key});
@@ -493,6 +494,15 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
                                     AsistenciasScreen()),
                           ),
                         ),
+                        // En la lista menuItems:
+_buildMenuCard(
+  imagePath: 'assets/icons/lugar_evento.png',
+  title: 'Proyectos',
+  subtitle: 'Ver lugares de ponencia',
+  onTap: () => Navigator.of(context).push(
+    MaterialPageRoute(builder: (_) => const VerProyectosScreen()),
+  ),
+),
                         _buildMenuCard(
                           imagePath: 'assets/icons/certificado.png',
                           title: 'Mis Certificados',

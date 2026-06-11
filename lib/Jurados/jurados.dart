@@ -67,10 +67,8 @@ class _JuradosScreenState extends State<JuradosScreen>
       });
 
       if (_userId.isNotEmpty) {
-        await Future.wait([
-          _cargarProyectosAsignados(),
-          _cargarCacheNombres(),
-        ]);
+        await _cargarCacheNombres();
+await _cargarProyectosAsignados();
       } else {
         if (mounted) setState(() => _isLoading = false);
       }
@@ -221,9 +219,8 @@ class _JuradosScreenState extends State<JuradosScreen>
       final proyectoData = proyectoSnap.data() as Map<String, dynamic>;
       final eventoId = proyectoRef.parent.parent?.id ?? '';
 
-      final integrantesRaw =
-          proyectoData['integrantes'] ?? proyectoData['Integrantes'];
-      final integrantes = _resolverCampoString(integrantesRaw);
+      final integrantesRaw = proyectoData['integrantes'] ?? proyectoData['Integrantes'];
+      final integrantes = _resolverNombres.resolver(integrantesRaw);
 
       final salaRaw = proyectoData['Sala'] ?? proyectoData['sala'] ?? '';
       final titulo = proyectoData['Título'] ?? proyectoData['titulo'] ?? '';

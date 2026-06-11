@@ -71,46 +71,62 @@ class _InformeEventoCarreraScreenState
   }
 
   Future<void> _cargarEventos() async {
-    setState(() => _isLoadingEventos = true);
-    try {
-      final snapshot = await _firestore
-          .collection('events')
-          .where('filialId', isEqualTo: _filialId)
-          .where('facultad', isEqualTo: _facultad)
-          .where('carreraId', isEqualTo: _carreraId)
-          .orderBy('createdAt', descending: true)
-          .get();
+  setState(() => _isLoadingEventos = true);
+  try {
+    final snapshot = await _firestore
+        .collection('events')
+        .orderBy('createdAt', descending: true)
+        .get();
 
-      final eventos = snapshot.docs.map((doc) {
-        final data = doc.data();
-        return {
-          'id': doc.id,
-          'name': data['name'] ?? 'Sin nombre',
-          'facultad': data['facultad'] ?? '',
-          'carrera': data['carrera'] ?? '',
-          'fecha': data['fecha'] ?? '',
-          'createdAt': data['createdAt'],
-        };
-      }).toList();
+    final eventos = snapshot.docs.where((doc) {
+      final data = doc.data();
 
-      if (mounted) {
-        setState(() {
-          _eventos = eventos;
-          _isLoadingEventos = false;
-        });
+      if (_filialId != null && _filialId!.isNotEmpty) {
+        final eventoFilial = data['filialId']?.toString() ?? '';
+        if (eventoFilial != _filialId) return false;
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoadingEventos = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al cargar eventos: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+
+      if (_facultad != null && _facultad!.isNotEmpty) {
+        if (data['facultad'] != _facultad) return false;
       }
+
+      if (_carrera != null && _carrera!.isNotEmpty) {
+        final eventoCarrera = data['carreraNombre']?.toString() ??
+            data['carrera']?.toString() ?? '';
+        if (eventoCarrera != _carrera) return false;
+      }
+
+      return true;
+    }).map((doc) {
+      final data = doc.data();
+      return {
+        'id': doc.id,
+        'name': data['name'] ?? 'Sin nombre',
+        'facultad': data['facultad'] ?? '',
+        'carrera': data['carreraNombre'] ?? data['carrera'] ?? '',
+        'fecha': data['fecha'] ?? '',
+        'createdAt': data['createdAt'],
+      };
+    }).toList();
+
+    if (mounted) {
+      setState(() {
+        _eventos = eventos;
+        _isLoadingEventos = false;
+      });
+    }
+  } catch (e) {
+    if (mounted) {
+      setState(() => _isLoadingEventos = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al cargar eventos: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
+}
 
   Future<void> _generarInforme() async {
     if (_eventoSeleccionado == null) return;

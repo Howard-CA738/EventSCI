@@ -455,50 +455,49 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  Widget _buildCertCard(_CertItem cert) {
-    final color      = _colorPorRol(cert.datos.rol);
-    final icon       = _iconPorRol(cert.datos.rol);
-    final procesando = _procesando.contains(cert.id);
+Widget _buildCertCard(_CertItem cert) {
+  final color      = _colorPorRol(cert.datos.rol);
+  final icon       = _iconPorRol(cert.datos.rol);
+  final procesando = _procesando.contains(cert.id);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.2), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8, offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Cabecera de la tarjeta
-          Container(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.06),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-              ),
+  return Container(
+    margin: const EdgeInsets.only(bottom: 12),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: color.withOpacity(0.2), width: 1.5),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.05),
+          blurRadius: 8, offset: const Offset(0, 3),
+        ),
+      ],
+    ),
+    child: Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.06),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(16),
+              topRight: Radius.circular(16),
             ),
-            child: Row(children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: Colors.white, size: 18),
+          ),
+          child: Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(10),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start, children: [
+              child: Icon(icon, color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8, vertical: 3),
@@ -525,95 +524,121 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF1E3A5F)),
                   ),
-                ]),
-              ),
-            ]),
-          ),
-
-          // Cuerpo con detalles
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _infoRow(Icons.calendar_today_outlined,
-                    'Fecha evento: ${cert.datos.fecha}'),
-                const SizedBox(height: 6),
-                _infoRow(Icons.school_outlined,
-                    cert.datos.carrera.isNotEmpty
-                        ? cert.datos.carrera
-                        : 'Sin carrera'),
-                if (cert.creadoEn != null) ...[
-                  const SizedBox(height: 6),
-                  _infoRow(Icons.send_rounded,
-                      'Emitido el ${_formatFecha(cert.creadoEn!)}',
-                      color: Colors.grey[500]),
                 ],
-                const SizedBox(height: 12),
-
-                // Botones de acción
-                if (procesando)
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(width: 18, height: 18,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Color(0xFF1E3A5F))),
-                          SizedBox(width: 10),
-                          Text('Procesando...',
-                              style: TextStyle(
-                                  fontSize: 13, color: Color(0xFF64748B))),
-                        ],
-                      ),
-                    ),
-                  )
-                else
-                  Row(children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _verCertificado(cert),
-                        icon: const Icon(Icons.visibility_outlined,
-                            size: 16),
-                        label: const Text('Ver',
-                            style: TextStyle(fontSize: 13)),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: color,
-                          side: BorderSide(color: color.withOpacity(0.5)),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _descargarCertificado(cert),
-                        icon: const Icon(Icons.download_rounded, size: 16),
-                        label: const Text('Descargar',
-                            style: TextStyle(fontSize: 13)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: color,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ),
-                  ]),
-              ],
+              ),
             ),
+          ]),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _infoRow(Icons.calendar_today_outlined,
+                  'Fecha evento: ${cert.datos.fecha}'),
+              const SizedBox(height: 6),
+              _infoRow(Icons.school_outlined,
+                  cert.datos.carrera.isNotEmpty
+                      ? cert.datos.carrera
+                      : 'Sin carrera'),
+              if (cert.creadoEn != null) ...[
+                const SizedBox(height: 6),
+                _infoRow(Icons.send_rounded,
+                    'Emitido el ${_formatFecha(cert.creadoEn!)}',
+                    color: Colors.grey[500]),
+              ],
+              if (cert.datos.codigoCertificado.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _buildCodigoBadge(cert.datos.codigoCertificado),
+              ],
+              const SizedBox(height: 12),
+              if (procesando)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                            width: 18, height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF1E3A5F))),
+                        SizedBox(width: 10),
+                        Text('Procesando...',
+                            style: TextStyle(
+                                fontSize: 13, color: Color(0xFF64748B))),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _verCertificado(cert),
+                      icon: const Icon(Icons.visibility_outlined, size: 16),
+                      label: const Text('Ver',
+                          style: TextStyle(fontSize: 13)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: color,
+                        side: BorderSide(color: color.withOpacity(0.5)),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _descargarCertificado(cert),
+                      icon: const Icon(Icons.download_rounded, size: 16),
+                      label: const Text('Descargar',
+                          style: TextStyle(fontSize: 13)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: color,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                ]),
+            ],
           ),
-        ],
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildCodigoBadge(String codigo) {
+  return Align(
+    alignment: Alignment.centerLeft,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xE61E3A5F),
+        borderRadius: BorderRadius.circular(8),
       ),
-    );
-  }
+      child: Text(
+        codigo,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+          letterSpacing: 1.5,
+          fontFamily: 'monospace',
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    ),
+  );
+}
 
   Widget _infoRow(IconData icon, String text, {Color? color}) {
     return Row(children: [

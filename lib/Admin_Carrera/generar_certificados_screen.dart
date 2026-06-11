@@ -234,27 +234,27 @@ class _GenerarCertificadosScreenState
   }
 
   Future<void> _init() async {
-    setState(() => _isLoading = true);
-    final data = await PrefsHelper.getAdminCarreraData();
-    if (data != null) {
-      setState(() {
-        _carrera   = data['carrera']      ?? '';
-        _facultad  = data['facultad']     ?? '';
-        _sede      = data['filialNombre'] ?? '';
-        _filial    = data['filialNombre'] ?? '';
-        _filialId  = data['filial']       ?? '';
-        _carreraId = data['carreraId']    ?? data['carrera'] ?? '';
-        _fechaController.text = _fechaActual(_sede);
-      });
-      _actualizarMotivo();
-      await Future.wait([
-        _cargarFirmantes(),
-        _cargarEventos(),
-        _cargarTitulosProyectos(),
-      ]);
-    }
-    if (mounted) setState(() => _isLoading = false);
+  setState(() => _isLoading = true);
+  final data = await PrefsHelper.getAdminCarreraData();
+  if (data != null) {
+    setState(() {
+      _carrera   = data['carrera']      ?? '';
+      _facultad  = data['facultad']     ?? '';
+      _sede      = data['filialNombre'] ?? '';
+      _filial    = data['filialNombre'] ?? ''; // ← "Campus Tarapoto"
+      _filialId  = data['filial']       ?? '';
+      _carreraId = data['carreraId']    ?? data['carrera'] ?? '';
+      _fechaController.text = _fechaActual(_sede);
+    });
+    _actualizarMotivo();
+    await Future.wait([
+      _cargarFirmantes(),
+      _cargarEventos(),
+      _cargarTitulosProyectos(),
+    ]);
   }
+  if (mounted) setState(() => _isLoading = false);
+}
 
   void _seleccionarEvento(Map<String, dynamic> evento) {
     setState(() {
@@ -306,47 +306,54 @@ class _GenerarCertificadosScreenState
   }
 
   Future<void> _cargarTitulosProyectos() async {
-    try {
-      final eventosSnap = await FirebaseFirestore.instance
+  try {
+    final eventosSnap = await FirebaseFirestore.instance
+        .collection('events')
+        .where('filialId', isEqualTo: _filialId)
+        .where('facultad', isEqualTo: _facultad)
+        .where('carreraId', isEqualTo: _carreraId)
+        .get();
+
+    final Map<String, String> mapa = {};
+
+    for (final eventoDoc in eventosSnap.docs) {
+      final proyectosSnap = await FirebaseFirestore.instance
           .collection('events')
-          .where('filialId', isEqualTo: _filialId)
-          .where('facultad', isEqualTo: _facultad)
-          .where('carreraId', isEqualTo: _carreraId)
+          .doc(eventoDoc.id)
+          .collection('proyectos')
           .get();
 
-      final Map<String, String> mapa = {};
+      for (final proyectoDoc in proyectosSnap.docs) {
+        final data   = proyectoDoc.data();
+        final titulo = data['Título']?.toString() ?? '';
+        if (titulo.isEmpty) continue;
 
-      for (final eventoDoc in eventosSnap.docs) {
-        final proyectosSnap = await FirebaseFirestore.instance
-            .collection('events')
-            .doc(eventoDoc.id)
-            .collection('proyectos')
-            .get();
+        final integrantes = data['Integrantes'];
+        List<String> valores = [];
+        if (integrantes is List) {
+          valores = integrantes.map((e) => e.toString().trim()).toList();
+        } else if (integrantes is String && integrantes.isNotEmpty) {
+          valores = integrantes.split(',').map((e) => e.trim()).toList();
+        }
 
-        for (final proyectoDoc in proyectosSnap.docs) {
-          final data   = proyectoDoc.data();
-          final titulo = data['Título']?.toString() ?? '';
-          if (titulo.isEmpty) continue;
-
-          final integrantes = data['Integrantes'];
-          List<String> codigos = [];
-          if (integrantes is List) {
-            codigos = integrantes.map((e) => e.toString()).toList();
-          } else if (integrantes is String && integrantes.isNotEmpty) {
-            codigos = integrantes.split(',').map((e) => e.trim()).toList();
-          }
-
-          for (final codigo in codigos) {
-            if (codigo.isNotEmpty) mapa[codigo] = titulo;
+        for (final valor in valores) {
+          if (valor.isNotEmpty) {
+            mapa[valor.toLowerCase()] = titulo;
           }
         }
       }
-
-      if (mounted) setState(() => _titulosPorCodigo = mapa);
-    } catch (e) {
-      debugPrint('Error cargando títulos de proyectos: $e');
     }
+
+    // ── DEBUG ──────────────────────────────────────────────────
+    debugPrint('📦 eventoSnap docs: ${eventosSnap.docs.length}');
+    debugPrint('🗺️ mapa keys (${mapa.length}): ${mapa.keys.toList()}');
+    // ───────────────────────────────────────────────────────────
+
+    if (mounted) setState(() => _titulosPorCodigo = mapa);
+  } catch (e) {
+    debugPrint('Error cargando títulos de proyectos: $e');
   }
+}
 
   Future<void> _cargarFirmantes() async {
     try {
@@ -400,72 +407,107 @@ class _GenerarCertificadosScreenState
     );
   }
 
-  Future<void> _cargarEstudiantes() async {
-    try {
-      final docKey = '${_filial}_$_carrera';
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(docKey)
-          .collection('students')
-          .orderBy('name')
-          .get();
+Future<void> _cargarEstudiantes() async {
+  try {
+    if (_eventoSeleccionado == null) return;
 
-      final lista = snap.docs.map((doc) {
-        final d = doc.data();
-        return PersonaCertificado(
-          id:     doc.id,
-          nombre: d['name']                as String? ?? 'Sin nombre',
-          dni:    d['dni']                 as String? ?? '',
-          codigo: d['codigoUniversitario'] as String? ?? '',
-          email:  d['email']               as String? ?? '',
-          esJurado: false,
-        );
-      }).toList();
+    final docKey   = '${_filial}_$_carrera'; // → "Campus Tarapoto_Psicología"
+    final eventoId = _eventoSeleccionado!['id'] as String;
 
-      if (!mounted) return;
-      setState(() {
-        _estudiantes = lista;
-        if (_rolParticipante != 'JURADO') _actualizarFiltros(notify: false);
-      });
-    } catch (e) {
-      debugPrint('Error cargando estudiantes: $e');
-    }
+    debugPrint('📂 docKey: $docKey');
+
+    final snap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(docKey)
+        .collection('students')
+        .orderBy('name')
+        .get();
+
+    debugPrint('👥 estudiantes encontrados: ${snap.docs.length}');
+
+    final lista = snap.docs
+        .where((doc) {
+          if (_rolParticipante == 'ORGANIZADOR') return true;
+          final pagos = doc.data()['pagos'] as Map<String, dynamic>? ?? {};
+          return pagos[eventoId] == true;
+        })
+        .map((doc) {
+          final d = doc.data();
+          return PersonaCertificado(
+            id:       doc.id,
+            nombre:   d['name']                as String? ?? 'Sin nombre',
+            dni:      d['dni']                 as String? ?? '',
+            codigo:   d['codigoUniversitario'] as String? ?? '',
+            email:    d['email']               as String? ?? '',
+            esJurado: false,
+          );
+        })
+        .toList();
+
+    debugPrint('✅ lista final: ${lista.length}');
+
+    if (!mounted) return;
+    setState(() {
+      _estudiantes = lista;
+      if (_rolParticipante != 'JURADO') _actualizarFiltros(notify: false);
+    });
+  } catch (e) {
+    debugPrint('❌ Error cargando estudiantes: $e');
   }
+}
+void _actualizarFiltros({bool notify = true}) {
+  final q = _searchQuery.toLowerCase();
+  final fuente = _personasActivas;
 
-  void _actualizarFiltros({bool notify = true}) {
-    final q = _searchQuery.toLowerCase();
-    final fuente = _personasActivas;
-    final filtrados = fuente.where((e) {
-      if (q.isEmpty) return true;
-      return e.nombre.toLowerCase().contains(q) ||
-          e.dni.contains(q) ||
-          e.codigo.toLowerCase().contains(q);
-    }).toList();
+  // ── DEBUG ──────────────────────────────────────────────────
+  debugPrint('🎭 rol: $_rolParticipante');
+  debugPrint('👥 fuente (${fuente.length}): ${fuente.map((e) => '"${e.nombre.toLowerCase()}" / "${e.codigo.toLowerCase()}"').toList()}');
+  debugPrint('🗺️ titulosPorCodigo keys: ${_titulosPorCodigo.keys.toList()}');
+  // ───────────────────────────────────────────────────────────
 
-    if (notify) {
-      setState(() => _personasFiltradas = filtrados);
-    } else {
-      _personasFiltradas = filtrados;
+  final filtrados = fuente.where((e) {
+    if (_rolParticipante == 'PONENTE' && !e.esJurado) {
+      final nombreLower = e.nombre.toLowerCase();
+      final codigoLower = e.codigo.toLowerCase();
+      final tieneProyecto = _titulosPorCodigo.containsKey(nombreLower) ||
+          _titulosPorCodigo.containsKey(codigoLower);
+      debugPrint('  → "${e.nombre}" | tieneProyecto: $tieneProyecto');
+      if (!tieneProyecto) return false;
     }
+
+    if (q.isEmpty) return true;
+    return e.nombre.toLowerCase().contains(q) ||
+        e.dni.contains(q) ||
+        e.codigo.toLowerCase().contains(q);
+  }).toList();
+
+  if (notify) {
+    setState(() => _personasFiltradas = filtrados);
+  } else {
+    _personasFiltradas = filtrados;
   }
+}
 
   void _togglePersona(PersonaCertificado persona, bool val) {
-    setState(() {
-      persona.seleccionado = val;
-      _seleccionadosCount += val ? 1 : -1;
-    });
+  setState(() {
+    persona.seleccionado = val;
+    _seleccionadosCount += val ? 1 : -1;
+  });
 
-    if (_rolParticipante == 'PONENTE') {
-      final seleccionados = _estudiantes.where((e) => e.seleccionado).toList();
-      if (seleccionados.length == 1) {
-        final titulo = _titulosPorCodigo[seleccionados.first.codigo];
-        if (titulo != null && titulo.isNotEmpty) {
-          setState(() => _tituloPonenciaController.text = titulo);
-          _actualizarMotivo();
-        }
+  if (_rolParticipante == 'PONENTE') {
+    final seleccionados = _estudiantes.where((e) => e.seleccionado).toList();
+    if (seleccionados.length == 1) {
+      final nombreLower  = seleccionados.first.nombre.toLowerCase();
+      final codigoLower  = seleccionados.first.codigo.toLowerCase();
+      final titulo = _titulosPorCodigo[nombreLower] ??
+                     _titulosPorCodigo[codigoLower];
+      if (titulo != null && titulo.isNotEmpty) {
+        setState(() => _tituloPonenciaController.text = titulo);
+        _actualizarMotivo();
       }
     }
   }
+}
 
   void _toggleTodos(bool? val) {
     final seleccionar = val ?? false;
@@ -479,22 +521,26 @@ class _GenerarCertificadosScreenState
     });
   }
 
-  void _cambiarRol(String nuevoRol) {
-    setState(() {
-      for (final e in _estudiantes) {
-        e.seleccionado = false;
-      }
-      for (final j in _jurados) {
-        j.seleccionado = false;
-      }
-      _seleccionadosCount = 0;
-      _rolParticipante = nuevoRol;
-      _searchQuery = '';
-      _searchController.clear();
-      _actualizarMotivo();
-      _actualizarFiltros(notify: false);
-    });
+ void _cambiarRol(String nuevoRol) {
+  setState(() {
+    for (final e in _estudiantes) e.seleccionado = false;
+    for (final j in _jurados)     j.seleccionado = false;
+    _seleccionadosCount = 0;
+    _rolParticipante = nuevoRol;
+    _searchQuery = '';
+    _searchController.clear();
+    _actualizarMotivo();
+    // Limpiar lista mientras recarga
+    _estudiantes = [];
+    _personasFiltradas = [];
+  });
+
+  if (_eventoSeleccionado != null && nuevoRol != 'JURADO') {
+    _cargarEstudiantes();
+  } else if (nuevoRol == 'JURADO') {
+    _actualizarFiltros();
   }
+}
 
   DatosCertificado get _datosCertificado => DatosCertificado(
         facultad:  _facultad,
@@ -748,11 +794,11 @@ class _GenerarCertificadosScreenState
           }
 
           batch.set(ref, {
-            ...datos,
-            'creadoEn':          ahora,
-            'nombreEstudiante':  persona.nombre,
-            'codigoCertificado': codigoUnico,
-          });
+  ...datos,
+  'creadoEn':          ahora,
+  'nombreEstudiante':  persona.nombre,
+  'codigoCertificado': '',  // ← vacío, lo asignas tú desde Gestionar Códigos
+});
         }
 
         try {
@@ -1491,23 +1537,25 @@ class _GenerarCertificadosScreenState
               ),
             )
           else if (_personasFiltradas.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: Text(
-                  totalPersonas == 0
-                      ? esJuradoRol
-                          ? 'No hay jurados registrados para esta carrera'
-                          : 'No hay estudiantes registrados'
-                      : 'Sin resultados para "$_searchQuery"',
-                  style: const TextStyle(
-                      color: _kTextoGrisClaro,
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            )
+  Padding(
+    padding: const EdgeInsets.symmetric(vertical: 16),
+    child: Center(
+      child: Text(
+        totalPersonas == 0
+            ? esJuradoRol
+                ? 'No hay jurados registrados para esta carrera'
+                : 'No hay estudiantes registrados'
+            : _rolParticipante == 'PONENTE' && _searchQuery.isEmpty
+                ? 'Ningún estudiante tiene proyecto asignado en este evento'
+                : 'Sin resultados para "$_searchQuery"',
+        style: const TextStyle(
+            color: _kTextoGrisClaro,
+            fontSize: 12,
+            fontStyle: FontStyle.italic),
+        textAlign: TextAlign.center,
+      ),
+    ),
+  )
           else
             _buildListaPersonas(_personasFiltradas),
         ],

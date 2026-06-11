@@ -1,6 +1,6 @@
 name: eventos
 description: "Sistema de Gestión de Eventos UPEU"
-version: 1.0.0+21
+version: 1.0.0+28
 
 environment:
   sdk: ^3.8.1

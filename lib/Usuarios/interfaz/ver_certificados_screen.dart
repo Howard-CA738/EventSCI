@@ -420,33 +420,60 @@ class _VerCertificadosScreenState extends State<VerCertificadosScreen> {
   }
 
   Widget _buildCardDetalles(CertificadoItem cert) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (cert.datos.fecha.isNotEmpty)
-          _detalle(Icons.calendar_today_outlined, cert.datos.fecha),
-        if (cert.datos.carrera.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          _detalle(Icons.school_outlined, cert.datos.carrera),
-        ],
-        if (cert.datos.rol == 'ASISTENTE' && cert.datos.horas.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          _detalle(Icons.timer_outlined, '${cert.datos.horas} horas académicas'),
-        ],
-        if (cert.creadoEn != null) ...[
-          const SizedBox(height: 4),
-          _detalle(
-            Icons.access_time_outlined,
-            'Recibido el ${_controller.formatFecha(cert.creadoEn!)}',
-            fontSize: 11,
-            color: _kTextoGrisClaro,
-          ),
-        ],
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (cert.datos.fecha.isNotEmpty)
+        _detalle(Icons.calendar_today_outlined, cert.datos.fecha),
+      if (cert.datos.carrera.isNotEmpty) ...[
+        const SizedBox(height: 4),
+        _detalle(Icons.school_outlined, cert.datos.carrera),
       ],
-    );
-  }
-
+      if (cert.datos.rol == 'ASISTENTE' && cert.datos.horas.isNotEmpty) ...[
+        const SizedBox(height: 4),
+        _detalle(Icons.timer_outlined, '${cert.datos.horas} horas académicas'),
+      ],
+      if (cert.creadoEn != null) ...[
+        const SizedBox(height: 4),
+        _detalle(
+          Icons.access_time_outlined,
+          'Recibido el ${_controller.formatFecha(cert.creadoEn!)}',
+          fontSize: 11,
+          color: _kTextoGrisClaro,
+        ),
+      ],
+      if (cert.datos.codigoCertificado.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        _buildCodigoBadge(cert.datos.codigoCertificado),
+      ],
+    ],
+  );
+}
+Widget _buildCodigoBadge(String codigo) {
+  return Align(
+    alignment: Alignment.centerLeft,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xE61E3A5F),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        codigo,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+          letterSpacing: 1.5,
+          fontFamily: 'monospace',
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    ),
+  );
+}
   Widget _buildCardBotones(CertificadoItem cert) {
     return Row(
       children: [

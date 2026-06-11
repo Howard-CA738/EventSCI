@@ -261,12 +261,8 @@ class CertificadoBuilder {
   CertificadoBuilder(this.datos);
 
   Future<Uint8List> buildPdf(List<Estudiante> estudiantes) async {
-    // 1. Assets estáticos
     await _AssetCache.loadAssets();
 
-    // 2. Procesar bytes de firmas (ya descargados desde la pantalla).
-    //    Cada firma se procesa de forma aislada: si una falla, las demás
-    //    y el certificado completo siguen generándose.
     pw.MemoryImage? f1Image, f2Image, f3Image;
 
     final results = await Future.wait([
@@ -311,8 +307,6 @@ class CertificadoBuilder {
     final pdf = pw.Document();
 
     for (final est in estudiantes) {
-      // Código del certificado: primero tomar el del Estudiante (asignado
-      // por el admin), si está vacío usar el de DatosCertificado como fallback.
       final codigoFinal = est.codigoCertificado.isNotEmpty
           ? est.codigoCertificado
           : datos.codigoCertificado;
@@ -323,7 +317,6 @@ class CertificadoBuilder {
           ignoreMargins: true,
           child: pw.Stack(children: [
 
-            // ── FACULTAD ────────────────────────────────────────────────────
             pw.Positioned(
               left: 0, right: 0, top: H * 0.280,
               child: pw.Center(child: pw.Text(
@@ -333,7 +326,6 @@ class CertificadoBuilder {
               )),
             ),
 
-            // ── CAMPUS ──────────────────────────────────────────────────────
             pw.Positioned(
               left: 0, right: 0, top: H * 0.330,
               child: pw.Center(child: pw.Text(
@@ -344,7 +336,6 @@ class CertificadoBuilder {
               )),
             ),
 
-            // ── NOMBRE ──────────────────────────────────────────────────────
             pw.Positioned(
               left: W * 0.07, right: W * 0.07, top: H * 0.410,
               child: pw.Center(child: pw.Text(
@@ -355,7 +346,6 @@ class CertificadoBuilder {
               )),
             ),
 
-            // ── MOTIVO ──────────────────────────────────────────────────────
             pw.Positioned(
               left: W * 0.10, right: W * 0.10, top: H * 0.470,
               child: pw.RichText(
@@ -364,7 +354,6 @@ class CertificadoBuilder {
               ),
             ),
 
-            // ── FECHA Y CIUDAD ──────────────────────────────────────────────
             pw.Positioned(
               right: W * 0.080, top: H * 0.600,
               child: pw.Text(
@@ -373,7 +362,6 @@ class CertificadoBuilder {
               ),
             ),
 
-            // ── FIRMAS ──────────────────────────────────────────────────────
             if (f1Image != null)
               pw.Positioned(
                 left: W * 0.190 - firmaAncho / 2, top: firmaTop,
@@ -415,47 +403,20 @@ class CertificadoBuilder {
                     firmaAncho, bold, reg, cAzul, cGris),
               ),
 
-            // ── CÓDIGO DEL CERTIFICADO (solo si fue asignado) ──────────────
-            if (codigoFinal.isNotEmpty)
-              pw.Positioned(
-                right:  W * 0.040,
-                bottom: H * 0.030,
-                child: pw.Container(
-                  padding: const pw.EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: pw.BoxDecoration(
-                    color: const PdfColor(0.051, 0.145, 0.290, 0.05),
-                    border: pw.Border.all(
-                      color: const PdfColor(0.051, 0.145, 0.290, 0.20),
-                      width: 0.5,
-                    ),
-                    borderRadius: const pw.BorderRadius.all(
-                        pw.Radius.circular(4)),
-                  ),
-                  child: pw.Row(
-                    mainAxisSize: pw.MainAxisSize.min,
-                    children: [
-                      pw.Text(
-                        'Código: ',
-                        style: pw.TextStyle(
-                          font:     reg,
-                          fontSize: 7,
-                          color:    cGris,
-                        ),
-                      ),
-                      pw.Text(
-                        codigoFinal,
-                        style: pw.TextStyle(
-                          font:         bold,
-                          fontSize:     7,
-                          color:        cAzul,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+           if (codigoFinal.isNotEmpty)
+  pw.Positioned(
+    right:  W * 0.040,
+    bottom: H * 0.030,
+    child: pw.Text(
+      codigoFinal,
+      style: pw.TextStyle(
+        font:          bold,
+        fontSize:      8,
+        color:         const PdfColor(1, 1, 1, 1.0),
+        letterSpacing: 1.5,
+      ),
+    ),
+  ),
 
           ]),
         ),

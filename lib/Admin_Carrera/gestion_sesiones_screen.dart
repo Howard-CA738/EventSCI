@@ -144,7 +144,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
         'sessionActive': false,
         'sessionToken': null,
         'primeraVez': true,
-        'lastLogin': null,
+        // FIX 1: lastLogin NO se borra — conserva la fecha real del último ingreso
         'bloqueadoPermanente': false,
         'deviceId': null,
         'bloqueadoEn': null,
@@ -229,7 +229,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
-                  color: colorBoton.withOpacity(0.1),
+                  color: colorBoton.withAlpha(25),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icono, color: colorBoton, size: 32),
@@ -470,9 +470,9 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withAlpha(25),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withOpacity(0.2)),
+          border: Border.all(color: Colors.white.withAlpha(51)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -522,12 +522,12 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
           decoration: BoxDecoration(
             color: selected
                 ? Colors.white
-                : Colors.white.withOpacity(0.15),
+                : Colors.white.withAlpha(38),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
                 color: selected
                     ? Colors.white
-                    : Colors.white.withOpacity(0.3)),
+                    : Colors.white.withAlpha(76)),
           ),
           child: Text(
             label,
@@ -576,7 +576,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withAlpha(15),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],
@@ -590,10 +590,10 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: estadoColor.withOpacity(0.12),
+                color: estadoColor.withAlpha(30),
                 shape: BoxShape.circle,
                 border: Border.all(
-                    color: estadoColor.withOpacity(0.4), width: 1.5),
+                    color: estadoColor.withAlpha(102), width: 1.5),
               ),
               child: Icon(Icons.person, color: estadoColor, size: 24),
             ),
@@ -653,10 +653,10 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: estadoColor.withOpacity(0.12),
+                    color: estadoColor.withAlpha(30),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color: estadoColor.withOpacity(0.3)),
+                        color: estadoColor.withAlpha(76)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -720,9 +720,9 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withAlpha(25),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: color.withOpacity(0.3)),
+              border: Border.all(color: color.withAlpha(76)),
             ),
             child: Icon(icon, color: color, size: 20),
           ),
@@ -761,11 +761,14 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
     );
   }
 
+  // FIX 2: toLocal() convierte UTC → hora local del dispositivo (Perú UTC-5)
   String _formatDate(DateTime dt) {
-    return '${dt.day.toString().padLeft(2, '0')}/'
-        '${dt.month.toString().padLeft(2, '0')}/'
-        '${dt.year} ${dt.hour.toString().padLeft(2, '0')}:'
-        '${dt.minute.toString().padLeft(2, '0')}';
+    final local = dt.toLocal();
+    return '${local.day.toString().padLeft(2, '0')}/'
+        '${local.month.toString().padLeft(2, '0')}/'
+        '${local.year} '
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
   }
 }
 

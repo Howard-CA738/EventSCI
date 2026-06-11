@@ -94,15 +94,18 @@ class InformeWordGenerator {
 
       // ── Detectar tipo de exposición por el código ──
       final codigo = (data['Código'] as String?)?.trim() ?? '';
-      final esBanner = codigo.toLowerCase().startsWith('banner');
+final codigoLower = codigo.toLowerCase();
 
-      if (esBanner) {
-        bannerPorCategoria[clasificacion] =
-            (bannerPorCategoria[clasificacion] ?? 0) + 1;
-      } else {
-        oralPorCategoria[clasificacion] =
-            (oralPorCategoria[clasificacion] ?? 0) + 1;
-      }
+final esBanner = codigoLower.contains('banner') ||
+                 codigoLower.contains('baner');
+
+if (esBanner) {
+  bannerPorCategoria[clasificacion] =
+      (bannerPorCategoria[clasificacion] ?? 0) + 1;
+} else if (codigo.isNotEmpty) {
+  oralPorCategoria[clasificacion] =
+      (oralPorCategoria[clasificacion] ?? 0) + 1;
+}
     }
 
     if (conteoPorCategoria.isEmpty) return [];
@@ -181,11 +184,15 @@ class InformeWordGenerator {
 
     final eventoData = eventoDoc.data()!;
     final String filialNombre  = (eventoData['filialNombre']  as String?)?.trim() ?? '';
-    final String carreraNombre = (eventoData['carreraNombre'] as String?)?.trim() ?? '';
+final String carreraNombre = (eventoData['carreraNombre'] as String?)?.trim() ?? '';
+final String docKey = '${filialNombre}_$carreraNombre';
+
+debugPrint('📊 filialNombre: "$filialNombre"');
+debugPrint('📊 carreraNombre: "$carreraNombre"');
+debugPrint('📊 docKey: "$docKey"');
 
     // ── Matriculados: users/{filialNombre}_{carreraNombre}/students ──
     if (filialNombre.isNotEmpty && carreraNombre.isNotEmpty) {
-      final String docKey = '${filialNombre}_$carreraNombre';
       debugPrint('📊 Buscando matriculados en: "$docKey"');
       try {
         final estudiantesSnap = await FirebaseFirestore.instance
@@ -210,7 +217,6 @@ class InformeWordGenerator {
     // ── Inscritos: estudiantes que pagaron para este evento ──
     if (filialNombre.isNotEmpty && carreraNombre.isNotEmpty) {
       try {
-        final String docKey = '${filialNombre}_$carreraNombre';
         final inscritosSnap = await FirebaseFirestore.instance
             .collection('users')
             .doc(docKey)
@@ -268,11 +274,36 @@ debugPrint('📊 Estudiantes que exponen: $exponen');
 
     // ── Asistentes: estudiantes únicos con registro en asistencias ──
     final asistenciasSnap = await FirebaseFirestore.instance
-        .collection('events')
-        .doc(eventId)
-        .collection('asistencias')
-        .get();
-    asistentes = asistenciasSnap.docs.length;
+    .collection('events')
+    .doc(eventId)
+    .collection('asistencias')
+    .get();
+
+final asistPersonalesSnap = await FirebaseFirestore.instance
+    .collection('events')
+    .doc(eventId)
+    .collection('asistencias_personales')
+    .get();
+
+final Set<String> idsAsistentes = {
+  ...asistenciasSnap.docs.map((d) => d.id),
+};
+
+for (final asistDoc in asistPersonalesSnap.docs) {
+  final registrosSnap = await FirebaseFirestore.instance
+      .collection('events')
+      .doc(eventId)
+      .collection('asistencias_personales')
+      .doc(asistDoc.id)
+      .collection('registros')
+      .get();
+  for (final reg in registrosSnap.docs) {
+    idsAsistentes.add(reg.id);
+  }
+}
+
+asistentes = idsAsistentes.length;
+debugPrint('✅ Asistentes únicos (ambas fuentes): $asistentes');
 
   } catch (e) {
     debugPrint('Error en _obtenerIndicadores: $e');
@@ -960,10 +991,11 @@ static String _buildTablaCategorias(List<String> categorias) {
 
     // Cargar nombres antes de usarlos
     final resolverNombres = ResolverNombresService();
-    await resolverNombres.cargarEstudiantes(
-      filialNombre: filialRaw,
-      carrera: carrera,
-    );
+resolverNombres.limpiarCache();
+await resolverNombres.cargarEstudiantes(
+  filialNombre: filialRaw,
+  carrera: carrera,
+);
 
     final List<String> categorias = await _obtenerCategorias(eventId);
     final List<_FilaResultado> filasResultado =

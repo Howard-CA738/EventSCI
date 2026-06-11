@@ -212,6 +212,16 @@ class _LoginScreenState extends State<LoginScreen> {
             studentId:   studentId,
           );
 
+          // ⬅️ DESHABILITADO (eliminación lógica): cuenta deshabilitada por el admin
+          if (estadoSesion == 'deshabilitado') {
+            await PrefsHelper.logout();
+            if (mounted) {
+              setState(() => _isLoading = false);
+              _showCuentaDeshabilitadaDialog();
+            }
+            return;
+          }
+
           if (estadoSesion == 'dispositivo_bloqueado') {
             await PrefsHelper.logout();
             if (mounted) {
@@ -574,6 +584,19 @@ class _LoginScreenState extends State<LoginScreen> {
             'Comunícate con el administrador de tu carrera '
             'para regularizar tu situación.',
         textoColor: const Color(0xFF78350F),
+      );
+
+  // ⬅️ DESHABILITADO (eliminación lógica): diálogo para cuenta deshabilitada
+  void _showCuentaDeshabilitadaDialog() => _showErrorDialog(
+        icono:       Icons.no_accounts_rounded,
+        iconColor:   Colors.red.shade700,
+        bgColor:     Colors.red.shade50,
+        borderColor: Colors.red.shade200,
+        titulo:      'Cuenta deshabilitada',
+        mensaje:     'Tu cuenta ha sido deshabilitada y no puede iniciar sesión.\n\n'
+            'Comunícate con el administrador de tu carrera '
+            'si crees que es un error.',
+        textoColor: const Color(0xFF7F1D1D),
       );
 
   void _showErrorDialog({

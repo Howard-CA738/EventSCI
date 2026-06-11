@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '/admin/logica/grupos.dart';
 import '/admin/logica/agregar_proyectos.dart';
+import '/resolver_nombres_service.dart';
 
 class GruposScreen extends StatefulWidget {
   final Map<String, dynamic> eventData;
@@ -14,10 +15,11 @@ class GruposScreen extends StatefulWidget {
 class _GruposScreenState extends State<GruposScreen>
     with TickerProviderStateMixin {
   final GruposService _gruposService = GruposService();
+  final ResolverNombresService _resolver = ResolverNombresService();
+
   bool _isLoading = false;
   bool _isLoadingProjects = false;
   List<Map<String, dynamic>> _estudiantesImportados = [];
-  Map<String, String> _nombresCache = {};
   Map<String, List<Map<String, dynamic>>> _estudiantesPorCategoria = {};
   List<Map<String, dynamic>> _proyectosExistentes = [];
 
@@ -29,6 +31,8 @@ class _GruposScreenState extends State<GruposScreen>
   @override
   void initState() {
     super.initState();
+    debugPrint('eventData: ${widget.eventData}');
+    _cargarNombres();
     _cargarProyectosExistentes();
 
     _fadeController = AnimationController(
@@ -59,25 +63,20 @@ class _GruposScreenState extends State<GruposScreen>
     super.dispose();
   }
 
-  List<String> _toIntegrantesList(dynamic raw) {
-    if (raw == null) return [];
-    if (raw is List) return raw.map((e) => e.toString()).toList();
-    if (raw is String && raw.isNotEmpty) {
-      return raw
-          .split(',')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
-    }
-    return [];
-  }
+  Future<void> _cargarNombres() async {
+    final filialNombre = widget.eventData['filialNombre']?.toString() ?? '';
+    final carrera = widget.eventData['carreraNombre']?.toString() ?? '';
 
-  String _resolverNombre(String codigoONombre) {
-    return _nombresCache[codigoONombre] ?? codigoONombre;
-  }
+    debugPrint('🔑 GruposScreen cargarNombres — filialNombre: $filialNombre, carrera: $carrera');
 
-  List<String> _integrantesResueltos(dynamic raw) {
-    return _toIntegrantesList(raw).map((c) => _resolverNombre(c)).toList();
+    if (filialNombre.isEmpty || carrera.isEmpty) return;
+
+    await _resolver.cargarEstudiantes(
+      filialNombre: filialNombre,
+      carrera: carrera,
+    );
+
+    if (mounted) setState(() {});
   }
 
   @override
@@ -155,32 +154,6 @@ class _GruposScreenState extends State<GruposScreen>
         ),
       ),
     );
-  }
-
-  Future<void> _resolverNombresDeProyectos(
-    List<Map<String, dynamic>> proyectos,
-  ) async {
-    final Set<String> todosLosCodigos = {};
-    for (final p in proyectos) {
-      final lista = _toIntegrantesList(p['Integrantes']);
-      for (final item in lista) {
-        if (RegExp(r'^\d{6,}$').hasMatch(item)) {
-          todosLosCodigos.add(item);
-        }
-      }
-    }
-
-    if (todosLosCodigos.isEmpty) return;
-
-    final nombres = await _gruposService.resolverNombresPorCodigos(
-      todosLosCodigos.toList(),
-      filialId: widget.eventData['filialId'],
-      carreraId: widget.eventData['carreraId'],
-    );
-    if (!mounted) return;
-    setState(() {
-      _nombresCache.addAll(nombres);
-    });
   }
 
   void _navegarAAgregarProyecto() {
@@ -546,7 +519,7 @@ class _GruposScreenState extends State<GruposScreen>
   }
 
   Widget _buildProjectItem(Map<String, dynamic> item) {
-    final integrantesList = _integrantesResueltos(item['Integrantes']);
+    final integrantesList = _resolver.resolverLista(item['Integrantes']);
     final totalIntegrantes =
         item['totalIntegrantes'] ?? integrantesList.length;
     final codigo = item['Código']?.toString() ?? 'Sin código';
@@ -707,7 +680,7 @@ class _GruposScreenState extends State<GruposScreen>
   }
 
   Widget _buildExistingProjectItem(Map<String, dynamic> proyecto) {
-    final integrantesList = _integrantesResueltos(proyecto['Integrantes']);
+    final integrantesList = _resolver.resolverLista(proyecto['Integrantes']);
     final totalIntegrantes =
         proyecto['totalIntegrantes'] ?? integrantesList.length;
     final codigo = proyecto['Código']?.toString() ?? 'Sin código';
@@ -813,7 +786,7 @@ class _GruposScreenState extends State<GruposScreen>
           eventData: widget.eventData,
           gruposService: _gruposService,
           onProyectoActualizado: _cargarProyectosExistentes,
-          nombresCache: _nombresCache,
+          resolver: _resolver,
         ),
       ),
     );
@@ -991,7 +964,6 @@ class _GruposScreenState extends State<GruposScreen>
         _proyectosExistentes = proyectos;
         _isLoadingProjects = false;
       });
-      await _resolverNombresDeProyectos(proyectos);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoadingProjects = false);
@@ -1130,7 +1102,7 @@ class DetalleProyectoScreen extends StatelessWidget {
   final Map<String, dynamic> eventData;
   final GruposService gruposService;
   final VoidCallback onProyectoActualizado;
-  final Map<String, String> nombresCache;
+  final ResolverNombresService resolver;
 
   const DetalleProyectoScreen({
     super.key,
@@ -1138,11 +1110,8 @@ class DetalleProyectoScreen extends StatelessWidget {
     required this.eventData,
     required this.gruposService,
     required this.onProyectoActualizado,
-    this.nombresCache = const {},
+    required this.resolver,
   });
-
-  String _resolverNombre(String codigoONombre) =>
-      nombresCache[codigoONombre] ?? codigoONombre;
 
   List<String> _toIntegrantesList(dynamic raw) {
     if (raw == null) return [];
@@ -1159,9 +1128,7 @@ class DetalleProyectoScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final integrantesList = _toIntegrantesList(proyecto['Integrantes'])
-        .map((c) => _resolverNombre(c))
-        .toList();
+    final integrantesList = resolver.resolverLista(proyecto['Integrantes']);
     final totalIntegrantes =
         proyecto['totalIntegrantes'] ?? integrantesList.length;
     final codigo = proyecto['Código']?.toString() ?? 'Sin código';
@@ -1596,7 +1563,6 @@ class DetalleProyectoScreen extends StatelessWidget {
     );
 
     if (confirmar != true) return;
-
     if (!context.mounted) return;
 
     showDialog(
