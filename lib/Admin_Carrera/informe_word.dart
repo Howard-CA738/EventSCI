@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '/resolver_nombres_service.dart';
 import 'package:archive/archive.dart';

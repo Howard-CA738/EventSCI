@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '/admin/logica/eventos_detalles.dart';
 import '/admin/logica/crear_eventos.dart';
 import '/admin/logica/periodos_helper.dart';
+import 'dart:async';
 
 class CrearEventosScreen extends StatefulWidget {
   const CrearEventosScreen({super.key});
@@ -34,23 +35,23 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
-  @override
-  void initState() {
-    super.initState();
+  // CrearEventosScreen.initState()
+@override
+void initState() {
+  super.initState();
+  _fadeController = AnimationController(
+    duration: const Duration(milliseconds: 800),
+    vsync: this,
+  );
+  _fadeAnimation = CurvedAnimation(
+    parent: _fadeController,
+    curve: Curves.easeIn,
+  );
+  unawaited(_fadeController.forward());   // ← cambio
+  _loadInitialData().ignore();
+}
 
-    _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-
-    _fadeAnimation = CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeIn,
-    );
-
-    _fadeController.forward();
-    _loadInitialData();
-  }
+ 
 
   @override
   void dispose() {
@@ -69,7 +70,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
       ]);
 
       final filiales = results[0] as List<Map<String, String>>;
-      final periodos = results[1] as List<Map<String, dynamic>>;
+      final periodos = (results[1] as List).cast<Map<String, dynamic>>();
 
       if (!mounted) return;
 
@@ -632,58 +633,58 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
     );
   }
 
-  Widget _buildDropdown({
-    required String? value,
-    required String label,
-    required IconData icon,
-    required List<String> items,
-    List<String>? itemLabels,
-    required void Function(String?)? onChanged,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: DropdownButtonFormField<String>(
-        value: value,
-        isExpanded: true,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          filled: true,
-          fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
-          ),
+ Widget _buildDropdown({
+  required String? value,
+  required String label,
+  required IconData icon,
+  required List<String> items,
+  List<String>? itemLabels,
+  required void Function(String?)? onChanged,
+}) {
+  return Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.05),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
         ),
-        items: List.generate(items.length, (index) {
-          return DropdownMenuItem<String>(
-            value: items[index],
-            child: Text(
-              itemLabels != null ? itemLabels[index] : items[index],
-              style: const TextStyle(fontSize: 14),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          );
-        }),
-        onChanged: onChanged,
+      ],
+    ),
+    child: DropdownButtonFormField<String?>(  // <- String? aquí
+      value: value,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: const Color(0xFF1E3A5F)),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
-    );
-  }
+      items: List.generate(items.length, (index) {
+        return DropdownMenuItem<String?>(  // <- String? aquí
+          value: items[index],
+          child: Text(
+            itemLabels != null ? itemLabels[index] : items[index],
+            style: const TextStyle(fontSize: 14),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        );
+      }),
+      onChanged: onChanged,
+    ),
+  );
+}
 
   Widget _buildPrimaryButton({
     required VoidCallback? onPressed,
@@ -830,26 +831,31 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
   List<Map<String, String>> _filiales = [];
   List<String> _facultades = [];
   List<Map<String, dynamic>> _carreras = [];
-  List<Map<String, dynamic>> _periodos = [];
+final List<Map<String, dynamic>> _periodos = [];
 
   late AnimationController _animationController;
   bool _isLoadingFilters = true;
 
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-    _animationController.forward();
-    _loadFilterData();
-  }
+// ListaEventosScreen.initState()
+@override
+void initState() {
+  super.initState();
+  _animationController = AnimationController(
+    duration: const Duration(milliseconds: 600),
+    vsync: this,
+  );
+  unawaited(_animationController.forward());  // ← cambio
+  _startLoadFilterData();
+}
 
   @override
   void dispose() {
     _animationController.dispose();
     super.dispose();
+  }
+
+  void _startLoadFilterData() {
+    _loadFilterData().ignore();
   }
 
   Future<void> _loadFilterData() async {
@@ -998,7 +1004,7 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
-                    value: editFilialId,
+                    initialValue: editFilialId,
                     isExpanded: true,
                     decoration: InputDecoration(
                       labelText: 'Filial',
@@ -1039,7 +1045,7 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
-                    value: editFacultad,
+                    initialValue: editFacultad,
                     isExpanded: true,
                     decoration: InputDecoration(
                       labelText: 'Facultad',
@@ -1079,7 +1085,7 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
-                    value: editCarreraId,
+                    initialValue: editCarreraId,
                     isExpanded: true,
                     decoration: InputDecoration(
                       labelText: 'Carrera',
@@ -1131,59 +1137,70 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              onPressed: () async {
-                final nameError = _eventosService.validateEventName(
-                  editNameController.text,
-                );
-                if (nameError != null) {
-                  if (mounted) _showSnackBar(nameError, isError: true);
-                  return;
-                }
+             // ✅ CORRECCIÓN — dentro del onPressed del botón Guardar en _editEvent()
+onPressed: () async {
+  final nameError = _eventosService.validateEventName(
+    editNameController.text,
+  );
+  if (nameError != null) {
+    if (mounted) _showSnackBar(nameError, isError: true);
+    return;
+  }
 
-                final filialError =
-                    _eventosService.validateFilial(editFilialId);
-                if (filialError != null) {
-                  if (mounted) _showSnackBar(filialError, isError: true);
-                  return;
-                }
+  final filialError = _eventosService.validateFilial(editFilialId);
+  if (filialError != null) {
+    if (mounted) _showSnackBar(filialError, isError: true);
+    return;
+  }
 
-                final facultadError =
-                    _eventosService.validateFacultad(editFacultad);
-                if (facultadError != null) {
-                  if (mounted) _showSnackBar(facultadError, isError: true);
-                  return;
-                }
+if ((editFilialNombre?.trim() ?? '').isEmpty) {
+  if (mounted) _showSnackBar('Selecciona una filial válida', isError: true);
+  return;
+}
 
-                final carreraError =
-                    _eventosService.validateCarrera(editCarreraId);
-                if (carreraError != null) {
-                  if (mounted) _showSnackBar(carreraError, isError: true);
-                  return;
-                }
+  final facultadError = _eventosService.validateFacultad(editFacultad);
+  if (facultadError != null) {
+    if (mounted) _showSnackBar(facultadError, isError: true);
+    return;
+  }
 
-                try {
-                  await _eventosService.updateEvent(
-                    eventId: eventId,
-                    name: editNameController.text.trim(),
-                    filialId: editFilialId!,
-                    filialNombre: editFilialNombre!,
-                    facultad: editFacultad!,
-                    carreraId: editCarreraId!,
-                    carreraNombre: editCarreraNombre!,
-                  );
+  final carreraError = _eventosService.validateCarrera(editCarreraId);
+  if (carreraError != null) {
+    if (mounted) _showSnackBar(carreraError, isError: true);
+    return;
+  }
 
-                  if (!dialogContext.mounted) return;
-                  Navigator.pop(dialogContext);
-                  if (mounted) _showSnackBar('Evento actualizado exitosamente');
-                } catch (e) {
-                  if (mounted) {
-                    _showSnackBar(
-                      'Error al actualizar evento: $e',
-                      isError: true,
-                    );
-                  }
-                }
-              },
+ if ((editCarreraNombre?.trim() ?? '').isEmpty) {
+  if (mounted) _showSnackBar('Selecciona una carrera válida', isError: true);
+  return;
+}
+
+final filialNombreSeguro = editFilialNombre ?? '';
+final carreraNombreSeguro = editCarreraNombre ?? '';
+final filialIdSeguro = editFilialId ?? '';
+final facultadSegura = editFacultad ?? '';
+final carreraIdSegura = editCarreraId ?? '';
+
+try {
+  await _eventosService.updateEvent(
+    eventId: eventId,
+    name: editNameController.text.trim(),
+    filialId: filialIdSeguro,
+    filialNombre: filialNombreSeguro,
+    facultad: facultadSegura,
+    carreraId: carreraIdSegura,
+    carreraNombre: carreraNombreSeguro,
+  );
+
+    if (!dialogContext.mounted) return;
+    Navigator.pop(dialogContext);
+    if (mounted) _showSnackBar('Evento actualizado exitosamente');
+  } catch (e) {
+    if (mounted) {
+      _showSnackBar('Error al actualizar evento: $e', isError: true);
+    }
+  }
+},
               child: const Text('Guardar'),
             ),
           ],
@@ -1368,7 +1385,7 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
                   const SizedBox(height: 16),
 
                   DropdownButtonFormField<String>(
-                    value: _filtroFilialId,
+                    initialValue: _filtroFilialId,
                     isExpanded: true,
                     decoration: InputDecoration(
                       labelText: 'Filial',
@@ -1414,7 +1431,7 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
                   const SizedBox(height: 12),
 
                   DropdownButtonFormField<String>(
-                    value: _filtroFacultad,
+                    initialValue: _filtroFacultad,
                     isExpanded: true,
                     decoration: InputDecoration(
                       labelText: 'Facultad',
@@ -1461,7 +1478,7 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
                   const SizedBox(height: 12),
 
                   DropdownButtonFormField<String>(
-                    value: _filtroCarreraId,
+                    initialValue: _filtroCarreraId,
                     isExpanded: true,
                     decoration: InputDecoration(
                       labelText: 'Carrera',
@@ -1500,7 +1517,7 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
                   const SizedBox(height: 12),
 
                   DropdownButtonFormField<String>(
-                    value: _filtroPeriodo,
+                    initialValue: _filtroPeriodo,
                     isExpanded: true,
                     decoration: InputDecoration(
                       labelText: 'Período Académico',

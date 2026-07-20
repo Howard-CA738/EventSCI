@@ -1,6 +1,6 @@
 name: eventos
 description: "Sistema de Gestión de Eventos UPEU"
-version: 1.0.0+28
+version: 1.0.0+43
 
 environment:
   sdk: ^3.8.1
@@ -35,7 +35,9 @@ dependencies:
   archive: ^3.6.1
   firebase_app_check: ^0.3.2+10
   encrypt: ^5.0.3
+  xml: ^6.6.1
 
+  crypto: any
 dev_dependencies:
   flutter_test:
     sdk: flutter

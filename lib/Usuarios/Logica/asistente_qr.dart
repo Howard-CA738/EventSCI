@@ -129,7 +129,7 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.where((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
 
         if (_filialNombre != null && _filialNombre!.isNotEmpty) {
           final eventoFilial = data['filialNombre']?.toString() ??

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/admin/logica/filiales_service.dart';
 import '/encryption_helper.dart';
+import 'dart:async';
 
 class ControlPagosScreen extends StatefulWidget {
   const ControlPagosScreen({super.key});
@@ -85,22 +86,24 @@ class _ControlPagosScreenState extends State<ControlPagosScreen>
   List<String> get _filialesDisponibles => _estructuraFiliales.keys.toList();
 
   List<String> _getFacultades(String filialId) {
-    final filial = _estructuraFiliales[filialId];
-    if (filial == null) return [];
-    return (filial['facultades'] as Map<String, dynamic>).keys.toList();
-  }
+  final filial = _estructuraFiliales[filialId] as Map<String, dynamic>?;
+  if (filial == null) return [];
+  return (filial['facultades'] as Map<String, dynamic>).keys.toList();
+}
 
-  List<Map<String, dynamic>> _getCarreras(String filialId, String facultad) {
-    final filial = _estructuraFiliales[filialId];
-    if (filial == null) return [];
-    final facs    = filial['facultades'] as Map<String, dynamic>;
-    final facData = facs[facultad];
-    if (facData == null) return [];
-    return List<Map<String, dynamic>>.from(facData['carreras'] ?? []);
-  }
+List<Map<String, dynamic>> _getCarreras(String filialId, String facultad) {
+  final filial = _estructuraFiliales[filialId] as Map<String, dynamic>?;
+  if (filial == null) return [];
+  final facs    = filial['facultades'] as Map<String, dynamic>;
+  final facData = facs[facultad] as Map<String, dynamic>?;
+  if (facData == null) return [];
+  return List<Map<String, dynamic>>.from(facData['carreras'] ?? []);
+}
 
-  String _getNombreFilial(String filialId) =>
-      _estructuraFiliales[filialId]?['nombre'] ?? filialId;
+  String _getNombreFilial(String filialId) {
+  final filial = _estructuraFiliales[filialId] as Map<String, dynamic>?;
+  return (filial?['nombre'] as String?) ?? filialId;
+}
 
   void _onFilialChanged(String? filialId) {
     setState(() {
@@ -221,10 +224,9 @@ class _ControlPagosScreenState extends State<ControlPagosScreen>
         };
       }).toList();
 
-      setState(() => _estudiantes = lista);
-      _animController
-        ..reset()
-        ..forward();
+       setState(() => _estudiantes = lista);
+      _animController.reset();
+      unawaited(_animController.forward());
     } catch (e) {
       _showMessage('Error cargando estudiantes: $e');
     }
@@ -372,7 +374,7 @@ class _ControlPagosScreenState extends State<ControlPagosScreen>
     items: _filialesDisponibles.map((id) => _SheetItem(
       value: id,
       label: _getNombreFilial(id),
-      subtitle: _estructuraFiliales[id]?['ubicacion'] ?? '',
+      subtitle: (_estructuraFiliales[id] as Map<String, dynamic>?)?['ubicacion'] as String? ?? '',
       isSelected: _selectedFilialId == id,
     )).toList(),
     onSelected: (v, [_]) { _onFilialChanged(v); Navigator.pop(context); },
@@ -574,7 +576,189 @@ class _ControlPagosScreenState extends State<ControlPagosScreen>
       backgroundColor: _primary,
     ));
   }
+Future<void> _togglePagoMasivo(bool nuevoEstado) async {
+  if (_selectedEventoId == null || _estudiantes.isEmpty) return;
 
+  final confirmado = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(ctx).size.height * 0.8,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: nuevoEstado ? Colors.green.shade50 : Colors.red.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  nuevoEstado ? Icons.check_circle : Icons.cancel,
+                  color: nuevoEstado ? Colors.green.shade700 : Colors.red.shade500,
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                nuevoEstado ? 'Marcar todos como PAGADO' : 'Marcar todos como PENDIENTE',
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: _primary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Se actualizarán ${_estudiantes.length} estudiantes de "$_selectedEventoNombre".',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.4),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 22),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 48,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: _primary),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('Cancelar',
+                            style: TextStyle(color: _primary)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: nuevoEstado
+                              ? Colors.green.shade700
+                              : Colors.red.shade500,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          nuevoEstado ? 'Marcar pagado' : 'Marcar pendiente',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  if (confirmado != true) return;
+
+  // Mostrar progreso
+  int procesados = 0;
+  int errores = 0;
+  final total = _estudiantes.length;
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setProgress) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(color: _primary),
+                const SizedBox(height: 16),
+                Text(
+                  'Actualizando $procesados / $total...',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: _primary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                LinearProgressIndicator(
+                  value: total > 0 ? procesados / total : 0,
+                  backgroundColor: Colors.grey.shade200,
+                  valueColor: const AlwaysStoppedAnimation<Color>(_primary),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+
+  try {
+    const batchSize = 500;
+    var batch = _firestore.batch();
+    int opsInBatch = 0;
+
+    for (final estudiante in _estudiantes) {
+      final studentId = estudiante['id'] as String;
+      final ref = _firestore
+          .collection('users')
+          .doc(_carreraPath)
+          .collection('students')
+          .doc(studentId);
+
+      batch.update(ref, {
+        'pagos.$_selectedEventoId': nuevoEstado,
+        'bloqueadoPorPago': !nuevoEstado,
+      });
+
+      opsInBatch++;
+      procesados++;
+
+      if (opsInBatch >= batchSize) {
+        await batch.commit();
+        batch = _firestore.batch();
+        opsInBatch = 0;
+      }
+    }
+
+    if (opsInBatch > 0) await batch.commit();
+
+    // Actualizar lista local
+    setState(() {
+      for (int i = 0; i < _estudiantes.length; i++) {
+        _estudiantes[i] = {..._estudiantes[i], 'pagado': nuevoEstado};
+      }
+    });
+
+    if (mounted) Navigator.pop(context); // cierra progreso
+
+    _showMessage(nuevoEstado
+        ? '✅ $total estudiantes marcados como PAGADO'
+        : '⚠️ $total estudiantes marcados como PENDIENTE');
+  } catch (e) {
+    if (mounted) Navigator.pop(context); // cierra progreso
+    _showMessage('Error en actualización masiva: $e. Procesados: $procesados, Errores: $errores');
+  }
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -937,107 +1121,155 @@ class _ControlPagosScreenState extends State<ControlPagosScreen>
     );
   }
 
-  Widget _buildStatsBar() {
-    final porcentaje = _totalEstudiantes > 0
-        ? (_totalPagaron / _totalEstudiantes * 100).toStringAsFixed(1)
-        : '0.0';
+Widget _buildStatsBar() {
+  final porcentaje = _totalEstudiantes > 0
+      ? (_totalPagaron / _totalEstudiantes * 100).toStringAsFixed(1)
+      : '0.0';
 
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final itemWidth = (constraints.maxWidth - 18 - 8) / 4;
-              final tooNarrow = itemWidth < 56;
-              if (tooNarrow) {
-                return Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    _statBadge('$_totalEstudiantes', 'Total',
-                        _primary, const Color(0xFFEFF6FF)),
-                    _statBadge('$_totalPagaron', 'Pagaron',
-                        Colors.green.shade700, Colors.green.shade50),
-                    _statBadge('$_totalNoPagaron', 'Pendientes',
-                        Colors.red.shade600, Colors.red.shade50),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+  return Container(
+    color: Colors.white,
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final itemWidth = (constraints.maxWidth - 18 - 8) / 4;
+            final tooNarrow = itemWidth < 56;
+            if (tooNarrow) {
+              return Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  _statBadge('$_totalEstudiantes', 'Total',
+                      _primary, const Color(0xFFEFF6FF)),
+                  _statBadge('$_totalPagaron', 'Pagaron',
+                      Colors.green.shade700, Colors.green.shade50),
+                  _statBadge('$_totalNoPagaron', 'Pendientes',
+                      Colors.red.shade600, Colors.red.shade50),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: _primary,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text('$porcentaje%',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              );
+            }
+            return Row(
+              children: [
+                Flexible(
+                  child: _statBadge('$_totalEstudiantes', 'Total',
+                      _primary, const Color(0xFFEFF6FF)),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: _statBadge('$_totalPagaron', 'Pagaron',
+                      Colors.green.shade700, Colors.green.shade50),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: _statBadge('$_totalNoPagaron', 'Pendientes',
+                      Colors.red.shade600, Colors.red.shade50),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
                         color: _primary,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Text('$porcentaje%',
+                      child: Text('$porcentaje% pagó',
                           style: const TextStyle(
                               color: Colors.white,
                               fontSize: 11,
                               fontWeight: FontWeight.bold)),
                     ),
-                  ],
-                );
-              }
-              return Row(
-                children: [
-                  Flexible(
-                    child: _statBadge('$_totalEstudiantes', 'Total',
-                        _primary, const Color(0xFFEFF6FF)),
                   ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: _statBadge('$_totalPagaron', 'Pagaron',
-                        Colors.green.shade700, Colors.green.shade50),
-                  ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: _statBadge('$_totalNoPagaron', 'Pendientes',
-                        Colors.red.shade600, Colors.red.shade50),
-                  ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: _primary,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text('$porcentaje% pagó',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          Semantics(
-            label: '$porcentaje% de estudiantes han pagado',
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: _totalEstudiantes > 0
-                    ? _totalPagaron / _totalEstudiantes
-                    : 0,
-                minHeight: 6,
-                backgroundColor: Colors.red.shade100,
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(Colors.green.shade600),
-              ),
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        Semantics(
+          label: '$porcentaje% de estudiantes han pagado',
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: _totalEstudiantes > 0
+                  ? _totalPagaron / _totalEstudiantes
+                  : 0,
+              minHeight: 6,
+              backgroundColor: Colors.red.shade100,
+              valueColor:
+                  AlwaysStoppedAnimation<Color>(Colors.green.shade600),
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: 40,
+                child: ElevatedButton.icon(
+                  onPressed: _loadingEstudiantes
+                      ? null
+                      : () => _togglePagoMasivo(true),
+                  icon: const Icon(Icons.check_circle, size: 16),
+                  label: const Text('Todos pagaron',
+                      style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade700,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: SizedBox(
+                height: 40,
+                child: ElevatedButton.icon(
+                  onPressed: _loadingEstudiantes
+                      ? null
+                      : () => _togglePagoMasivo(false),
+                  icon: const Icon(Icons.cancel, size: 16),
+                  label: const Text('Todos pendientes',
+                      style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade500,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _statBadge(String value, String label, Color textColor, Color bgColor) {
     return Container(

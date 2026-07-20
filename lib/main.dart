@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:app_links/app_links.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'dart:async';
@@ -306,24 +305,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return true;
       }
 
-      // ─────────────────────────────────────────────────────────────
-      // 🔐 REACTIVAR AUTH ANÓNIMA al reiniciar la app
-      // Jurado, Estudiante y AdminCarrera usan auth anónima para
-      // cumplir las reglas de Firestore. Firebase Auth se pierde
-      // al cerrar la app, por eso hay que reactivarla aquí.
-      // ─────────────────────────────────────────────────────────────
-      if (userType == PrefsHelper.userTypeJurado      ||
+     if (userType == PrefsHelper.userTypeJurado      ||
           userType == PrefsHelper.userTypeStudent      ||
           userType == PrefsHelper.userTypeAdminCarrera) {
-        try {
-          if (FirebaseAuth.instance.currentUser == null) {
-            await FirebaseAuth.instance.signInAnonymously();
-            debugPrint('✅ Auth anónima reactivada para $userType al reiniciar');
-          }
-        } catch (e) {
-          debugPrint('⚠️ No se pudo reactivar auth anónima: $e');
-          // No bloqueamos el acceso si falla, App Check puede cubrir
-        }
+        await PrefsHelper.ensureAuthActiva(esperarRestauracion: true);
       }
 
       final isValid = await PrefsHelper.isSessionValid();

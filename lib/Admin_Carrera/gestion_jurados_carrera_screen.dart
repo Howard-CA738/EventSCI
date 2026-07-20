@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 import '/password_helper.dart';
 import '/jurado_security_service.dart';
+import 'dart:async';
 import 'package:flutter/services.dart';
 
 class GestionJuradosCarreraScreen extends StatefulWidget {
@@ -23,10 +24,21 @@ class _GestionJuradosCarreraScreenState
   String? _facultad;
   String? _carreraId;
   String? _carreraNombre;
+final TextEditingController _searchController = TextEditingController();
 
+List<Map<String, dynamic>> get _juradosFiltrados {
+  final q = _searchController.text.trim().toLowerCase();
+  if (q.isEmpty) return _jurados;
+  return _jurados
+      .where((j) => (j['nombre'] as String).toLowerCase().contains(q))
+      .toList();
+}
   List<Map<String, dynamic>> _jurados = [];
   bool _isLoadingSession = true;
   bool _isLoadingJurados = false;
+
+  // Cache de eventos para no recargar cada vez que se abre el diálogo
+  List<Map<String, dynamic>>? _eventosCache;
 
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
@@ -42,24 +54,25 @@ class _GestionJuradosCarreraScreenState
     Color(0xFFD44B87),
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    _fadeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 350),
-    );
-    _fadeAnimation =
-        CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
-    _loadSessionData();
-  }
+ @override
+void initState() {
+  super.initState();
+  _fadeController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 350),
+  );
+  _fadeAnimation =
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+  _searchController.addListener(() => setState(() {}));
+  _loadSessionData();
+}
 
-  @override
-  void dispose() {
-    _fadeController.dispose();
-    super.dispose();
-  }
-
+ @override
+void dispose() {
+  _fadeController.dispose();
+  _searchController.dispose();
+  super.dispose();
+}
   Future<void> _loadSessionData() async {
     setState(() => _isLoadingSession = true);
     try {
@@ -76,7 +89,11 @@ class _GestionJuradosCarreraScreenState
     } finally {
       setState(() => _isLoadingSession = false);
     }
-    await _cargarJurados();
+    // Cargar jurados y eventos en paralelo
+    await Future.wait([
+      _cargarJurados(),
+      _cargarEventosConCache(),
+    ]);
   }
 
   Future<void> _cargarJurados() async {
@@ -121,6 +138,13 @@ class _GestionJuradosCarreraScreenState
     } finally {
       if (mounted) setState(() => _isLoadingJurados = false);
     }
+  }
+
+  // Carga y guarda en cache los eventos para no repetir la llamada
+  Future<List<Map<String, dynamic>>> _cargarEventosConCache() async {
+    if (_eventosCache != null) return _eventosCache!;
+    _eventosCache = await _cargarEventos();
+    return _eventosCache!;
   }
 
   Future<List<String>> _cargarCategoriasPorEvento(String eventoId) async {
@@ -223,6 +247,7 @@ class _GestionJuradosCarreraScreenState
     return docRef.id;
   }
 
+  // Retorna true si se cambió la contraseña (para re-cifrar externamente)
   Future<bool> _actualizarJurado({
     required String id,
     required String nombre,
@@ -240,14 +265,14 @@ class _GestionJuradosCarreraScreenState
       'eventoNombre': eventoNombre,
     };
 
-    final needsEncrypt = password.isNotEmpty && !_isSha256(password);
-    if (needsEncrypt) {
+    final passwordCambiada = password.isNotEmpty && !_isSha256(password);
+    if (passwordCambiada) {
       updateData['password'] = PasswordHelper.hashPassword(password);
     }
 
     await _firestore.collection('users').doc(id).update(updateData);
 
-    return needsEncrypt;
+    return passwordCambiada;
   }
 
   bool _isSha256(String value) {
@@ -392,424 +417,473 @@ class _GestionJuradosCarreraScreenState
     }
   }
 
-  void _mostrarDialogoJurado({Map<String, dynamic>? jurado}) async {
+  // ─── DIÁLOGO INSTANTÁNEO ────────────────────────────────────────────────
+  // Se abre de inmediato y carga datos en background dentro del StatefulBuilder
+  void _mostrarDialogoJurado({Map<String, dynamic>? jurado}) {
     final isEditing = jurado != null;
-    final eventos = await _cargarEventos();
-    if (!mounted) return;
 
     final nombreCtrl = TextEditingController(text: jurado?['nombre'] ?? '');
     final usuarioCtrl = TextEditingController(text: jurado?['usuario'] ?? '');
-
-    String passwordActual = '';
-    if (isEditing) {
-      passwordActual = await JuradoSecurityService.decryptPassword(
-        juradoId: jurado!['id'],
-      );
-    }
-    final passwordCtrl = TextEditingController(text: passwordActual);
+    final passwordCtrl = TextEditingController();
 
     List<String> categoriasSeleccionadas =
         List<String>.from(jurado?['categorias'] ?? []);
     String? eventoSeleccionado =
-        isEditing && (jurado!['eventoId'] as String).isNotEmpty
+        isEditing && (jurado['eventoId'] as String).isNotEmpty
             ? jurado['eventoId'] as String
             : null;
+
+    List<Map<String, dynamic>> eventos = _eventosCache ?? [];
     List<String> categorias = [];
     bool obscurePass = true;
     bool isLoading = false;
     bool isLoadingCategorias = false;
+    // Indica que los datos async iniciales están cargando
+    bool isLoadingInitial = isEditing;
 
-    if (eventoSeleccionado != null) {
-      categorias = await _cargarCategoriasPorEvento(eventoSeleccionado);
-    }
-    if (!mounted) return;
-
-    await showDialog(
+    showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => Dialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.12),
-                  blurRadius: 30,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: SingleChildScrollView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: EdgeInsets.only(
-                  left: 22,
-                  right: 22,
-                  top: 22,
-                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 22,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1E3A5F),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            isEditing
-                                ? Icons.edit_rounded
-                                : Icons.person_add_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                isEditing ? 'Editar Jurado' : 'Nuevo Jurado',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF1E3A5F),
-                                ),
-                              ),
-                              const Text(
-                                'Completa los datos del jurado',
-                                style: TextStyle(
-                                    fontSize: 11, color: Color(0xFF94A3B8)),
-                              ),
-                            ],
-                          ),
-                        ),
-                        SizedBox(
-                          width: 44,
-                          height: 44,
-                          child: IconButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            icon: const Icon(Icons.close_rounded,
-                                color: Color(0xFF94A3B8), size: 20),
-                            padding: EdgeInsets.zero,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
+        builder: (ctx, setDialogState) {
+          // Carga inicial: contraseña descifrada + categorías del evento actual
+          // Se dispara una sola vez al construir el diálogo
+          if (isEditing && isLoadingInitial) {
+            isLoadingInitial = false; // evitar re-disparar
+            Future(() async {
+              // Cargar en paralelo: contraseña descifrada y categorías
+              final results = await Future.wait([
+                JuradoSecurityService.decryptPassword(juradoId: jurado['id']),
+                if (eventoSeleccionado != null)
+                  _cargarCategoriasPorEvento(eventoSeleccionado!)
+                else
+                  Future.value(<String>[]),
+                _cargarEventosConCache(),
+              ]);
 
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF0F5FF),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFCBD9F5)),
-                      ),
-                      child: Row(
+              final passwordActual = results[0] as String;
+              final cats = results[1] as List<String>;
+              final eventosActualizados =
+                  results[2] as List<Map<String, dynamic>>;
+
+              if (!ctx.mounted) return;
+              setDialogState(() {
+                passwordCtrl.text = passwordActual;
+                categorias = cats;
+                eventos = eventosActualizados;
+              });
+            });
+          } else if (!isEditing && eventos.isEmpty) {
+            // Para nuevo jurado, asegurar eventos cargados
+            Future(() async {
+              final eventosActualizados = await _cargarEventosConCache();
+              if (!ctx.mounted) return;
+              setDialogState(() => eventos = eventosActualizados);
+            });
+          }
+
+          return Dialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            elevation: 0,
+            backgroundColor: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 30,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: SingleChildScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.only(
+                    left: 22,
+                    right: 22,
+                    top: 22,
+                    bottom: MediaQuery.of(ctx).viewInsets.bottom + 22,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── Header ──────────────────────────────────────────
+                      Row(
                         children: [
-                          const Icon(Icons.school_rounded,
-                              color: Color(0xFF3B6FD4), size: 16),
-                          const SizedBox(width: 10),
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E3A5F),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              isEditing
+                                  ? Icons.edit_rounded
+                                  : Icons.person_add_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
                           Expanded(
-                            child: Text(
-                              '${_carreraNombre ?? ''} · ${_facultad ?? ''} · ${_filialNombre ?? ''}',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF1E3A5F),
-                                fontWeight: FontWeight.w500,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  isEditing ? 'Editar Jurado' : 'Nuevo Jurado',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF1E3A5F),
+                                  ),
+                                ),
+                                const Text(
+                                  'Completa los datos del jurado',
+                                  style: TextStyle(
+                                      fontSize: 11, color: Color(0xFF94A3B8)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: IconButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              icon: const Icon(Icons.close_rounded,
+                                  color: Color(0xFF94A3B8), size: 20),
+                              padding: EdgeInsets.zero,
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 18),
+                      const SizedBox(height: 18),
 
-                    _buildDialogSectionLabel('Datos personales',
-                        Icons.person_rounded, const Color(0xFFD4863B)),
-                    const SizedBox(height: 10),
-                    _buildDialogTextField(
-                      controller: nombreCtrl,
-                      label: 'Nombre completo',
-                      icon: Icons.person_outline_rounded,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildDialogTextField(
-                      controller: usuarioCtrl,
-                      label: 'Usuario',
-                      icon: Icons.account_circle_outlined,
-                      enabled: !isEditing,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildPasswordField(
-                      controller: passwordCtrl,
-                      obscure: obscurePass,
-                      isEditing: isEditing,
-                      onToggle: () =>
-                          setDialogState(() => obscurePass = !obscurePass),
-                    ),
-                    const SizedBox(height: 18),
-
-                    _buildDialogSectionLabel('Evento asignado',
-                        Icons.event_rounded, const Color(0xFF3B6FD4)),
-                    const SizedBox(height: 10),
-                    _buildEventoDropdown(
-                      eventos: eventos,
-                      eventoSeleccionado: eventoSeleccionado,
-                      isEditing: isEditing,
-                      jurado: jurado,
-                      onChanged: (value) async {
-                        setDialogState(() {
-                          eventoSeleccionado = value;
-                          categorias = [];
-                          if (!isEditing || value != jurado?['eventoId']) {
-                            categoriasSeleccionadas = [];
-                          }
-                          isLoadingCategorias = true;
-                        });
-                        final cats =
-                            await _cargarCategoriasPorEvento(value!);
-                        setDialogState(() {
-                          categorias = cats;
-                          isLoadingCategorias = false;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 18),
-
-                    if (eventoSeleccionado != null) ...[
-                      _buildDialogSectionLabel('Categorías',
-                          Icons.category_rounded, const Color(0xFF8B4DC7)),
-                      const SizedBox(height: 10),
-                      _buildCategoriasPanel(
-                        categorias: categorias,
-                        seleccionadas: categoriasSeleccionadas,
-                        isLoading: isLoadingCategorias,
-                        onChanged: (cat, selected) =>
-                            setDialogState(() {
-                          if (selected) {
-                            categoriasSeleccionadas.add(cat);
-                          } else {
-                            categoriasSeleccionadas.remove(cat);
-                          }
-                        }),
-                      ),
-                      if (categoriasSeleccionadas.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: categoriasSeleccionadas
-                              .asMap()
-                              .entries
-                              .map((e) {
-                            final color = _categoryColors[
-                                e.key % _categoryColors.length];
-                            return Chip(
-                              label: Text(
-                                e.value,
+                      // ── Info de carrera ──────────────────────────────────
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0F5FF),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFCBD9F5)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.school_rounded,
+                                color: Color(0xFF3B6FD4), size: 16),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                '${_carreraNombre ?? ''} · ${_facultad ?? ''} · ${_filialNombre ?? ''}',
                                 style: const TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.white,
+                                  fontSize: 12,
+                                  color: Color(0xFF1E3A5F),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // ── Datos personales ─────────────────────────────────
+                      _buildDialogSectionLabel('Datos personales',
+                          Icons.person_rounded, const Color(0xFFD4863B)),
+                      const SizedBox(height: 10),
+                      _buildDialogTextField(
+                        controller: nombreCtrl,
+                        label: 'Nombre completo',
+                        icon: Icons.person_outline_rounded,
+                      ),
+                      const SizedBox(height: 12),
+                      // CORREGIDO: usuario siempre editable
+                      _buildDialogTextField(
+                        controller: usuarioCtrl,
+                        label: 'Usuario',
+                        icon: Icons.account_circle_outlined,
+                      ),
+                      const SizedBox(height: 12),
+                      // Contraseña: muestra shimmer mientras carga en edición
+                      isEditing && passwordCtrl.text.isEmpty
+                          ? _buildPasswordFieldLoading()
+                          : _buildPasswordField(
+                              controller: passwordCtrl,
+                              obscure: obscurePass,
+                              isEditing: isEditing,
+                              onToggle: () => setDialogState(
+                                  () => obscurePass = !obscurePass),
+                            ),
+                      const SizedBox(height: 18),
+
+                      // ── Evento ────────────────────────────────────────────
+                      _buildDialogSectionLabel('Evento asignado',
+                          Icons.event_rounded, const Color(0xFF3B6FD4)),
+                      const SizedBox(height: 10),
+                      _buildEventoDropdown(
+                        eventos: eventos,
+                        eventoSeleccionado: eventoSeleccionado,
+                        isEditing: isEditing,
+                        jurado: jurado,
+                        onChanged: (value) async {
+                          setDialogState(() {
+                            eventoSeleccionado = value;
+                            categorias = [];
+                            if (!isEditing || value != jurado['eventoId']) {
+                              categoriasSeleccionadas = [];
+                            }
+                            isLoadingCategorias = true;
+                          });
+                          final cats =
+                              await _cargarCategoriasPorEvento(value!);
+                          if (ctx.mounted) {
+                            setDialogState(() {
+                              categorias = cats;
+                              isLoadingCategorias = false;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 18),
+
+                      // ── Categorías ────────────────────────────────────────
+                      if (eventoSeleccionado != null) ...[
+                        _buildDialogSectionLabel('Categorías',
+                            Icons.category_rounded, const Color(0xFF8B4DC7)),
+                        const SizedBox(height: 10),
+                        _buildCategoriasPanel(
+                          categorias: categorias,
+                          seleccionadas: categoriasSeleccionadas,
+                          isLoading: isLoadingCategorias,
+                          onChanged: (cat, selected) =>
+                              setDialogState(() {
+                            if (selected) {
+                              categoriasSeleccionadas.add(cat);
+                            } else {
+                              categoriasSeleccionadas.remove(cat);
+                            }
+                          }),
+                        ),
+                        if (categoriasSeleccionadas.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: categoriasSeleccionadas
+                                .asMap()
+                                .entries
+                                .map((e) {
+                              final color = _categoryColors[
+                                  e.key % _categoryColors.length];
+                              return Chip(
+                                label: Text(
+                                  e.value,
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                                backgroundColor: color,
+                                deleteIcon: const Icon(Icons.close_rounded,
+                                    size: 14, color: Colors.white),
+                                onDeleted: () => setDialogState(() =>
+                                    categoriasSeleccionadas.remove(e.value)),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                side: BorderSide.none,
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                        const SizedBox(height: 18),
+                      ],
+
+                      // ── Botones ───────────────────────────────────────────
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              style: TextButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: const BorderSide(
+                                      color: Color(0xFFE2E8F0)),
+                                ),
+                              ),
+                              child: const Text(
+                                'Cancelar',
+                                style: TextStyle(
+                                    color: Color(0xFF64748B),
                                     fontWeight: FontWeight.w600),
                               ),
-                              backgroundColor: color,
-                              deleteIcon: const Icon(Icons.close_rounded,
-                                  size: 14, color: Colors.white),
-                              onDeleted: () => setDialogState(() =>
-                                  categoriasSeleccionadas.remove(e.value)),
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 4),
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                              side: BorderSide.none,
-                            );
-                          }).toList(),
-                        ),
-                      ],
-                      const SizedBox(height: 18),
-                    ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton.icon(
+                              onPressed: isLoading
+                                  ? null
+                                  : () async {
+                                      final nombre = nombreCtrl.text.trim();
+                                      final usuario = usuarioCtrl.text.trim();
+                                      final password = passwordCtrl.text;
 
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            style: TextButton.styleFrom(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                side: const BorderSide(
-                                    color: Color(0xFFE2E8F0)),
+                                      if (nombre.isEmpty || usuario.isEmpty) {
+                                        _showSnackBar(
+                                            'Completa todos los campos',
+                                            isWarning: true);
+                                        return;
+                                      }
+                                      if (!isEditing && password.isEmpty) {
+                                        _showSnackBar(
+                                            'La contraseña es obligatoria',
+                                            isWarning: true);
+                                        return;
+                                      }
+                                      if (eventoSeleccionado == null) {
+                                        _showSnackBar(
+                                            'Selecciona un evento',
+                                            isWarning: true);
+                                        return;
+                                      }
+                                      if (categoriasSeleccionadas.isEmpty) {
+                                        _showSnackBar(
+                                            'Selecciona al menos una categoría',
+                                            isWarning: true);
+                                        return;
+                                      }
+
+                                      final eventoNombre = eventos.firstWhere(
+                                        (e) => e['id'] == eventoSeleccionado,
+                                        orElse: () => {'name': ''},
+                                      )['name'] as String;
+
+                                      setDialogState(() => isLoading = true);
+
+                                      try {
+                                        if (isEditing) {
+                                          // ── Editar ──────────────────────
+                                          final passwordCambiada =
+                                              await _actualizarJurado(
+                                            id: jurado['id'],
+                                            nombre: nombre,
+                                            usuario: usuario,
+                                            password: password,
+                                            categorias: categoriasSeleccionadas,
+                                            eventoId: eventoSeleccionado!,
+                                            eventoNombre: eventoNombre,
+                                          );
+
+                                          // CORREGIDO: si cambió la contraseña,
+                                          // también actualizamos el cifrado seguro
+                                          if (passwordCambiada) {
+                                            await JuradoSecurityService
+                                                .encryptAndSavePassword(
+                                              juradoId: jurado['id'],
+                                              password: password,
+                                            );
+                                          }
+                                        } else {
+                                          // ── Crear ────────────────────────
+                                          final nuevoId = await _crearJurado(
+                                            nombre: nombre,
+                                            usuario: usuario,
+                                            password: password,
+                                            categorias: categoriasSeleccionadas,
+                                            eventoId: eventoSeleccionado!,
+                                            eventoNombre: eventoNombre,
+                                          );
+
+                                          if (nuevoId != null) {
+                                            await JuradoSecurityService
+                                                .encryptAndSavePassword(
+                                              juradoId: nuevoId,
+                                              password: password,
+                                            );
+                                          } else {
+                                            // _crearJurado ya mostró el error
+                                            setDialogState(
+                                                () => isLoading = false);
+                                            return;
+                                          }
+                                        }
+                                      } catch (e) {
+                                        _showSnackBar('Error: $e',
+                                            isError: true);
+                                        setDialogState(
+                                            () => isLoading = false);
+                                        return;
+                                      }
+
+                                      setDialogState(() => isLoading = false);
+                                      if (mounted) Navigator.pop(ctx);
+
+                                      _showSnackBar(isEditing
+                                          ? 'Jurado actualizado exitosamente'
+                                          : 'Jurado creado exitosamente');
+                                      // Invalidar cache de eventos para reflejar posibles cambios
+                                      _eventosCache = null;
+                                      await _cargarJurados();
+                                    },
+                              icon: isLoading
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                          color: Colors.white, strokeWidth: 2),
+                                    )
+                                  : Icon(
+                                      isEditing
+                                          ? Icons.save_rounded
+                                          : Icons.person_add_rounded,
+                                      size: 18),
+                              label: Text(
+                                isLoading
+                                    ? 'Guardando...'
+                                    : isEditing
+                                        ? 'Guardar cambios'
+                                        : 'Crear Jurado',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 14),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF1E3A5F),
+                                foregroundColor: Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
                               ),
                             ),
-                            child: const Text(
-                              'Cancelar',
-                              style: TextStyle(
-                                  color: Color(0xFF64748B),
-                                  fontWeight: FontWeight.w600),
-                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: ElevatedButton.icon(
-                            onPressed: isLoading
-                                ? null
-                                : () async {
-                                    final nombre = nombreCtrl.text.trim();
-                                    final usuario = usuarioCtrl.text.trim();
-                                    final password = passwordCtrl.text;
-
-                                    if (nombre.isEmpty || usuario.isEmpty) {
-                                      _showSnackBar(
-                                          'Completa todos los campos',
-                                          isWarning: true);
-                                      return;
-                                    }
-                                    if (!isEditing && password.isEmpty) {
-                                      _showSnackBar(
-                                          'La contraseña es obligatoria',
-                                          isWarning: true);
-                                      return;
-                                    }
-                                    if (eventoSeleccionado == null) {
-                                      _showSnackBar(
-                                          'Selecciona un evento',
-                                          isWarning: true);
-                                      return;
-                                    }
-                                    if (categoriasSeleccionadas.isEmpty) {
-                                      _showSnackBar(
-                                          'Selecciona al menos una categoría',
-                                          isWarning: true);
-                                      return;
-                                    }
-
-                                    final eventoNombre = eventos.firstWhere(
-                                      (e) => e['id'] == eventoSeleccionado,
-                                      orElse: () => {'name': ''},
-                                    )['name'] as String;
-
-                                    setDialogState(() => isLoading = true);
-
-                                    String? juradoIdParaCifrar;
-                                    bool necesitaCifrarUpdate = false;
-                                    final String passwordParaCifrar =
-                                        password;
-
-                                    try {
-                                      if (isEditing) {
-                                        necesitaCifrarUpdate =
-                                            await _actualizarJurado(
-                                          id: jurado!['id'],
-                                          nombre: nombre,
-                                          usuario: usuario,
-                                          password: password,
-                                          categorias: categoriasSeleccionadas,
-                                          eventoId: eventoSeleccionado!,
-                                          eventoNombre: eventoNombre,
-                                        );
-                                        if (necesitaCifrarUpdate) {
-
-                                        }
-                                      } else {
-                                        juradoIdParaCifrar =
-                                            await _crearJurado(
-                                          nombre: nombre,
-                                          usuario: usuario,
-                                          password: password,
-                                          categorias: categoriasSeleccionadas,
-                                          eventoId: eventoSeleccionado!,
-                                          eventoNombre: eventoNombre,
-                                        );
-                                      }
-                                    } catch (e) {
-                                      _showSnackBar('Error: $e',
-                                          isError: true);
-                                      setDialogState(
-                                          () => isLoading = false);
-                                      return;
-                                    }
-
-                                    setDialogState(
-                                        () => isLoading = false);
-
-                                    if (mounted) Navigator.pop(ctx);
-
-                                    if (juradoIdParaCifrar != null) {
-                                      await JuradoSecurityService
-                                          .encryptAndSavePassword(
-                                        juradoId: juradoIdParaCifrar,
-                                        password: passwordParaCifrar,
-                                      );
-                                    }
-
-                                    _showSnackBar(isEditing
-                                        ? 'Jurado actualizado exitosamente'
-                                        : 'Jurado creado exitosamente');
-                                    await _cargarJurados();
-                                  },
-                            icon: isLoading
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                        color: Colors.white, strokeWidth: 2),
-                                  )
-                                : Icon(
-                                    isEditing
-                                        ? Icons.save_rounded
-                                        : Icons.person_add_rounded,
-                                    size: 18),
-                            label: Text(
-                              isLoading
-                                  ? 'Guardando...'
-                                  : isEditing
-                                      ? 'Guardar cambios'
-                                      : 'Crear Jurado',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w700, fontSize: 14),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF1E3A5F),
-                              foregroundColor: Colors.white,
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -849,90 +923,129 @@ class _GestionJuradosCarreraScreenState
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFEEF2F7),
-      appBar: AppBar(
-        title: const Text(
-          'Gestión de Jurados',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 17,
-          ),
-        ),
-        backgroundColor: const Color(0xFF1E3A5F),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, size: 22),
-            onPressed: _cargarJurados,
-            tooltip: 'Actualizar',
-          ),
-          const SizedBox(width: 4),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            height: 1,
-            color: Colors.white.withValues(alpha: 0.1),
-          ),
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: const Color(0xFFEEF2F7),
+    appBar: AppBar(
+      title: const Text(
+        'Gestión de Jurados',
+        style: TextStyle(
+          fontWeight: FontWeight.w700,
+          fontSize: 17,
         ),
       ),
-      floatingActionButton: _isLoadingSession
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => _mostrarDialogoJurado(),
-              backgroundColor: const Color(0xFF1E3A5F),
-              foregroundColor: Colors.white,
-              elevation: 4,
-              icon: const Icon(Icons.person_add_rounded, size: 20),
-              label: const Text(
-                'Nuevo Jurado',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-              ),
+      backgroundColor: const Color(0xFF1E3A5F),
+      foregroundColor: Colors.white,
+      elevation: 0,
+      centerTitle: true,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh_rounded, size: 22),
+          onPressed: () {
+            _eventosCache = null;
+            _cargarJurados();
+          },
+          tooltip: 'Actualizar',
+        ),
+        const SizedBox(width: 4),
+      ],
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(
+          height: 1,
+          color: Colors.white.withValues(alpha: 0.1),
+        ),
+      ),
+    ),
+    floatingActionButton: _isLoadingSession
+        ? null
+        : FloatingActionButton.extended(
+            onPressed: () => _mostrarDialogoJurado(),
+            backgroundColor: const Color(0xFF1E3A5F),
+            foregroundColor: Colors.white,
+            elevation: 4,
+            icon: const Icon(Icons.person_add_rounded, size: 20),
+            label: const Text(
+              'Nuevo Jurado',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
             ),
-      body: _isLoadingSession
-          ? const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF1E3A5F),
-                strokeWidth: 2.5,
+          ),
+    body: _isLoadingSession
+        ? const Center(
+            child: CircularProgressIndicator(
+              color: Color(0xFF1E3A5F),
+              strokeWidth: 2.5,
+            ),
+          )
+        : Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: _buildContextCard(),
               ),
-            )
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: _buildContextCard(),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Buscar jurado por nombre...',
+                    hintStyle: const TextStyle(
+                        fontSize: 13, color: Color(0xFF94A3B8)),
+                    prefixIcon: const Icon(Icons.search_rounded,
+                        color: Color(0xFF1E3A5F), size: 20),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.close_rounded,
+                                color: Color(0xFF94A3B8), size: 18),
+                            onPressed: () => _searchController.clear(),
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 0),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none),
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide:
+                            const BorderSide(color: Color(0xFFE2E8F0))),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                            color: Color(0xFF1E3A5F), width: 1.5)),
+                  ),
                 ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: _isLoadingJurados
-                      ? const Center(
-                          child: CircularProgressIndicator(
-                            color: Color(0xFF1E3A5F),
-                            strokeWidth: 2.5,
-                          ),
-                        )
-                      : _jurados.isEmpty
-                          ? _buildEmptyState()
-                          : FadeTransition(
-                              opacity: _fadeAnimation,
-                              child: ListView.builder(
-                                padding: const EdgeInsets.fromLTRB(
-                                    16, 4, 16, 100),
-                                itemCount: _jurados.length,
-                                itemBuilder: (_, i) =>
-                                    _buildJuradoCard(_jurados[i]),
-                              ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: _isLoadingJurados
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF1E3A5F),
+                          strokeWidth: 2.5,
+                        ),
+                      )
+                    : _juradosFiltrados.isEmpty
+                        ? _buildEmptyState()
+                        : FadeTransition(
+                            opacity: _fadeAnimation,
+                            child: ListView.builder(
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 4, 16, 100),
+                              itemCount: _juradosFiltrados.length,
+                              itemBuilder: (_, i) =>
+                                  _buildJuradoCard(_juradosFiltrados[i]),
                             ),
-                ),
-              ],
-            ),
-    );
-  }
+                          ),
+              ),
+            ],
+          ),
+  );
+}
 
   Widget _buildContextCard() {
     return Container(
@@ -1081,7 +1194,6 @@ class _GestionJuradosCarreraScreenState
               ),
             ),
             const SizedBox(width: 14),
-
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1160,7 +1272,6 @@ class _GestionJuradosCarreraScreenState
                 ],
               ),
             ),
-
             const SizedBox(width: 8),
             Column(
               mainAxisSize: MainAxisSize.min,
@@ -1169,6 +1280,7 @@ class _GestionJuradosCarreraScreenState
                   icon: Icons.edit_rounded,
                   color: const Color(0xFF1E3A5F),
                   bgColor: const Color(0xFFF0F5FF),
+                  // INSTANTÁNEO: ya no es async, abre el diálogo de inmediato
                   onTap: () => _mostrarDialogoJurado(jurado: jurado),
                   tooltip: 'Editar',
                 ),
@@ -1317,6 +1429,41 @@ class _GestionJuradosCarreraScreenState
             enabled ? const Color(0xFFF8FAFC) : const Color(0xFFF1F5F9),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      ),
+    );
+  }
+
+  // Placeholder mientras carga la contraseña descifrada en edición
+  Widget _buildPasswordFieldLoading() {
+    return Container(
+      height: 56,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 14),
+          const Icon(Icons.lock_outline_rounded,
+              color: Color(0xFF1E3A5F), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Cargando contraseña...',
+              style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.only(right: 14),
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: Color(0xFF1E3A5F)),
+            ),
+          ),
+        ],
       ),
     );
   }

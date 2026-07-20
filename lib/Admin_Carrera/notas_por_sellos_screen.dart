@@ -103,7 +103,7 @@ class _NotasPorSellosScreenState extends State<NotasPorSellosScreen>
 
       setState(() {
         _eventos = snap.docs.map((doc) {
-          final d = doc.data() as Map<String, dynamic>;
+          final d = doc.data();
           return {
             'id':   doc.id,
             'name': d['name'] ?? 'Sin nombre',

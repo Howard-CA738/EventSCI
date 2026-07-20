@@ -6,8 +6,8 @@ const crypto                 = require("crypto");
 
 initializeApp();
 
-const AES_KEY = "EvSc2024SecureKeyUPEUDNI32CharsX"; // 32 chars
-const AES_IV  = "InitVector161616";                  // 16 chars — mismo que Flutter
+const AES_KEY = "EvSc2024SecureKeyUPEUDNI32CharsX";
+const AES_IV  = "InitVector161616";
 
 function encryptAES(text) {
   const cipher = crypto.createCipheriv(
@@ -30,6 +30,8 @@ function decryptAES(encryptedBase64) {
   decrypted += decipher.final("utf8");
   return decrypted;
 }
+
+// ─── ESTUDIANTES ─────────────────────────────────────────────────────────────
 
 exports.encryptStudentDni = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "No autenticado");
@@ -80,7 +82,6 @@ exports.decryptStudentDni = onCall(async (request) => {
 
   const encrypted = studentSnap.data().dniEncrypted;
 
-  // Si no tiene dniEncrypted retorna vacío sin tirar error
   if (!encrypted) return { dni: "" };
 
   try {
@@ -96,9 +97,57 @@ exports.decryptStudentDni = onCall(async (request) => {
 
     return { dni };
   } catch (e) {
-    // Si el campo existe pero fue cifrado con CryptoJS (formato antiguo)
-    // retorna vacío en lugar de crashear
     console.error("Error descifrando DNI:", e.message);
     return { dni: "" };
+  }
+});
+
+// ─── JURADOS ──────────────────────────────────────────────────────────────────
+
+exports.encryptJuradoPassword = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "No autenticado");
+
+  const { juradoId, password, adminId } = request.data;
+
+  if (!juradoId || !password) {
+    throw new HttpsError("invalid-argument", "Faltan parámetros");
+  }
+
+  const db        = getFirestore();
+  const encrypted = encryptAES(password);
+
+  await db.collection("users").doc(juradoId).update({
+    passwordEncrypted: encrypted,
+  });
+
+  return { success: true };
+});
+
+exports.decryptJuradoPassword = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "No autenticado");
+
+  const { juradoId, adminId } = request.data;
+
+  if (!juradoId) {
+    throw new HttpsError("invalid-argument", "Falta juradoId");
+  }
+
+  const db         = getFirestore();
+  const juradoSnap = await db.collection("users").doc(juradoId).get();
+
+  if (!juradoSnap.exists) {
+    throw new HttpsError("not-found", "Jurado no encontrado");
+  }
+
+  const encrypted = juradoSnap.data().passwordEncrypted;
+
+  if (!encrypted) return { password: "" };
+
+  try {
+    const password = decryptAES(encrypted);
+    return { password };
+  } catch (e) {
+    console.error("Error descifrando password jurado:", e.message);
+    return { password: "" };
   }
 });

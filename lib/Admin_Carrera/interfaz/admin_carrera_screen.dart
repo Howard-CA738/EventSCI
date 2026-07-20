@@ -12,7 +12,6 @@ import '/admin_carrera/generar_certificados_screen.dart';
 import '/admin_carrera/gestion_sesiones_screen.dart';
 import '/admin_carrera/reportes_admin_carrera_screen.dart';
 import '/admin_carrera/gestion_roles_screen.dart';
-import 'package:flutter/foundation.dart';
 
 
 class AdminCarreraScreen extends StatefulWidget {
@@ -328,8 +327,8 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                           // 9. Generar Certificados
                           _buildMenuCard(
                             imagePath: 'assets/icons/certificado.png',
-                            title: 'Generar\nCertificados',
-                            subtitle: 'Emitir certificados PDF',
+                            title: 'Certificados por Roles',
+                            subtitle: 'Ver y descargar certificados',
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => const GenerarCertificadosScreen(),
@@ -377,7 +376,6 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
 
   Widget _buildMenuCard({
     required String imagePath,
-    IconData? iconData,
     required String title,
     required String subtitle,
     required VoidCallback onTap,

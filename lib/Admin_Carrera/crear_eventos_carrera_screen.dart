@@ -685,7 +685,7 @@ class _CrearEventosCarreraScreenState
     required void Function(String?)? onChanged,
   }) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       isExpanded: true,
       menuMaxHeight: 300,
       decoration: InputDecoration(

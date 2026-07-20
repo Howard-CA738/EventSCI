@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '/prefs_helper.dart';
 import 'participantes_carrera_excel.dart';
 import '/resolver_nombres_service.dart';
+import 'nota_docente_service.dart';
 
 class _C {
   static const primary       = Color(0xFF1E3A5F);
@@ -60,6 +61,7 @@ class _ParticipantesCompletoCarreraScreenState
     with SingleTickerProviderStateMixin {
   final _firestore    = FirebaseFirestore.instance;
   final _excelService = ParticipantesCarreraExcelService();
+  final _notaDocenteService = NotaDocenteService();
 
   String? _filialId;
   String? _filialNombre;
@@ -71,9 +73,14 @@ class _ParticipantesCompletoCarreraScreenState
   bool _isLoadingEventos       = false;
   bool _isLoadingParticipantes = false;
   bool _isGeneratingExcel      = false;
+  bool _isImportandoNotas      = false;
 
   List<Map<String, dynamic>> _eventos = [];
   Map<String, dynamic>? _eventoSeleccionado;
+
+  /// Notas docente cargadas para el evento seleccionado.
+  /// Mapa { codigoEstudiante → notaDocente (0–20) }
+  Map<String, double> _notasDocente = {};
 
   List<_CategoriaData> _categoriasData = [];
 
@@ -173,6 +180,7 @@ class _ParticipantesCompletoCarreraScreenState
     _totalProyectos  = 0;
     _totalConEval    = 0;
     _busqueda        = '';
+    _notasDocente    = {};
     _searchCtrl.clear();
     _animCtrl.reset();
 
@@ -183,7 +191,12 @@ class _ParticipantesCompletoCarreraScreenState
     });
 
     try {
-      final categorias = await _cargarParticipantes(evento['id'] as String);
+      // Cargar notas docente existentes para este evento
+      final notasDoc =
+          await _notaDocenteService.obtenerNotasDocente(evento['id'] as String);
+
+      final categorias =
+          await _cargarParticipantes(evento['id'] as String, notasDoc);
       if (!mounted) return;
 
       int proj = 0, eval = 0;
@@ -195,6 +208,7 @@ class _ParticipantesCompletoCarreraScreenState
       }
 
       setState(() {
+        _notasDocente           = notasDoc;
         _categoriasData         = categorias;
         _totalProyectos         = proj;
         _totalConEval           = eval;
@@ -211,7 +225,8 @@ class _ParticipantesCompletoCarreraScreenState
     }
   }
 
-  Future<List<_CategoriaData>> _cargarParticipantes(String eventoId) async {
+  Future<List<_CategoriaData>> _cargarParticipantes(
+      String eventoId, Map<String, double> notasDocente) async {
     try {
       final proyectosSnap = await _firestore
           .collection('events')
@@ -228,14 +243,24 @@ class _ParticipantesCompletoCarreraScreenState
       for (int i = 0; i < docs.length; i += batchSize) {
         final batch = docs.sublist(i, (i + batchSize).clamp(0, docs.length));
         final batchResults = await Future.wait(
-          batch.map((doc) => _procesarProyecto(eventoId, doc)),
+          batch.map((doc) => _procesarProyecto(eventoId, doc, notasDocente)),
         );
         results.addAll(batchResults);
       }
 
       final Map<String, List<Map<String, dynamic>>> porCategoria = {};
       for (final p in results) {
-        final cat = p['clasificacion'] as String;
+        final codigo = (p['codigo'] as String).toUpperCase().trim();
+        final String modalidad;
+        if (codigo.startsWith('ORAL')) {
+          modalidad = 'ORAL';
+        } else if (codigo.startsWith('BANNER')) {
+          modalidad = 'BANNER';
+        } else {
+          modalidad = 'OTROS';
+        }
+        final clasif = p['clasificacion'] as String;
+        final cat = '$modalidad · $clasif';
         porCategoria.putIfAbsent(cat, () => []).add(p);
       }
 
@@ -244,7 +269,10 @@ class _ParticipantesCompletoCarreraScreenState
             (b['promedio'] as double).compareTo(a['promedio'] as double));
       }
 
-      return porCategoria.entries
+      final entradas = porCategoria.entries.toList()
+        ..sort((a, b) => a.key.compareTo(b.key));
+
+      return entradas
           .map((e) => _CategoriaData(nombre: e.key, proyectos: e.value))
           .toList();
     } catch (e, stack) {
@@ -255,7 +283,8 @@ class _ParticipantesCompletoCarreraScreenState
   }
 
   Future<Map<String, dynamic>> _procesarProyecto(
-      String eventoId, QueryDocumentSnapshot doc) async {
+      String eventoId, QueryDocumentSnapshot doc,
+      Map<String, double> notasDocente) async {
     try {
       final d = doc.data() as Map<String, dynamic>;
 
@@ -279,7 +308,9 @@ class _ParticipantesCompletoCarreraScreenState
           'asesor':            _s(d['Asesor'],         ''),
           'descripcion':       _s(d['Descripción'],   ''),
           'promedio':          0.0,
+          'promedioJurados':   0.0,
           'promedioRaw':       0.0,
+          'notaDocente':       null,
           'notaMax':           0.0,
           'notaMin':           0.0,
           'cantidadJurados':   0,
@@ -288,6 +319,7 @@ class _ParticipantesCompletoCarreraScreenState
           'notasRaw':          <double>[],
           'escalaBase':        _C.escalaBase,
           'tieneEvaluaciones': false,
+          'tieneNotaDocente':  false,
         };
       }
 
@@ -296,7 +328,7 @@ class _ParticipantesCompletoCarreraScreenState
       final nombresJurados    = <String>[];
 
       for (final e in evalSnap.docs) {
-        final data      = e.data() as Map<String, dynamic>;
+        final data      = e.data();
         final notaTotal = (data['notaTotal'] ?? 0.0 as num).toDouble();
 
         final nombreJurado = _s(data['juradoNombre'], '');
@@ -326,7 +358,9 @@ class _ParticipantesCompletoCarreraScreenState
           'asesor':            _s(d['Asesor'],         ''),
           'descripcion':       _s(d['Descripción'],   ''),
           'promedio':          0.0,
+          'promedioJurados':   0.0,
           'promedioRaw':       0.0,
+          'notaDocente':       null,
           'notaMax':           0.0,
           'notaMin':           0.0,
           'cantidadJurados':   0,
@@ -335,6 +369,7 @@ class _ParticipantesCompletoCarreraScreenState
           'notasRaw':          <double>[],
           'escalaBase':        _C.escalaBase,
           'tieneEvaluaciones': false,
+          'tieneNotaDocente':  false,
         };
       }
 
@@ -342,6 +377,24 @@ class _ParticipantesCompletoCarreraScreenState
       final promedioRaw = notasRaw.reduce((a, b) => a + b) / notasRaw.length;
       final notaMax     = notasNormalizadas.reduce((a, b) => a > b ? a : b);
       final notaMin     = notasNormalizadas.reduce((a, b) => a < b ? a : b);
+
+      // ── Nota docente: buscar por cualquier integrante del proyecto ──
+      double? notaDoc;
+      if (notasDocente.isNotEmpty) {
+        final codigos = _extraerCodigos(d['Integrantes']);
+        for (final cod in codigos) {
+          if (notasDocente.containsKey(cod)) {
+            notaDoc = notasDocente[cod];
+            break;
+          }
+        }
+      }
+
+      // ── Nota final ──
+      // Con docente: 50 % jurados + 50 % docente
+      // Sin docente: 100 % jurados
+      final notaFinal =
+          notaDoc != null ? (promedio + notaDoc) / 2.0 : promedio;
 
       return {
         'proyectoId':        doc.id,
@@ -352,8 +405,10 @@ class _ParticipantesCompletoCarreraScreenState
         'clasificacion':     _s(d['Clasificación'], 'Sin categoría'),
         'asesor':            _s(d['Asesor'],         ''),
         'descripcion':       _s(d['Descripción'],   ''),
-        'promedio':          double.parse(promedio.toStringAsFixed(2)),
+        'promedio':          double.parse(notaFinal.toStringAsFixed(2)),
+        'promedioJurados':   double.parse(promedio.toStringAsFixed(2)),
         'promedioRaw':       double.parse(promedioRaw.toStringAsFixed(2)),
+        'notaDocente':       notaDoc,
         'notaMax':           notaMax,
         'notaMin':           notaMin,
         'cantidadJurados':   notasNormalizadas.length,
@@ -362,6 +417,7 @@ class _ParticipantesCompletoCarreraScreenState
         'notasRaw':          notasRaw,
         'escalaBase':        _C.escalaBase,
         'tieneEvaluaciones': true,
+        'tieneNotaDocente':  notaDoc != null,
       };
     } catch (e, stack) {
       debugPrint('❌ Error en proyecto ${doc.id}: $e');
@@ -376,7 +432,9 @@ class _ParticipantesCompletoCarreraScreenState
         'asesor':            '',
         'descripcion':       '',
         'promedio':          0.0,
+        'promedioJurados':   0.0,
         'promedioRaw':       0.0,
+        'notaDocente':       null,
         'notaMax':           0.0,
         'notaMin':           0.0,
         'cantidadJurados':   0,
@@ -385,8 +443,26 @@ class _ParticipantesCompletoCarreraScreenState
         'notasRaw':          <double>[],
         'escalaBase':        _C.escalaBase,
         'tieneEvaluaciones': false,
+        'tieneNotaDocente':  false,
       };
     }
+  }
+
+  /// Extrae códigos universitarios de un campo de integrantes.
+  /// Soporta List<String> y String separado por comas.
+  List<String> _extraerCodigos(dynamic integrantes) {
+    if (integrantes == null) return [];
+    if (integrantes is List) {
+      return integrantes.map((e) => e.toString().trim()).toList();
+    }
+    if (integrantes is String) {
+      return integrantes
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
+    return [];
   }
 
   List<_CategoriaData> get _datosFiltrados {
@@ -426,6 +502,128 @@ class _ParticipantesCompletoCarreraScreenState
       _busqueda       = trimmed;
       _filtradosCache = null;
     });
+  }
+
+  // ── Importar notas docente ───────────────────────────────────────────────
+  Future<void> _importarNotasDocente() async {
+    if (_eventoSeleccionado == null) return;
+    final eventId = _eventoSeleccionado!['id'] as String;
+
+    setState(() => _isImportandoNotas = true);
+    try {
+      final result = await _notaDocenteService.importarDesdeExcel(eventId);
+
+      if (result == null) {
+        // usuario canceló el picker
+        if (mounted) setState(() => _isImportandoNotas = false);
+        return;
+      }
+
+      if (result.errores.isNotEmpty) {
+        _snack(
+          'Importado con advertencias: ${result.errores.first}',
+          isError: true,
+        );
+      }
+
+      // Recargar notas y recalcular participantes
+      final notasDoc = await _notaDocenteService.obtenerNotasDocente(eventId);
+      final categorias = await _cargarParticipantes(eventId, notasDoc);
+
+      int proj = 0, eval = 0;
+      for (final c in categorias) {
+        proj += c.proyectos.length;
+        for (final p in c.proyectos) {
+          if (p['tieneEvaluaciones'] == true) eval++;
+        }
+      }
+
+      if (mounted) {
+        _filtradosCache = null;
+        setState(() {
+          _notasDocente           = notasDoc;
+          _categoriasData         = categorias;
+          _totalProyectos         = proj;
+          _totalConEval           = eval;
+          _isImportandoNotas      = false;
+        });
+        _animCtrl
+          ..reset()
+          ..forward();
+        _snack(
+          '✅ ${result.codigosTotales} códigos importados '
+          '(${result.gruposImportados} grupos)',
+          isSuccess: true,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isImportandoNotas = false);
+        _snack('Error al importar: $e', isError: true);
+      }
+    }
+  }
+
+  /// Confirma y elimina las notas docente del evento actual.
+  Future<void> _eliminarNotasDocente() async {
+    if (_eventoSeleccionado == null) return;
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Eliminar notas docente'),
+        content: const Text(
+            '¿Quitar las notas docente de este evento? '
+            'El ranking se calculará solo con notas de jurado.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Eliminar',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
+
+    setState(() => _isImportandoNotas = true);
+    try {
+      final eventId = _eventoSeleccionado!['id'] as String;
+      await _notaDocenteService.eliminarNotasDocente(eventId);
+      final categorias = await _cargarParticipantes(eventId, {});
+
+      int proj = 0, eval = 0;
+      for (final c in categorias) {
+        proj += c.proyectos.length;
+        for (final p in c.proyectos) {
+          if (p['tieneEvaluaciones'] == true) eval++;
+        }
+      }
+
+      if (mounted) {
+        _filtradosCache = null;
+        setState(() {
+          _notasDocente      = {};
+          _categoriasData    = categorias;
+          _totalProyectos    = proj;
+          _totalConEval      = eval;
+          _isImportandoNotas = false;
+        });
+        _animCtrl
+          ..reset()
+          ..forward();
+        _snack('Notas docente eliminadas', isSuccess: true);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isImportandoNotas = false);
+        _snack('Error al eliminar: $e', isError: true);
+      }
+    }
   }
 
   Future<void> _exportarExcel() async {
@@ -674,6 +872,21 @@ class _ParticipantesCompletoCarreraScreenState
             ),
           ),
           if (_eventoSeleccionado != null) ...[
+            // Botón importar / quitar notas docente
+            if (_isImportandoNotas)
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                    color: Colors.white, strokeWidth: 2),
+              )
+            else
+              _NotaDocenteButton(
+                tieneNotas: _notasDocente.isNotEmpty,
+                onImportar: _importarNotasDocente,
+                onEliminar: _eliminarNotasDocente,
+              ),
+            const SizedBox(width: 4),
             if (!_isLoadingParticipantes && _categoriasData.isNotEmpty)
               _VistaToggle(
                 modoActual: _modoVista,
@@ -770,6 +983,8 @@ class _ParticipantesCompletoCarreraScreenState
           totalProyectos:  _totalProyectos,
           totalCategorias: _categoriasData.length,
           totalConEval:    _totalConEval,
+          tieneNotaDocente: _notasDocente.isNotEmpty,
+          cantidadCodigos:  _notasDocente.length,
           onTap: () {
             _filtradosCache = null;
             setState(() {
@@ -777,6 +992,7 @@ class _ParticipantesCompletoCarreraScreenState
               _categoriasData     = [];
               _totalProyectos     = 0;
               _totalConEval       = 0;
+              _notasDocente       = {};
             });
           },
         ),
@@ -919,6 +1135,66 @@ class _CategoriaData {
   _CategoriaData({required this.nombre, required this.proyectos})
       : conEval =
             proyectos.where((p) => p['tieneEvaluaciones'] == true).length;
+}
+
+// ── Widget: botón de notas docente ──────────────────────────────────────────
+class _NotaDocenteButton extends StatelessWidget {
+  final bool tieneNotas;
+  final VoidCallback onImportar;
+  final VoidCallback onEliminar;
+
+  const _NotaDocenteButton({
+    required this.tieneNotas,
+    required this.onImportar,
+    required this.onEliminar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tieneNotas
+          ? 'Notas docente cargadas (mantén pulsado para quitar)'
+          : 'Importar notas docente',
+      child: GestureDetector(
+        onTap: tieneNotas ? null : onImportar,
+        onLongPress: tieneNotas ? onEliminar : null,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: tieneNotas
+                ? Colors.green.withValues(alpha: 0.25)
+                : Colors.white.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: tieneNotas
+                  ? Colors.greenAccent.withValues(alpha: 0.6)
+                  : Colors.white30,
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                tieneNotas ? Icons.how_to_reg : Icons.upload_file,
+                color: tieneNotas ? Colors.greenAccent : Colors.white70,
+                size: 16,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                tieneNotas ? 'Docente ✓' : 'Docente',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: tieneNotas ? Colors.greenAccent : Colors.white70,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _VistaToggle extends StatelessWidget {
@@ -1183,6 +1459,8 @@ class _EventoBanner extends StatelessWidget {
   final int totalProyectos;
   final int totalCategorias;
   final int totalConEval;
+  final bool tieneNotaDocente;
+  final int cantidadCodigos;
   final VoidCallback onTap;
 
   const _EventoBanner({
@@ -1190,6 +1468,8 @@ class _EventoBanner extends StatelessWidget {
     required this.totalProyectos,
     required this.totalCategorias,
     required this.totalConEval,
+    required this.tieneNotaDocente,
+    required this.cantidadCodigos,
     required this.onTap,
   });
 
@@ -1221,6 +1501,17 @@ class _EventoBanner extends StatelessWidget {
                           overflow:      TextOverflow.ellipsis),
                       maxLines: 1),
                 ),
+                if (tieneNotaDocente)
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.school,
+                        size: 12, color: Colors.greenAccent),
+                    const SizedBox(width: 3),
+                    Text('$cantidadCodigos doc.',
+                        maxLines: 1,
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.greenAccent)),
+                    const SizedBox(width: 8),
+                  ]),
                 const Text('Cambiar',
                     style: TextStyle(color: Colors.white54, fontSize: 11)),
                 const SizedBox(width: 4),
@@ -1564,7 +1855,6 @@ class _ProyectoCard extends StatelessWidget {
   final VoidCallback onTap;
 
   const _ProyectoCard({
-    super.key,
     required this.proyecto,
     required this.posicion,
     required this.onTap,
@@ -1575,6 +1865,7 @@ class _ProyectoCard extends StatelessWidget {
     final promedio  = (proyecto['promedio'] as num?)?.toDouble() ?? 0.0;
     final jurados   = (proyecto['cantidadJurados'] as int?) ?? 0;
     final tieneEval = proyecto['tieneEvaluaciones'] == true;
+    final tieneDoc  = proyecto['tieneNotaDocente'] == true;
     final escala    = (proyecto['escalaBase'] as num?)?.toDouble() ?? _C.escalaBase;
 
     final color = _posColor(posicion, tieneEval);
@@ -1640,6 +1931,11 @@ class _ProyectoCard extends StatelessWidget {
                           label: 'Sala ${_s(proyecto['sala'])}',
                           bg:    const Color(0xFFE5E7EB),
                           fg:    _C.textSecondary),
+                    if (tieneDoc)
+                      _MiniChip(
+                          label: '+ Docente',
+                          bg:    Colors.green.withValues(alpha: 0.12),
+                          fg:    Colors.green.shade700),
                   ]),
                   const SizedBox(height: 5),
                   Text(_s(proyecto['titulo'], 'Sin título'),
@@ -1819,6 +2115,7 @@ class _TablaCategoria extends StatelessWidget {
           ...List.generate(data.proyectos.length, (i) {
             final p         = data.proyectos[i];
             final tieneEval = p['tieneEvaluaciones'] == true;
+            final tieneDoc  = p['tieneNotaDocente'] == true;
             final promedio  = (p['promedio'] as num?)?.toDouble() ?? 0.0;
             final jurados   = (p['cantidadJurados'] as int?) ?? 0;
             final color     = _posColor(i, tieneEval);
@@ -1865,11 +2162,18 @@ class _TablaCategoria extends StatelessWidget {
                                   color:      _C.primary),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis),
-                          Text(_s(p['codigo'], '—'),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 10, color: _C.textSecondary)),
+                          Row(children: [
+                            Text(_s(p['codigo'], '—'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 10, color: _C.textSecondary)),
+                            if (tieneDoc) ...[
+                              const SizedBox(width: 4),
+                              const Icon(Icons.school,
+                                  size: 10, color: Colors.green),
+                            ],
+                          ]),
                         ],
                       ),
                     ),
@@ -1945,16 +2249,19 @@ class _DetalleProyectoSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final promedio      = (proyecto['promedio']    as num?)?.toDouble() ?? 0.0;
-    final promedioRaw   = (proyecto['promedioRaw'] as num?)?.toDouble() ?? 0.0;
-    final notaMax       = (proyecto['notaMax']     as num?)?.toDouble() ?? 0.0;
-    final notaMin       = (proyecto['notaMin']     as num?)?.toDouble() ?? 0.0;
-    final jurados       = (proyecto['cantidadJurados'] as int?) ?? 0;
-    final nombresJurados = _s(proyecto['nombresJurados'], '');
-    final notas         = (proyecto['notas']    as List?)?.cast<double>() ?? [];
-    final notasRaw      = (proyecto['notasRaw'] as List?)?.cast<double>() ?? [];
-    final tieneEval     = proyecto['tieneEvaluaciones'] == true;
-    final escala        = (proyecto['escalaBase'] as num?)?.toDouble() ?? _C.escalaBase;
+    final promedio        = (proyecto['promedio']        as num?)?.toDouble() ?? 0.0;
+    final promedioJurados = (proyecto['promedioJurados'] as num?)?.toDouble() ?? promedio;
+    final promedioRaw     = (proyecto['promedioRaw']     as num?)?.toDouble() ?? 0.0;
+    final notaDocente     = proyecto['notaDocente'] as double?;
+    final notaMax         = (proyecto['notaMax']     as num?)?.toDouble() ?? 0.0;
+    final notaMin         = (proyecto['notaMin']     as num?)?.toDouble() ?? 0.0;
+    final jurados         = (proyecto['cantidadJurados'] as int?) ?? 0;
+    final nombresJurados  = _s(proyecto['nombresJurados'], '');
+    final notas           = (proyecto['notas']    as List?)?.cast<double>() ?? [];
+    final notasRaw        = (proyecto['notasRaw'] as List?)?.cast<double>() ?? [];
+    final tieneEval       = proyecto['tieneEvaluaciones'] == true;
+    final tieneNotaDocente = proyecto['tieneNotaDocente'] == true;
+    final escala          = (proyecto['escalaBase'] as num?)?.toDouble() ?? _C.escalaBase;
 
     final color    = _posColor(posicion, tieneEval);
     final icono    = _posIcono(posicion, tieneEval);
@@ -2066,7 +2373,9 @@ class _DetalleProyectoSheet extends StatelessWidget {
                             children: [
                               Expanded(
                                 child: _StatItem(
-                                    label:  'Prom./${escala.toStringAsFixed(0)}',
+                                    label:  tieneNotaDocente
+                                        ? 'Final'
+                                        : 'Prom./${escala.toStringAsFixed(0)}',
                                     value:  _sf(promedio),
                                     icon:   Icons.star_rounded,
                                     color:  _C.gold,
@@ -2076,28 +2385,30 @@ class _DetalleProyectoSheet extends StatelessWidget {
                                   width: 1, height: 40, color: Colors.white24),
                               Expanded(
                                 child: _StatItem(
-                                    label: 'Nota máx.',
-                                    value: _sf(notaMax),
-                                    icon:  Icons.arrow_upward_rounded,
-                                    color: Colors.greenAccent),
-                              ),
-                              Container(
-                                  width: 1, height: 40, color: Colors.white24),
-                              Expanded(
-                                child: _StatItem(
-                                    label: 'Nota mín.',
-                                    value: _sf(notaMin),
-                                    icon:  Icons.arrow_downward_rounded,
-                                    color: Colors.redAccent.shade100),
-                              ),
-                              Container(
-                                  width: 1, height: 40, color: Colors.white24),
-                              Expanded(
-                                child: _StatItem(
                                     label: 'Jurados',
+                                    value: _sf(promedioJurados),
+                                    icon:  Icons.gavel_rounded,
+                                    color: Colors.lightBlueAccent),
+                              ),
+                              if (tieneNotaDocente) ...[
+                                Container(
+                                    width: 1, height: 40, color: Colors.white24),
+                                Expanded(
+                                  child: _StatItem(
+                                      label: 'Docente',
+                                      value: _sf(notaDocente ?? 0),
+                                      icon:  Icons.school_rounded,
+                                      color: Colors.greenAccent),
+                                ),
+                              ],
+                              Container(
+                                  width: 1, height: 40, color: Colors.white24),
+                              Expanded(
+                                child: _StatItem(
+                                    label: 'J. cant.',
                                     value: '$jurados',
                                     icon:  Icons.how_to_vote_outlined,
-                                    color: Colors.lightBlueAccent),
+                                    color: Colors.orangeAccent),
                               ),
                             ],
                           ),
@@ -2145,6 +2456,17 @@ class _DetalleProyectoSheet extends StatelessWidget {
                         ],
                       ),
                     ),
+
+                  // ── Desglose de fórmula (cuando hay nota docente) ──
+                  if (tieneEval && tieneNotaDocente) ...[
+                    const SizedBox(height: 14),
+                    _FormulaDesglose(
+                      promedioJurados: promedioJurados,
+                      notaDocente:     notaDocente!,
+                      notaFinal:       promedio,
+                    ),
+                  ],
+
                   const SizedBox(height: 20),
                   if (notas.isNotEmpty) ...[
                     _SheetSection(
@@ -2286,6 +2608,129 @@ class _DetalleProyectoSheet extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Widget: desglose de fórmula ──────────────────────────────────────────────
+class _FormulaDesglose extends StatelessWidget {
+  final double promedioJurados;
+  final double notaDocente;
+  final double notaFinal;
+
+  const _FormulaDesglose({
+    required this.promedioJurados,
+    required this.notaDocente,
+    required this.notaFinal,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FFF4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.calculate_outlined,
+                  size: 15, color: Colors.green),
+              const SizedBox(width: 6),
+              const Text('Cálculo nota final',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _FormulaRow(
+            label: 'Prom. jurados',
+            valor: _sf(promedioJurados),
+            color: Colors.blue,
+            peso: '50%',
+          ),
+          const SizedBox(height: 4),
+          _FormulaRow(
+            label: 'Nota docente',
+            valor: _sf(notaDocente),
+            color: Colors.green,
+            peso: '50%',
+          ),
+          const Divider(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('= Nota final',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: _C.primary)),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _C.primary,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(_sf(notaFinal),
+                    style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FormulaRow extends StatelessWidget {
+  final String label;
+  final String valor;
+  final Color color;
+  final String peso;
+
+  const _FormulaRow({
+    required this.label,
+    required this.valor,
+    required this.color,
+    required this.peso,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(label,
+              style: const TextStyle(fontSize: 12, color: _C.textSecondary)),
+        ),
+        Text(peso,
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color)),
+        const SizedBox(width: 10),
+        Text(valor,
+            style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: _C.primary)),
+      ],
     );
   }
 }

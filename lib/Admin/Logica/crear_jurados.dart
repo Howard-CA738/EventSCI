@@ -529,7 +529,7 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
                           const SizedBox(height: 16),
 
                           DropdownButtonFormField<String>(
-                            value: _filialSeleccionada,
+                            initialValue: _filialSeleccionada,
                             isExpanded: true,
                             icon: Icon(
                               Icons.arrow_drop_down,
@@ -587,7 +587,7 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
                           const SizedBox(height: 16),
 
                           DropdownButtonFormField<String>(
-                            value: _facultadSeleccionada,
+                            initialValue: _facultadSeleccionada,
                             isExpanded: true,
                             icon: Icon(
                               Icons.arrow_drop_down,
@@ -658,7 +658,7 @@ class _CrearJuradosScreenState extends State<CrearJuradosScreen> {
                           const SizedBox(height: 16),
 
                           DropdownButtonFormField<String>(
-                            value: _carreraSeleccionada,
+                            initialValue: _carreraSeleccionada,
                             isExpanded: true,
                             icon: Icon(
                               Icons.arrow_drop_down,

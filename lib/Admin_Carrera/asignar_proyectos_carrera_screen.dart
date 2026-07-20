@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
@@ -34,7 +35,8 @@ class _AsignarProyectosCarreraScreenState
   List<Map<String, dynamic>> _juradosDisponibles = [];
   List<Map<String, dynamic>> _proyectosDisponibles = [];
   Map<String, List<Map<String, dynamic>>> _proyectosPorCategoria = {};
-  Set<String> _proyectosSeleccionados = {};
+  // FIX L37: referencia nunca se reasigna → final
+  final Set<String> _proyectosSeleccionados = {};
 
   bool _isLoadingSession = true;
   bool _isLoadingJurados = false;
@@ -95,7 +97,8 @@ class _AsignarProyectosCarreraScreenState
     } finally {
       if (mounted) {
         setState(() => _isLoadingSession = false);
-        _fadeController.forward();
+        // FIX L98: TickerFuture no necesita await; unawaited() silencia el warning
+        unawaited(_fadeController.forward());
       }
     }
   }
@@ -150,10 +153,10 @@ class _AsignarProyectosCarreraScreenState
     if (mounted) setState(() => _isLoadingJurados = true);
     try {
       final jurados = await _rubricasService.obtenerJurados(
-        filial:   _eventoData!['filialId'],
-        facultad: _eventoData!['facultad'],
+        filial:   _eventoData!['filialId'] as String?,
+        facultad: _eventoData!['facultad'] as String?,
         carrera:  (_eventoData!['carreraNombre'] as String).isNotEmpty
-            ? _eventoData!['carreraNombre']
+            ? _eventoData!['carreraNombre'] as String?
             : null,
       );
       if (mounted) {
@@ -203,9 +206,9 @@ class _AsignarProyectosCarreraScreenState
         return;
       }
 
-      final eventoFilial   = _eventoData!['filialId'];
-      final eventoFacultad = _eventoData!['facultad'];
-      final eventoCarrera  = _eventoData!['carreraNombre'] as String;
+      final eventoFilial   = _eventoData!['filialId'] as String?;
+      final eventoFacultad = _eventoData!['facultad'] as String? ?? '';
+      final eventoCarrera  = _eventoData!['carreraNombre'] as String? ?? '';
 
       final rubricasCompatibles = rubricasJurado.where((r) {
         if (r.filial != eventoFilial) return false;
@@ -281,9 +284,13 @@ class _AsignarProyectosCarreraScreenState
 
       List<String> categoriasJurado = [];
       if (juradoDoc.exists) {
-        final d = juradoDoc.data() as Map<String, dynamic>?;
-        if (d != null && d.containsKey('categorias')) {
-          categoriasJurado = List<String>.from(d['categorias'] ?? []);
+        // FIX L885: data() puede ser null → null-check antes del cast
+        final rawData = juradoDoc.data();
+        if (rawData != null) {
+          final d = rawData as Map<String, dynamic>;
+          if (d.containsKey('categorias')) {
+            categoriasJurado = List<String>.from(d['categorias'] as List? ?? []);
+          }
         }
       }
 
@@ -297,38 +304,42 @@ class _AsignarProyectosCarreraScreenState
       }
 
       final proyectosAsignados = <String>{};
-      for (var doc in evaluacionesSnap.docs) {
+      // FIX L300: var → final
+      for (final doc in evaluacionesSnap.docs) {
         final parts = doc.reference.path.split('/');
         if (parts.length >= 4) proyectosAsignados.add(parts[3]);
       }
 
       final Map<String, Map<String, dynamic>> proyectosMap = {};
-      for (var doc in proyectosSnap.docs) {
-        final d             = doc.data() as Map<String, dynamic>;
-        final codigo        = d['Código']        ?? '';
-        final clasificacion = d['Clasificación'] ?? 'Sin categoría';
-        if (codigo.isEmpty || !categoriasJurado.contains(clasificacion)) {
-          continue;
-        }
-        if (!proyectosMap.containsKey(codigo)) {
-          proyectosMap[codigo] = {
-            'id':            doc.id,
-            'eventId':       _eventoSeleccionado,
-            'codigo':        codigo,
-            'titulo':        d['Título']      ?? '',
-            'integrantes':   d['Integrantes'] ?? '',
-            'sala':          d['Sala']        ?? '',
-            'clasificacion': clasificacion,
-            'yaAsignado':    proyectosAsignados.contains(doc.id),
-          };
-        }
+      // FIX L306: var → final; FIX L307: null-check en data()
+      for (final doc in proyectosSnap.docs) {
+        final rawDoc = doc.data();
+        if (rawDoc == null) continue;
+        final d             = rawDoc as Map<String, dynamic>;
+        // FIX L318: cast explícito desde dynamic
+        final codigo        = (d['Código']        as String?) ?? '';
+        final clasificacion = (d['Clasificación'] as String?) ?? 'Sin categoría';
+
+        if (!categoriasJurado.contains(clasificacion)) continue;
+
+        proyectosMap[doc.id] = {
+          'id':            doc.id,
+          'eventId':       _eventoSeleccionado,
+          'codigo':        codigo.isEmpty ? '(sin código)' : codigo,
+          'titulo':        (d['Título']      as String?) ?? '',
+          'integrantes':   (d['Integrantes'] as String?) ?? '',
+          'sala':          (d['Sala']        as String?) ?? '',
+          'clasificacion': clasificacion,
+          'yaAsignado':    proyectosAsignados.contains(doc.id),
+        };
       }
 
       final proyectosList = proyectosMap.values.toList()
         ..sort((a, b) =>
-            (a['codigo'] as String).compareTo(b['codigo'] as String));
+            (a['titulo'] as String).compareTo(b['titulo'] as String));
 
       final Map<String, List<Map<String, dynamic>>> grupos = {};
+      // FIX L339: var → final
       for (final p in proyectosList) {
         final cat = p['clasificacion'] as String;
         grupos.putIfAbsent(cat, () => []).add(p);
@@ -336,9 +347,10 @@ class _AsignarProyectosCarreraScreenState
 
       if (mounted) {
         _proyectosSeleccionados.clear();
-        for (var p in proyectosList) {
+        // FIX L569 (equivalente): var → final
+        for (final p in proyectosList) {
           if (p['yaAsignado'] == true) {
-            _proyectosSeleccionados.add(p['codigo'] as String);
+            _proyectosSeleccionados.add(p['id'] as String);
           }
         }
         setState(() {
@@ -357,7 +369,7 @@ class _AsignarProyectosCarreraScreenState
   }
 
   Future<void> _asignarProyectos() async {
-    if (_proyectosSeleccionados.isEmpty) {
+    if (_proyectosSeleccionados.isEmpty && !_modoEdicion) {
       _showSnackBar('Selecciona al menos un proyecto', isWarning: true);
       return;
     }
@@ -368,7 +380,7 @@ class _AsignarProyectosCarreraScreenState
 
     final proyectosAEliminar = _proyectosDisponibles
         .where((p) =>
-            !_proyectosSeleccionados.contains(p['codigo']) &&
+            !_proyectosSeleccionados.contains(p['id']) &&
             p['yaAsignado'] == true)
         .length;
 
@@ -435,7 +447,9 @@ class _AsignarProyectosCarreraScreenState
               const SizedBox(height: 20),
               Text(
                 _modoEdicion
-                    ? '¿Guardar los cambios de proyectos para ${_juradoData!['nombre']}?'
+                    ? _proyectosSeleccionados.isEmpty
+                        ? '¿Quitar TODOS los proyectos asignados a ${_juradoData!['nombre']}?'
+                        : '¿Guardar los cambios de proyectos para ${_juradoData!['nombre']}?'
                     : '¿Asignar ${_proyectosSeleccionados.length} proyecto(s) a ${_juradoData!['nombre']}?',
                 style: const TextStyle(
                   fontSize: 14,
@@ -564,16 +578,16 @@ class _AsignarProyectosCarreraScreenState
       final batch = _firestore.batch();
       int asignados = 0, actualizados = 0, eliminados = 0;
 
-      for (var p in _proyectosDisponibles) {
-        final codigo      = p['codigo']     as String;
-        final yaAsignado  = p['yaAsignado'] as bool;
-        final seleccionado = _proyectosSeleccionados.contains(codigo);
+      for (final p in _proyectosDisponibles) {
+        final id           = p['id']         as String;
+        final yaAsignado   = p['yaAsignado'] as bool;
+        final seleccionado = _proyectosSeleccionados.contains(id);
 
         final docRef = _firestore
             .collection('events')
-            .doc(p['eventId'])
+            .doc(p['eventId'] as String?)
             .collection('proyectos')
-            .doc(p['id'])
+            .doc(p['id'] as String?)
             .collection('evaluaciones')
             .doc(_juradoSeleccionado);
 
@@ -967,7 +981,7 @@ class _AsignarProyectosCarreraScreenState
   Widget _buildEventCard(String eventId, Map<String, dynamic> data,
       {Key? key}) {
     final name    = data['name'] as String? ?? '';
-    final periodo = data['periodoNombre'] ?? '';
+    final periodo = data['periodoNombre'] as String? ?? '';
     final displayName = name.isNotEmpty ? name : 'Sin nombre';
     final initial = displayName[0].toUpperCase();
 
@@ -1093,8 +1107,8 @@ class _AsignarProyectosCarreraScreenState
   }
 
   Widget _buildEventoSeleccionadoCard() {
-    final name    = _eventoData?['name'] ?? 'Sin nombre';
-    final periodo = _eventoData?['periodoNombre'] ?? '';
+    final name    = _eventoData?['name'] as String? ?? 'Sin nombre';
+    final periodo = _eventoData?['periodoNombre'] as String? ?? '';
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1346,8 +1360,9 @@ class _AsignarProyectosCarreraScreenState
   Widget _buildJuradoItem(Map<String, dynamic> jurado) {
     final id         = jurado['id']     as String;
     final nombre     = jurado['nombre'] as String? ?? '—';
+    // FIX L213: cast explícito desde dynamic antes de List.from
     final categorias = List<dynamic>.from(
-        (jurado['categorias'] as List<dynamic>?) ?? []);
+        jurado['categorias'] as List<dynamic>? ?? <dynamic>[]);
     final isSelected = _juradoSeleccionado == id;
     final inicial    = nombre.isNotEmpty ? nombre[0].toUpperCase() : '?';
 
@@ -1362,7 +1377,8 @@ class _AsignarProyectosCarreraScreenState
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
-          cat.toString(),
+          // FIX L1037: cast explícito a Object antes de toString()
+          (cat as Object).toString(),
           style: TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.w600,
@@ -1590,7 +1606,7 @@ class _AsignarProyectosCarreraScreenState
               ),
             )
           : DropdownButtonFormField<String>(
-              value: _rubricaSeleccionada?.id,
+              initialValue: _rubricaSeleccionada?.id,
               isExpanded: true,
               decoration: _inputDecoration(
                   'Selecciona una rúbrica', Icons.assignment_rounded),
@@ -1744,9 +1760,9 @@ class _AsignarProyectosCarreraScreenState
           ),
           childrenPadding:
               const EdgeInsets.fromLTRB(10, 0, 10, 10),
+          // FIX L1159: pasar key explícito para evitar dynamic implícito
           children: proyectos
-              .map((p) => _buildProyectoItem(
-                  p, key: ValueKey(p['codigo'])))
+              .map((p) => _buildProyectoItem(p, key: ValueKey(p['id'] as String)))
               .toList(),
         ),
       ),
@@ -1755,38 +1771,37 @@ class _AsignarProyectosCarreraScreenState
 
   Widget _buildProyectoItem(Map<String, dynamic> proyecto,
       {Key? key}) {
+    final id          = proyecto['id']         as String;
     final codigo      = proyecto['codigo']     as String;
     final yaAsignado  = proyecto['yaAsignado'] as bool;
-    final isSelected  =
-        _proyectosSeleccionados.contains(codigo);
-        _proyectosDisponibles.any((p) => p['yaAsignado'] == true);
+    final isSelected  = _proyectosSeleccionados.contains(id);
     final interactivo = _modoEdicion || !yaAsignado;
 
     Color cardBg;
-Color? textColor;
-Color borderColor = Colors.transparent;
+    Color? textColor;
+    Color borderColor = Colors.transparent;
 
-if (!_modoEdicion && yaAsignado) {
-  cardBg      = const Color(0xFFFFFBEB);
-  textColor   = const Color(0xFF92400E);
-  borderColor = Colors.transparent;
-} else if (_modoEdicion && yaAsignado && isSelected) {
-  cardBg      = const Color(0xFFF0FBF6);
-  textColor   = const Color(0xFF1A5C3E);
-  borderColor = const Color(0xFF2E9E6E);
-} else if (_modoEdicion && yaAsignado && !isSelected) {
-  cardBg      = const Color(0xFFFFF5F5);
-  textColor   = const Color(0xFF9B1C1C);
-  borderColor = const Color(0xFFD4453B);
-} else if (!yaAsignado && isSelected) {
-  cardBg      = const Color(0xFFF0F5FF);
-  textColor   = const Color(0xFF1E3A5F);
-  borderColor = const Color(0xFF3B6FD4);
-} else {
-  cardBg      = const Color(0xFFF8FAFC);
-  textColor   = const Color(0xFF334155);
-  borderColor = Colors.transparent;
-}
+    if (!_modoEdicion && yaAsignado) {
+      cardBg      = const Color(0xFFFFFBEB);
+      textColor   = const Color(0xFF92400E);
+      borderColor = Colors.transparent;
+    } else if (_modoEdicion && yaAsignado && isSelected) {
+      cardBg      = const Color(0xFFF0FBF6);
+      textColor   = const Color(0xFF1A5C3E);
+      borderColor = const Color(0xFF2E9E6E);
+    } else if (_modoEdicion && yaAsignado && !isSelected) {
+      cardBg      = const Color(0xFFFFF5F5);
+      textColor   = const Color(0xFF9B1C1C);
+      borderColor = const Color(0xFFD4453B);
+    } else if (!yaAsignado && isSelected) {
+      cardBg      = const Color(0xFFF0F5FF);
+      textColor   = const Color(0xFF1E3A5F);
+      borderColor = const Color(0xFF3B6FD4);
+    } else {
+      cardBg      = const Color(0xFFF8FAFC);
+      textColor   = const Color(0xFF334155);
+      borderColor = Colors.transparent;
+    }
 
     return Container(
       key: key,
@@ -1795,9 +1810,9 @@ if (!_modoEdicion && yaAsignado) {
         color: cardBg,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-  color: borderColor,
-  width: 1.5,
-),
+          color: borderColor,
+          width: 1.5,
+        ),
       ),
       child: CheckboxListTile(
         value: isSelected,
@@ -1805,9 +1820,9 @@ if (!_modoEdicion && yaAsignado) {
             ? (val) {
                 setState(() {
                   if (val == true) {
-                    _proyectosSeleccionados.add(codigo);
+                    _proyectosSeleccionados.add(id);
                   } else {
-                    _proyectosSeleccionados.remove(codigo);
+                    _proyectosSeleccionados.remove(id);
                   }
                 });
               }
@@ -1927,10 +1942,11 @@ if (!_modoEdicion && yaAsignado) {
                       setState(() {
                         _modoEdicion = false;
                         _proyectosSeleccionados.clear();
-                        for (var p in _proyectosDisponibles) {
+                        // FIX L1931: var → final
+                        for (final p in _proyectosDisponibles) {
                           if (p['yaAsignado'] == true) {
                             _proyectosSeleccionados
-                                .add(p['codigo'] as String);
+                                .add(p['id'] as String);
                           }
                         }
                       });
@@ -2000,10 +2016,9 @@ if (!_modoEdicion && yaAsignado) {
                   : 'Asignar ${_proyectosSeleccionados.length} proyectos',
               button: true,
               child: ElevatedButton.icon(
-                onPressed:
-                    _isAsignando || _proyectosSeleccionados.isEmpty
-                        ? null
-                        : _asignarProyectos,
+                onPressed: _isAsignando || (_proyectosSeleccionados.isEmpty && !_modoEdicion)
+                    ? null
+                    : _asignarProyectos,
                 icon: _isAsignando
                     ? const SizedBox(
                         width: 18,

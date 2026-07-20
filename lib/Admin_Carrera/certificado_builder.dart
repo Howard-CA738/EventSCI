@@ -1,30 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:flutter/foundation.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  EXTRACCIÓN DE FIRMA — universal y de alta calidad
-//
-//  Funciona con cualquier firma sin importar el fondo:
-//   • Fondo blanco con tinta negra o azul.
-//   • Fondo negro con tinta azul o trazo gris débil.
-//   • Sellos circulares (se conservan).
-//
-//  Claves de calidad:
-//   1) Detecta el color de fondo real muestreando los bordes de la imagen.
-//   2) Alpha GRADUAL según la distancia de color al fondo → bordes suaves
-//      (antialiasing), no "recortados" ni opacos.
-//   3) Conserva el color de la tinta (azul sigue azul, negro sigue negro);
-//      solo profundiza un poco para que no quede lavada sobre el blanco.
-//   4) Umbral adaptativo: refuerza automáticamente las firmas muy débiles.
-//   5) Nunca lanza excepción: si algo falla, devuelve null y el certificado
-//      se genera igual (con el respaldo de texto del firmante).
-// ─────────────────────────────────────────────────────────────────────────────
 Future<Uint8List?> _procesarFirma(Uint8List? srcBytes) async {
   if (srcBytes == null) return null;
   try {
@@ -141,11 +122,17 @@ Future<Uint8List> _extraerFirma(Uint8List srcBytes) async {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MODELO ESTUDIANTE — incluye codigoCertificado
+// MODELO ESTUDIANTE — incluye codigoCertificado y motivo
 // ─────────────────────────────────────────────────────────────────────────────
 class Estudiante {
   final String id, nombre, dni, codigo, email;
   final String codigoCertificado; // ← campo para mostrar en el PDF
+  // Motivo individual del certificado de ESTE estudiante. Si viene vacío,
+  // buildPdf usa datos.motivo como respaldo (mismo patrón que
+  // codigoCertificado / datos.codigoCertificado). Se usa principalmente
+  // para PONENTE, donde cada estudiante tiene un título de investigación
+  // distinto y por lo tanto un motivo distinto.
+  final String motivo;
   final bool   pagado;
   bool         seleccionado;
 
@@ -156,6 +143,7 @@ class Estudiante {
     required this.codigo,
     this.email               = '',
     this.codigoCertificado   = '',
+    this.motivo               = '',
     this.pagado              = false,
     this.seleccionado        = false,
   });
@@ -302,7 +290,7 @@ class CertificadoBuilder {
 
     final firmaAncho = W * 0.300;
     final firmaImgH  = 72.0;
-    final firmaTop   = H * 0.640;
+    final firmaTop   = H * 0.620;
 
     final pdf = pw.Document();
 
@@ -310,6 +298,14 @@ class CertificadoBuilder {
       final codigoFinal = est.codigoCertificado.isNotEmpty
           ? est.codigoCertificado
           : datos.codigoCertificado;
+
+      // Igual patrón que codigoFinal: si el estudiante trae su propio
+      // motivo (p. ej. PONENTE con título de investigación propio), se usa
+      // ese; si no, se usa el motivo general de datos (comportamiento
+      // idéntico al de antes para ASISTENTE/ORGANIZADOR/JURADO).
+      final motivoFinal = est.motivo.isNotEmpty
+          ? est.motivo
+          : datos.motivo;
 
       pdf.addPage(pw.Page(
         pageTheme: pageTheme,
@@ -347,15 +343,15 @@ class CertificadoBuilder {
             ),
 
             pw.Positioned(
-              left: W * 0.10, right: W * 0.10, top: H * 0.470,
+              left: W * 0.18, right: W * 0.18, top: H * 0.470,
               child: pw.RichText(
                 textAlign: pw.TextAlign.center,
-                text: _motivoSpan(datos.motivo.trim(), reg, bold, cTexto),
+                text: _motivoSpan(motivoFinal.trim(), reg, bold, cTexto),
               ),
             ),
 
             pw.Positioned(
-              right: W * 0.080, top: H * 0.600,
+              right: W * 0.080, top: H * 0.580,
               child: pw.Text(
                 '${_campusNombre(datos.campus)}, ${datos.fecha}',
                 style: pw.TextStyle(font: italic, fontSize: 10, color: cTexto),

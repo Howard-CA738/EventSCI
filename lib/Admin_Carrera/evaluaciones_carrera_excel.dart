@@ -104,25 +104,47 @@ class EvaluacionesCarreraExcelService {
       verticalAlign: VerticalAlign.Center,
       textWrapping: TextWrapping.WrapText,
     );
-    final sDatoIzq = CellStyle(
-      fontSize: 9,
-      fontColorHex: ExcelColor.fromHexString(_gray900),
-    );
-    final sDatoIzqP = CellStyle(
-      fontSize: 9,
-      backgroundColorHex: ExcelColor.fromHexString(_purpleSoft),
-      fontColorHex: ExcelColor.fromHexString(_gray900),
-    );
     final sDatoCen = CellStyle(
       fontSize: 9,
       fontColorHex: ExcelColor.fromHexString(_gray900),
       horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
     );
     final sDatoCenP = CellStyle(
       fontSize: 9,
       backgroundColorHex: ExcelColor.fromHexString(_purpleSoft),
       fontColorHex: ExcelColor.fromHexString(_gray900),
       horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+    );
+    final sWrap = CellStyle(
+      fontSize: 9,
+      fontColorHex: ExcelColor.fromHexString(_gray900),
+      verticalAlign: VerticalAlign.Top,
+      textWrapping: TextWrapping.WrapText,
+    );
+    final sWrapP = CellStyle(
+      fontSize: 9,
+      backgroundColorHex: ExcelColor.fromHexString(_purpleSoft),
+      fontColorHex: ExcelColor.fromHexString(_gray900),
+      verticalAlign: VerticalAlign.Top,
+      textWrapping: TextWrapping.WrapText,
+    );
+    // Códigos: centrados arriba, mismo alto que nombres
+    final sCodCen = CellStyle(
+      fontSize: 9,
+      fontColorHex: ExcelColor.fromHexString(_gray700),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Top,
+      textWrapping: TextWrapping.WrapText,
+    );
+    final sCodCenP = CellStyle(
+      fontSize: 9,
+      backgroundColorHex: ExcelColor.fromHexString(_purpleSoft),
+      fontColorHex: ExcelColor.fromHexString(_gray700),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Top,
+      textWrapping: TextWrapping.WrapText,
     );
     final sTotGen = CellStyle(
       bold: true, fontSize: 10,
@@ -133,7 +155,7 @@ class EvaluacionesCarreraExcelService {
 
     _cel(sheet, 0, 0, '  REPORTE DE EVALUACIONES POR PROYECTO', sTitulo);
     _cel(sheet, 1, 0, '  ${eventoNombre.toUpperCase()}', sSubtitulo);
-    const lastCol = 4;
+    const lastCol = 6; // 7 columnas (0..6)
     for (int c = 0; c <= lastCol; c++) _cel(sheet, 2, c, '', sSep);
     sheet.setRowHeight(2, 4);
 
@@ -165,9 +187,11 @@ class EvaluacionesCarreraExcelService {
     _cel(sheet, fEnc, 0, 'N°', sEncDim);
     _cel(sheet, fEnc, 1, 'CÓDIGO', sEncDim);
     _cel(sheet, fEnc, 2, 'TÍTULO', sEncDim);
-    _cel(sheet, fEnc, 3, 'JURADOS', sEncVal);
-    _cel(sheet, fEnc, 4, 'NOTA\nFINAL', sEncDim);
-    sheet.setRowHeight(fEnc, 30);
+    _cel(sheet, fEnc, 3, 'ESTUDIANTE', sEncDim);
+    _cel(sheet, fEnc, 4, 'CÓDIGO\nESTUDIANTE', sEncDim);
+    _cel(sheet, fEnc, 5, 'JURADOS', sEncVal);
+    _cel(sheet, fEnc, 6, 'NOTA\nFINAL', sEncDim);
+    sheet.setRowHeight(fEnc, 32);
 
     int idx = 0;
     double sumaPromedios = 0;
@@ -175,17 +199,44 @@ class EvaluacionesCarreraExcelService {
       final evs = entry.value;
       final fila = fEnc + 1 + idx;
       final par = idx % 2 == 0;
-      final sI = par ? sDatoIzqP : sDatoIzq;
-      final sC = par ? sDatoCenP : sDatoCen;
+      final sCen  = par ? sDatoCenP : sDatoCen;
+      final sLeft = par ? sWrapP   : sWrap;
+      final sCod  = par ? sCodCenP  : sCodCen;
 
       final codigo = evs.first['codigo']?.toString() ?? '—';
       final titulo = evs.first['titulo']?.toString() ?? 'Sin título';
-      final evaluadasList = evs.where((e) => e['evaluada'] == true).toList();
 
+      // Listas paralelas de nombres y códigos
+      List<String> nombres = (evs.first['integrantesNombres']?.toString() ?? '')
+          .split('\n').where((s) => s.trim().isNotEmpty).toList();
+      List<String> codigos = (evs.first['integrantesCodigos']?.toString() ?? '')
+          .split('\n').where((s) => s.trim().isNotEmpty).toList();
+
+      // Fallback si no llegaron los campos nuevos: usa 'integrantes' crudo
+      if (codigos.isEmpty) {
+        final crudo = evs.first['integrantes'];
+        if (crudo is List) {
+          codigos = crudo.map((e) => e.toString().trim())
+              .where((s) => s.isNotEmpty).toList();
+        } else {
+          codigos = (crudo?.toString() ?? '')
+              .split(RegExp(r'[,\n]'))
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+        }
+      }
+      // Si no hay nombres, repite el código para no dejar vacío
+      if (nombres.isEmpty) nombres = List<String>.from(codigos);
+
+      final nombresTexto = nombres.isEmpty ? '—' : nombres.join('\n');
+      final codigosTexto = codigos.isEmpty ? '—' : codigos.join('\n');
+
+      final evaluadasList = evs.where((e) => e['evaluada'] == true).toList();
       final nombresJurados = evaluadasList
           .map((e) => e['juradoNombre']?.toString().trim() ?? '')
           .where((s) => s.isNotEmpty)
-          .join(', ');
+          .join('\n');
 
       double promedio = 0;
       if (evaluadasList.isNotEmpty) {
@@ -195,12 +246,30 @@ class EvaluacionesCarreraExcelService {
       }
       sumaPromedios += promedio;
 
-      _celNum(sheet, fila, 0, idx + 1, sC);
-      _cel(sheet, fila, 1, codigo, sC);
-      _cel(sheet, fila, 2, titulo, sI);
-      _cel(sheet, fila, 3, nombresJurados.isEmpty ? '—' : nombresJurados, sI);
-      _celDec(sheet, fila, 4, promedio, sC);
-      sheet.setRowHeight(fila, 18);
+      _celNum(sheet, fila, 0, idx + 1, sCen);
+      _cel(sheet, fila, 1, codigo, sCen);
+      _cel(sheet, fila, 2, titulo, sLeft);
+      _cel(sheet, fila, 3, nombresTexto, sLeft);
+      _cel(sheet, fila, 4, codigosTexto, sCod);
+      _cel(sheet, fila, 5, nombresJurados.isEmpty ? '—' : nombresJurados, sLeft);
+      _celDec(sheet, fila, 6, promedio, sCen);
+
+      // Altura dinámica según el contenido más alto
+      final nomLineas = nombres.isEmpty ? 1 : nombres.length;
+      final codLineas = codigos.isEmpty ? 1 : codigos.length;
+      final jurLineas =
+          nombresJurados.isEmpty ? 1 : nombresJurados.split('\n').length;
+      int tituloLineas = (titulo.length / 30).ceil();
+      if (tituloLineas < 1) tituloLineas = 1;
+      if (tituloLineas > 6) tituloLineas = 6;
+
+      int maxLineas = nomLineas;
+      if (codLineas > maxLineas) maxLineas = codLineas;
+      if (jurLineas > maxLineas) maxLineas = jurLineas;
+      if (tituloLineas > maxLineas) maxLineas = tituloLineas;
+
+      final altura = (maxLineas * 13.0 + 8).clamp(18.0, 260.0).toDouble();
+      sheet.setRowHeight(fila, altura);
       idx++;
     }
 
@@ -214,12 +283,13 @@ class EvaluacionesCarreraExcelService {
     _merge(sheet, 0, 0, 0, lastCol);
     _merge(sheet, 1, 0, 1, lastCol);
 
-    sheet.setColumnWidth(0, 5);
-    sheet.setColumnWidth(1, 12);
-    sheet.setColumnWidth(2, 38);
-    sheet.setColumnWidth(3, 34);
-    sheet.setColumnWidth(4, 12);
-    sheet.setColumnWidth(6, 18);
+    sheet.setColumnWidth(0, 5);   // N°
+    sheet.setColumnWidth(1, 12);  // CÓDIGO proyecto
+    sheet.setColumnWidth(2, 32);  // TÍTULO
+    sheet.setColumnWidth(3, 30);  // ESTUDIANTE (nombre)
+    sheet.setColumnWidth(4, 16);  // CÓDIGO ESTUDIANTE
+    sheet.setColumnWidth(5, 24);  // JURADOS
+    sheet.setColumnWidth(6, 11);  // NOTA FINAL
     sheet.setRowHeight(0, 34);
     sheet.setRowHeight(1, 22);
   }

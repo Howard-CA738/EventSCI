@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
@@ -6,7 +7,7 @@ import 'reporte_evaluacion_final_excel.dart';
 class _C {
   static const navy    = Color(0xFF0F2342);
   static const accent  = Color(0xFF3B82F6);
-  static const green   = Color(0xFF059669);   
+  static const green   = Color(0xFF059669);
   static const orange  = Color(0xFFD97706);
   static const orangeL = Color(0xFFFEF3C7);
   static const red     = Color(0xFFDC2626);
@@ -59,15 +60,15 @@ class _Config {
   });
 
   factory _Config.fromMap(Map<String, dynamic> m) => _Config(
-    pctAsistNoSel       : (m['pctAsistNoSel']       ?? 100).toDouble(),
-    pctDocenteNoSel     : (m['pctDocenteNoSel']     ?? 0).toDouble(),
-    incluirDocenteNoSel : m['incluirDocenteNoSel']  ?? false,
-    modalidad           : m['modalidad']            ?? 'jurado',
-    pctAsistSel         : (m['pctAsistSel']         ?? 40).toDouble(),
-    pctJuradoSel        : (m['pctJuradoSel']        ?? 60).toDouble(),
-    pctAsistSelMixta    : (m['pctAsistSelMixta']    ?? 30).toDouble(),
-    pctJuradoSelMixta   : (m['pctJuradoSelMixta']  ?? 50).toDouble(),
-    pctDocenteSelMixta  : (m['pctDocenteSelMixta'] ?? 20).toDouble(),
+    pctAsistNoSel       : ((m['pctAsistNoSel']       ?? 100) as num).toDouble(),
+    pctDocenteNoSel     : ((m['pctDocenteNoSel']     ?? 0) as num).toDouble(),
+    incluirDocenteNoSel : (m['incluirDocenteNoSel'] as bool?) ?? false,
+    modalidad           : (m['modalidad'] as String?) ?? 'jurado',
+    pctAsistSel         : ((m['pctAsistSel']         ?? 40) as num).toDouble(),
+    pctJuradoSel        : ((m['pctJuradoSel']        ?? 60) as num).toDouble(),
+    pctAsistSelMixta    : ((m['pctAsistSelMixta']    ?? 30) as num).toDouble(),
+    pctJuradoSelMixta   : ((m['pctJuradoSelMixta']   ?? 50) as num).toDouble(),
+    pctDocenteSelMixta  : ((m['pctDocenteSelMixta']  ?? 20) as num).toDouble(),
   );
 
   Map<String, dynamic> toMap() => {
@@ -113,6 +114,17 @@ class _NotaFinal {
   });
 }
 
+class _IntegranteRef {
+  final String codigo;
+  final String proyectoCodigo;
+  final String proyectoDocId;
+  const _IntegranteRef({
+    required this.codigo,
+    required this.proyectoCodigo,
+    required this.proyectoDocId,
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // PANTALLA PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════
@@ -123,11 +135,11 @@ class EvaluacionFinalCarreraScreen extends StatefulWidget {
   final String carrera;
 
   const EvaluacionFinalCarreraScreen({
-    super.key,
     required this.filialId,
     required this.filialNombre,
     required this.facultad,
     required this.carrera,
+    super.key,
   });
 
   @override
@@ -178,7 +190,9 @@ class _EvaluacionFinalCarreraScreenState
 
   String _docIdSellos(String eventoId) =>
       '${_filialId}_${_facultad}_${_carreraId}_$eventoId'
-          .replaceAll(' ', '_');
+          .replaceAll(' ', '_')
+          .replaceAll('/', '_')
+          .replaceAll('.', '_');
 
   @override
   void initState() {
@@ -308,12 +322,20 @@ class _EvaluacionFinalCarreraScreenState
       _snack('Error al guardar config: $e', isError: true);
     }
   }
-
-  // ─────────────────────────────────────────────────────────────
-  // CALCULAR NOTAS FINALES
-  // ─────────────────────────────────────────────────────────────
+String _normalizarNombre(String s) {
+    var t = s.toLowerCase().trim();
+    const conTilde = 'áàäâãéèëêíìïîóòöôõúùüûñ';
+    const sinTilde = 'aaaaaeeeeiiiiooooouuuun';
+    for (var i = 0; i < conTilde.length; i++) {
+      t = t.replaceAll(conTilde[i], sinTilde[i]);
+    }
+    final palabras = t.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList()
+      ..sort();
+    return palabras.join(' ');
+  }
   Future<void> _calcularNotas() async {
-    if (_eventoId == null) return;
+    final eventoId = _eventoId;
+    if (eventoId == null) return;
     setState(() {
       _isCalculando = true;
       _notas        = [];
@@ -331,16 +353,18 @@ class _EvaluacionFinalCarreraScreenState
 
       List<QueryDocumentSnapshot<Map<String, dynamic>>> estudianteDocs = [];
       for (final path in candidatos) {
-        final snap = await _firestore
-            .collection('users')
-            .doc(path)
-            .collection('students')
-            .get();
-        if (snap.docs.isNotEmpty) {
-          estudianteDocs = snap.docs;
-          break;
-        }
-      }
+  final snap = await _firestore
+      .collection('users')
+      .doc(path)
+      .collection('students')
+      .get();
+  debugPrint('🔍 Ruta probada: "$path" → ${snap.docs.length} students');
+  if (snap.docs.isNotEmpty) {
+    estudianteDocs = snap.docs;
+    break;
+  }
+}
+debugPrint('✅ Total estudiantes cargados: ${estudianteDocs.length}');
 
       if (estudianteDocs.isEmpty) {
         _snack('No se encontraron estudiantes para esta carrera', isError: true);
@@ -348,82 +372,117 @@ class _EvaluacionFinalCarreraScreenState
         return;
       }
 
-      // ── 2. Proyectos del evento (para saber seleccionados) ──
+      // ── 2. Proyectos del evento (para saber quién expone) ──
+      // El campo 'Integrantes' guarda NOMBRES → cruzamos por nombre.
+      final List<_IntegranteRef> integrantesProyecto = [];
+
       final proyectosSnap = await _firestore
           .collection('events')
-          .doc(_eventoId!)
+          .doc(eventoId)
           .collection('proyectos')
           .get();
-
-      // Mapear codigoUniversitario → {proyectoCodigo, docId}
-      final Map<String, String> codigoAProyecto = {};    // codigo → proyectoCodigo
-      final Map<String, String> codigoAProyectoId = {};  // codigo → proyectoDocId
 
       for (final pDoc in proyectosSnap.docs) {
         final pData = pDoc.data();
         final codProyecto = pData['Código']?.toString() ?? '';
-        final integrantesRaw = pData['Integrantes'];
+        final integrantesRaw = pData['Integrantes'] ?? pData['integrantes'];
         List<String> integrantes = [];
         if (integrantesRaw is List) {
-          integrantes = integrantesRaw.map((e) => e.toString()).toList();
+          // Cada elemento puede ser un solo código O varios separados por coma
+          for (final e in integrantesRaw) {
+            integrantes.addAll(
+              e.toString()
+                  .split(RegExp(r'[,\n]'))
+                  .map((x) => x.trim())
+                  .where((x) => x.isNotEmpty),
+            );
+          }
         } else if (integrantesRaw is String && integrantesRaw.isNotEmpty) {
           integrantes = integrantesRaw
-              .split(',')
+              .split(RegExp(r'[,\n]'))
               .map((e) => e.trim())
               .where((e) => e.isNotEmpty)
               .toList();
         }
         for (final cod in integrantes) {
-          codigoAProyecto[cod]   = codProyecto;
-          codigoAProyectoId[cod] = pDoc.id;
+          final codNorm = cod.trim();
+          if (codNorm.isEmpty) continue;
+          integrantesProyecto.add(_IntegranteRef(
+            codigo: codNorm,
+            proyectoCodigo: codProyecto,
+            proyectoDocId: pDoc.id,
+          ));
         }
       }
 
+      // ▼▼▼ LOG 1 ▼▼▼
+      debugPrint('📦 Proyectos encontrados: ${proyectosSnap.docs.length}');
+      debugPrint('👥 Total integrantes acumulados: ${integrantesProyecto.length}');
+      for (final ref in integrantesProyecto.take(10)) {
+        debugPrint('   → proyecto ${ref.proyectoCodigo} | integrante "${ref.codigo}"');
+      }
+      // ▲▲▲ LOG 1 ▲▲▲
+      // Índice por nombre normalizado (para proyectos que guardan nombres)
+      final Map<String, _IntegranteRef> integrantesPorNombre = {};
+      for (final ref in integrantesProyecto) {
+        integrantesPorNombre[_normalizarNombre(ref.codigo)] = ref;
+      }
+
       // ── 3. Notas de jurados por proyecto ───────────────────
-      // Para cada proyectoDocId → promedio de notaTotal de sus evaluaciones evaluadas
+      // Para cada proyectoDocId → promedio (normalizado a 20) de sus
+      // evaluaciones evaluadas.
       final Map<String, double> promedioJuradoPorProyecto = {};
 
-      final proyectoIdsUnicos = codigoAProyectoId.values.toSet();
-      for (final pDocId in proyectoIdsUnicos) {
-        final evalSnap = await _firestore
-            .collection('events')
-            .doc(_eventoId!)
-            .collection('proyectos')
-            .doc(pDocId)
-            .collection('evaluaciones')
+      final proyectoIdsUnicos =
+          integrantesProyecto.map((e) => e.proyectoDocId).toSet();
+
+      // Todas las consultas de jurado en paralelo (antes era secuencial)
+      // ── Notas de jurado vía collectionGroup (recupera aunque cambien IDs) ──
+      // En vez de bajar por events/{id}/proyectos/{pDocId}/evaluaciones (que
+      // falla si el evento se recreó), buscamos TODAS las evaluaciones y las
+      // agrupamos por el doc de proyecto padre real (igual que el jurado).
+      try {
+        // notaTotal/puntajeMaximo acumulados por proyectoDocId
+        final Map<String, double> sumNormPorProyecto = {};
+        final Map<String, int>    countPorProyecto   = {};
+
+        final evalGroupSnap = await _firestore
+            .collectionGroup('evaluaciones')
             .where('evaluada', isEqualTo: true)
             .get();
 
-        if (evalSnap.docs.isEmpty) {
-          promedioJuradoPorProyecto[pDocId] = 0;
-          continue;
-        }
+        for (final eDoc in evalGroupSnap.docs) {
+          // Subir: evaluación → proyecto
+          final proyectoRef = eDoc.reference.parent.parent;
+          if (proyectoRef == null) continue;
+          // Subir: proyecto → evento, y filtrar SOLO este evento
+          final evtId = proyectoRef.parent.parent?.id;
+          if (evtId != eventoId) continue;
 
-        // Promedio de notaTotal entre jurados
-        double sumNotas   = 0;
-        double sumMaximos = 0;
-        int    count      = 0;
+          final pDocId = proyectoRef.id;
+          // Solo proyectos que tienen integrantes en esta carrera
+          if (!proyectoIdsUnicos.contains(pDocId)) continue;
 
-        for (final eDoc in evalSnap.docs) {
           final eData = eDoc.data();
-          final notaTotal     = (eData['notaTotal']     ?? 0).toDouble();
-          final puntajeMaximo = (eData['puntajeMaximo'] ?? 20).toDouble();
-          sumNotas   += notaTotal;
-          sumMaximos += puntajeMaximo > 0 ? puntajeMaximo : 20;
-          count++;
+          final notaTotal     = ((eData['notaTotal']     ?? 0) as num).toDouble();
+          final puntajeMaximo = ((eData['puntajeMaximo'] ?? 20) as num).toDouble();
+          final base = puntajeMaximo > 0 ? puntajeMaximo : 20;
+          final norm = (notaTotal / base * 20).clamp(0.0, 20.0);
+
+          sumNormPorProyecto[pDocId] = (sumNormPorProyecto[pDocId] ?? 0) + norm;
+          countPorProyecto[pDocId]   = (countPorProyecto[pDocId] ?? 0) + 1;
         }
 
-        // Normalizar a 20
-        if (count > 0 && sumMaximos > 0) {
-              (sumNotas / sumMaximos) * 20 * count / count;
-          // Equivalente: (promedio_de_notas / promedio_de_maximos) * 20
-          final avgNota = sumNotas / count;
-          final avgMax  = sumMaximos / count;
+        for (final pDocId in proyectoIdsUnicos) {
+          final c = countPorProyecto[pDocId] ?? 0;
           promedioJuradoPorProyecto[pDocId] =
-              (avgNota / avgMax * 20).clamp(0.0, 20.0);
-        } else {
-          promedioJuradoPorProyecto[pDocId] = 0;
+              c > 0 ? (sumNormPorProyecto[pDocId]! / c) : 0.0;
         }
+
+        debugPrint('⚖️ Jurado (collectionGroup): '
+            '${countPorProyecto.length} proyectos con notas de ${proyectoIdsUnicos.length}');
+      } catch (e) {
+        debugPrint('❌ Error leyendo evaluaciones (collectionGroup): $e');
       }
 
       // ── 4. Meta de sellos ───────────────────────────────────
@@ -431,7 +490,7 @@ class _EvaluacionFinalCarreraScreenState
       try {
         final configSellos = await _firestore
             .collection('sellos_asistencia')
-            .doc(_docIdSellos(_eventoId!))
+            .doc(_docIdSellos(eventoId))
             .get();
         if (configSellos.exists) {
           final meta = configSellos.data()!['meta'];
@@ -439,58 +498,105 @@ class _EvaluacionFinalCarreraScreenState
           if (meta is double) metaSellos = meta.toInt();
         }
       } catch (_) {}
+      final Map<String, double> notaDocentePorCodigo = {};
+try {
+  final docentesSnap = await _firestore
+    .collection('events')
+    .doc(eventoId)
+    .collection('notas_docente')          // ← antes 'notasDocentes'
+    .get();
+for (final d in docentesSnap.docs) {
+  final n = ((d.data()['nota'] ?? 0) as num).toDouble();   // ← antes 'notaDocente'
+  notaDocentePorCodigo[d.id.trim()] = n.clamp(0.0, 20.0);
+}
+} catch (_) {}
 
-      // ── 5. Calcular nota final por estudiante ───────────────
+      // ── 4b. Sellos personales: leer cada sesión UNA sola vez ─
+      // Antes esto se hacía DENTRO del bucle de estudiantes, así que la
+      // colección completa se leía 1 vez por alumno (lentísimo). Ahora se
+      // arma un mapa studentId → cantidad de sellos personales.
+      final Map<String, int> sellosPersonalesPorStudent = {};
+      if (metaSellos > 0) {
+        try {
+          final asistPersonalesSnap = await _firestore
+              .collection('events')
+              .doc(eventoId)
+              .collection('asistencias_personales')
+              .get();
+
+          final registrosSnaps = await Future.wait(
+            asistPersonalesSnap.docs.map((d) => _firestore
+                .collection('events')
+                .doc(eventoId)
+                .collection('asistencias_personales')
+                .doc(d.id)
+                .collection('registros')
+                .get()),
+          );
+
+          for (final rs in registrosSnaps) {
+            for (final reg in rs.docs) {
+              sellosPersonalesPorStudent[reg.id] =
+                  (sellosPersonalesPorStudent[reg.id] ?? 0) + 1;
+            }
+          }
+        } catch (_) {}
+      }
       final List<Future<_NotaFinal>> futuros =
           estudianteDocs.map((sDoc) async {
         final sData = sDoc.data();
         final codigoUniv = sData['codigoUniversitario']?.toString() ?? '';
 
-        // N1: asistencias
         // N1: asistencias (proyectos + personales)
-double notaAsist = 0;
-if (metaSellos > 0) {
-  try {
-    // Scans de proyectos
-    final scansSnap = await _firestore
-        .collection('events')
-        .doc(_eventoId!)
-        .collection('asistencias')
-        .doc(sDoc.id)
-        .collection('scans')
-        .get();
-    final sellosProyectos = scansSnap.docs.length;
+        double notaAsist = 0;
+        if (metaSellos > 0) {
+          try {
+            // Conteo de scans SIN descargar los documentos (aggregate)
+            final scansCount = await _firestore
+                .collection('events')
+                .doc(eventoId)
+                .collection('asistencias')
+                .doc(sDoc.id)
+                .collection('scans')
+                .count()
+                .get();
+            final sellosProyectos = scansCount.count ?? 0;
 
-    // Asistencias personales en paralelo
-    final asistPersonalesSnap = await _firestore
-        .collection('events')
-        .doc(_eventoId!)
-        .collection('asistencias_personales')
-        .get();
+            // Personales: del mapa precalculado (sin lecturas extra)
+            final sellosPersonales =
+                sellosPersonalesPorStudent[sDoc.id] ?? 0;
 
-    final resultados = await Future.wait(
-      asistPersonalesSnap.docs.map((asistDoc) => _firestore
-          .collection('events')
-          .doc(_eventoId!)
-          .collection('asistencias_personales')
-          .doc(asistDoc.id)
-          .collection('registros')
-          .doc(sDoc.id)
-          .get()),
-    );
-    final sellosPersonales =
-        resultados.where((doc) => doc.exists).length;
+            final totalSellos = sellosProyectos + sellosPersonales;
+            notaAsist =
+                (totalSellos / metaSellos * 20).clamp(0.0, 20.0);
+          } catch (_) {}
+        }
 
-    final totalSellos = sellosProyectos + sellosPersonales;
-    notaAsist =
-        (totalSellos / metaSellos * 20).clamp(0.0, 20.0);
-  } catch (_) {}
-}
+       final codAlumno = codigoUniv.trim();
+        final nombreNorm = _normalizarNombre(sData['name']?.toString() ?? '');
+        String proyectoDocId  = '';
+        String proyectoCodigo = '';
 
-        // ¿Está seleccionado?
-        final seleccionado    = codigoAProyecto.containsKey(codigoUniv);
-        final proyectoDocId   = codigoAProyectoId[codigoUniv] ?? '';
-        final proyectoCodigo  = codigoAProyecto[codigoUniv]   ?? '';
+        // 1) Match por código
+        if (codAlumno.isNotEmpty) {
+          for (final ref in integrantesProyecto) {
+            if (ref.codigo == codAlumno) {
+              proyectoDocId  = ref.proyectoDocId;
+              proyectoCodigo = ref.proyectoCodigo;
+              break;
+            }
+          }
+        }
+        // 2) Si no hubo match por código, intentar por nombre normalizado
+        if (proyectoDocId.isEmpty && nombreNorm.isNotEmpty) {
+          final ref = integrantesPorNombre[nombreNorm];
+          if (ref != null) {
+            proyectoDocId  = ref.proyectoDocId;
+            proyectoCodigo = ref.proyectoCodigo;
+          }
+        }
+
+        final seleccionado = proyectoDocId.isNotEmpty;
 
         // N2: nota de jurado
         final notaJurado = seleccionado
@@ -498,7 +604,7 @@ if (metaSellos > 0) {
             : 0.0;
 
         // N3: nota docente (vacía por ahora)
-        const notaDocente = 0.0;
+        final notaDocente = notaDocentePorCodigo[codigoUniv.trim()] ?? 0.0;
 
         // Calcular nota final según configuración
         double notaFinal;
@@ -509,9 +615,9 @@ if (metaSellos > 0) {
             notaFinal =
                 (notaAsist   * _config.pctAsistNoSel   / 100) +
                 (notaDocente * _config.pctDocenteNoSel / 100);
-          } else {
-            // Solo asistencia
-            notaFinal = notaAsist;
+         } else {
+            // Aplica el porcentaje de asistencias aunque no haya docente
+            notaFinal = notaAsist * _config.pctAsistNoSel / 100;
           }
         } else {
           // Seleccionado
@@ -553,9 +659,8 @@ if (metaSellos > 0) {
         _notas       = resultados;
         _calculoDone = true;
       });
-      _animCtrl
-        ..reset()
-        ..forward();
+      _animCtrl.reset();
+      unawaited(_animCtrl.forward());
     } catch (e, st) {
       debugPrint('❌ Error calculando notas: $e\n$st');
       _snack('Error al calcular: $e', isError: true);
@@ -568,7 +673,7 @@ if (metaSellos > 0) {
   // HELPERS
   // ─────────────────────────────────────────────────────────────
   List<_NotaFinal> get _notasFiltradas {
-    var lista = _notas.where((n) {
+    final lista = _notas.where((n) {
       if (_filtro == 'seleccionados')    return n.seleccionado;
       if (_filtro == 'no_seleccionados') return !n.seleccionado;
       return true;
@@ -818,7 +923,7 @@ if (metaSellos > 0) {
                             ),
                           ))
                       .toList(),
-                  onChanged: (v) async {
+                  onChanged: (v) {
                     if (v == null) return;
                     final nombre = _eventos.firstWhere(
                         (e) => e['id'] == v)['name'] as String;
@@ -829,7 +934,7 @@ if (metaSellos > 0) {
                       _calculoDone  = false;
                       _configCargada = false;
                     });
-                    await _cargarConfig(v);
+                    unawaited(_cargarConfig(v));
                   },
                   dropdownColor: Colors.white,
                   borderRadius: BorderRadius.circular(12),
@@ -937,17 +1042,17 @@ if (metaSellos > 0) {
         children: [
           // Stats + filtros
           Padding(
-  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-  child: Column(
-    children: [
-      _buildStatsCard(),
-      const SizedBox(height: 12),
-      _buildFiltrosYBusqueda(),
-      const SizedBox(height: 12),          // ← agrega
-      _buildBotonExportar(),               // ← agrega
-    ],
-  ),
-),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            child: Column(
+              children: [
+                _buildStatsCard(),
+                const SizedBox(height: 12),
+                _buildFiltrosYBusqueda(),
+                const SizedBox(height: 12),
+                _buildBotonExportar(),
+              ],
+            ),
+          ),
 
           // Lista
           Expanded(
@@ -1152,6 +1257,13 @@ if (metaSellos > 0) {
       initialValue: _filtro,
       onSelected: (v) => setState(() => _filtro = v),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      itemBuilder: (_) => opciones.entries
+          .map((e) => PopupMenuItem(
+                value: e.key,
+                child: Text(e.value,
+                    style: const TextStyle(fontSize: 13)),
+              ))
+          .toList(),
       child: Container(
         height: 42,
         padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -1173,51 +1285,46 @@ if (metaSellos > 0) {
           ],
         ),
       ),
-      itemBuilder: (_) => opciones.entries
-          .map((e) => PopupMenuItem(
-                value: e.key,
-                child: Text(e.value,
-                    style: const TextStyle(fontSize: 13)),
-              ))
-          .toList(),
     );
   }
-Widget _buildBotonExportar() {
-  return SizedBox(
-    width: double.infinity,
-    child: BotonExportarEvaluacionFinal(
-      notas: _notas.map((n) => NotaFinalItem(
-        studentId:      n.studentId,
-        nombre:         n.nombre,
-        codigo:         n.codigo,
-        ciclo:          n.ciclo,
-        grupo:          n.grupo,
-        seleccionado:   n.seleccionado,
-        proyectoCodigo: n.proyectoCodigo,
-        notaAsist:      n.notaAsist,
-        notaJurado:     n.notaJurado,
-        notaDocente:    n.notaDocente,
-        notaFinal:      n.notaFinal,
-      )).toList(),
-      config: EvalFinalConfig(
-        pctAsistNoSel:       _config.pctAsistNoSel,
-        pctDocenteNoSel:     _config.pctDocenteNoSel,
-        incluirDocenteNoSel: _config.incluirDocenteNoSel,
-        modalidad:           _config.modalidad,
-        pctAsistSel:         _config.pctAsistSel,
-        pctJuradoSel:        _config.pctJuradoSel,
-        pctAsistSelMixta:    _config.pctAsistSelMixta,
-        pctJuradoSelMixta:   _config.pctJuradoSelMixta,
-        pctDocenteSelMixta:  _config.pctDocenteSelMixta,
+
+  Widget _buildBotonExportar() {
+    return SizedBox(
+      width: double.infinity,
+      child: BotonExportarEvaluacionFinal(
+        notas: _notas.map((n) => NotaFinalItem(
+          studentId:      n.studentId,
+          nombre:         n.nombre,
+          codigo:         n.codigo,
+          ciclo:          n.ciclo,
+          grupo:          n.grupo,
+          seleccionado:   n.seleccionado,
+          proyectoCodigo: n.proyectoCodigo,
+          notaAsist:      n.notaAsist,
+          notaJurado:     n.notaJurado,
+          notaDocente:    n.notaDocente,
+          notaFinal:      n.notaFinal,
+        )).toList(),
+        config: EvalFinalConfig(
+          pctAsistNoSel:       _config.pctAsistNoSel,
+          pctDocenteNoSel:     _config.pctDocenteNoSel,
+          incluirDocenteNoSel: _config.incluirDocenteNoSel,
+          modalidad:           _config.modalidad,
+          pctAsistSel:         _config.pctAsistSel,
+          pctJuradoSel:        _config.pctJuradoSel,
+          pctAsistSelMixta:    _config.pctAsistSelMixta,
+          pctJuradoSelMixta:   _config.pctJuradoSelMixta,
+          pctDocenteSelMixta:  _config.pctDocenteSelMixta,
+        ),
+        eventoNombre: _eventoNombre ?? '',
+        filialNombre: widget.filialNombre,
+        facultad:     widget.facultad,
+        carrera:      widget.carrera,
+        onExportado: (path) async {},
       ),
-      eventoNombre: _eventoNombre ?? '',
-      filialNombre: widget.filialNombre,
-      facultad:     widget.facultad,
-      carrera:      widget.carrera,
-      onExportado: (path) async {},
-    ),
-  );
-}
+    );
+  }
+
   // ── Card de estudiante ─────────────────────────────────────────
   Widget _buildStudentCard(_NotaFinal n, int index) {
     final color = _colorNota(n.notaFinal);
@@ -1287,22 +1394,20 @@ Widget _buildBotonExportar() {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
-                      Row(
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          if (n.codigo.isNotEmpty) ...[
+                          if (n.codigo.isNotEmpty)
                             Text(n.codigo,
                                 style: const TextStyle(
                                     fontSize: 10, color: _C.txt3)),
-                            const SizedBox(width: 6),
-                          ],
                           if (n.ciclo.isNotEmpty)
                             _miniTag('C${n.ciclo}', _C.accent),
-                          if (n.grupo.isNotEmpty) ...[
-                            const SizedBox(width: 4),
+                          if (n.grupo.isNotEmpty)
                             _miniTag('G${n.grupo}', _C.purple),
-                          ],
                           // Badge seleccionado
-                          const SizedBox(width: 4),
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 2),
@@ -1375,7 +1480,7 @@ Widget _buildBotonExportar() {
                   _notaChip('Jurado', n.notaJurado, _C.purple),
                 if (n.seleccionado) const SizedBox(width: 6),
                 _notaChip('Docente', n.notaDocente, _C.orange,
-                    isEmpty: true),
+                    isEmpty: n.notaDocente == 0),
                 if (n.seleccionado && n.proyectoCodigo.isNotEmpty) ...[
                   const Spacer(),
                   Row(
@@ -1953,7 +2058,6 @@ class _ConfigBottomSheetState extends State<_ConfigBottomSheet> {
             ),
             child: Slider(
               value: value.clamp(0, 100),
-              min: 0,
               max: 100,
               divisions: 20,
               onChanged: enabled ? onChanged : null,
@@ -1992,7 +2096,7 @@ class _ConfigBottomSheetState extends State<_ConfigBottomSheet> {
         Switch(
           value: value,
           onChanged: onChanged,
-          activeColor: _C.teal,
+          activeThumbColor: _C.teal,
         ),
       ],
     );

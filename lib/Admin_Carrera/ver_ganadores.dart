@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 import '/resolver_nombres_service.dart';
+import 'nota_docente_service.dart'; // ← nuevo servicio
 
 class _C {
   static const primary = Color(0xFF1E3A5F);
@@ -11,14 +12,16 @@ class _C {
   static const bronze = Color(0xFFCD7F32);
   static const textSecondary = Color(0xFF64748B);
 
-  static const podioColors = [gold, silver, bronze];
+  static const Color cuarto = Color(0xFF78909C); // azul grisáceo 4to
+  static const podioColors = [gold, silver, bronze, cuarto];
   static const podioFondos = [
     Color(0xFFFFFDE7),
     Color(0xFFF5F5F5),
     Color(0xFFFBE9E7),
+    Color(0xFFECEFF1),
   ];
-  static const podioIconos = ['🥇', '🥈', '🥉'];
-  static const podioEtiquetas = ['1er lugar', '2do lugar', '3er lugar'];
+  static const podioIconos = ['🥇', '🥈', '🥉', '🏅'];
+  static const podioEtiquetas = ['1er lugar', '2do lugar', '3er lugar', '4to lugar'];
 }
 
 enum _ModoVista { lista, tabla, grafico }
@@ -44,6 +47,7 @@ class VerGanadoresScreen extends StatefulWidget {
 class _VerGanadoresScreenState extends State<VerGanadoresScreen>
     with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final _notaDocenteService = NotaDocenteService();
 
   String? _filialId;
   String? _filialNombre;
@@ -54,10 +58,16 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
   bool _isLoadingInit = true;
   bool _isLoadingEventos = false;
   bool _isLoadingGanadores = false;
+  bool _isImportandoNotas = false;
 
   List<Map<String, dynamic>> _eventos = [];
   Map<String, dynamic>? _eventoSeleccionado;
   Map<String, List<Map<String, dynamic>>> _ganadoresPorCategoria = {};
+
+  /// Notas docente cargadas para el evento seleccionado.
+  /// Mapa { codigoEstudiante → notaDocente (0–20) }
+  Map<String, double> _notasDocente = {};
+  bool _notasDocenteCargadas = false;
 
   _ModoVista _modoVista = _ModoVista.lista;
   final _resolverNombres = ResolverNombresService();
@@ -100,14 +110,11 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
       _facultad     = adminData['facultad']     as String?;
       _carrera      = adminData['carrera']      as String?;
       _carreraId    = adminData['carreraId'] ?? adminData['carrera'];
-      debugPrint('🔑 filialNombre: $_filialNombre');
-      debugPrint('🔑 carrera: $_carrera');
-      debugPrint('🔑 docKey que se usará: ${_filialNombre}_$_carrera');
+
       await _resolverNombres.cargarEstudiantes(
         filialNombre: _filialNombre ?? '',
         carrera: _carrera ?? '',
       );
-
       await _cargarEventos();
     } catch (e) {
       _snack('Error al iniciar: $e', isError: true);
@@ -143,19 +150,35 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
     }
   }
 
+  // ── Selección de evento ──────────────────────────────────────────────────
   Future<void> _seleccionarEvento(Map<String, dynamic> evento) async {
     setState(() {
       _eventoSeleccionado = evento;
       _ganadoresPorCategoria = {};
+      _notasDocente = {};
+      _notasDocenteCargadas = false;
       _isLoadingGanadores = true;
       _modoVista = _ModoVista.lista;
     });
     _animCtrl.reset();
 
     try {
-      final ganadores = await _calcularGanadores(evento['id'] as String);
+      // Cargar notas docente existentes y proyectos en paralelo
+      final results = await Future.wait([
+        _notaDocenteService.obtenerNotasDocente(evento['id'] as String),
+        _calcularGanadores(evento['id'] as String, {}),
+      ]);
+
+      final notasDoc = results[0] as Map<String, double>;
+      // Recalcular con notas docente si las hay
+      final ganadores = notasDoc.isNotEmpty
+          ? await _calcularGanadores(evento['id'] as String, notasDoc)
+          : results[1] as Map<String, List<Map<String, dynamic>>>;
+
       if (mounted) {
         setState(() {
+          _notasDocente = notasDoc;
+          _notasDocenteCargadas = true;
           _ganadoresPorCategoria = ganadores;
           _isLoadingGanadores = false;
         });
@@ -169,8 +192,119 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
     }
   }
 
+  // ── Importar notas docente ───────────────────────────────────────────────
+  Future<void> _importarNotasDocente() async {
+    if (_eventoSeleccionado == null) return;
+    final eventId = _eventoSeleccionado!['id'] as String;
+
+    setState(() => _isImportandoNotas = true);
+    try {
+      final result =
+          await _notaDocenteService.importarDesdeExcel(eventId);
+
+      if (result == null) {
+        // usuario canceló el picker
+        setState(() => _isImportandoNotas = false);
+        return;
+      }
+
+      if (result.errores.isNotEmpty) {
+        _snack(
+          'Importado con advertencias: ${result.errores.first}',
+          isError: true,
+        );
+      }
+
+      // Recargar notas y recalcular ganadores
+      final notasDoc =
+          await _notaDocenteService.obtenerNotasDocente(eventId);
+      final ganadores = await _calcularGanadores(eventId, notasDoc);
+
+      if (mounted) {
+        setState(() {
+          _notasDocente = notasDoc;
+          _notasDocenteCargadas = true;
+          _ganadoresPorCategoria = ganadores;
+          _isImportandoNotas = false;
+        });
+        _animCtrl
+          ..reset()
+          ..forward();
+        _snack(
+          '✅ ${result.codigosTotales} códigos importados '
+          '(${result.gruposImportados} grupos)',
+          isSuccess: true,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isImportandoNotas = false);
+        _snack('Error al importar: $e', isError: true);
+      }
+    }
+  }
+
+  /// Confirma y elimina las notas docente del evento actual.
+  Future<void> _eliminarNotasDocente() async {
+    if (_eventoSeleccionado == null) return;
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Eliminar notas docente'),
+        content: const Text(
+            '¿Quitar las notas docente de este evento? '
+            'Los ganadores se calcularán solo con notas de jurado.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style:
+                ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Eliminar',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
+
+    setState(() => _isImportandoNotas = true);
+    try {
+      final eventId = _eventoSeleccionado!['id'] as String;
+      await _notaDocenteService.eliminarNotasDocente(eventId);
+      final ganadores = await _calcularGanadores(eventId, {});
+      if (mounted) {
+        setState(() {
+          _notasDocente = {};
+          _notasDocenteCargadas = true;
+          _ganadoresPorCategoria = ganadores;
+          _isImportandoNotas = false;
+        });
+        _animCtrl
+          ..reset()
+          ..forward();
+        _snack('Notas docente eliminadas', isSuccess: true);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isImportandoNotas = false);
+        _snack('Error al eliminar: $e', isError: true);
+      }
+    }
+  }
+
+  // ── Cálculo de ganadores ─────────────────────────────────────────────────
+  /// [notasDocente] mapa { codigoEstudiante → nota (0-20) }.
+  /// Si está vacío, el promedio final es solo el de los jurados.
+  /// Si tiene datos, la nota final = promedio( notaJurados, notaDocente )
+  /// donde ambas ya están normalizadas a base 20.
   Future<Map<String, List<Map<String, dynamic>>>> _calcularGanadores(
-      String eventoId) async {
+    String eventoId,
+    Map<String, double> notasDocente,
+  ) async {
     const double escalaBase = 20.0;
 
     final proyectosSnap = await _firestore
@@ -197,18 +331,14 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
 
           final d = doc.data();
 
+          // ── Notas de jurado normalizadas ──
           final notasNormalizadas = <double>[];
-
           for (final e in evalSnap.docs) {
             final data = e.data();
             final notaTotal =
                 ((data['notaTotal'] ?? 0.0) as num).toDouble();
 
-            if (!data.containsKey('puntajeMaximo')) {
-              debugPrint(
-                  '⚠️ [Ganadores] Evaluación ${e.id} sin puntajeMaximo — omitida');
-              continue;
-            }
+            if (!data.containsKey('puntajeMaximo')) continue;
 
             final puntajeMax =
                 (data['puntajeMaximo'] as num).toDouble();
@@ -223,8 +353,31 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
 
           if (notasNormalizadas.isEmpty) return null;
 
-          final promedio = notasNormalizadas.reduce((a, b) => a + b) /
-              notasNormalizadas.length;
+          final promedioJurados =
+              notasNormalizadas.reduce((a, b) => a + b) /
+                  notasNormalizadas.length;
+
+          // ── Nota docente: buscar por cualquier integrante del proyecto ──
+          double? notaDoc;
+          if (notasDocente.isNotEmpty) {
+            final integrantesRaw =
+                d['Integrantes'] ?? d['integrantes'];
+            final codigos = _extraerCodigos(integrantesRaw);
+            for (final cod in codigos) {
+              if (notasDocente.containsKey(cod)) {
+                notaDoc = notasDocente[cod];
+                break;
+              }
+            }
+          }
+
+          // ── Nota final ──
+          // Con docente: promedio 50 % jurados + 50 % docente
+          // Sin docente: 100 % jurados
+          final notaFinal = notaDoc != null
+              ? (promedioJurados + notaDoc) / 2.0
+              : promedioJurados;
+
           final notaMax =
               notasNormalizadas.reduce((a, b) => a > b ? a : b);
           final notaMin =
@@ -239,12 +392,15 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
             'clasificacion': _s(d['Clasificación'], 'Sin categoría'),
             'asesor':      _s(d['Asesor'],         ''),
             'descripcion': _s(d['Descripción'],   ''),
-            'promedio':    double.parse(promedio.toStringAsFixed(2)),
+            'promedio':    double.parse(notaFinal.toStringAsFixed(2)),
+            'promedioJurados': double.parse(promedioJurados.toStringAsFixed(2)),
+            'notaDocente': notaDoc,
             'notaMax':     notaMax,
             'notaMin':     notaMin,
             'cantidadJurados': notasNormalizadas.length,
             'notas':       notasNormalizadas,
             'escalaBase':  escalaBase,
+            'tieneNotaDocente': notaDoc != null,
           };
         } catch (e) {
           debugPrint('❌ [Ganadores] Error en proyecto ${doc.id}: $e');
@@ -267,11 +423,29 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
         entry.key: (entry.value
               ..sort((a, b) => (b['promedio'] as double)
                   .compareTo(a['promedio'] as double)))
-            .take(3)
+            .take(4)
             .toList(),
     };
   }
 
+  /// Extrae códigos universitarios de un campo de integrantes.
+  /// Soporta List<String> y String separado por comas.
+  List<String> _extraerCodigos(dynamic integrantes) {
+    if (integrantes == null) return [];
+    if (integrantes is List) {
+      return integrantes.map((e) => e.toString().trim()).toList();
+    }
+    if (integrantes is String) {
+      return integrantes
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
+    return [];
+  }
+
+  // ── Helpers UI ───────────────────────────────────────────────────────────
   void _snack(String msg, {bool isError = false, bool isSuccess = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -301,7 +475,8 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
                 ? Colors.red[700]
                 : _C.primary,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 3),
       ));
@@ -320,6 +495,7 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
     );
   }
 
+  // ── Build ────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
@@ -384,6 +560,21 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
             ),
           ),
           if (_eventoSeleccionado != null) ...[
+            // Botón importar / quitar notas docente
+            if (_isImportandoNotas)
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                    color: Colors.white, strokeWidth: 2),
+              )
+            else
+              _NotaDocenteButton(
+                tieneNotas: _notasDocente.isNotEmpty,
+                onImportar: _importarNotasDocente,
+                onEliminar: _eliminarNotasDocente,
+              ),
+            const SizedBox(width: 4),
             if (!_isLoadingGanadores && _ganadoresPorCategoria.isNotEmpty)
               _VistaToggle(
                 modoActual: _modoVista,
@@ -442,9 +633,13 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
         _EventoBanner(
           nombre: _s(_eventoSeleccionado!['name']),
           totalCategorias: _ganadoresPorCategoria.length,
+          tieneNotaDocente: _notasDocente.isNotEmpty,
+          cantidadCodigos: _notasDocente.length,
           onTap: () => setState(() {
             _eventoSeleccionado = null;
             _ganadoresPorCategoria = {};
+            _notasDocente = {};
+            _notasDocenteCargadas = false;
           }),
         ),
         Expanded(
@@ -485,11 +680,71 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
               _mostrarDetalle(context, proyecto, posicion),
         );
       case _ModoVista.grafico:
-        return _VistaGrafico(ganadoresPorCategoria: _ganadoresPorCategoria);
+        return _VistaGrafico(
+            ganadoresPorCategoria: _ganadoresPorCategoria);
     }
   }
 }
 
+// ── Widget: botón de notas docente ──────────────────────────────────────────
+class _NotaDocenteButton extends StatelessWidget {
+  final bool tieneNotas;
+  final VoidCallback onImportar;
+  final VoidCallback onEliminar;
+
+  const _NotaDocenteButton({
+    required this.tieneNotas,
+    required this.onImportar,
+    required this.onEliminar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tieneNotas ? 'Notas docente cargadas' : 'Importar notas docente',
+      child: GestureDetector(
+        onTap: tieneNotas ? null : onImportar,
+        onLongPress: tieneNotas ? onEliminar : null,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: tieneNotas
+                ? Colors.green.withOpacity(0.25)
+                : Colors.white.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: tieneNotas
+                  ? Colors.greenAccent.withOpacity(0.6)
+                  : Colors.white30,
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                tieneNotas ? Icons.how_to_reg : Icons.upload_file,
+                color: tieneNotas ? Colors.greenAccent : Colors.white70,
+                size: 16,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                tieneNotas ? 'Docente ✓' : 'Docente',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: tieneNotas ? Colors.greenAccent : Colors.white70,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Widget: toggle de vistas ─────────────────────────────────────────────────
 class _VistaToggle extends StatelessWidget {
   final _ModoVista modoActual;
   final ValueChanged<_ModoVista> onChange;
@@ -566,6 +821,7 @@ class _ToggleBtn extends StatelessWidget {
   }
 }
 
+// ── Detalle del proyecto (bottom sheet) ─────────────────────────────────────
 class _DetalleProyectoSheet extends StatelessWidget {
   final Map<String, dynamic> proyecto;
   final int posicion;
@@ -578,15 +834,20 @@ class _DetalleProyectoSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final promedio = (proyecto['promedio'] as num?)?.toDouble() ?? 0.0;
+    final promedioJurados =
+        (proyecto['promedioJurados'] as num?)?.toDouble() ?? promedio;
+    final notaDocente = proyecto['notaDocente'] as double?;
     final notaMax = (proyecto['notaMax'] as num?)?.toDouble() ?? 0.0;
     final notaMin = (proyecto['notaMin'] as num?)?.toDouble() ?? 0.0;
     final jurados = (proyecto['cantidadJurados'] as int?) ?? 0;
     final notas = (proyecto['notas'] as List?)?.cast<double>() ?? [];
+    final tieneNotaDocente = proyecto['tieneNotaDocente'] as bool? ?? false;
 
-    final color =
-        posicion < 3 ? _C.podioColors[posicion] : const Color(0xFF90A4AE);
-    final icono = posicion < 3 ? _C.podioIconos[posicion] : '🏅';
-    final etiqueta = posicion < 3
+    final color = posicion < 4
+        ? _C.podioColors[posicion]
+        : const Color(0xFF90A4AE);
+    final icono = posicion < 4 ? _C.podioIconos[posicion] : '🏅';
+    final etiqueta = posicion < 4
         ? _C.podioEtiquetas[posicion]
         : '${posicion + 1}° lugar';
 
@@ -610,6 +871,7 @@ class _DetalleProyectoSheet extends StatelessWidget {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
+            // Encabezado
             Container(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
               child: Row(
@@ -620,11 +882,12 @@ class _DetalleProyectoSheet extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: color.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
-                      border:
-                          Border.all(color: color.withValues(alpha: 0.5), width: 2),
+                      border: Border.all(
+                          color: color.withValues(alpha: 0.5), width: 2),
                     ),
                     child: Center(
-                      child: Text(icono, style: const TextStyle(fontSize: 24)),
+                      child:
+                          Text(icono, style: const TextStyle(fontSize: 24)),
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -661,7 +924,8 @@ class _DetalleProyectoSheet extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close_rounded, color: _C.textSecondary),
+                    icon: const Icon(Icons.close_rounded,
+                        color: _C.textSecondary),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -673,6 +937,7 @@ class _DetalleProyectoSheet extends StatelessWidget {
                 controller: controller,
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                 children: [
+                  // ── Stats card ──
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -687,7 +952,7 @@ class _DetalleProyectoSheet extends StatelessWidget {
                       children: [
                         Expanded(
                           child: _StatItem(
-                            label: 'Promedio',
+                            label: 'Final',
                             value: _sf(promedio),
                             icon: Icons.star_rounded,
                             color: _C.gold,
@@ -698,36 +963,51 @@ class _DetalleProyectoSheet extends StatelessWidget {
                             width: 1, height: 40, color: Colors.white24),
                         Expanded(
                           child: _StatItem(
-                            label: 'Nota máx.',
-                            value: _sf(notaMax),
-                            icon: Icons.arrow_upward_rounded,
-                            color: Colors.greenAccent,
-                          ),
-                        ),
-                        Container(
-                            width: 1, height: 40, color: Colors.white24),
-                        Expanded(
-                          child: _StatItem(
-                            label: 'Nota mín.',
-                            value: _sf(notaMin),
-                            icon: Icons.arrow_downward_rounded,
-                            color: Colors.redAccent[100]!,
-                          ),
-                        ),
-                        Container(
-                            width: 1, height: 40, color: Colors.white24),
-                        Expanded(
-                          child: _StatItem(
                             label: 'Jurados',
+                            value: _sf(promedioJurados),
+                            icon: Icons.gavel_rounded,
+                            color: Colors.lightBlueAccent,
+                          ),
+                        ),
+                        if (tieneNotaDocente) ...[
+                          Container(
+                              width: 1, height: 40, color: Colors.white24),
+                          Expanded(
+                            child: _StatItem(
+                              label: 'Docente',
+                              value: _sf(notaDocente ?? 0),
+                              icon: Icons.school_rounded,
+                              color: Colors.greenAccent,
+                            ),
+                          ),
+                        ],
+                        Container(
+                            width: 1, height: 40, color: Colors.white24),
+                        Expanded(
+                          child: _StatItem(
+                            label: 'J. cant.',
                             value: '$jurados',
                             icon: Icons.how_to_vote_outlined,
-                            color: Colors.lightBlueAccent,
+                            color: Colors.orangeAccent,
                           ),
                         ),
                       ],
                     ),
                   ),
+
+                  // ── Desglose de fórmula ──
+                  if (tieneNotaDocente) ...[
+                    const SizedBox(height: 14),
+                    _FormulaDesglose(
+                      promedioJurados: promedioJurados,
+                      notaDocente: notaDocente!,
+                      notaFinal: promedio,
+                    ),
+                  ],
+
                   const SizedBox(height: 20),
+
+                  // ── Notas por jurado ──
                   if (notas.isNotEmpty) ...[
                     _SheetSection(
                       titulo: 'Notas por jurado',
@@ -739,7 +1019,8 @@ class _DetalleProyectoSheet extends StatelessWidget {
                       runSpacing: 8,
                       children: notas.asMap().entries.map((e) {
                         final isMax = e.value == notaMax;
-                        final isMin = e.value == notaMin && jurados > 1;
+                        final isMin =
+                            e.value == notaMin && jurados > 1;
                         return Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 8),
@@ -781,6 +1062,8 @@ class _DetalleProyectoSheet extends StatelessWidget {
                     ),
                     const SizedBox(height: 20),
                   ],
+
+                  // ── Info proyecto ──
                   _SheetSection(
                     titulo: 'Información del proyecto',
                     icon: Icons.info_outline_rounded,
@@ -849,6 +1132,131 @@ class _DetalleProyectoSheet extends StatelessWidget {
   }
 }
 
+// ── Widget: desglose de fórmula ──────────────────────────────────────────────
+class _FormulaDesglose extends StatelessWidget {
+  final double promedioJurados;
+  final double notaDocente;
+  final double notaFinal;
+
+  const _FormulaDesglose({
+    required this.promedioJurados,
+    required this.notaDocente,
+    required this.notaFinal,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FFF4),
+        borderRadius: BorderRadius.circular(12),
+        border:
+            Border.all(color: Colors.green.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.calculate_outlined,
+                  size: 15, color: Colors.green),
+              const SizedBox(width: 6),
+              const Text('Cálculo nota final',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _FormulaRow(
+            label: 'Prom. jurados',
+            valor: _sf(promedioJurados),
+            color: Colors.blue,
+            peso: '50%',
+          ),
+          const SizedBox(height: 4),
+          _FormulaRow(
+            label: 'Nota docente',
+            valor: _sf(notaDocente),
+            color: Colors.green,
+            peso: '50%',
+          ),
+          const Divider(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('= Nota final',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: _C.primary)),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _C.primary,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(_sf(notaFinal),
+                    style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FormulaRow extends StatelessWidget {
+  final String label;
+  final String valor;
+  final Color color;
+  final String peso;
+
+  const _FormulaRow({
+    required this.label,
+    required this.valor,
+    required this.color,
+    required this.peso,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(label,
+              style: const TextStyle(fontSize: 12, color: _C.textSecondary)),
+        ),
+        Text(peso,
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color)),
+        const SizedBox(width: 10),
+        Text(valor,
+            style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: _C.primary)),
+      ],
+    );
+  }
+}
+
+// ── Vista tabla ──────────────────────────────────────────────────────────────
 class _VistaTabla extends StatelessWidget {
   final Map<String, List<Map<String, dynamic>>> ganadoresPorCategoria;
   final void Function(Map<String, dynamic> proyecto, int posicion) onTapFila;
@@ -901,27 +1309,56 @@ class _VistaTabla extends StatelessWidget {
               ),
               Container(
                 color: _C.primary.withValues(alpha: 0.06),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 8),
                 child: const Row(
                   children: [
-                    SizedBox(width: 32, child: Text('#', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _C.textSecondary))),
-                    Expanded(flex: 3, child: Text('Proyecto', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _C.textSecondary))),
-                    SizedBox(width: 52, child: Text('Prom.', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _C.textSecondary), textAlign: TextAlign.center)),
-                    SizedBox(width: 36, child: Text('J.', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _C.textSecondary), textAlign: TextAlign.center)),
+                    SizedBox(
+                        width: 32,
+                        child: Text('#',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: _C.textSecondary))),
+                    Expanded(
+                        flex: 3,
+                        child: Text('Proyecto',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: _C.textSecondary))),
+                    SizedBox(
+                        width: 52,
+                        child: Text('Final',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: _C.textSecondary),
+                            textAlign: TextAlign.center)),
+                    SizedBox(
+                        width: 36,
+                        child: Text('J.',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: _C.textSecondary),
+                            textAlign: TextAlign.center)),
                   ],
                 ),
               ),
               ...entry.value.asMap().entries.map((e) {
                 final i = e.key;
                 final p = e.value;
-                final color = i < 3
+                final color = i < 4
                     ? _C.podioColors[i]
                     : const Color(0xFF90A4AE);
-                final icono = i < 3 ? _C.podioIconos[i] : '🏅';
+                final icono = i < 4 ? _C.podioIconos[i] : '🏅';
                 final promedio =
                     (p['promedio'] as num?)?.toDouble() ?? 0.0;
-                final jurados = (p['cantidadJurados'] as int?) ?? 0;
+                final jurados =
+                    (p['cantidadJurados'] as int?) ?? 0;
+                final tieneDoc =
+                    p['tieneNotaDocente'] as bool? ?? false;
 
                 return InkWell(
                   onTap: () => onTapFila(p, i),
@@ -930,7 +1367,8 @@ class _VistaTabla extends StatelessWidget {
                         horizontal: 14, vertical: 11),
                     decoration: BoxDecoration(
                       border: Border(
-                        bottom: BorderSide(color: Colors.grey[100]!),
+                        bottom:
+                            BorderSide(color: Colors.grey[100]!),
                       ),
                       color: i == 0
                           ? _C.gold.withValues(alpha: 0.04)
@@ -955,12 +1393,20 @@ class _VistaTabla extends StatelessWidget {
                                       color: _C.primary),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis),
-                              Text(_s(p['codigo'], '—'),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontSize: 10,
-                                      color: _C.textSecondary)),
+                              Row(children: [
+                                Text(_s(p['codigo'], '—'),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontSize: 10,
+                                        color: _C.textSecondary)),
+                                if (tieneDoc) ...[
+                                  const SizedBox(width: 4),
+                                  const Icon(Icons.school,
+                                      size: 10,
+                                      color: Colors.green),
+                                ],
+                              ]),
                             ],
                           ),
                         ),
@@ -968,11 +1414,13 @@ class _VistaTabla extends StatelessWidget {
                           width: 52,
                           child: Center(
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                              padding:
+                                  const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
                                 color: color,
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius:
+                                    BorderRadius.circular(8),
                               ),
                               child: FittedBox(
                                 fit: BoxFit.scaleDown,
@@ -1012,7 +1460,8 @@ class _VistaTabla extends StatelessWidget {
                         size: 12, color: Colors.grey[400]),
                     const SizedBox(width: 4),
                     Flexible(
-                      child: Text('Toca una fila para ver detalle',
+                      child: Text(
+                          'Toca una fila para ver detalle',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1029,6 +1478,7 @@ class _VistaTabla extends StatelessWidget {
   }
 }
 
+// ── Vista gráfico ────────────────────────────────────────────────────────────
 class _VistaGrafico extends StatelessWidget {
   final Map<String, List<Map<String, dynamic>>> ganadoresPorCategoria;
 
@@ -1048,7 +1498,6 @@ class _VistaGrafico extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final maxNota = _maxNota;
-
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
       children: ganadoresPorCategoria.entries.map((entry) {
@@ -1098,10 +1547,13 @@ class _VistaGrafico extends StatelessWidget {
                         (p['promedio'] as num?)?.toDouble() ?? 0.0;
                     final porcentaje =
                         maxNota > 0 ? promedio / maxNota : 0.0;
-                    final color = i < 3
+                    final color = i < 4
                         ? _C.podioColors[i]
                         : const Color(0xFF90A4AE);
-                    final icono = i < 3 ? _C.podioIconos[i] : '🏅';
+                    final icono =
+                        i < 4 ? _C.podioIconos[i] : '🏅';
+                    final tieneDoc =
+                        p['tieneNotaDocente'] as bool? ?? false;
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 14),
@@ -1111,7 +1563,8 @@ class _VistaGrafico extends StatelessWidget {
                           Row(
                             children: [
                               Text(icono,
-                                  style: const TextStyle(fontSize: 16)),
+                                  style:
+                                      const TextStyle(fontSize: 16)),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
@@ -1124,6 +1577,13 @@ class _VistaGrafico extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              if (tieneDoc)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.only(right: 4),
+                                  child: const Icon(Icons.school,
+                                      size: 12, color: Colors.green),
+                                ),
                               const SizedBox(width: 6),
                               Text(_sf(promedio),
                                   style: TextStyle(
@@ -1151,8 +1611,8 @@ class _VistaGrafico extends StatelessWidget {
                                     ),
                                   ),
                                   AnimatedContainer(
-                                    duration:
-                                        const Duration(milliseconds: 700),
+                                    duration: const Duration(
+                                        milliseconds: 700),
                                     curve: Curves.easeOutCubic,
                                     height: 14,
                                     width: constraints.maxWidth *
@@ -1179,7 +1639,8 @@ class _VistaGrafico extends StatelessWidget {
                             ),
                             if (_s(p['sala'], '').isNotEmpty) ...[
                               Flexible(
-                                child: Text(' · Sala ${_s(p['sala'])}',
+                                child: Text(
+                                    ' · Sala ${_s(p['sala'])}',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
@@ -1201,6 +1662,8 @@ class _VistaGrafico extends StatelessWidget {
     );
   }
 }
+
+// ── Resto de widgets auxiliares (sin cambios funcionales) ────────────────────
 
 class _StatItem extends StatelessWidget {
   final String label;
@@ -1237,7 +1700,8 @@ class _StatItem extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white60, fontSize: 10)),
+            style:
+                const TextStyle(color: Colors.white60, fontSize: 10)),
       ],
     );
   }
@@ -1320,7 +1784,8 @@ class _IntegrantesCard extends StatelessWidget {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Text(texto,
-            style: const TextStyle(fontSize: 13, color: _C.textSecondary)),
+            style: const TextStyle(
+                fontSize: 13, color: _C.textSecondary)),
       );
     }
 
@@ -1338,7 +1803,10 @@ class _IntegrantesCard extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: Center(
-                  child: Text(nombre.isNotEmpty ? nombre[0].toUpperCase() : '?',
+                  child: Text(
+                      nombre.isNotEmpty
+                          ? nombre[0].toUpperCase()
+                          : '?',
                       style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
@@ -1375,8 +1843,8 @@ class _CenteredLoader extends StatelessWidget {
             const CircularProgressIndicator(color: _C.primary),
             const SizedBox(height: 16),
             Text(mensaje,
-                style:
-                    const TextStyle(color: _C.textSecondary, fontSize: 14),
+                style: const TextStyle(
+                    color: _C.textSecondary, fontSize: 14),
                 textAlign: TextAlign.center),
           ],
         ),
@@ -1390,7 +1858,8 @@ class _InfoCarreraCard extends StatelessWidget {
   final String? facultad;
   final String? filialNombre;
 
-  const _InfoCarreraCard({this.carrera, this.facultad, this.filialNombre});
+  const _InfoCarreraCard(
+      {this.carrera, this.facultad, this.filialNombre});
 
   @override
   Widget build(BuildContext context) {
@@ -1414,7 +1883,8 @@ class _InfoCarreraCard extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.emoji_events, color: _C.gold, size: 28),
+            child: const Icon(Icons.emoji_events,
+                color: _C.gold, size: 28),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -1518,7 +1988,8 @@ class _EventoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nombre = _s(evento['name'], 'Sin nombre');
-    final inicial = nombre.isNotEmpty ? nombre[0].toUpperCase() : '?';
+    final inicial =
+        nombre.isNotEmpty ? nombre[0].toUpperCase() : '?';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1547,7 +2018,10 @@ class _EventoCard extends StatelessWidget {
                   height: 48,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
+                      colors: [
+                        Color(0xFFFFD700),
+                        Color(0xFFFFA000)
+                      ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -1583,7 +2057,8 @@ class _EventoCard extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                  fontSize: 11, color: Colors.amber[700])),
+                                  fontSize: 11,
+                                  color: Colors.amber[700])),
                         ),
                       ]),
                     ],
@@ -1637,7 +2112,9 @@ class _EmptyEventos extends StatelessWidget {
           const SizedBox(height: 8),
           const Text('No se encontraron eventos para tu carrera.',
               style: TextStyle(
-                  fontSize: 13, color: _C.textSecondary, height: 1.5),
+                  fontSize: 13,
+                  color: _C.textSecondary,
+                  height: 1.5),
               textAlign: TextAlign.center),
         ],
       ),
@@ -1648,11 +2125,15 @@ class _EmptyEventos extends StatelessWidget {
 class _EventoBanner extends StatelessWidget {
   final String nombre;
   final int totalCategorias;
+  final bool tieneNotaDocente;
+  final int cantidadCodigos;
   final VoidCallback onTap;
 
   const _EventoBanner({
     required this.nombre,
     required this.totalCategorias,
+    required this.tieneNotaDocente,
+    required this.cantidadCodigos,
     required this.onTap,
   });
 
@@ -1683,17 +2164,36 @@ class _EventoBanner extends StatelessWidget {
                           fontSize: 13,
                           overflow: TextOverflow.ellipsis),
                       maxLines: 1),
-                  const Text('Toca para cambiar de evento',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: Colors.white54, fontSize: 11)),
+                  Row(children: [
+                    const Text('Toca para cambiar · ',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: Colors.white54, fontSize: 11)),
+                    if (tieneNotaDocente)
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.school,
+                            size: 11, color: Colors.greenAccent),
+                        const SizedBox(width: 3),
+                        Text('$cantidadCodigos doc.',
+                            maxLines: 1,
+                            style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.greenAccent)),
+                      ])
+                    else
+                      const Text('solo jurados',
+                          maxLines: 1,
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.white38)),
+                  ]),
                 ],
               ),
             ),
             const SizedBox(width: 8),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(20),
@@ -1702,7 +2202,8 @@ class _EventoBanner extends StatelessWidget {
                 '$totalCategorias categ.',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white70, fontSize: 11),
+                style: const TextStyle(
+                    color: Colors.white70, fontSize: 11),
               ),
             ),
           ],
@@ -1742,7 +2243,9 @@ class _SinEvaluaciones extends StatelessWidget {
             const Text(
               'Ningún proyecto tiene evaluaciones finalizadas en este evento todavía.',
               style: TextStyle(
-                  fontSize: 13, color: _C.textSecondary, height: 1.5),
+                  fontSize: 13,
+                  color: _C.textSecondary,
+                  height: 1.5),
               textAlign: TextAlign.center,
             ),
           ],
@@ -1808,8 +2311,8 @@ class _CategoriaSection extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
@@ -1818,8 +2321,8 @@ class _CategoriaSection extends StatelessWidget {
                     '${ganadores.length} proy.',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style:
-                        const TextStyle(color: Colors.white70, fontSize: 11),
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 11),
                   ),
                 ),
               ],
@@ -1847,11 +2350,12 @@ class _CategoriaSection extends StatelessWidget {
                     size: 12, color: Colors.grey[400]),
                 const SizedBox(width: 4),
                 Flexible(
-                  child: Text('Toca una tarjeta para ver detalle',
+                  child: Text(
+                      'Toca una tarjeta para ver detalle',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style:
-                          TextStyle(fontSize: 10, color: Colors.grey[400])),
+                      style: TextStyle(
+                          fontSize: 10, color: Colors.grey[400])),
                 ),
               ],
             ),
@@ -1881,13 +2385,17 @@ class _GanadorCard extends StatelessWidget {
     final codigo = _s(proyecto['codigo'], '—');
     final integrantes = _s(proyecto['integrantes'], '');
     final sala = _s(proyecto['sala'], '');
+    final tieneNotaDocente =
+        proyecto['tieneNotaDocente'] as bool? ?? false;
 
-    final color =
-        posicion < 3 ? _C.podioColors[posicion] : const Color(0xFF90A4AE);
-    final fondo =
-        posicion < 3 ? _C.podioFondos[posicion] : const Color(0xFFF5F5F5);
-    final icono = posicion < 3 ? _C.podioIconos[posicion] : '🏅';
-    final etiqueta = posicion < 3
+    final color = posicion < 4
+        ? _C.podioColors[posicion]
+        : const Color(0xFF90A4AE);
+    final fondo = posicion < 4
+        ? _C.podioFondos[posicion]
+        : const Color(0xFFF5F5F5);
+    final icono = posicion < 4 ? _C.podioIconos[posicion] : '🏅';
+    final etiqueta = posicion < 4
         ? _C.podioEtiquetas[posicion]
         : '${posicion + 1}° lugar';
 
@@ -1900,7 +2408,8 @@ class _GanadorCard extends StatelessWidget {
           color: fondo,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: color.withValues(alpha: posicion == 0 ? 0.5 : 0.25),
+            color:
+                color.withValues(alpha: posicion == 0 ? 0.5 : 0.25),
             width: posicion == 0 ? 2 : 1,
           ),
         ),
@@ -1913,11 +2422,12 @@ class _GanadorCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
-                border:
-                    Border.all(color: color.withValues(alpha: 0.4), width: 2),
+                border: Border.all(
+                    color: color.withValues(alpha: 0.4), width: 2),
               ),
               child: Center(
-                child: Text(icono, style: const TextStyle(fontSize: 20)),
+                child: Text(icono,
+                    style: const TextStyle(fontSize: 20)),
               ),
             ),
             const SizedBox(width: 12),
@@ -1937,6 +2447,12 @@ class _GanadorCard extends StatelessWidget {
                           label: etiqueta,
                           bg: color.withValues(alpha: 0.18),
                           fg: color),
+                      if (tieneNotaDocente)
+                        _MiniChip(
+                          label: '+ Docente',
+                          bg: Colors.green.withOpacity(0.12),
+                          fg: Colors.green[700]!,
+                        ),
                     ],
                   ),
                   const SizedBox(height: 5),
@@ -1956,7 +2472,8 @@ class _GanadorCard extends StatelessWidget {
                       Expanded(
                         child: Text(integrantes,
                             style: const TextStyle(
-                                fontSize: 11, color: _C.textSecondary),
+                                fontSize: 11,
+                                color: _C.textSecondary),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis),
                       ),
@@ -1981,7 +2498,8 @@ class _GanadorCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(children: [
                     Icon(Icons.info_outline,
-                        size: 11, color: color.withValues(alpha: 0.7)),
+                        size: 11,
+                        color: color.withValues(alpha: 0.7)),
                     const SizedBox(width: 3),
                     Flexible(
                       child: Text('Ver detalle completo',
@@ -1989,7 +2507,8 @@ class _GanadorCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                               fontSize: 10,
-                              color: color.withValues(alpha: 0.8))),
+                              color:
+                                  color.withValues(alpha: 0.8))),
                     ),
                   ]),
                 ],
@@ -2014,8 +2533,8 @@ class _GanadorCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 const Text('pts',
-                    style:
-                        TextStyle(fontSize: 10, color: _C.textSecondary)),
+                    style: TextStyle(
+                        fontSize: 10, color: _C.textSecondary)),
                 const SizedBox(height: 2),
                 Row(mainAxisSize: MainAxisSize.min, children: [
                   const Icon(Icons.how_to_vote_outlined,
@@ -2045,7 +2564,8 @@ class _MiniChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(6),

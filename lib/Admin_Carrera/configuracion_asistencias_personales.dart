@@ -980,7 +980,7 @@ class _ConfiguracionAsistenciaPersonalScreenState
                       fontSize: 11, color: Colors.grey.shade500)),
             ]),
       ),
-      Switch(value: valor, onChanged: onChanged, activeColor: colorOn),
+      Switch(value: valor, onChanged: onChanged, activeThumbColor: colorOn),
     ]);
   }
 

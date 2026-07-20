@@ -347,7 +347,7 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     String? Function(T?)? validator,
   }) {
     return DropdownButtonFormField<T>(
-      value: value,
+      initialValue: value,
       isExpanded: true,
       decoration: InputDecoration(
         labelText: label,

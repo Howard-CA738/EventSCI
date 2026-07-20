@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '/admin/logica/grupos.dart';
 
-// ═══════════════════════════════════════════════════════════════════
-// PALETA — alineada con la pantalla de Evaluación Final
-// ═══════════════════════════════════════════════════════════════════
 class _C {
   static const navy    = Color(0xFF0F2342);
   static const accent  = Color(0xFF3B82F6);
@@ -41,15 +39,18 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
   final _scrollController = ScrollController();
   final _codigoController = TextEditingController();
   final _tituloController = TextEditingController();
-  final _integrantesController = TextEditingController();
   final _clasificacionController = TextEditingController();
   final _salaController = TextEditingController();
 
   bool _isLoading = false;
+  bool _mostrarErrorIntegrantes = false;
 
-  // Clasificaciones reales tomadas de los proyectos ya importados del evento.
   List<String> _clasificacionesExistentes = [];
   bool _cargandoClasificaciones = true;
+
+  List<Map<String, dynamic>> _estudiantesSeleccionados = [];
+  List<Map<String, dynamic>> _estudiantesDisponibles = [];
+  bool _cargandoEstudiantes = true;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -75,33 +76,28 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
-
     _slideAnimation =
         Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
           CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
         );
-
     _animationController.forward();
     _cargarClasificaciones();
+    _cargarEstudiantes();
   }
 
-  // ── Cargar clasificaciones reales del evento ────────────────────────
   Future<void> _cargarClasificaciones() async {
     try {
       final proyectos = await widget.gruposService
           .cargarProyectosExistentes(widget.eventData['id']);
       if (!mounted) return;
-
       final set = <String>{};
       for (final p in proyectos) {
         final c = p['Clasificación']?.toString().trim() ?? '';
         if (c.isNotEmpty) set.add(c);
       }
-
       setState(() {
         _clasificacionesExistentes = set.toList()..sort();
         _cargandoClasificaciones = false;
@@ -111,12 +107,46 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
     }
   }
 
+  Future<void> _cargarEstudiantes() async {
+    try {
+      final filialNombre =
+          (widget.eventData['filialNombre'] ?? '').toString().trim();
+      final carrera =
+          (widget.eventData['carreraNombre'] ?? '').toString().trim();
+
+      if (filialNombre.isEmpty || carrera.isEmpty) {
+        if (mounted) setState(() => _cargandoEstudiantes = false);
+        return;
+      }
+
+      final docKey = '${filialNombre}_$carrera';
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(docKey)
+          .collection('students')
+          .orderBy('name')
+          .get();
+
+      if (!mounted) return;
+      setState(() {
+        _estudiantesDisponibles = snap.docs.map((d) {
+          final data = d.data();
+          data['id'] = d.id;
+          return data;
+        }).toList();
+        _cargandoEstudiantes = false;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _cargandoEstudiantes = false);
+      debugPrint('Error cargando estudiantes: $e');
+    }
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
     _codigoController.dispose();
     _tituloController.dispose();
-    _integrantesController.dispose();
     _clasificacionController.dispose();
     _salaController.dispose();
     _animationController.dispose();
@@ -190,7 +220,6 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
     );
   }
 
-  // ── Header navy (estilo Evaluación Final) ───────────────────────────
   Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 12, 20, 14),
@@ -227,7 +256,6 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
     );
   }
 
-  // ── Tarjeta del evento (degradado navy→teal) ────────────────────────
   Widget _buildEventCard() {
     final eventName =
         (widget.eventData['name'] as String? ?? 'Evento').trim();
@@ -363,15 +391,7 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
               alignLabelWithHint: true,
             ),
             const SizedBox(height: 18),
-            _buildTextField(
-              controller: _integrantesController,
-              label: 'Integrantes',
-              icon: Icons.people,
-              hint: 'Nombres separados por comas',
-              maxLines: 3,
-              isRequired: true,
-              alignLabelWithHint: true,
-            ),
+            _buildIntegrantesField(),
             const SizedBox(height: 18),
             _buildClasificacionField(),
             const SizedBox(height: 18),
@@ -386,6 +406,601 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
         ),
       ),
     );
+  }
+
+  Widget _buildIntegrantesField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Text(
+              'Integrantes',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: _C.txt2,
+              ),
+            ),
+            SizedBox(width: 4),
+            Text('*', style: TextStyle(color: _C.red, fontSize: 14)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_estudiantesSeleccionados.isNotEmpty) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _estudiantesSeleccionados.map((est) {
+              final nombre = est['name']?.toString() ?? 'Sin nombre';
+              final codigo =
+                  est['codigoUniversitario']?.toString() ?? '';
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _C.teal.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: _C.teal.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: const BoxDecoration(
+                        color: _C.teal,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          nombre.isNotEmpty
+                              ? nombre[0].toUpperCase()
+                              : 'E',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    ConstrainedBox(
+                      constraints:
+                          const BoxConstraints(maxWidth: 140),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            nombre,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: _C.teal,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (codigo.isNotEmpty)
+                            Text(
+                              codigo,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: _C.teal.withValues(alpha: 0.7),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () => setState(
+                          () => _estudiantesSeleccionados.remove(est)),
+                      child: const Icon(Icons.close,
+                          size: 14, color: _C.teal),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 10),
+        ],
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: _cargandoEstudiantes
+                ? null
+                : _mostrarSelectorEstudiantes,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: _C.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _mostrarErrorIntegrantes &&
+                          _estudiantesSeleccionados.isEmpty
+                      ? _C.red
+                      : _estudiantesSeleccionados.isEmpty
+                          ? _C.border
+                          : _C.teal.withValues(alpha: 0.4),
+                  width: _mostrarErrorIntegrantes &&
+                          _estudiantesSeleccionados.isEmpty
+                      ? 1.5
+                      : 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _cargandoEstudiantes
+                        ? Icons.hourglass_empty
+                        : Icons.person_add,
+                    color: _mostrarErrorIntegrantes &&
+                            _estudiantesSeleccionados.isEmpty
+                        ? _C.red
+                        : _C.teal,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _cargandoEstudiantes
+                        ? const Text(
+                            'Cargando estudiantes...',
+                            style: TextStyle(
+                                color: _C.txt3, fontSize: 13),
+                          )
+                        : _estudiantesDisponibles.isEmpty
+                            ? const Text(
+                                'Sin estudiantes importados en esta carrera',
+                                style: TextStyle(
+                                    color: _C.txt3, fontSize: 13),
+                              )
+                            : Text(
+                                _estudiantesSeleccionados.isEmpty
+                                    ? 'Toca para seleccionar integrantes'
+                                    : '${_estudiantesSeleccionados.length} integrante${_estudiantesSeleccionados.length != 1 ? 's' : ''} seleccionado${_estudiantesSeleccionados.length != 1 ? 's' : ''}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: _estudiantesSeleccionados
+                                          .isEmpty
+                                      ? _mostrarErrorIntegrantes
+                                          ? _C.red
+                                          : _C.txt3
+                                      : _C.teal,
+                                  fontWeight:
+                                      _estudiantesSeleccionados.isEmpty
+                                          ? FontWeight.normal
+                                          : FontWeight.w600,
+                                ),
+                              ),
+                  ),
+                  if (_cargandoEstudiantes)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(_C.teal),
+                      ),
+                    )
+                  else
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      color: _mostrarErrorIntegrantes &&
+                              _estudiantesSeleccionados.isEmpty
+                          ? _C.red
+                          : _C.teal,
+                      size: 14,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (_mostrarErrorIntegrantes && _estudiantesSeleccionados.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 12),
+            child: Text(
+              'Selecciona al menos un integrante',
+              style: TextStyle(color: _C.red, fontSize: 12),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _mostrarSelectorEstudiantes() {
+    final TextEditingController busquedaCtrl = TextEditingController();
+    List<Map<String, dynamic>> filtrados =
+        List.from(_estudiantesDisponibles);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          void filtrar(String term) {
+            final t = term.toLowerCase().trim();
+            setSheet(() {
+              filtrados = t.isEmpty
+                  ? List.from(_estudiantesDisponibles)
+                  : _estudiantesDisponibles.where((e) {
+                      final nombre =
+                          (e['name'] ?? '').toString().toLowerCase();
+                      final codigo =
+                          (e['codigoUniversitario'] ?? '')
+                              .toString()
+                              .toLowerCase();
+                      return nombre.contains(t) || codigo.contains(t);
+                    }).toList();
+            });
+          }
+
+          return Container(
+            height: MediaQuery.of(ctx).size.height * 0.85,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius:
+                  BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 12, bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: _C.teal.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.people,
+                            color: _C.teal, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Seleccionar Integrantes',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                            color: _C.navy,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text(
+                          'Listo',
+                          style: TextStyle(
+                            color: _C.teal,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_estudiantesSeleccionados.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _C.teal.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: _C.teal.withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.check_circle,
+                              color: _C.teal, size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${_estudiantesSeleccionados.length} seleccionado${_estudiantesSeleccionados.length != 1 ? 's' : ''}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: _C.teal,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              setSheet(() =>
+                                  _estudiantesSeleccionados.clear());
+                              setState(() {});
+                            },
+                            child: const Text(
+                              'Quitar todos',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _C.red,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: TextField(
+                    controller: busquedaCtrl,
+                    onChanged: filtrar,
+                    style: const TextStyle(fontSize: 14, color: _C.txt1),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar por nombre o código',
+                      hintStyle: const TextStyle(
+                          color: _C.txt3, fontSize: 13),
+                      prefixIcon: const Icon(Icons.search,
+                          color: _C.teal, size: 20),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              const BorderSide(color: _C.border)),
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              const BorderSide(color: _C.border)),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                              color: _C.teal, width: 2)),
+                      filled: true,
+                      fillColor: _C.surface,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      suffixIcon: busquedaCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear,
+                                  color: _C.txt3, size: 18),
+                              onPressed: () {
+                                busquedaCtrl.clear();
+                                filtrar('');
+                              },
+                            )
+                          : null,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (filtrados.isEmpty)
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.search_off,
+                              size: 48,
+                              color: _C.txt3.withValues(alpha: 0.5)),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Sin resultados',
+                            style: TextStyle(
+                                color: _C.txt3, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: ListView.builder(
+                      padding:
+                          const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                      itemCount: filtrados.length,
+                      itemBuilder: (ctx, i) {
+                        final est = filtrados[i];
+                        final codigo =
+                            est['codigoUniversitario']?.toString() ??
+                                '';
+                        final nombre =
+                            est['name']?.toString() ?? 'Sin nombre';
+                        final ciclo =
+                            est['ciclo']?.toString() ?? '';
+                        final isSelected =
+                            _estudiantesSeleccionados.any((s) =>
+                                s['codigoUniversitario'] == codigo);
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius:
+                                  BorderRadius.circular(12),
+                              onTap: () {
+                                setSheet(() {
+                                  if (isSelected) {
+                                    _estudiantesSeleccionados
+                                        .removeWhere((s) =>
+                                            s['codigoUniversitario'] ==
+                                            codigo);
+                                  } else {
+                                    _estudiantesSeleccionados
+                                        .add(est);
+                                  }
+                                });
+                                setState(() {});
+                              },
+                              child: AnimatedContainer(
+                                duration:
+                                    const Duration(milliseconds: 180),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 11),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? _C.teal.withValues(alpha: 0.07)
+                                      : _C.surface,
+                                  borderRadius:
+                                      BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? _C.teal
+                                        : _C.border,
+                                    width: isSelected ? 2 : 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    AnimatedContainer(
+                                      duration: const Duration(
+                                          milliseconds: 180),
+                                      width: 22,
+                                      height: 22,
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? _C.teal
+                                            : Colors.transparent,
+                                        borderRadius:
+                                            BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? _C.teal
+                                              : _C.txt3,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      child: isSelected
+                                          ? const Icon(Icons.check,
+                                              color: Colors.white,
+                                              size: 14)
+                                          : null,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? _C.teal
+                                            : _C.navy,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          nombre.isNotEmpty
+                                              ? nombre[0].toUpperCase()
+                                              : 'E',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight:
+                                                FontWeight.bold,
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            nombre,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight:
+                                                  FontWeight.w600,
+                                              color: isSelected
+                                                  ? _C.teal
+                                                  : _C.txt1,
+                                            ),
+                                            maxLines: 1,
+                                            overflow:
+                                                TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Row(
+                                            children: [
+                                              if (codigo.isNotEmpty) ...[
+                                                Icon(
+                                                  Icons.badge,
+                                                  size: 11,
+                                                  color: isSelected
+                                                      ? _C.teal.withValues(
+                                                          alpha: 0.7)
+                                                      : _C.txt3,
+                                                ),
+                                                const SizedBox(
+                                                    width: 3),
+                                                Text(
+                                                  codigo,
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: isSelected
+                                                        ? _C.teal.withValues(
+                                                            alpha: 0.8)
+                                                        : _C.txt3,
+                                                  ),
+                                                ),
+                                              ],
+                                              if (ciclo.isNotEmpty) ...[
+                                                const SizedBox(
+                                                    width: 8),
+                                                Text(
+                                                  'Ciclo $ciclo',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: isSelected
+                                                        ? _C.teal.withValues(
+                                                            alpha: 0.7)
+                                                        : _C.txt3,
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    ).whenComplete(() => setState(() {}));
   }
 
   Widget _buildTextField({
@@ -484,8 +1099,6 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
   }
 
   Widget _buildClasificacionField() {
-    // Si el evento ya tiene proyectos importados, mostramos SUS clasificaciones.
-    // Si está vacío (sin importaciones aún), usamos las sugeridas como semilla.
     final List<String> opciones = _clasificacionesExistentes.isNotEmpty
         ? _clasificacionesExistentes
         : _categoriasSugeridas;
@@ -516,7 +1129,8 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
           decoration: InputDecoration(
             hintText: 'Seleccione o escriba una categoría',
             hintStyle: const TextStyle(color: _C.txt3, fontSize: 13),
-            prefixIcon: const Icon(Icons.category, color: _C.teal, size: 20),
+            prefixIcon:
+                const Icon(Icons.category, color: _C.teal, size: 20),
             suffixIcon: _cargandoClasificaciones
                 ? const Padding(
                     padding: EdgeInsets.all(14),
@@ -595,7 +1209,6 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
           },
         ),
         const SizedBox(height: 8),
-        // Etiqueta de contexto: deja claro de dónde salen las opciones.
         if (!_cargandoClasificaciones)
           Padding(
             padding: const EdgeInsets.only(left: 2, bottom: 4),
@@ -621,8 +1234,8 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
                 },
                 borderRadius: BorderRadius.circular(20),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 7),
                   decoration: BoxDecoration(
                     color: _C.tealL,
                     borderRadius: BorderRadius.circular(20),
@@ -652,7 +1265,6 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 320;
-
         if (isNarrow) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -663,7 +1275,6 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
             ],
           );
         }
-
         return Row(
           children: [
             Expanded(child: _buildClearButton()),
@@ -706,13 +1317,15 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
               height: 18,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                valueColor:
+                    AlwaysStoppedAnimation<Color>(Colors.white),
               ),
             )
           : const Icon(Icons.save, size: 20),
       label: Text(
         _isLoading ? 'Guardando...' : 'Guardar Proyecto',
-        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        style:
+            const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         overflow: TextOverflow.ellipsis,
         maxLines: 1,
       ),
@@ -734,22 +1347,35 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
     _formKey.currentState?.reset();
     _codigoController.clear();
     _tituloController.clear();
-    _integrantesController.clear();
     _clasificacionController.clear();
     _salaController.clear();
+    setState(() {
+      _estudiantesSeleccionados = [];
+      _mostrarErrorIntegrantes = false;
+    });
   }
 
   Future<void> _guardarProyecto() async {
+    setState(() => _mostrarErrorIntegrantes = true);
+
     if (!_formKey.currentState!.validate()) {
       _mostrarError('Por favor complete todos los campos obligatorios');
+      return;
+    }
+    if (_estudiantesSeleccionados.isEmpty) {
+      _mostrarError('Selecciona al menos un integrante');
       return;
     }
 
     final codigoSnapshot = _codigoController.text.trim();
     final tituloSnapshot = _tituloController.text.trim();
-    final integrantesSnapshot = _integrantesController.text.trim();
     final clasificacionSnapshot = _clasificacionController.text.trim();
     final salaSnapshot = _salaController.text.trim();
+
+    final codigos = _estudiantesSeleccionados
+        .map((e) => e['codigoUniversitario']?.toString() ?? '')
+        .where((c) => c.isNotEmpty)
+        .toList();
 
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -771,14 +1397,52 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
             const Text('Confirmar', style: TextStyle(color: _C.navy)),
           ],
         ),
-        content: const Text(
-          '¿Deseas guardar este proyecto?',
-          style: TextStyle(fontSize: 15, color: _C.txt2),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '¿Deseas guardar este proyecto?',
+              style: TextStyle(fontSize: 15, color: _C.txt2),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _C.teal.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: _C.teal.withValues(alpha: 0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    codigoSnapshot,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: _C.navy,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${codigos.length} integrante${codigos.length != 1 ? 's' : ''}',
+                    style: const TextStyle(
+                        fontSize: 12, color: _C.txt2),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar', style: TextStyle(color: _C.txt2)),
+            child:
+                const Text('Cancelar', style: TextStyle(color: _C.txt2)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -798,22 +1462,18 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
 
     if (confirm != true) return;
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       final proyectoData = {
         'Código': codigoSnapshot,
         'Título': tituloSnapshot,
-        'Integrantes': integrantesSnapshot,
+        'Integrantes': codigos,
+        'totalIntegrantes': codigos.length,
         'Clasificación': clasificacionSnapshot,
         'Sala': salaSnapshot,
       };
 
-      // FIX: se pasa eventData para que el proyecto manual guarde
-      // filialId/facultad/carreraId igual que la importación de Excel,
-      // y la resolución de nombres de integrantes funcione sin fallback.
       await widget.gruposService.guardarProyectosEnEvento(
         widget.eventData['id'],
         [proyectoData],
@@ -825,22 +1485,15 @@ class _AgregarProyectoScreenState extends State<AgregarProyectoScreen>
       if (mounted) {
         _mostrarMensajeExito(codigoSnapshot);
         _limpiarFormulario();
-
         await Future.delayed(const Duration(seconds: 1));
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
+        if (mounted) Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
         _mostrarError('Error al guardar el proyecto: $e');
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

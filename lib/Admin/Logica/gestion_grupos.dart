@@ -409,7 +409,7 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
             ],
           ),
           child: DropdownButtonFormField<String>(
-            value: value,
+            initialValue: value,
             isExpanded: true,
             hint: Text(
               'Seleccionar $label',

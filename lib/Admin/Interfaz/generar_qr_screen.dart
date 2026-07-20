@@ -627,7 +627,7 @@ class _GenerarQRScreenState extends State<GenerarQRScreen>
         border: Border.all(color: const Color(0xFFE0E7ED)),
       ),
       child: DropdownButtonFormField<String>(
-        value: value,
+        initialValue: value,
         isExpanded: true,
         menuMaxHeight: 300,
         decoration: InputDecoration(
@@ -657,62 +657,64 @@ class _GenerarQRScreenState extends State<GenerarQRScreen>
     );
   }
 
-  Widget _buildEventDropdown() {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F8FA),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE0E7ED)),
-      ),
-      child: DropdownButtonFormField<String>(
-        value: _selectedEventId,
-        isExpanded: true,
-        menuMaxHeight: 300,
-        decoration: const InputDecoration(
-          labelText: 'Evento',
-          labelStyle: TextStyle(color: Color(0xFF1E3A5F)),
-          border: InputBorder.none,
-          contentPadding:
-              EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          prefixIcon: Icon(
-            Icons.event_note_rounded,
-            color: Color(0xFF1E3A5F),
-          ),
+ Widget _buildEventDropdown() {
+  return Container(
+    decoration: BoxDecoration(
+      color: const Color(0xFFF5F8FA),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFFE0E7ED)),
+    ),
+    child: DropdownButtonFormField<String>(
+      initialValue: _selectedEventId,
+      isExpanded: true,
+      menuMaxHeight: 300,
+      decoration: const InputDecoration(
+        labelText: 'Evento',
+        labelStyle: TextStyle(color: Color(0xFF1E3A5F)),
+        border: InputBorder.none,
+        contentPadding:
+            EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        prefixIcon: Icon(
+          Icons.event_note_rounded,
+          color: Color(0xFF1E3A5F),
         ),
-        items: _eventos.map((evento) {
-          final data = evento.data() as Map<String, dynamic>;
-          return DropdownMenuItem<String>(
-            value: evento.id,
-            child: Text(
-              data['name'] as String? ?? 'Sin nombre',
-              style: const TextStyle(fontSize: 14),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          );
-        }).toList(),
-        onChanged: (String? newValue) {
-          setState(() {
-            _selectedEventId = newValue;
-            if (newValue != null) {
-              final match = _eventos.where((e) => e.id == newValue);
-              if (match.isNotEmpty) {
-                final eventoData =
-                    match.first.data() as Map<String, dynamic>;
-                _selectedEventName =
-                    eventoData['name'] as String? ?? 'Sin nombre';
-              }
-            }
-            _categorias.clear();
-          });
-          if (newValue != null) {
-            _cargarCategorias();
-          }
-        },
-        dropdownColor: Colors.white,
       ),
-    );
-  }
+      items: _eventos.map((evento) {
+        // FIX L683: cast nullable seguro
+        final data = evento.data() as Map<String, dynamic>? ?? {};
+        return DropdownMenuItem<String>(
+          value: evento.id,
+          child: Text(
+            data['name'] as String? ?? 'Sin nombre',
+            style: const TextStyle(fontSize: 14),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        );
+      }).toList(),
+      onChanged: (String? newValue) {
+        setState(() {
+          _selectedEventId = newValue;
+          if (newValue != null) {
+            final match = _eventos.where((e) => e.id == newValue);
+            if (match.isNotEmpty) {
+              // FIX L701: cast nullable seguro
+              final eventoData =
+                  match.first.data() as Map<String, dynamic>? ?? {};
+              _selectedEventName =
+                  eventoData['name'] as String? ?? 'Sin nombre';
+            }
+          }
+          _categorias.clear();
+        });
+        if (newValue != null) {
+          _cargarCategorias();
+        }
+      },
+      dropdownColor: Colors.white,
+    ),
+  );
+}
 
   Widget _buildAnimatedButton({
     required VoidCallback? onPressed,

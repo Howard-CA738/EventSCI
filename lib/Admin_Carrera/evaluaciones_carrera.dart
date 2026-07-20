@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '/admin/logica/gestion_criterios.dart';
 import '/prefs_helper.dart';
 import 'detalle_evaluaciones_carrera.dart';
+import '/resolver_nombres_service.dart';
 
 class EvaluacionesCarreraScreen extends StatefulWidget {
   const EvaluacionesCarreraScreen({super.key});
@@ -16,6 +17,8 @@ class _EvaluacionesCarreraScreenState
     extends State<EvaluacionesCarreraScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final RubricasService _rubricasService = RubricasService();
+final ResolverNombresService _resolverNombres = ResolverNombresService();
+  
 
   String? _filialId;
   String? _filialNombre;
@@ -50,11 +53,20 @@ class _EvaluacionesCarreraScreenState
         setState(() => _isLoadingInit = false);
         return;
       }
-      _filialId = adminData['filial'] as String?;
+     _filialId = adminData['filial'] as String?;
       _filialNombre = adminData['filialNombre'] as String?;
       _facultad = adminData['facultad'] as String?;
       _carrera = adminData['carrera'] as String?;
       _carreraId = adminData['carreraId'] ?? adminData['carrera'];
+
+      // Cargar caché de nombres para resolver códigos → nombres
+      if ((_filialNombre ?? '').isNotEmpty && (_carrera ?? '').isNotEmpty) {
+        await _resolverNombres.cargarEstudiantes(
+          filialNombre: _filialNombre!,
+          carrera: _carrera!,
+        );
+      }
+
       await _cargarEventos();
     } catch (e) {
       if (mounted) {
@@ -68,7 +80,19 @@ class _EvaluacionesCarreraScreenState
     }
     if (mounted) setState(() => _isLoadingInit = false);
   }
-
+List<String> _extraerCodigosIntegrantes(dynamic raw) {
+    if (raw == null) return [];
+    if (raw is List) {
+      return raw.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+    }
+    final texto = raw.toString().trim();
+    if (texto.isEmpty) return [];
+    return texto
+        .split(RegExp(r'[,\n]'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
   Future<void> _cargarEventos() async {
     if (!mounted) return;
     setState(() => _isLoadingEventos = true);
@@ -187,6 +211,10 @@ class _EvaluacionesCarreraScreenState
             'codigo': proyectoData['Código'] ?? 'Sin código',
             'titulo': proyectoData['Título'] ?? 'Sin título',
             'integrantes': proyectoData['Integrantes'] ?? '',
+            'integrantesCodigos':
+                _extraerCodigosIntegrantes(proyectoData['Integrantes']).join('\n'),
+            'integrantesNombres':
+                _resolverNombres.resolverLista(proyectoData['Integrantes']).join('\n'),
             'sala': proyectoData['Sala'] ?? '',
             'clasificacion': proyectoData['Clasificación'] ?? 'Sin categoría',
             'juradoId': evalDoc.id,

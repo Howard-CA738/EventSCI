@@ -91,6 +91,7 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
   final Set<String> _guardando  = {};
   final Set<String> _guardados  = {};
   final Set<String> _eliminando = {};
+  bool _eliminandoTodos = false;
 
   late final TabController _tabController;
 
@@ -357,6 +358,205 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     }
   }
 
+  /// Elimina en bloque todos los certificados que coinciden con los filtros
+  /// actuales (pestaña, rol y estado). Si no hay ningún filtro activo,
+  /// esto equivale a eliminar absolutamente todos los certificados.
+  Future<void> _eliminarTodosCertificados() async {
+    final objetivo = _entriesFiltradas;
+    if (objetivo.isEmpty || _eliminandoTodos) return;
+
+    final hayFiltrosActivos = _searchQuery.isNotEmpty ||
+        _rolFiltro != 'TODOS' ||
+        _estadoFiltro != 'TODOS';
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(children: [
+          Icon(Icons.delete_forever, color: Colors.red, size: 26),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Eliminar todos los certificados',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.red,
+              ),
+            ),
+          ),
+        ]),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '¿Estás seguro de eliminar ${objetivo.length} '
+                '${objetivo.length == 1 ? "certificado" : "certificados"}?',
+                style: const TextStyle(fontSize: 14, color: _kTextoGris),
+              ),
+              if (hayFiltrosActivos) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.filter_alt_outlined,
+                          size: 16, color: _kAmbar),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Se eliminarán solo los certificados que coinciden '
+                          'con los filtros y la pestaña actuales.',
+                          style: TextStyle(
+                              fontSize: 11.5, color: Colors.amber.shade900),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 10),
+              const Text(
+                'Esta acción no se puede deshacer.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.red,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar',
+                style: TextStyle(color: _kTextoGris)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.delete_forever, size: 18),
+            label: Text('Eliminar ${objetivo.length}'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true) return;
+
+    // Pedimos una segunda confirmación por texto cuando el borrado es grande,
+    // para evitar eliminaciones masivas accidentales.
+    if (objetivo.length >= 10) {
+      final confirmTextController = TextEditingController();
+      final confirmarDoble = await showDialog<bool>(
+        context: context,
+        useRootNavigator: true,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Confirmación final',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Escribe ELIMINAR para confirmar el borrado de '
+                  '${objetivo.length} certificados.',
+                  style: const TextStyle(fontSize: 13, color: _kTextoGris)),
+              const SizedBox(height: 10),
+              TextField(
+                controller: confirmTextController,
+                textCapitalization: TextCapitalization.characters,
+                decoration: InputDecoration(
+                  hintText: 'ELIMINAR',
+                  filled: true,
+                  fillColor: _kCampoFondo2,
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar', style: TextStyle(color: _kTextoGris)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(
+                  ctx, confirmTextController.text.trim().toUpperCase() == 'ELIMINAR'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Confirmar'),
+            ),
+          ],
+        ),
+      );
+      confirmTextController.dispose();
+      if (confirmarDoble != true) {
+        _snack('❌ Eliminación cancelada: texto de confirmación incorrecto');
+        return;
+      }
+    }
+
+    final idsAEliminar = objetivo.map((e) => e.certId).toSet();
+    if (mounted) setState(() => _eliminandoTodos = true);
+
+    try {
+      // Firestore permite máximo 500 operaciones por batch.
+      const tamanoLote = 450;
+      for (var i = 0; i < objetivo.length; i += tamanoLote) {
+        final lote = objetivo.sublist(
+            i, i + tamanoLote > objetivo.length ? objetivo.length : i + tamanoLote);
+        final batch = FirebaseFirestore.instance.batch();
+        for (final entry in lote) {
+          batch.delete(entry.docRef);
+        }
+        await batch.commit();
+      }
+
+      if (mounted) {
+        setState(() {
+          for (final e in _entries) {
+            if (idsAEliminar.contains(e.certId)) e.dispose();
+          }
+          _entries.removeWhere((e) => idsAEliminar.contains(e.certId));
+          _eliminandoTodos = false;
+        });
+        _snack('🗑️ ${idsAEliminar.length} certificados eliminados');
+      }
+    } catch (e) {
+      if (mounted) setState(() => _eliminandoTodos = false);
+      _snack('❌ Error al eliminar todos: $e');
+      // Recargamos para reflejar el estado real, ya que el batch pudo
+      // haber eliminado parcialmente antes de fallar.
+      await _cargarTodo();
+    }
+  }
+
   Widget _dialogoDetalle(IconData icon, String texto, {int maxLines = 1}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -592,8 +792,57 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
         ),
       ),
       _buildFiltros(),
+      _buildAccionesMasivas(),
       Expanded(child: _buildLista()),
     ]);
+  }
+
+  /// Barra con la acción de "Eliminar todos" (aplica sobre la lista
+  /// actualmente filtrada, respetando pestaña y filtros activos).
+  Widget _buildAccionesMasivas() {
+    final objetivo = _entriesFiltradas;
+    if (objetivo.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Semantics(
+          label: 'Eliminar todos los certificados listados',
+          button: true,
+          child: TextButton.icon(
+            onPressed: _eliminandoTodos
+                ? null
+                : () => _eliminarTodosCertificados(),
+            icon: _eliminandoTodos
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                        color: Colors.red, strokeWidth: 2),
+                  )
+                : const Icon(Icons.delete_sweep_outlined,
+                    size: 16, color: Colors.red),
+            label: Text(
+              _eliminandoTodos
+                  ? 'Eliminando...'
+                  : 'Eliminar todos (${objetivo.length})',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Colors.red,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: const Size(44, 36),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildFiltros() {
@@ -807,7 +1056,7 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
   Widget _buildEntryCard(_CertEntry entry, {Key? key}) {
     final guardando   = _guardando.contains(entry.certId);
     final guardado    = _guardados.contains(entry.certId);
-    final eliminando  = _eliminando.contains(entry.certId);
+    final eliminando  = _eliminando.contains(entry.certId) || _eliminandoTodos;
     final tieneCodigo = entry.codigoCertificado.isNotEmpty;
     final rolColor    = _colorPorRol(entry.rol);
 
@@ -1025,7 +1274,7 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
             SizedBox(
               width: double.infinity,
               height: 44,
-              child: eliminando
+              child: _eliminando.contains(entry.certId)
                   ? const Center(
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,

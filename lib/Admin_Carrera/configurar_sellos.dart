@@ -103,7 +103,7 @@ class _ConfigurarSellosScreenState extends State<ConfigurarSellosScreen>
           .get();
 
       final lista = snap.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         return {
           'id': doc.id,
           'name': data['name'] ?? 'Sin nombre',

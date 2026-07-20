@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 class GruposService {
@@ -30,7 +29,53 @@ class GruposService {
       rethrow;
     }
   }
+Future<int> corregirSalasPorCodigo(
+  String eventId,
+  Map<String, String> codigoSala,
+) async {
+  // Normaliza un código: quita espacios y ceros a la izquierda.
+  String norm(String c) {
+    final t = c.trim();
+    final sinCeros = t.replaceFirst(RegExp(r'^0+'), '');
+    return sinCeros.isEmpty ? t : sinCeros;
+  }
 
+  // Mapa normalizado para comparar sin importar el formato de los ceros.
+  final Map<String, String> mapaNorm = {
+    for (final e in codigoSala.entries) norm(e.key): e.value,
+  };
+
+  int actualizados = 0;
+  try {
+    final snap = await _firestore
+        .collection('events')
+        .doc(eventId)
+        .collection('proyectos')
+        .get();
+
+    for (int i = 0; i < snap.docs.length; i += 500) {
+      final batch = _firestore.batch();
+      final lote = snap.docs.skip(i).take(500);
+      for (final doc in lote) {
+        final codigo = (doc.data()['Código'] ?? '').toString();
+        final nuevaSala = mapaNorm[norm(codigo)];
+        if (nuevaSala != null && nuevaSala.isNotEmpty) {
+          batch.update(doc.reference, {
+            'Sala': nuevaSala,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+          actualizados++;
+        }
+      }
+      await batch.commit();
+    }
+    debugPrint('✅ Salas corregidas: $actualizados');
+  } catch (e) {
+    debugPrint('❌ Error corrigiendo salas: $e');
+    rethrow;
+  }
+  return actualizados;
+}
   // ── Actualizar categoría de scans por proyecto ────────────────────────────
   // FIX: batches parciales para no superar el límite de 500 operaciones
   Future<void> actualizarCategoriaDeScansPorProyecto(
@@ -49,8 +94,8 @@ class GruposService {
           .get();
 
       int scansActualizados = 0;
-      List<WriteBatch> batches = [];
-      WriteBatch currentBatch = _firestore.batch();
+      final List<WriteBatch> batches = [];
+WriteBatch currentBatch = _firestore.batch();
       int operaciones = 0;
 
       for (final estudianteDoc in asistenciasSnapshot.docs) {
@@ -95,7 +140,7 @@ class GruposService {
   // ── Importar Excel y retornar los datos procesados ────────────────────────
   Future<List<Map<String, dynamic>>?> importarExcel() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      final FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['xlsx', 'xls'],
         allowMultiple: false,
@@ -124,13 +169,13 @@ class GruposService {
       final excel = Excel.decodeBytes(bytes);
       List<Map<String, dynamic>> proyectos = [];
 
-      for (var table in excel.tables.keys) {
+      for (final table in excel.tables.keys) {
         final sheet = excel.tables[table];
         if (sheet == null || sheet.maxRows < 2) continue;
 
-        List<String> headers = [];
+        final List<String> headers = [];              // L130: final
         final headerRow = sheet.rows.first;
-        for (var cell in headerRow) {
+        for (final cell in headerRow) {              // L132: final
           headers.add(cell?.value?.toString().trim() ?? '');
         }
 
@@ -186,17 +231,17 @@ class GruposService {
   String detectarFormatoExcel(List<String> headers) {
     final headersUpper = headers.map((h) => h.toUpperCase().trim()).toList();
 
-    bool tieneEvento = headersUpper.any((h) => h.contains('EVENTO'));
-    bool tieneSubeventos = headersUpper.any((h) => h.contains('SUBEVENTOS'));
-    bool tieneEncargado = headersUpper.any((h) => h.contains('ENCARGADO'));
-    bool tieneLugar = headersUpper.any((h) => h.contains('LUGAR'));
+    final bool tieneEvento = headersUpper.any((h) => h.contains('EVENTO'));          // L188: final
+    final bool tieneSubeventos = headersUpper.any((h) => h.contains('SUBEVENTOS')); // L189: final
+    final bool tieneEncargado = headersUpper.any((h) => h.contains('ENCARGADO'));   // L190: final
+    final bool tieneLugar = headersUpper.any((h) => h.contains('LUGAR'));           // L191: final
 
     if (tieneEvento || tieneSubeventos || tieneEncargado || tieneLugar) {
       return 'EVENTOS';
     }
 
-    bool tieneCodigo = headersUpper.any((h) => h.contains('CÓDIGO'));
-    bool tieneClasificacion = headersUpper.any(
+    final bool tieneCodigo = headersUpper.any((h) => h.contains('CÓDIGO'));         // L197: final
+    final bool tieneClasificacion = headersUpper.any(                               // L198: final
       (h) => h.contains('CLASIFICACIÓN'),
     );
 
@@ -207,7 +252,6 @@ class GruposService {
     return 'PROYECTOS';
   }
 
-  // ── Procesar formato PROYECTOS con soporte de celdas combinadas ───────────
   List<Map<String, dynamic>> procesarFormatoProyectosConMerge(
     List<String> headers,
     Sheet sheet,
@@ -234,6 +278,10 @@ class GruposService {
     Map<String, dynamic>? proyectoActual;
     List<String> integrantesActuales = [];
 
+    // ── Memoria de celdas combinadas (merge) ──
+    String ultimaClasificacion = '';
+    String ultimaSala = '';
+
     void cerrarProyectoActual() {
       if (proyectoActual != null) {
         proyectoActual!['Integrantes'] = List<String>.from(integrantesActuales);
@@ -257,15 +305,24 @@ class GruposService {
       final String clasificacion = _cellValue(row, idxClasificacion);
       final String sala = _cellValue(row, idxSala);
 
+      // ── Arrastrar hacia abajo el último valor visto de columnas combinadas ──
+      if (clasificacion.isNotEmpty) ultimaClasificacion = clasificacion;
+      if (sala.isNotEmpty) ultimaSala = sala;
+
       final bool esFilaPrincipal = codigo.isNotEmpty || titulo.isNotEmpty;
 
       if (esFilaPrincipal) {
         cerrarProyectoActual();
+
+        final String clasifEfectiva =
+            clasificacion.isNotEmpty ? clasificacion : ultimaClasificacion;
+        final String salaEfectiva = sala.isNotEmpty ? sala : ultimaSala;
+
         proyectoActual = {
           'Código': codigo,
           'Título': titulo,
-          'Clasificación': clasificacion,
-          if (sala.isNotEmpty) 'Sala': sala,
+          'Clasificación': clasifEfectiva,
+          if (salaEfectiva.isNotEmpty) 'Sala': salaEfectiva,
         };
         if (integrante.isNotEmpty) integrantesActuales.add(integrante);
         debugPrint('📌 Nuevo proyecto: $codigo — $titulo');
@@ -274,10 +331,19 @@ class GruposService {
           integrantesActuales.add(integrante);
           debugPrint('   ➕ Integrante añadido: $integrante');
         }
-        if (clasificacion.isNotEmpty &&
-            proyectoActual != null &&
-            (proyectoActual!['Clasificación'] as String).isEmpty) {
-          proyectoActual!['Clasificación'] = clasificacion;
+        // Si el proyecto se abrió sin clasificación pero luego aparece
+        // (o ya teníamos una arrastrada), completarla.
+        if (proyectoActual != null &&
+            (proyectoActual!['Clasificación'] as String).isEmpty &&
+            ultimaClasificacion.isNotEmpty) {
+          proyectoActual!['Clasificación'] = ultimaClasificacion;
+        }
+        // Igual para la sala, por si el proyecto se abrió antes de verla.
+        if (proyectoActual != null &&
+            (proyectoActual!['Sala'] == null ||
+                (proyectoActual!['Sala'] as String).isEmpty) &&
+            ultimaSala.isNotEmpty) {
+          proyectoActual!['Sala'] = ultimaSala;
         }
       }
     }
@@ -315,7 +381,7 @@ class GruposService {
     List<String> headers,
     List<Data?> row,
   ) {
-    Map<String, dynamic> proyecto = {};
+    final Map<String, dynamic> proyecto = {};    // L338: final
     for (int j = 0; j < headers.length && j < row.length; j++) {
       final cellValue = row[j]?.value?.toString().trim();
       if (cellValue != null && cellValue.isNotEmpty) {
@@ -333,8 +399,8 @@ class GruposService {
     String? ultimoSubevento,
     String? ultimoEvento,
   ) {
-    Map<String, dynamic> proyecto = {};
-    Map<String, String> datosRaw = {};
+    final Map<String, dynamic> proyecto = {};    // L356: final
+    final Map<String, String> datosRaw = {};     // L357: final
 
     for (int j = 0; j < headers.length && j < row.length; j++) {
       final cellValue = row[j]?.value?.toString().trim();
@@ -347,7 +413,7 @@ class GruposService {
       }
     }
 
-    String titulo = datosRaw['TÍTULO DE PROGRAMA / PONENCIA'] ?? '';
+    final String titulo = datosRaw['TÍTULO DE PROGRAMA / PONENCIA'] ?? ''; // L370: final
     if (titulo.isEmpty) return {};
     proyecto['Título'] = titulo;
     proyecto['Código'] = 'PON-${rowIndex.toString().padLeft(3, '0')}';

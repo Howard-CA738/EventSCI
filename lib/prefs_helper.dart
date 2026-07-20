@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:math'; 
 import 'encryption_helper.dart';
 import 'password_helper.dart'; 
+import 'dart:convert';
  
 class PrefsHelper {
 
@@ -28,6 +29,7 @@ class PrefsHelper {
   static const String _keyAdminCarreraCarrera       = 'admin_carrera_carrera';
   static const String _keyAdminCarreraCarreraId     = 'admin_carrera_carrera_id';
   static const String _keyAdminCarreraPermisos      = 'admin_carrera_permisos';
+  static const String _keyStudentData = 'student_data_cache';
  
   // Jurado
   static const String _keyJuradoFacultad            = 'jurado_facultad';
@@ -38,7 +40,52 @@ class PrefsHelper {
  
 
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static Future<void> ensureAuthActiva() => _activarAuthAnonima();
+static Future<void> ensureAuthActiva({bool esperarRestauracion = false}) async {
+    if (FirebaseAuth.instance.currentUser != null) return;
+    if (esperarRestauracion) {
+      try {
+        await FirebaseAuth.instance
+            .authStateChanges()
+            .firstWhere((u) => u != null)
+            .timeout(const Duration(seconds: 2));
+      } catch (_) {/* timeout o sin sesión previa */}
+      if (FirebaseAuth.instance.currentUser != null) return;
+    }
+    await reautenticarAnonimo();
+  }
+
+  static Future<void> reautenticarAnonimo() async {
+  try {
+    final u = FirebaseAuth.instance.currentUser;
+    if (u != null) {
+      // Ya hay sesión: solo refrescar el token. NO cerrar ni recrear cuenta.
+      await u.getIdToken(true);
+      return;
+    }
+    await FirebaseAuth.instance.signInAnonymously();
+    debugPrint('🔁 Sesión anónima creada');
+  } on FirebaseAuthException catch (e) {
+    if (e.code == 'too-many-requests') {
+      // Firebase está limitando por IP (típico en eventos masivos).
+      // Espera y reintenta UNA vez antes de rendirse.
+      debugPrint('⏳ too-many-requests: esperando antes de reintentar');
+      await Future.delayed(const Duration(seconds: 2));
+      try {
+        if (FirebaseAuth.instance.currentUser == null) {
+          await FirebaseAuth.instance.signInAnonymously();
+        }
+      } catch (e2) {
+        debugPrint('⚠️ Reintento de auth falló: $e2');
+      }
+    } else {
+      debugPrint('⚠️ No se pudo (re)autenticar: ${e.code}');
+    }
+  } catch (e) {
+    // Errores de red (no FirebaseAuthException) no deben tumbar el flujo.
+    debugPrint('⚠️ Error de red al (re)autenticar: $e');
+  }
+}
+
   static final Map<String, Map<String, dynamic>> _userCache        = {};
   static DateTime?                               _cacheTimestamp;
   static const Duration                          _cacheDuration     = Duration(hours: 24);
@@ -75,7 +122,39 @@ class PrefsHelper {
       debugPrint('⚠️ Auth anónima fallida: $e');
     }
   }
+static Future<void> _persistStudentData(Map<String, dynamic> data) async {
+  try {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keyStudentData, jsonEncode({
+      'name':                data['name'],
+      'username':            data['username'],
+      'filial':              data['filial'],
+      'facultad':            data['facultad'],
+      'carrera':             data['carrera'],
+      'dni':                 data['dni'],
+      'documento':           data['documento'],
+      'codigoUniversitario': data['codigoUniversitario'],
+      'ciclo':               data['ciclo'],
+      'grupo':               data['grupo'],
+      'carreraPath':         data['carreraPath'],
+      'id':                  data['id'],
+    }));
+  } catch (e) {
+    debugPrint('⚠️ No se pudo persistir datos del estudiante: $e');
+  }
+}
 
+static Future<Map<String, dynamic>?> getPersistedStudentData() async {
+  try {
+    final prefs = await _getPrefs();
+    final raw   = prefs.getString(_keyStudentData);
+    if (raw == null || raw.isEmpty) return null;
+    return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+  } catch (e) {
+    debugPrint('⚠️ Error leyendo datos persistidos: $e');
+    return null;
+  }
+}
   static Future<void> _cerrarAuthAnonima() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -417,7 +496,7 @@ if (studentDoc.exists) {
       studentData['carreraPath'] = carreraPath;
       _userCache[studentId]      = studentData;
       _cacheTimestamp            = DateTime.now();
-
+await _persistStudentData(studentData);
       await _activarAuthAnonima();
       debugPrint('✅ Login exitoso vía índice (username único)');
       return true;
@@ -486,7 +565,7 @@ if (studentDoc.exists) {
       studentData['carreraPath'] = carreraPath;
       _userCache[studentId]      = studentData;
       _cacheTimestamp            = DateTime.now();
-
+await _persistStudentData(studentData);
       await _activarAuthAnonima();
       debugPrint('✅ Login exitoso — duplicado resuelto por DNI en $carreraPath');
       return true;
@@ -564,7 +643,7 @@ if (studentDoc.exists) {
           _userCache[studentDoc.id]  = studentData;
           _cacheTimestamp            = DateTime.now();
 
-          // 🔐 Auth anónima para que las reglas Firestore funcionen
+await _persistStudentData(studentData);
           await _activarAuthAnonima();
  
           debugPrint('✅ Login exitoso vía fallback en "$carreraName"');
@@ -766,66 +845,106 @@ if (studentDoc.exists) {
       return false;
     }
   }
- 
+ static Future<T> _conReintento<T>(
+  Future<T> Function() operacion, {
+  int maxIntentos = 4,
+}) async {
+  int intento = 0;
+  while (true) {
+    try {
+      return await operacion();
+    } on FirebaseException catch (e) {
+      intento++;
+      // Sesión perdida o cuenta anónima inválida → recrearla y reintentar
+      if (e.code == 'permission-denied' || e.code == 'unauthenticated') {
+        if (intento >= maxIntentos) rethrow;
+        debugPrint('🔁 Auth perdida ("${e.code}") → recreando sesión');
+        await reautenticarAnonimo();
+        await Future.delayed(const Duration(milliseconds: 300));
+        continue;
+      }
+      const transitorios = {
+        'unavailable',
+        'deadline-exceeded',
+        'aborted',
+        'internal',
+        'resource-exhausted',
+      };
+      if (!transitorios.contains(e.code) || intento >= maxIntentos) {
+        rethrow;
+      }
+      final espera = Duration(milliseconds: 400 * (1 << (intento - 1)));
+      debugPrint('🔁 Reintento $intento tras "${e.code}"');
+      await Future.delayed(espera);
+    }
+  }
+}
   // ─────────────────────────────────────────────────────────────────────────
   // DATOS DEL USUARIO ACTUAL
   // ─────────────────────────────────────────────────────────────────────────
   static Future<Map<String, dynamic>?> getCurrentUserData({
-    bool forceRefresh = false,
-  }) async {
-    try {
-      final userIdPath = await getCurrentUserId();
-      if (userIdPath == null) return null;
- 
-      if (!forceRefresh &&
-          _cacheTimestamp != null &&
-          DateTime.now().difference(_cacheTimestamp!) < _cacheDuration) {
-        final parts = userIdPath.split('/');
-        if (parts.length == 2) {
-          final studentId = parts[1];
-          if (_userCache.containsKey(studentId)) {
-            debugPrint('✅ Datos obtenidos del caché');
-            return _userCache[studentId];
-          }
+  bool forceRefresh = false,
+}) async {
+  try {
+    final userIdPath = await getCurrentUserId();
+    if (userIdPath == null) return null;
+
+    if (!forceRefresh &&
+        _cacheTimestamp != null &&
+        DateTime.now().difference(_cacheTimestamp!) < _cacheDuration) {
+      final parts = userIdPath.split('/');
+      if (parts.length == 2) {
+        final studentId = parts[1];
+        if (_userCache.containsKey(studentId)) {
+          debugPrint('✅ Datos obtenidos del caché');
+          return _userCache[studentId];
         }
       }
- 
-      if (userIdPath.contains('/')) {
-        final parts = userIdPath.split('/');
-        if (parts.length != 2) return null;
-        final carreraPath = parts[0];
-        final studentId   = parts[1];
- 
-        final userDoc = await _firestore
-            .collection('users')
-            .doc(carreraPath)
-            .collection('students')
-            .doc(studentId)
-            .get();
- 
-        if (!userDoc.exists) return null;
- 
-        final userData          = userDoc.data()!;
-        userData['id']          = userDoc.id;
-        userData['carreraPath'] = carreraPath;
- 
-        _userCache[studentId] = userData;
-        _cacheTimestamp       = DateTime.now();
- 
-        return userData;
-      } else {
-        final userDoc = await _firestore.collection('users').doc(userIdPath).get();
-        if (!userDoc.exists) return null;
-        final userData = userDoc.data()!;
-        userData['id'] = userDoc.id;
-        return userData;
-      }
-    } catch (e) {
-      debugPrint('Error obteniendo datos del usuario: $e');
-      return null;
     }
+if (userIdPath.contains('/')) {
+      await ensureAuthActiva();   // ← garantiza sesión antes de leer
+      final parts = userIdPath.split('/');
+      if (parts.length != 2) return null;
+      final carreraPath = parts[0];
+      final studentId = parts[1];
+
+      final userDoc = await _conReintento(() => _firestore
+          .collection('users')
+          .doc(carreraPath)
+          .collection('students')
+          .doc(studentId)
+          .get());
+
+      if (!userDoc.exists) return null;
+
+      final userData = userDoc.data()!;
+      userData['id'] = userDoc.id;
+      userData['carreraPath'] = carreraPath;
+
+     _userCache[studentId] = userData;
+      _cacheTimestamp = DateTime.now();
+      await _persistStudentData(userData);   // ← agregar
+
+      return userData;
+    } else {
+      final userDoc = await _conReintento(
+          () => _firestore.collection('users').doc(userIdPath).get());
+      if (!userDoc.exists) return null;
+      final userData = userDoc.data()!;
+      userData['id'] = userDoc.id;
+      return userData;
+    }
+  } catch (e) {
+    debugPrint('Error obteniendo datos del usuario: $e');
+    final persisted = await getPersistedStudentData();   // ← respaldo
+    if (persisted != null) {
+      debugPrint('✅ Usando datos persistidos (fallback)');
+      return persisted;
+    }
+    return null;
   }
- 
+}
+
   // ─────────────────────────────────────────────────────────────────────────
   // 🔐 CREAR ESTUDIANTE — dni hasheado antes de guardar
   // ─────────────────────────────────────────────────────────────────────────

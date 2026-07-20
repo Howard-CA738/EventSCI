@@ -1,6 +1,6 @@
 # eventos
 
-A new Flutter project.
+Sistema de Eventos - EventSCI
 
 ## Getting Started
 

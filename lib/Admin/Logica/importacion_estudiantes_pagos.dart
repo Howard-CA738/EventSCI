@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:excel/excel.dart' as excel_pkg;
 import 'dart:io';
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/admin/logica/filiales_service.dart';
+import 'package:flutter/foundation.dart';   // compute
+import 'package:archive/archive.dart';      // descomprimir el .xlsx
+import 'package:xml/xml_events.dart';       // leer el XML en streaming
 
 class ImportacionPagosScreen extends StatefulWidget {
   const ImportacionPagosScreen({super.key});
@@ -33,6 +36,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
   String? _selectedEventoNombre;
 
   bool _isLoading = false;
+  bool _isParsing = false; // ← NUEVO: lectura del Excel en curso
   bool _fileSelected = false;
   String? _fileName;
   List<Map<String, dynamic>> _previewData = [];
@@ -51,6 +55,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     'Ciclo'             : 'ciclo',
     'Grupo'             : 'grupo',
     'Código estudiante' : 'codigoUniversitario',
+    'Código Estudiante' : 'codigoUniversitario',
     'Estudiante'        : 'name',
     'Documento'         : 'dni',
     'Correo'            : 'email',
@@ -470,7 +475,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
       );
       if (result != null && mounted) {
         setState(() {
-          _isLoading       = true;
+          _isParsing       = true; // ← muestra el indicador de lectura
           _fileName        = result.files.single.name;
           _notFoundList    = [];
           _successCount    = 0;
@@ -482,94 +487,42 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
         if (!mounted) return;
         setState(() {
           _fileSelected = true;
-          _isLoading    = false;
+          _isParsing    = false;
         });
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() => _isParsing = false);
       _showMessage('Error al seleccionar archivo: $e');
     }
   }
 
   Future<void> _readExcelFile(File file) async {
     try {
-      final bytes     = file.readAsBytesSync();
-      final excelFile = excel_pkg.Excel.decodeBytes(bytes);
-      final sheet     = excelFile.tables.keys.first;
-      final table     = excelFile.tables[sheet];
+      // Todo el trabajo pesado corre en un isolate aparte (no congela la UI).
+      final resultado = await compute(
+        _parseExcelPagosIsolate,
+        (file.path, _columnMapping),
+      );
 
-      if (table == null || table.rows.isEmpty) {
-        _showMessage('El archivo Excel está vacío');
+      if (!resultado.headersValidos) {
+        _showMessage('El archivo debe tener la columna "Código estudiante"');
         return;
       }
 
-      final headers = table.rows.first
-          .map((cell) => cell?.value?.toString().trim())
-          .toList();
-
-      if (!_validateHeaders(headers)) return;
-
-      _allData.clear();
-      for (int i = 1; i < table.rows.length; i++) {
-        final row     = table.rows[i];
-        final rowData = <String, dynamic>{};
-        bool hasAnyData = false;
-
-        for (int j = 0; j < headers.length; j++) {
-          if (j < row.length) {
-            final header = headers[j];
-            if (header != null && _columnMapping.containsKey(header)) {
-              final fieldName = _columnMapping[header]!;
-              final cellValue = row[j]?.value;
-              if (cellValue != null) {
-                String value;
-                if (cellValue is int || cellValue is double) {
-                  value = cellValue.toString();
-                } else {
-                  value = cellValue.toString().trim();
-                }
-                if (value.isNotEmpty) {
-                  hasAnyData = true;
-                  rowData[fieldName] = value;
-                }
-              }
-            }
-          }
-        }
-
-        if (hasAnyData && rowData.containsKey('codigoUniversitario')) {
-          _allData.add(rowData);
-        }
-      }
-
-      final Map<String, Map<String, dynamic>> uniqueMap = {};
-      for (var row in _allData) {
-        final codigo = row['codigoUniversitario']?.toString().trim() ?? '';
-        if (codigo.isNotEmpty) uniqueMap.putIfAbsent(codigo, () => row);
-      }
-      _allData = uniqueMap.values.toList();
-
+      _allData     = resultado.data;
       _totalRows   = _allData.length;
       _previewData = _allData.take(5).toList();
 
       if (_totalRows == 0) {
         _showMessage('No se encontraron registros con "Código estudiante"');
       } else {
-        _showMessage('✅ $_totalRows registros encontrados');
+        _showMessage('✅ $_totalRows estudiantes detectados');
       }
     } catch (e) {
       _showMessage('Error al leer el archivo Excel: $e');
       debugPrint('Error detallado: $e');
     }
-  }
-
-  bool _validateHeaders(List<String?> headers) {
-    if (!headers.contains('Código estudiante')) {
-      _showMessage('El archivo debe tener la columna "Código estudiante"');
-      return false;
-    }
-    return true;
   }
 
   Future<void> _importarPagos() async {
@@ -624,7 +577,8 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  '¿Marcar $_totalRows estudiantes como pagados?',
+                  '¿Marcar $_totalRows estudiantes como pagados y BLOQUEAR '
+                  'a todos los demás de esta carrera?',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -645,8 +599,9 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Se buscará por código universitario y se actualizará '
-                          'el campo de pago en el evento seleccionado.',
+                          'Los estudiantes del Excel quedarán como pagados y con acceso. '
+                          'Los que NO estén en el archivo quedarán BLOQUEADOS y no podrán '
+                          'iniciar sesión hasta regularizar su pago.',
                           style: TextStyle(fontSize: 12, color: Colors.green.shade800),
                         ),
                       ),
@@ -696,58 +651,80 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     _showResultsDialog();
   }
 
-  Future<void> _procesarPagos() async {
-    final carreraPath = _carreraPath;
-    final eventoId    = _selectedEventoId!;
+ Future<void> _procesarPagos() async {
+  final carreraPath = _carreraPath;
+  final eventoId    = _selectedEventoId!;
 
-    debugPrint('💳 Importando pagos → carrera: "$carreraPath" | evento: "$eventoId"');
+  debugPrint('💳 Procesando (modo aditivo) → "$carreraPath" | evento "$eventoId"');
 
-    for (int i = 0; i < _allData.length; i++) {
-      if (!mounted) break;
+  // 1) Códigos del Excel = los que pagaron en esta importación
+  final Set<String> pagaron = _allData
+      .map((r) => (r['codigoUniversitario'] ?? '').toString().trim())
+      .where((c) => c.isNotEmpty)
+      .toSet();
 
-      final row    = _allData[i];
-      final codigo = (row['codigoUniversitario'] ?? '').toString().trim();
+  // 2) TODOS los estudiantes de la carrera (para poder matchear por código)
+  final snapshot = await _firestore
+      .collection('users')
+      .doc(carreraPath)
+      .collection('students')
+      .get();
 
-      if (codigo.isEmpty) {
-        _notFoundCount++;
-        _notFoundList.add('Fila ${i + 2}: sin código universitario');
-        if (mounted) setState(() => _currentProgress++);
-        continue;
+  if (!mounted) return;
+
+  setState(() {
+    _totalRows       = pagaron.length; // referencia: cuántos códigos trae el Excel
+    _currentProgress = 0;
+  });
+
+  // Set para saber qué códigos del Excel sí se encontraron en la BD
+  final Set<String> encontrados = {};
+
+  const batchSize = 450;
+  var batch = _firestore.batch();
+  int opsInBatch = 0;
+
+  for (final doc in snapshot.docs) {
+    if (!mounted) break;
+
+    final data   = doc.data();
+    final codigo = (data['codigoUniversitario'] ?? '').toString().trim();
+
+    // Solo tocamos al estudiante si su código está en el Excel
+    if (codigo.isNotEmpty && pagaron.contains(codigo)) {
+      encontrados.add(codigo);
+
+      batch.update(doc.reference, {
+        'pagos.$eventoId' : true,
+        'bloqueadoPorPago': false,
+      });
+      opsInBatch++;
+      _successCount++;
+
+      if (opsInBatch >= batchSize) {
+        await batch.commit();
+        batch = _firestore.batch();
+        opsInBatch = 0;
       }
-
-      try {
-        final query = await _firestore
-            .collection('users')
-            .doc(carreraPath)
-            .collection('students')
-            .where('codigoUniversitario', isEqualTo: codigo)
-            .limit(1)
-            .get();
-
-        if (!mounted) break;
-
-        if (query.docs.isNotEmpty) {
-          final studentRef = query.docs.first.reference;
-          await studentRef.update({'pagos.$eventoId': true});
-          _successCount++;
-          debugPrint('  ✅ Código $codigo → pago marcado');
-        } else {
-          _notFoundCount++;
-          final nombre = row['name']?.toString() ?? codigo;
-          _notFoundList.add('$nombre ($codigo) — no encontrado');
-          debugPrint('  ⚠️ Código $codigo → no encontrado en "$carreraPath"');
-        }
-      } catch (e) {
-        _notFoundCount++;
-        _notFoundList.add('$codigo — error: $e');
-        debugPrint('  ❌ Error con código $codigo: $e');
-      }
-
-      if (mounted) setState(() => _currentProgress++);
     }
 
-    debugPrint('✅ Pagos procesados: $_successCount exitosos, $_notFoundCount no encontrados');
+    _currentProgress++;
+    if (mounted && _currentProgress % 25 == 0) setState(() {});
   }
+
+  if (opsInBatch > 0) await batch.commit();
+
+  // 3) Códigos del Excel que NO se encontraron en la BD (para reportar)
+  final noEncontrados = pagaron.difference(encontrados);
+  _notFoundCount = noEncontrados.length;
+  _notFoundList  = noEncontrados
+      .map((c) => 'Código $c — no encontrado en el sistema')
+      .toList();
+
+  if (mounted) setState(() {});
+
+  debugPrint('✅ $_successCount marcados como pagados / $_notFoundCount códigos no encontrados');
+}
 
   void _showResultsDialog() {
     if (!mounted) return;
@@ -814,14 +791,14 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                 _buildResultCard('Pagos registrados', '$_successCount',
                     Icons.payments, Colors.green.shade600, Colors.green.shade50),
                 const SizedBox(height: 10),
-                _buildResultCard('No encontrados', '$_notFoundCount',
-                    Icons.person_search, Colors.orange.shade600, Colors.orange.shade50),
+                _buildResultCard('Bloqueados (no pagaron)', '$_notFoundCount',
+                    Icons.lock_person, Colors.red.shade600, Colors.red.shade50),
                 if (_notFoundList.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   const Divider(),
                   const SizedBox(height: 8),
                   const Text(
-                    'Estudiantes no encontrados:',
+                    'Estudiantes bloqueados:',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF1E3A5F),
@@ -1118,19 +1095,71 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                     ? const Center(
                         child: CircularProgressIndicator(
                             color: Color(0xFF1E3A5F)))
-                    : _isLoading && _fileSelected
-                        ? _buildLoadingView()
-                        : FadeTransition(
-                            opacity: _fadeAnimation,
-                            child: SlideTransition(
-                              position: _slideAnimation,
-                              child: _buildMainContent(),
-                            ),
-                          ),
+                    : _isParsing
+                        ? _buildParsingView()
+                        : _isLoading && _fileSelected
+                            ? _buildLoadingView()
+                            : FadeTransition(
+                                opacity: _fadeAnimation,
+                                child: SlideTransition(
+                                  position: _slideAnimation,
+                                  child: _buildMainContent(),
+                                ),
+                              ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // Indicador mientras se lee el Excel (en isolate)
+  Widget _buildParsingView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: const CircularProgressIndicator(
+              strokeWidth: 6,
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1E3A5F)),
+            ),
+          ),
+          const SizedBox(height: 28),
+          const Text(
+            'Leyendo archivo Excel...',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E3A5F),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              _fileName ?? 'Procesando datos...',
+              style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1212,8 +1241,8 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                 ),
                 Container(width: 1, height: 40, color: Colors.grey.shade300),
                 Expanded(
-                  child: _statCol('$_notFoundCount', 'No encontrados',
-                      Icons.person_search, Colors.orange),
+                  child: _statCol('$_notFoundCount', 'Bloqueados',
+                      Icons.lock_person, Colors.red),
                 ),
               ],
             ),
@@ -1644,7 +1673,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
-                    'Vista Previa',
+                    'Estudiantes detectados',
                     style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.bold,
@@ -1799,7 +1828,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
                 onPressed: _importarPagos,
                 icon: const Icon(Icons.payments, size: 22),
                 label: const Text(
-                  'Marcar como Pagados',
+                  'Importar y marcar como Pagados',
                   style: TextStyle(
                       fontSize: 15, fontWeight: FontWeight.bold),
                 ),
@@ -1853,4 +1882,274 @@ class _SheetItem {
     required this.isSelected,
     this.extra,
   });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PARSEO DEL EXCEL EN ISOLATE (fuera de la clase)
+// No bloquea la UI. Detección de columnas tolerante a tildes, mayúsculas
+// y espacios. La estructura de salida es idéntica a la original.
+// ═══════════════════════════════════════════════════════════════════════════
+typedef _ParseResult = ({bool headersValidos, List<Map<String, dynamic>> data});
+
+// Normaliza un encabezado: minúsculas, sin tildes, espacios colapsados.
+String _normalizarHeader(String? h) {
+  if (h == null) return '';
+  var s = h.trim().toLowerCase();
+  const acentos = {
+    'á': 'a', 'à': 'a', 'ä': 'a', 'â': 'a',
+    'é': 'e', 'è': 'e', 'ë': 'e', 'ê': 'e',
+    'í': 'i', 'ì': 'i', 'ï': 'i', 'î': 'i',
+    'ó': 'o', 'ò': 'o', 'ö': 'o', 'ô': 'o',
+    'ú': 'u', 'ù': 'u', 'ü': 'u', 'û': 'u',
+    'ñ': 'n', 'ç': 'c',
+  };
+  acentos.forEach((a, r) => s = s.replaceAll(a, r));
+  s = s.replaceAll(RegExp(r'\s+'), ' ');
+  return s;
+}
+
+// Quita el prefijo de namespace de un nombre de elemento/atributo XML.
+String _local(String name) =>
+    name.contains(':') ? name.split(':').last : name;
+
+// Convierte la parte de letras de una referencia de celda (ej. "AB12") a
+// índice de columna base 0 (A=0, B=1, ... Z=25, AA=26 ...).
+int _colIndex(String cellRef) {
+  int idx = 0;
+  bool huboLetra = false;
+  for (int i = 0; i < cellRef.length; i++) {
+    final ch = cellRef.codeUnitAt(i);
+    if (ch >= 65 && ch <= 90) {        // A-Z
+      idx = idx * 26 + (ch - 64);
+      huboLetra = true;
+    } else if (ch >= 97 && ch <= 122) { // a-z
+      idx = idx * 26 + (ch - 96);
+      huboLetra = true;
+    } else {
+      break; // llegó a los dígitos
+    }
+  }
+  return huboLetra ? idx - 1 : -1;
+}
+
+// Busca un archivo dentro del zip por su ruta exacta.
+ArchiveFile? _findFile(Archive a, String name) {
+  for (final f in a.files) {
+    if (f.name == name) return f;
+  }
+  return null;
+}
+
+// Ubica la ruta de la primera hoja del libro (con respaldo a sheet1.xml).
+String _firstSheetPath(Archive archive) {
+  try {
+    final wbFile   = _findFile(archive, 'xl/workbook.xml');
+    final relsFile = _findFile(archive, 'xl/_rels/workbook.xml.rels');
+    if (wbFile != null && relsFile != null) {
+      final wbXml = utf8.decode(wbFile.content as List<int>,
+          allowMalformed: true);
+      String? rid;
+      for (final ev in parseEvents(wbXml)) {
+        if (ev is XmlStartElementEvent && _local(ev.name) == 'sheet') {
+          for (final at in ev.attributes) {
+            if (_local(at.name) == 'id') { rid = at.value; break; }
+          }
+          break; // primera hoja
+        }
+      }
+      if (rid != null) {
+        final relsXml = utf8.decode(relsFile.content as List<int>,
+            allowMalformed: true);
+        for (final ev in parseEvents(relsXml)) {
+          if (ev is XmlStartElementEvent && _local(ev.name) == 'Relationship') {
+            String? id, target;
+            for (final at in ev.attributes) {
+              final n = _local(at.name);
+              if (n == 'Id')     id = at.value;
+              if (n == 'Target') target = at.value;
+            }
+            if (id == rid && target != null) {
+              return target.startsWith('/')
+                  ? target.substring(1)
+                  : 'xl/$target';
+            }
+          }
+        }
+      }
+    }
+  } catch (_) {/* respaldo abajo */}
+
+  final sheets = archive.files
+      .map((f) => f.name)
+      .where((n) => n.startsWith('xl/worksheets/') && n.endsWith('.xml'))
+      .toList()
+    ..sort();
+  return sheets.isNotEmpty ? sheets.first : 'xl/worksheets/sheet1.xml';
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// LECTOR EN STREAMING — recorre el XML del .xlsx leyendo SOLO las celdas con
+// valor. Ignora por completo las filas vacías (aunque haya un millón), por lo
+// que no se cuelga ni consume memoria de más. La salida es idéntica a la
+// versión anterior: List<Map> con los mismos campos, deduplicada por código.
+// ───────────────────────────────────────────────────────────────────────────
+_ParseResult _parseExcelPagosIsolate(
+    (String path, Map<String, String> mapping) args) {
+  final (path, columnMapping) = args;
+
+  // Mapeo normalizado: tolera mayúsculas/tildes/espacios en los encabezados.
+  final normMapping = <String, String>{};
+  columnMapping.forEach((k, v) => normMapping[_normalizarHeader(k)] = v);
+
+  final bytes = File(path).readAsBytesSync();
+  final Archive archive;
+  try {
+    archive = ZipDecoder().decodeBytes(bytes);
+  } catch (_) {
+    return (headersValidos: true, data: <Map<String, dynamic>>[]);
+  }
+
+  // 1) Cadenas compartidas (para celdas de texto, ej. nombres).
+  final sharedStrings = <String>[];
+  final ssFile = _findFile(archive, 'xl/sharedStrings.xml');
+  if (ssFile != null) {
+    final ssXml = utf8.decode(ssFile.content as List<int>,
+        allowMalformed: true);
+    final sb = StringBuffer();
+    var inSi = false, inT = false;
+    for (final ev in parseEvents(ssXml)) {
+      if (ev is XmlStartElementEvent) {
+        final n = _local(ev.name);
+        if (n == 'si') {
+          inSi = true;
+          sb.clear();
+          if (ev.isSelfClosing) { sharedStrings.add(''); inSi = false; }
+        } else if (n == 't' && inSi) {
+          inT = true;
+        }
+      } else if (ev is XmlTextEvent && inT) {
+        sb.write(ev.value);
+      } else if (ev is XmlEndElementEvent) {
+        final n = _local(ev.name);
+        if (n == 't') {
+          inT = false;
+        } else if (n == 'si') {
+          sharedStrings.add(sb.toString());
+          inSi = false;
+        }
+      }
+    }
+  }
+
+  // 2) Hoja de cálculo (primera hoja).
+  final sheetPath = _firstSheetPath(archive);
+  final wsFile = _findFile(archive, sheetPath) ??
+      _findFile(archive, 'xl/worksheets/sheet1.xml');
+  if (wsFile == null) {
+    return (headersValidos: true, data: <Map<String, dynamic>>[]);
+  }
+  final wsXml = utf8.decode(wsFile.content as List<int>, allowMalformed: true);
+
+  final colToField = <int, String>{}; // índice de columna -> campo
+  bool headersListos = false;
+  bool tieneCodigo   = false;
+  final out = <Map<String, dynamic>>[];
+
+  // Estado de la celda en curso.
+  int curCol = -1;
+  String curType = '';
+  bool inV = false;
+  bool inInlineT = false;
+  final cellBuf = StringBuffer();
+  int autoCol = 0;
+
+  // Celdas con valor de la fila en curso: índiceCol -> valor (texto).
+  var rowCells = <int, String>{};
+
+  for (final ev in parseEvents(wsXml)) {
+    if (ev is XmlStartElementEvent) {
+      final n = _local(ev.name);
+      if (n == 'row') {
+        rowCells = <int, String>{};
+        autoCol  = 0;
+      } else if (n == 'c') {
+        curType = '';
+        curCol  = -1;
+        inV = false;
+        inInlineT = false;
+        cellBuf.clear();
+        for (final at in ev.attributes) {
+          final an = _local(at.name);
+          if (an == 'r') curCol = _colIndex(at.value);
+          else if (an == 't') curType = at.value;
+        }
+        if (curCol < 0) curCol = autoCol;
+        autoCol = curCol + 1;
+        if (ev.isSelfClosing) curCol = -1; // celda vacía
+      } else if (n == 'v') {
+        inV = true;
+      } else if (n == 't' && curType == 'inlineStr') {
+        inInlineT = true;
+      }
+    } else if (ev is XmlTextEvent) {
+      if (inV || inInlineT) cellBuf.write(ev.value);
+    } else if (ev is XmlEndElementEvent) {
+      final n = _local(ev.name);
+      if (n == 'v') {
+        inV = false;
+      } else if (n == 't' && inInlineT) {
+        inInlineT = false;
+      } else if (n == 'c') {
+        if (curCol >= 0) {
+          final raw = cellBuf.toString();
+          String value;
+          if (curType == 's') {
+            final idx = int.tryParse(raw.trim());
+            value = (idx != null && idx >= 0 && idx < sharedStrings.length)
+                ? sharedStrings[idx]
+                : '';
+          } else {
+            value = raw;
+          }
+          value = value.trim();
+          if (value.isNotEmpty) rowCells[curCol] = value;
+        }
+        curCol = -1;
+      } else if (n == 'row') {
+        if (!headersListos) {
+          // Primera fila no vacía = encabezados.
+          if (rowCells.isNotEmpty) {
+            rowCells.forEach((col, val) {
+              final field = normMapping[_normalizarHeader(val)];
+              if (field != null) {
+                colToField[col] = field;
+                if (field == 'codigoUniversitario') tieneCodigo = true;
+              }
+            });
+            headersListos = true;
+          }
+        } else {
+          // Fila de datos.
+          final rowData = <String, dynamic>{};
+          rowCells.forEach((col, val) {
+            final field = colToField[col];
+            if (field != null) rowData[field] = val;
+          });
+          if (rowData.containsKey('codigoUniversitario')) out.add(rowData);
+        }
+      }
+    }
+  }
+
+  if (!tieneCodigo) {
+    return (headersValidos: false, data: <Map<String, dynamic>>[]);
+  }
+
+  // Dedupe por código universitario (igual que antes).
+  final uniqueMap = <String, Map<String, dynamic>>{};
+  for (final row in out) {
+    final codigo = (row['codigoUniversitario'] ?? '').toString().trim();
+    if (codigo.isNotEmpty) uniqueMap.putIfAbsent(codigo, () => row);
+  }
+  return (headersValidos: true, data: uniqueMap.values.toList());
 }

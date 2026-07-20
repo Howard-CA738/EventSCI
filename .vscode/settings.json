@@ -1,3 +1,5 @@
 {
-  "java.configuration.updateBuildConfiguration": "interactive"
+  "java.configuration.updateBuildConfiguration": "interactive",
+  "snyk.advanced.organization": "fe1b4e88-f188-4252-b543-b6e181e4d0be",
+  "snyk.advanced.autoSelectOrganization": true
 }

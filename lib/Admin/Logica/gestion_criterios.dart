@@ -27,10 +27,12 @@ class Criterio {
 
   factory Criterio.fromMap(Map<String, dynamic> map) {
     return Criterio(
-      id: map['id'] ?? '',
-      descripcion: map['descripcion'] ?? '',
-      peso: (map['peso'] ?? 0).toDouble(),
-      puntajeObtenido: (map['puntajeObtenido'] ?? 0).toDouble(),
+      id: map['id'] as String? ?? '',
+      descripcion: map['descripcion'] as String? ?? '',
+      // FIX L32: cast explícito a num? para evitar dynamic call en .toDouble()
+      peso: (map['peso'] as num? ?? 0).toDouble(),
+      // FIX L33: ídem
+      puntajeObtenido: (map['puntajeObtenido'] as num? ?? 0).toDouble(),
     );
   }
 
@@ -74,19 +76,21 @@ class SeccionRubrica {
 
   factory SeccionRubrica.fromMap(Map<String, dynamic> map) {
     return SeccionRubrica(
-      id: map['id'] ?? '',
-      nombre: map['nombre'] ?? '',
+      id: map['id'] as String? ?? '',
+      nombre: map['nombre'] as String? ?? '',
       criterios:
           (map['criterios'] as List<dynamic>?)
               ?.map((c) => Criterio.fromMap(c as Map<String, dynamic>))
               .toList() ??
           [],
-      pesoTotal: (map['pesoTotal'] ?? 10).toDouble(),
+      // FIX L84: cast explícito a num? para evitar dynamic call en .toDouble()
+      pesoTotal: (map['pesoTotal'] as num? ?? 10).toDouble(),
     );
   }
 
   double get totalPesosCriterios {
-    return criterios.fold(0.0, (sum, criterio) => sum + criterio.peso);
+    // FIX L89: renombrar parámetro sum → acc (sum colisiona con tipo visible)
+    return criterios.fold(0.0, (double acc, Criterio criterio) => acc + criterio.peso);
   }
 
   bool get pesosBalanceados {
@@ -151,28 +155,29 @@ class Rubrica {
 
   factory Rubrica.fromMap(Map<String, dynamic> map) {
     return Rubrica(
-      id: map['id'] ?? '',
-      nombre: map['nombre'] ?? '',
-      descripcion: map['descripcion'] ?? '',
+      id: map['id'] as String? ?? '',
+      nombre: map['nombre'] as String? ?? '',
+      descripcion: map['descripcion'] as String? ?? '',
       secciones:
           (map['secciones'] as List<dynamic>?)
               ?.map((s) => SeccionRubrica.fromMap(s as Map<String, dynamic>))
               .toList() ??
           [],
-      juradosAsignados: List<String>.from(map['juradosAsignados'] ?? []),
+      juradosAsignados: List<String>.from(map['juradosAsignados'] as List? ?? []),
       fechaCreacion:
           (map['fechaCreacion'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      puntajeMaximo: (map['puntajeMaximo'] ?? 20).toDouble(),
-      filial: map['filial'] ?? 'lima',
-      facultad: map['facultad'] ?? '',
-      carrera: map['carrera'],
+      // FIX L165: cast explícito a num? para evitar dynamic call en .toDouble()
+      puntajeMaximo: (map['puntajeMaximo'] as num? ?? 20).toDouble(),
+      filial: map['filial'] as String? ?? 'lima',
+      facultad: map['facultad'] as String? ?? '',
+      carrera: map['carrera'] as String?,
     );
   }
 
   int get totalCriterios {
     return secciones.fold<int>(
       0,
-      (sum, seccion) => sum + seccion.criterios.length,
+      (int acc, SeccionRubrica seccion) => acc + seccion.criterios.length,
     );
   }
 
@@ -183,11 +188,15 @@ class Rubrica {
   bool get estaCompleta {
     if (nombre.isEmpty) return false;
     if (secciones.isEmpty) return false;
-    for (var seccion in secciones) {
+    // FIX L186: var → final
+    for (final seccion in secciones) {
       if (seccion.criterios.isEmpty) return false;
     }
     return true;
   }
+
+  // FIX L175: renombrar parámetro sum → acc en totalCriterios (consistencia)
+  // (ya corregido arriba en totalCriterios con tipo explícito)
 
   Rubrica copyWith({
     String? id,
@@ -239,14 +248,17 @@ class RubricasService {
 
   Future<String> getNombreFilial(String filialId) async {
     final estructura = await getEstructuraCompleta();
-    return estructura[filialId]?['nombre'] ?? filialId;
+    // FIX L242: cast explícito para evitar dynamic call en operador []
+    final filialMap = estructura[filialId] as Map<String, dynamic>?;
+    return filialMap?['nombre'] as String? ?? filialId;
   }
 
   Future<List<String>> getFacultadesByFilial(String filialId) async {
     final estructura = await getEstructuraCompleta();
-    final filial = estructura[filialId];
-    if (filial == null) return [];
-    final facultades = filial['facultades'] as Map<String, dynamic>;
+    // FIX L249: cast explícito para evitar dynamic calls
+    final filialMap = estructura[filialId] as Map<String, dynamic>?;
+    if (filialMap == null) return [];
+    final facultades = filialMap['facultades'] as Map<String, dynamic>;
     return facultades.keys.toList();
   }
 
@@ -260,7 +272,6 @@ class RubricasService {
     );
   }
 
-  // Obtener todas las rúbricas (sin filtro — para el panel del jurado)
   Future<List<Rubrica>> obtenerRubricas() async {
     try {
       final snapshot = await _firestore.collection(_collection).get();
@@ -308,7 +319,11 @@ class RubricasService {
     try {
       final doc = await _firestore.collection(_collection).doc(id).get();
       if (doc.exists) {
-        return Rubrica.fromMap(doc.data()!);
+        // FIX L388: null-check explícito antes del cast en lugar de !
+        final rawData = doc.data();
+        if (rawData != null) {
+          return Rubrica.fromMap(rawData);
+        }
       }
       return null;
     } catch (e) {
@@ -353,9 +368,6 @@ class RubricasService {
     }
   }
 
-  // FIX M3 (4.1): obtenerJurados ahora incluye eventoNombre y eventoId
-  // en el mapa retornado, para que el selector de jurados en la rúbrica
-  // pueda mostrar el evento asignado a cada jurado correctamente.
   Future<List<Map<String, dynamic>>> obtenerJurados({
     String? filial,
     String? facultad,
@@ -388,16 +400,17 @@ class RubricasService {
         final data = doc.data() as Map<String, dynamic>;
         return {
           'id': doc.id,
-          'nombre': data['name'] ?? data['nombre'] ?? '',
-          'usuario': data['usuario'] ?? '',
-          'filial': data['filial'] ?? '',
-          'facultad': data['facultad'] ?? '',
-          'carrera': data['carrera'] ?? '',
-          'categoria': data['categoria'] ?? '',
-          // FIX M3/4.1: campos agregados para que el selector de rúbricas
-          // muestre el evento asignado a cada jurado.
-          'eventoNombre': data['eventoNombre'] ?? '',
-          'eventoId': data['eventoId'] ?? '',
+          // FIX L242 (equivalente en obtenerJurados): cast explícito en accesos
+          'nombre': (data['name'] as String?) ?? (data['nombre'] as String?) ?? '',
+          'usuario': data['usuario'] as String? ?? '',
+          'filial': data['filial'] as String? ?? '',
+          'facultad': data['facultad'] as String? ?? '',
+          'carrera': data['carrera'] as String? ?? '',
+          'categoria': data['categoria'] as String? ?? '',
+          // campo categorias (lista) para que el selector de proyectos lo use
+          'categorias': data['categorias'] ?? <dynamic>[],
+          'eventoNombre': data['eventoNombre'] as String? ?? '',
+          'eventoId': data['eventoId'] as String? ?? '',
         };
       }).toList();
     } catch (e) {
@@ -406,12 +419,6 @@ class RubricasService {
     }
   }
 
-  // FIX C4 + 4.2: eliminarEvaluacionesDeJurados ahora maneja tanto
-  // evaluaciones nuevas (con rubricaId) como legacy (sin rubricaId).
-  // - Evaluaciones con rubricaId == este rubricaId → eliminar.
-  // - Evaluaciones legacy sin rubricaId → eliminar también (el jurado
-  //   fue removido de la rúbrica, así que su evaluación debe limpiarse).
-  // - Evaluaciones con rubricaId de OTRA rúbrica → NO tocar.
   Future<void> eliminarEvaluacionesDeJurados({
     required String rubricaId,
     required List<String> juradosIds,
@@ -419,10 +426,8 @@ class RubricasService {
     try {
       debugPrint('🗑️ Eliminando evaluaciones de jurados removidos...');
 
-      // 1. Traer todos los eventos
       final eventosSnapshot = await _firestore.collection('events').get();
 
-      // 2. Obtener todos los proyectos de todos los eventos en paralelo
       final proyectosSnapshotList = await Future.wait(
         eventosSnapshot.docs.map((eventoDoc) => _firestore
             .collection('events')
@@ -431,15 +436,16 @@ class RubricasService {
             .get()),
       );
 
-      // 3. Construir todas las rutas de evaluación a verificar
       final List<DocumentReference> refsAVerificar = [];
 
       for (int i = 0; i < eventosSnapshot.docs.length; i++) {
         final eventoId = eventosSnapshot.docs[i].id;
         final proyectos = proyectosSnapshotList[i].docs;
 
-        for (var proyectoDoc in proyectos) {
-          for (var juradoId in juradosIds) {
+        // FIX L441: var → final
+        for (final proyectoDoc in proyectos) {
+          // FIX L442: var → final
+          for (final juradoId in juradosIds) {
             refsAVerificar.add(_firestore
                 .collection('events')
                 .doc(eventoId)
@@ -451,19 +457,15 @@ class RubricasService {
         }
       }
 
-      // 4. Leer todas las evaluaciones en paralelo
       final evaluacionesDocs = await Future.wait(
         refsAVerificar.map((ref) => ref.get()),
       );
 
-      // 5. Eliminar en lotes según la lógica de rubricaId
-      //    - rubricaId coincide → eliminar
-      //    - rubricaId ausente (legacy) → eliminar (evaluación huérfana)
-      //    - rubricaId de otra rúbrica → conservar
       final WriteBatch batch = _firestore.batch();
       int eliminadas = 0;
 
-      for (var doc in evaluacionesDocs) {
+      // FIX L466: var → final
+      for (final doc in evaluacionesDocs) {
         if (doc.exists) {
           final data = doc.data() as Map<String, dynamic>?;
           if (data != null) {

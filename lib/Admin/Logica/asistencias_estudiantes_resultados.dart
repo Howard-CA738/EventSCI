@@ -61,19 +61,79 @@ class _AsistenciasEstudiantesResultadosScreenState
     setState(() => _isLoading = true);
 
     try {
-      debugPrint('🔍 Cargando asistencias del evento: ${widget.eventoId}');
-
-      // ── 1. Docs de asistencias (proyectos) ────────────────────────────────
+      // 1. Proyectos (resumen por estudiante: doc.id == studentId)
       final asistenciasSnapshot = await _firestore
-          .collection('events')
-          .doc(widget.eventoId)
-          .collection('asistencias')
-          .get();
+          .collection('events').doc(widget.eventoId)
+          .collection('asistencias').get();
 
-      debugPrint(
-          '📊 ${asistenciasSnapshot.docs.length} documentos encontrados');
+      // 2. Cabeceras de asistencias personales
+      final asistPersonalesSnap = await _firestore
+          .collection('events').doc(widget.eventoId)
+          .collection('asistencias_personales').get();
 
-      if (asistenciasSnapshot.docs.isEmpty) {
+      // 3. Registros personales en paralelo
+      final registrosSnaps = await Future.wait(
+        asistPersonalesSnap.docs.map((a) => _firestore
+            .collection('events').doc(widget.eventoId)
+            .collection('asistencias_personales').doc(a.id)
+            .collection('registros').get()),
+      );
+
+      // 4. Reunir estudiantes desde AMBAS fuentes
+      final Map<String, Map<String, dynamic>> base = {};
+      final Map<String, List<Map<String, dynamic>>> personalesPorStudent = {};
+
+      // 4a. desde proyectos
+      for (final doc in asistenciasSnapshot.docs) {
+        final d = doc.data();
+        base[doc.id] = {
+          'id': doc.id,
+          'nombre': d['studentName'] ?? 'Sin nombre',
+          'username': d['studentUsername'] ?? '',
+          'dni': d['studentDNI'] ?? '',
+          'codigo': d['studentCodigo'] ?? '',
+          'facultad': d['facultad'] ?? '',
+          'carrera': d['carrera'] ?? '',
+          'ciclo': d['ciclo'],
+          'grupo': d['grupo'],
+          'lastScan': d['lastScan'],
+        };
+      }
+
+      // 4b. desde personales (crea al estudiante si no vino de proyectos)
+      for (int i = 0; i < asistPersonalesSnap.docs.length; i++) {
+        final ad = asistPersonalesSnap.docs[i].data();
+        for (final regDoc in registrosSnaps[i].docs) {
+          final sid = regDoc.id;
+          final rd = regDoc.data();
+
+          base.putIfAbsent(sid, () => {
+                'id': sid,
+                'nombre': rd['studentName'] ?? 'Sin nombre',
+                'username': rd['studentUsername'] ?? '',
+                'dni': rd['studentDNI'] ?? '',
+                'codigo': rd['studentCodigo'] ?? '',
+                'facultad': rd['facultad'] ?? '',
+                'carrera': rd['carrera'] ?? '',
+                'ciclo': rd['ciclo'],
+                'grupo': rd['grupo'],
+                'lastScan': null,
+              });
+
+          (personalesPorStudent[sid] ??= []).add({
+            'id': regDoc.id,
+            'asistenciaId': asistPersonalesSnap.docs[i].id,
+            'asistenciaNombre':
+                rd['asistenciaNombre'] ?? ad['nombre'] ?? 'Asistencia personal',
+            'asistenciaTipo':
+                rd['asistenciaTipo'] ?? ad['tipo'] ?? 'Asistencia Personal',
+            'timestamp': rd['timestamp'],
+            'tipo': 'personal',
+          });
+        }
+      }
+
+      if (base.isEmpty) {
         if (mounted) {
           setState(() {
             _estudiantes = [];
@@ -84,79 +144,30 @@ class _AsistenciasEstudiantesResultadosScreenState
         return;
       }
 
-      // ── 2. Deduplicar por studentUsername ──────────────────────────────────
-      final Map<String, Map<String, dynamic>> estudiantesMap = {};
+      // 5. Procesar cada estudiante
+      final futures = base.values.map((est) async {
+        final studentId = est['id'] as String;
 
-      for (final doc in asistenciasSnapshot.docs) {
-        final data = doc.data();
-        final username = data['studentUsername'] ?? doc.id;
-
-        if (!estudiantesMap.containsKey(username)) {
-          estudiantesMap[username] = {
-            'id': doc.id,
-            'nombre': data['studentName'] ?? 'Sin nombre',
-            'username': username,
-            'dni': data['studentDNI'] ?? '',
-            'codigo': data['studentCodigo'] ?? '',
-            'facultad': data['facultad'] ?? '',
-            'carrera': data['carrera'] ?? '',
-            'ciclo': data['ciclo'],
-            'grupo': data['grupo'],
-            'lastScan': data['lastScan'],
-            '_docIds': [doc.id],
-            '_rawData': data,
-          };
-        } else {
-          (estudiantesMap[username]!['_docIds'] as List).add(doc.id);
-          final existingLast = estudiantesMap[username]!['lastScan'];
-          final newLast = data['lastScan'];
-          if (existingLast == null ||
-              (newLast != null &&
-                  (newLast as Timestamp)
-                      .compareTo(existingLast as Timestamp) >
-                      0)) {
-            estudiantesMap[username]!['lastScan'] = newLast;
-          }
-        }
-      }
-
-      // ── 3. Cargar asistencias_personales UNA SOLA VEZ (fuera del loop) ────
-      final asistPersonalesSnap = await _firestore
-          .collection('events')
-          .doc(widget.eventoId)
-          .collection('asistencias_personales')
-          .get();
-
-      // ── 4. Procesar cada estudiante único ──────────────────────────────────
-      final futures = estudiantesMap.values.map((estudianteData) async {
-        final docIds = estudianteData['_docIds'] as List<String>;
-        final rawData = estudianteData['_rawData'] as Map<String, dynamic>;
-        final studentId = estudianteData['id'] as String;
-
-        // Scans de proyectos (todos los docs del estudiante)
+        // scans de proyectos
         final List<Map<String, dynamic>> scans = [];
-        for (final docId in docIds) {
-          final scansSnapshot = await _firestore
-              .collection('events')
-              .doc(widget.eventoId)
-              .collection('asistencias')
-              .doc(docId)
-              .collection('scans')
-              .get();
-
-          for (final scanDoc in scansSnapshot.docs) {
-            final scanData = scanDoc.data();
+        try {
+          final scansSnap = await _firestore
+              .collection('events').doc(widget.eventoId)
+              .collection('asistencias').doc(studentId)
+              .collection('scans').get();
+          for (final s in scansSnap.docs) {
+            final sd = s.data();
             scans.add({
-              'id': scanDoc.id,
-              'codigoProyecto': scanData['codigoProyecto'] ?? 'Sin código',
-              'tituloProyecto': scanData['tituloProyecto'] ?? 'Sin título',
-              'categoria': scanData['categoria'] ?? 'Sin categoría',
-              'grupo': scanData['grupo'],
-              'timestamp': scanData['timestamp'],
+              'id': s.id,
+              'codigoProyecto': sd['codigoProyecto'] ?? 'Sin código',
+              'tituloProyecto': sd['tituloProyecto'] ?? 'Sin título',
+              'categoria': sd['categoria'] ?? 'Sin categoría',
+              'grupo': sd['grupo'],
+              'timestamp': sd['timestamp'],
               'tipo': 'proyecto',
             });
           }
-        }
+        } catch (_) {}
 
         scans.sort((a, b) {
           final tA = (a['timestamp'] as Timestamp?)?.toDate();
@@ -165,35 +176,7 @@ class _AsistenciasEstudiantesResultadosScreenState
           return tB.compareTo(tA);
         });
 
-        // Asistencias personales: reutilizamos asistPersonalesSnap
-        // El doc en registros tiene como ID el studentId (doc.id de asistencias)
-        final List<Map<String, dynamic>> personales = [];
-        for (final asistDoc in asistPersonalesSnap.docs) {
-          final registroDoc = await _firestore
-              .collection('events')
-              .doc(widget.eventoId)
-              .collection('asistencias_personales')
-              .doc(asistDoc.id)
-              .collection('registros')
-              .doc(studentId)
-              .get();
-
-          if (registroDoc.exists) {
-            final rd = registroDoc.data()!;
-            final ad = asistDoc.data();
-            personales.add({
-              'id': registroDoc.id,
-              'asistenciaId': asistDoc.id,
-              'asistenciaNombre':
-                  rd['asistenciaNombre'] ?? ad['nombre'] ?? 'Asistencia personal',
-              'asistenciaTipo':
-                  rd['asistenciaTipo'] ?? ad['tipo'] ?? 'Asistencia Personal',
-              'timestamp': rd['timestamp'],
-              'tipo': 'personal',
-            });
-          }
-        }
-
+        final personales = personalesPorStudent[studentId] ?? [];
         personales.sort((a, b) {
           final tA = (a['timestamp'] as Timestamp?)?.toDate();
           final tB = (b['timestamp'] as Timestamp?)?.toDate();
@@ -201,57 +184,57 @@ class _AsistenciasEstudiantesResultadosScreenState
           return tB.compareTo(tA);
         });
 
-        // Ciclo y grupo si faltan
-        String? ciclo = estudianteData['ciclo'];
-        String? grupo = estudianteData['grupo'];
+        // lastScan = el más reciente de AMBOS tipos
+        Timestamp? lastScan = est['lastScan'] as Timestamp?;
+        for (final l in [...scans, ...personales]) {
+          final ts = l['timestamp'] as Timestamp?;
+          if (ts != null && (lastScan == null || ts.compareTo(lastScan) > 0)) {
+            lastScan = ts;
+          }
+        }
 
+        // ciclo/grupo si faltan (igual que antes)
+        String? ciclo = est['ciclo']?.toString();
+        String? grupo = est['grupo']?.toString();
         if (ciclo == null || grupo == null) {
           try {
-            final carreraPath = rawData['carrera'];
-            final username = estudianteData['username'];
-
+            final carreraPath = est['carrera'];
+            final username = est['username'];
             if (carreraPath != null &&
                 username != null &&
                 (username as String).isNotEmpty) {
-              final studentQuery = await _firestore
-                  .collection('users')
-                  .doc(carreraPath as String)
+              final q = await _firestore
+                  .collection('users').doc(carreraPath as String)
                   .collection('students')
                   .where('username', isEqualTo: username)
-                  .limit(1)
-                  .get();
-
-              if (studentQuery.docs.isNotEmpty) {
-                final studentDoc = studentQuery.docs.first.data();
-                ciclo ??= studentDoc['ciclo']?.toString();
-                grupo ??= studentDoc['grupo']?.toString();
+                  .limit(1).get();
+              if (q.docs.isNotEmpty) {
+                final sd = q.docs.first.data();
+                ciclo ??= sd['ciclo']?.toString();
+                grupo ??= sd['grupo']?.toString();
               }
             }
-          } catch (e) {
-            debugPrint('⚠️ Error buscando ciclo/grupo: $e');
-          }
+          } catch (_) {}
         }
 
         return {
           'id': studentId,
-          'nombre': estudianteData['nombre'],
-          'username': estudianteData['username'],
-          'dni': estudianteData['dni'],
-          'codigo': estudianteData['codigo'],
-          'facultad': estudianteData['facultad'],
-          'carrera': estudianteData['carrera'],
+          'nombre': est['nombre'],
+          'username': est['username'],
+          'dni': est['dni'],
+          'codigo': est['codigo'],
+          'facultad': est['facultad'],
+          'carrera': est['carrera'],
           'ciclo': ciclo ?? 'N/A',
           'grupo': grupo ?? 'N/A',
           'totalScans': scans.length + personales.length,
-          'lastScan': estudianteData['lastScan'],
+          'lastScan': lastScan,
           'scans': scans,
           'personales': personales,
         };
       }).toList();
 
       final estudiantesList = await Future.wait(futures);
-
-      debugPrint('✅ ${estudiantesList.length} estudiantes únicos cargados');
 
       if (mounted) {
         setState(() {
@@ -269,7 +252,27 @@ class _AsistenciasEstudiantesResultadosScreenState
       }
     }
   }
-
+Widget _fechaHoraTrailing(DateTime dt) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '${dt.day.toString().padLeft(2, '0')}/'
+          '${dt.month.toString().padLeft(2, '0')}/${dt.year}',
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+        ),
+        Text(
+          '${dt.hour.toString().padLeft(2, '0')}:'
+          '${dt.minute.toString().padLeft(2, '0')}',
+          style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Colors.grey.shade700),
+        ),
+      ],
+    );
+  }
   void _aplicarFiltrosYOrdenamiento() {
     List<Map<String, dynamic>> filtrados = List.from(_estudiantes);
 
@@ -609,12 +612,7 @@ class _AsistenciasEstudiantesResultadosScreenState
                 ],
               ),
             ),
-            if (timestamp != null)
-              Text(
-                '${timestamp.day}/${timestamp.month}/${timestamp.year}',
-                style: TextStyle(
-                    fontSize: 11, color: Colors.grey.shade600),
-              ),
+            if (timestamp != null) _fechaHoraTrailing(timestamp),      
           ],
         ),
       );
@@ -660,12 +658,7 @@ class _AsistenciasEstudiantesResultadosScreenState
                   ),
                 ),
               ),
-              if (timestamp != null)
-                Text(
-                  '${timestamp.day}/${timestamp.month}/${timestamp.year}',
-                  style: TextStyle(
-                      fontSize: 11, color: Colors.grey.shade600),
-                ),
+              if (timestamp != null) _fechaHoraTrailing(timestamp),
             ],
           ),
           if (item['tituloProyecto'] != 'Sin título') ...[
@@ -1119,17 +1112,23 @@ class _AsistenciasEstudiantesResultadosScreenState
                       ],
                       if (lastScan != null) ...[
                         const SizedBox(height: 4),
-                        Row(
+                       Row(
                           children: [
                             Icon(Icons.access_time,
                                 size: 12,
                                 color: Colors.grey.shade500),
                             const SizedBox(width: 4),
-                            Text(
-                              'Última: ${lastScan.day}/${lastScan.month}/${lastScan.year}',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade500,
+                            Expanded(
+                              child: Text(
+                                'Última: ${lastScan.day}/${lastScan.month}/${lastScan.year} '
+'${lastScan.hour.toString().padLeft(2, '0')}:'
+'${lastScan.minute.toString().padLeft(2, '0')}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],

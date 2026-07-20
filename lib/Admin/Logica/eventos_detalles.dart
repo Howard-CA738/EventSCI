@@ -404,7 +404,7 @@ class _EventosDetallesScreenState extends State<EventosDetallesScreen>
     }
 
     return DropdownButtonFormField<String>(
-      value: _selectedPeriodoId,
+      initialValue: _selectedPeriodoId,
       isExpanded: true,
       decoration: InputDecoration(
         labelText: 'Período académico',

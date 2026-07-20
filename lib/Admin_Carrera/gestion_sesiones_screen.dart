@@ -18,6 +18,10 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
 
   String _filtroEstado = 'todos';
 
+  // NUEVO: estado para selección múltiple
+  bool _modoSeleccion = false;
+  final Set<String> _seleccionados = {};
+
   @override
   void initState() {
     super.initState();
@@ -88,6 +92,9 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
       if (mounted) {
         setState(() {
           _estudiantes = lista;
+          // Limpia selecciones que ya no existen tras recargar
+          final idsValidos = lista.map((e) => e['docId'].toString()).toSet();
+          _seleccionados.removeWhere((id) => !idsValidos.contains(id));
           _aplicarFiltro();
         });
       }
@@ -119,6 +126,135 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
         return matchSearch && matchEstado;
       }).toList();
     });
+  }
+
+  // ============================================================
+  // NUEVO: lógica de selección múltiple
+  // ============================================================
+
+  void _toggleModoSeleccion() {
+    setState(() {
+      _modoSeleccion = !_modoSeleccion;
+      _seleccionados.clear();
+    });
+  }
+
+  void _toggleSeleccion(String docId) {
+    setState(() {
+      if (_seleccionados.contains(docId)) {
+        _seleccionados.remove(docId);
+      } else {
+        _seleccionados.add(docId);
+      }
+    });
+  }
+
+  // ¿Están seleccionados todos los que se ven actualmente (según filtro/búsqueda)?
+  bool _todosSeleccionados() {
+    if (_filtrados.isEmpty) return false;
+    return _filtrados
+        .every((e) => _seleccionados.contains(e['docId'].toString()));
+  }
+
+  // Marca o desmarca TODOS los estudiantes visibles (respetando el filtro actual)
+  void _toggleSeleccionarTodos() {
+    setState(() {
+      final idsVisibles =
+          _filtrados.map((e) => e['docId'].toString()).toSet();
+      if (_todosSeleccionados()) {
+        _seleccionados.removeAll(idsVisibles);
+      } else {
+        _seleccionados.addAll(idsVisibles);
+      }
+    });
+  }
+
+  // NUEVO: desbloquea en bloque todos los seleccionados
+  Future<void> _desbloquearSeleccionados() async {
+    if (_seleccionados.isEmpty) return;
+
+    final count = _seleccionados.length;
+
+    final confirm = await _showConfirmDialog(
+      titulo: '¿Desbloquear $count estudiante(s)?',
+      mensaje:
+          'Se reseteará la sesión de $count estudiante(s) seleccionado(s).\n\n'
+          'Todos podrán ingresar UNA VEZ más desde cualquier dispositivo.',
+      botonConfirmar: 'Sí, desbloquear todos',
+      colorBoton: const Color(0xFF0EA5E9),
+      icono: Icons.lock_open_rounded,
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final seleccionadosList = _estudiantes
+          .where((e) => _seleccionados.contains(e['docId'].toString()))
+          .toList();
+
+      final firestore = FirebaseFirestore.instance;
+      final studentsRef = firestore
+          .collection('users')
+          .doc(_carreraPath)
+          .collection('students');
+
+      // Firestore permite máx. 500 operaciones por lote.
+      // Cada estudiante puede generar hasta 2 (update + delete device),
+      // así que dividimos en tandas para no superar el límite.
+      WriteBatch batch = firestore.batch();
+      int ops = 0;
+
+      for (final e in seleccionadosList) {
+        batch.update(studentsRef.doc(e['docId']), {
+          'sessionActive': false,
+          'sessionToken': null,
+          'primeraVez': true,
+          // lastLogin NO se borra — conserva la fecha real del último ingreso
+          'bloqueadoPermanente': false,
+          'deviceId': null,
+          'bloqueadoEn': null,
+          'sessionResetAt': FieldValue.serverTimestamp(),
+        });
+        ops++;
+
+        final deviceId = e['deviceId'] as String?;
+        if (deviceId != null && deviceId.isNotEmpty) {
+          batch.delete(
+              firestore.collection('blocked_devices').doc(deviceId));
+          ops++;
+        }
+
+        // Si nos acercamos al límite, confirmamos esta tanda y abrimos otra
+        if (ops >= 450) {
+          await batch.commit();
+          batch = firestore.batch();
+          ops = 0;
+        }
+      }
+
+      if (ops > 0) {
+        await batch.commit();
+      }
+
+      if (mounted) {
+        setState(() {
+          _modoSeleccion = false;
+          _seleccionados.clear();
+        });
+        _showSnack(
+          '$count estudiante(s) desbloqueado(s) correctamente.',
+          Colors.green,
+        );
+        await _loadData();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showSnack('Error al desbloquear: $e', Colors.red);
+      }
+    }
   }
 
   Future<void> _resetearSesion(Map<String, dynamic> estudiante) async {
@@ -341,16 +477,26 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
         backgroundColor: const Color(0xFF1E3A5F),
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          'Control de Sesiones',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        title: Text(
+          _modoSeleccion ? 'Seleccionar estudiantes' : 'Control de Sesiones',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         actions: [
+          // NUEVO: botón para activar/desactivar modo selección
           IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _isLoading ? null : _loadData,
-            tooltip: 'Actualizar',
+            icon: Icon(_modoSeleccion
+                ? Icons.close_rounded
+                : Icons.checklist_rtl_rounded),
+            onPressed: _isLoading ? null : _toggleModoSeleccion,
+            tooltip:
+                _modoSeleccion ? 'Cancelar selección' : 'Seleccionar varios',
           ),
+          if (!_modoSeleccion)
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded),
+              onPressed: _isLoading ? null : _loadData,
+              tooltip: 'Actualizar',
+            ),
         ],
       ),
       body: SafeArea(
@@ -384,6 +530,9 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
                             },
                           ),
                   ),
+                  // NUEVO: barra inferior de acción para desbloqueo masivo
+                  if (_modoSeleccion && _seleccionados.isNotEmpty)
+                    _buildBottomActionBar(),
                 ],
               ),
       ),
@@ -460,6 +609,58 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
               ],
             ),
           ),
+          // NUEVO: control "Marcar todos" + contador (solo en modo selección)
+          if (_modoSeleccion) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: _toggleSeleccionarTodos,
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 44),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(38),
+                      borderRadius: BorderRadius.circular(20),
+                      border:
+                          Border.all(color: Colors.white.withAlpha(76)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _todosSeleccionados()
+                              ? Icons.check_box_rounded
+                              : Icons.check_box_outline_blank_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _todosSeleccionados()
+                              ? 'Quitar todos'
+                              : 'Marcar todos',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '${_seleccionados.length} seleccionado(s)',
+                  style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -542,10 +743,54 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
     );
   }
 
+  // NUEVO: barra inferior con el botón de desbloqueo masivo
+  Widget _buildBottomActionBar() {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        12,
+        16,
+        MediaQuery.of(context).padding.bottom + 12,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(20),
+            blurRadius: 12,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: _desbloquearSeleccionados,
+          icon: const Icon(Icons.lock_open_rounded),
+          label: Text(
+            'Desbloquear ${_seleccionados.length} seleccionado(s)',
+            overflow: TextOverflow.ellipsis,
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF0EA5E9),
+            foregroundColor: Colors.white,
+            minimumSize: const Size(0, 52),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14)),
+            textStyle:
+                const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildEstudianteCard(Map<String, dynamic> e, int index) {
     final estado = _getEstado(e);
     final lastLogin = e['lastLogin'] as Timestamp?;
     final bloqueadoEn = e['bloqueadoEn'] as Timestamp?;
+    final docId = e['docId'].toString();
+    final seleccionado = _seleccionados.contains(docId);
 
     Color estadoColor;
     String estadoLabel;
@@ -569,135 +814,158 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
         break;
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withAlpha(15),
-              blurRadius: 8,
-              offset: const Offset(0, 2))
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: estadoColor.withAlpha(30),
-                shape: BoxShape.circle,
-                border: Border.all(
-                    color: estadoColor.withAlpha(102), width: 1.5),
+    return GestureDetector(
+      // En modo selección, tocar la tarjeta marca/desmarca al estudiante
+      onTap: _modoSeleccion ? () => _toggleSeleccion(docId) : null,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: _modoSeleccion && seleccionado
+              ? Border.all(color: const Color(0xFF0EA5E9), width: 2)
+              : null,
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withAlpha(15),
+                blurRadius: 8,
+                offset: const Offset(0, 2))
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // NUEVO: checkbox visible solo en modo selección
+              if (_modoSeleccion) ...[
+                Icon(
+                  seleccionado
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked,
+                  color: seleccionado
+                      ? const Color(0xFF0EA5E9)
+                      : Colors.grey[400],
+                  size: 26,
+                ),
+                const SizedBox(width: 12),
+              ],
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: estadoColor.withAlpha(30),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: estadoColor.withAlpha(102), width: 1.5),
+                ),
+                child: Icon(Icons.person, color: estadoColor, size: 24),
               ),
-              child: Icon(Icons.person, color: estadoColor, size: 24),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    e['nombre'],
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: Color(0xFF1E3A5F),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    e['usuario'],
-                    style: const TextStyle(
-                        fontSize: 12, color: Color(0xFF64748B)),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (lastLogin != null) ...[
-                    const SizedBox(height: 2),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      'Último ingreso: ${_formatDate(lastLogin.toDate())}',
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.grey[400]),
+                      e['nombre'],
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: Color(0xFF1E3A5F),
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    const SizedBox(height: 2),
+                    Text(
+                      e['usuario'],
+                      style: const TextStyle(
+                          fontSize: 12, color: Color(0xFF64748B)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (lastLogin != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'Último ingreso: ${_formatDate(lastLogin.toDate())}',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey[400]),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    if (bloqueadoEn != null &&
+                        estado == _EstadoSesion.bloqueado) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'Bloqueado: ${_formatDate(bloqueadoEn.toDate())}',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.red[300]),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ],
-                  if (bloqueadoEn != null &&
-                      estado == _EstadoSesion.bloqueado) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      'Bloqueado: ${_formatDate(bloqueadoEn.toDate())}',
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.red[300]),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: estadoColor.withAlpha(30),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: estadoColor.withAlpha(76)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(estadoIcon,
+                            size: 12, color: estadoColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          estadoLabel,
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: estadoColor,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Los botones individuales se ocultan en modo selección
+                  if (!_modoSeleccion) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildActionBtn(
+                          icon: Icons.refresh_rounded,
+                          color: const Color(0xFF0EA5E9),
+                          tooltip: 'Dar nueva oportunidad',
+                          onTap: () => _resetearSesion(e),
+                        ),
+                        if (estado != _EstadoSesion.bloqueado) ...[
+                          const SizedBox(width: 6),
+                          _buildActionBtn(
+                            icon: Icons.block_rounded,
+                            color: Colors.red,
+                            tooltip: 'Bloquear acceso',
+                            onTap: () => _bloquearSesion(e),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ],
               ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: estadoColor.withAlpha(30),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: estadoColor.withAlpha(76)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(estadoIcon,
-                          size: 12, color: estadoColor),
-                      const SizedBox(width: 4),
-                      Text(
-                        estadoLabel,
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: estadoColor,
-                            fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildActionBtn(
-                      icon: Icons.refresh_rounded,
-                      color: const Color(0xFF0EA5E9),
-                      tooltip: 'Dar nueva oportunidad',
-                      onTap: () => _resetearSesion(e),
-                    ),
-                    if (estado != _EstadoSesion.bloqueado) ...[
-                      const SizedBox(width: 6),
-                      _buildActionBtn(
-                        icon: Icons.block_rounded,
-                        color: Colors.red,
-                        tooltip: 'Bloquear acceso',
-                        onTap: () => _bloquearSesion(e),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

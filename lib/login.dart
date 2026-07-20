@@ -1,14 +1,14 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
-import '/prefs_helper.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '/Admin/logica/admin.dart';
-import '/usuarios/logica/estudiante.dart';
 import '/Jurados/jurados.dart';
 import '/admin_carrera/admin_carrera_service.dart';
 import '/admin_carrera/interfaz/admin_carrera_screen.dart';
+import '/prefs_helper.dart';
 import '/super_admin_login.dart';
-import 'package:flutter/services.dart';
+import '/usuarios/logica/estudiante.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -50,8 +50,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _precacheImages() async {
     try {
+      if (!mounted) return;
       await precacheImage(const AssetImage('assets/images/logoupeu.jpg'), context);
       for (final bg in _backgrounds) {
+        if (!mounted) return;
         await precacheImage(AssetImage(bg), context);
       }
     } catch (e) {
@@ -161,11 +163,10 @@ class _LoginScreenState extends State<LoginScreen> {
           permisos:     adminCarreraData['permisos'],
         );
         if (mounted) {
-          Navigator.of(context).pushReplacement(
+          unawaited(Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const AdminCarreraScreen()),
-          );
+          ));
         }
-        break;
 
       case 'jurado':
         final esJurado = await PrefsHelper.loginJurado(username, password);
@@ -174,11 +175,10 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
         if (mounted) {
-          Navigator.of(context).pushReplacement(
+          unawaited(Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const JuradosScreen()),
-          );
+          ));
         }
-        break;
 
       case 'student':
         final success = await PrefsHelper.loginStudent(username, password);
@@ -254,18 +254,17 @@ class _LoginScreenState extends State<LoginScreen> {
         }
 
         if (mounted) {
-          Navigator.of(context).pushReplacement(
+          unawaited(Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const EstudianteScreen()),
-          );
+          ));
         }
-        break;
     }
   }
 
   void _mostrarDialogOTP(String uid, String email) {
     final otpController = TextEditingController();
     final otpFocusNode  = FocusNode();
-    final otpDigits     = List.filled(6, '', growable: false);
+    final otpDigits     = List.filled(6, '');
     bool  verificando   = false;
     String? errorOtp;
     int segundos        = 300;
@@ -299,186 +298,179 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Padding(
               padding: EdgeInsets.only(
                   bottom: MediaQuery.of(ctx).viewInsets.bottom),
-              child: Container(
+              child: DecoratedBox(
                 decoration: const BoxDecoration(
                   color:        Colors.white,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
                 ),
-                padding: const EdgeInsets.fromLTRB(28, 12, 28, 32),
-                child: SafeArea(
-                  top: false,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 40, height: 4,
-                          decoration: BoxDecoration(
-                            color:        Colors.grey[300],
-                            borderRadius: BorderRadius.circular(2),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(28, 12, 28, 32),
+                  child: SafeArea(
+                    top: false,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 40, height: 4,
+                            decoration: BoxDecoration(
+                              color:        Colors.grey[300],
+                              borderRadius: BorderRadius.circular(2),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 24),
-                        Container(
-                          width: 64, height: 64,
-                          decoration: BoxDecoration(
-                            color:  const Color(0xFF1E3A5F).withAlpha(25),
-                            shape:  BoxShape.circle,
+                          const SizedBox(height: 24),
+                          Container(
+                            width: 64, height: 64,
+                            decoration: BoxDecoration(
+                              color:  const Color(0xFF1E3A5F).withAlpha(25),
+                              shape:  BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.mark_email_read_outlined,
+                                color: Color(0xFF1E3A5F), size: 32),
                           ),
-                          child: const Icon(Icons.mark_email_read_outlined,
-                              color: Color(0xFF1E3A5F), size: 32),
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Verifica tu identidad',
-                          style: TextStyle(
-                              fontSize:   20,
-                              fontWeight: FontWeight.w800,
-                              color:      Color(0xFF1E3A5F)),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Ingresa el código enviado a\n$email',
-                          style: TextStyle(
-                              fontSize: 13,
-                              color:    Colors.grey[500],
-                              height:   1.5),
-                          textAlign: TextAlign.center,
-                          overflow:  TextOverflow.ellipsis,
-                          maxLines:  3,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          expirado ? '⏰ Código expirado' : 'Expira en $mm:$ss',
-                          style: TextStyle(
-                            fontSize:   13,
-                            fontWeight: FontWeight.w600,
-                            color: (expirado || segundos < 60)
-                                ? const Color(0xFFEF4444)
-                                : const Color(0xFF16A34A),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Verifica tu identidad',
+                            style: TextStyle(
+                                fontSize:   20,
+                                fontWeight: FontWeight.w800,
+                                color:      Color(0xFF1E3A5F)),
+                            textAlign: TextAlign.center,
                           ),
-                        ),
-                        const SizedBox(height: 24),
-                        _OtpInputRow(
-                          otpDigits:     otpDigits,
-                          otpController: otpController,
-                          otpFocusNode:  otpFocusNode,
-                          expirado:      expirado,
-                          onChanged: (value) {
-                            setSheet(() {
-                              for (int i = 0; i < 6; i++) {
-                                otpDigits[i] = i < value.length ? value[i] : '';
-                              }
-                              errorOtp = null;
-                            });
-                            if (value.length == 6 && !expirado) {
-                              _verificarOTP(
-                                uid, value, ctx, setSheet,
-                                (v) => verificando = v,
-                                (e) => errorOtp    = e,
-                              );
-                            }
-                          },
-                        ),
-                        if (errorOtp != null) ...[
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 6),
                           Text(
-                            errorOtp!,
-                            style: const TextStyle(
-                                color: Color(0xFFEF4444), fontSize: 13),
+                            'Ingresa el código enviado a\n$email',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color:    Colors.grey[500],
+                                height:   1.5),
                             textAlign: TextAlign.center,
                             overflow:  TextOverflow.ellipsis,
-                            maxLines:  2,
+                            maxLines:  3,
                           ),
-                        ],
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 52,
-                          child: ElevatedButton(
-                            onPressed: (verificando || expirado)
-                                ? null
-                                : () => _verificarOTP(
-                                      uid, otpController.text, ctx, setSheet,
-                                      (v) => verificando = v,
-                                      (e) => errorOtp    = e,
-                                    ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:        const Color(0xFF1E3A5F),
-                              foregroundColor:        Colors.white,
-                              disabledBackgroundColor:
-                                  const Color(0xFF1E3A5F).withAlpha(100),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16)),
-                              elevation: 0,
-                            ),
-                            child: verificando
-                                ? const SizedBox(
-                                    width: 22, height: 22,
-                                    child: CircularProgressIndicator(
-                                        color:       Colors.white,
-                                        strokeWidth: 2.5))
-                                : const Text(
-                                    'Verificar',
-                                    style: TextStyle(
-                                        fontSize:   15,
-                                        fontWeight: FontWeight.w700),
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        TextButton(
-                          onPressed: expirado
-                              ? () async {
-                                  countdownTimer?.cancel();
-                                  Navigator.of(ctx).pop();
-                                  setState(() => _isLoading = true);
-                                  final user =
-                                      FirebaseAuth.instance.currentUser;
-                                  if (user != null) {
-                                    await SuperAdminAuthService
-                                        .enviarCodigoEmail(uid, email);
-                                  }
-                                  if (mounted) {
-                                    setState(() => _isLoading = false);
-                                    _mostrarDialogOTP(uid, email);
-                                  }
-                                }
-                              : null,
-                          style: TextButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 44),
-                          ),
-                          child: Text(
-                            expirado
-                                ? 'Reenviar código'
-                                : 'Reenviar (disponible al expirar)',
+                          const SizedBox(height: 8),
+                          Text(
+                            expirado ? '⏰ Código expirado' : 'Expira en $mm:$ss',
                             style: TextStyle(
-                              color: expirado
-                                  ? const Color(0xFF1E3A5F)
-                                  : Colors.grey[400],
                               fontSize:   13,
                               fontWeight: FontWeight.w600,
+                              color: (expirado || segundos < 60)
+                                  ? const Color(0xFFEF4444)
+                                  : const Color(0xFF16A34A),
                             ),
                           ),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            countdownTimer?.cancel();
-                            Navigator.of(ctx).pop();
-                            FirebaseAuth.instance.signOut();
-                          },
-                          style: TextButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 44),
+                          const SizedBox(height: 24),
+                          _OtpInputRow(
+                            otpDigits:     otpDigits,
+                            otpController: otpController,
+                            otpFocusNode:  otpFocusNode,
+                            expirado:      expirado,
+                            onChanged: (value) {
+                              setSheet(() {
+                                for (int i = 0; i < 6; i++) {
+                                  otpDigits[i] = i < value.length ? value[i] : '';
+                                }
+                                errorOtp = null;
+                              });
+                              if (value.length == 6 && !expirado) {
+                                unawaited(_verificarOTP(
+                                  uid, value, ctx, setSheet,
+                                  (v) => verificando = v,
+                                  (e) => errorOtp    = e,
+                                ));
+                              }
+                            },
                           ),
-                          child: const Text(
-                            'Cancelar',
-                            style: TextStyle(
-                                color: Color(0xFFEF4444), fontSize: 13),
+                          if (errorOtp != null) ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              errorOtp!,
+                              style: const TextStyle(
+                                  color: Color(0xFFEF4444), fontSize: 13),
+                              textAlign: TextAlign.center,
+                              overflow:  TextOverflow.ellipsis,
+                              maxLines:  2,
+                            ),
+                          ],
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 52,
+                            child: ElevatedButton(
+                              onPressed: (verificando || expirado)
+                                  ? null
+                                  : () {
+                                      unawaited(_verificarOTP(
+                                        uid, otpController.text, ctx, setSheet,
+                                        (v) => verificando = v,
+                                        (e) => errorOtp    = e,
+                                      ));
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:        const Color(0xFF1E3A5F),
+                                foregroundColor:        Colors.white,
+                                disabledBackgroundColor:
+                                    const Color(0xFF1E3A5F).withAlpha(100),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16)),
+                                elevation: 0,
+                              ),
+                              child: verificando
+                                  ? const SizedBox(
+                                      width: 22, height: 22,
+                                      child: CircularProgressIndicator(
+                                          color:       Colors.white,
+                                          strokeWidth: 2.5))
+                                  : const Text(
+                                      'Verificar',
+                                      style: TextStyle(
+                                          fontSize:   15,
+                                          fontWeight: FontWeight.w700),
+                                    ),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
+                          const SizedBox(height: 4),
+                          TextButton(
+                            onPressed: expirado
+                                ? () {
+                                    unawaited(_reenviarCodigo(
+                                        uid, email, countdownTimer, ctx));
+                                  }
+                                : null,
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 44),
+                            ),
+                            child: Text(
+                              expirado
+                                  ? 'Reenviar código'
+                                  : 'Reenviar (disponible al expirar)',
+                              style: TextStyle(
+                                color: expirado
+                                    ? const Color(0xFF1E3A5F)
+                                    : Colors.grey[400],
+                                fontSize:   13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              countdownTimer?.cancel();
+                              Navigator.of(ctx).pop();
+                              unawaited(FirebaseAuth.instance.signOut());
+                            },
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 44),
+                            ),
+                            child: const Text(
+                              'Cancelar',
+                              style: TextStyle(
+                                  color: Color(0xFFEF4444), fontSize: 13),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -492,6 +484,25 @@ class _LoginScreenState extends State<LoginScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (otpFocusNode.canRequestFocus) otpFocusNode.requestFocus();
     });
+  }
+
+  Future<void> _reenviarCodigo(
+    String uid,
+    String email,
+    Timer? countdownTimer,
+    BuildContext ctx,
+  ) async {
+    countdownTimer?.cancel();
+    if (ctx.mounted) Navigator.of(ctx).pop();
+    setState(() => _isLoading = true);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await SuperAdminAuthService.enviarCodigoEmail(uid, email);
+    }
+    if (mounted) {
+      setState(() => _isLoading = false);
+      _mostrarDialogOTP(uid, email);
+    }
   }
 
   Future<void> _verificarOTP(
@@ -517,11 +528,12 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    if (!ctx.mounted) return;
     Navigator.of(ctx).pop();
     if (mounted) {
-      Navigator.of(context).pushReplacement(
+      unawaited(Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const AdminScreen()),
-      );
+      ));
     }
   }
 
@@ -669,7 +681,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                   fontSize: 13,
                                   color:    textoColor,
                                   height:   1.4),
-                              overflow: TextOverflow.visible,
                               softWrap: true,
                             ),
                           ),
@@ -741,7 +752,7 @@ class _LoginScreenState extends State<LoginScreen> {
         children: [
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 1000),
-            child: Container(
+            child: DecoratedBox(
               key: ValueKey<int>(_currentBackgroundIndex),
               decoration: BoxDecoration(
                 image: DecorationImage(
@@ -751,6 +762,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       Colors.black.withAlpha(76), BlendMode.darken),
                 ),
               ),
+              child: const SizedBox.expand(),
             ),
           ),
           SafeArea(
@@ -782,7 +794,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(30),
                           border: Border.all(
                             color: Colors.white.withAlpha(20),
-                            width: 1,
                           ),
                           boxShadow: [
                             BoxShadow(
@@ -803,13 +814,17 @@ class _LoginScreenState extends State<LoginScreen> {
                               keyboardType: TextInputType.emailAddress,
                             ),
                             SizedBox(height: isSmallPhone ? 14 : 18),
-                            _buildPasswordField(isSmallPhone),
+                            _buildPasswordField(isSmallPhone: isSmallPhone),
                             SizedBox(height: isSmallPhone ? 20 : 28),
                             SizedBox(
                               width:  double.infinity,
                               height: 52,
                               child: ElevatedButton(
-                                onPressed: _isLoading ? null : _login,
+                                onPressed: _isLoading
+                                    ? null
+                                    : () {
+                                        unawaited(_login());
+                                      },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFFF5B731),
                                   foregroundColor: const Color(0xFF0F1E35),
@@ -856,11 +871,11 @@ class _LoginScreenState extends State<LoginScreen> {
     required bool isSmallPhone,
     TextInputType keyboardType = TextInputType.text,
   }) {
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color:        Colors.grey[50],
         borderRadius: BorderRadius.circular(15),
-        border:       Border.all(color: Colors.grey[300]!, width: 1),
+        border:       Border.all(color: Colors.grey[300]!),
       ),
       child: TextField(
         controller:   controller,
@@ -880,12 +895,12 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildPasswordField(bool isSmallPhone) {
-    return Container(
+  Widget _buildPasswordField({required bool isSmallPhone}) {
+    return DecoratedBox(
       decoration: BoxDecoration(
         color:        Colors.grey[50],
         borderRadius: BorderRadius.circular(15),
-        border:       Border.all(color: Colors.grey[300]!, width: 1),
+        border:       Border.all(color: Colors.grey[300]!),
       ),
       child: TextField(
         controller:  _passwordController,
@@ -960,7 +975,7 @@ class _OtpInputRow extends StatelessWidget {
               ),
             ),
             GestureDetector(
-              onTap: () => otpFocusNode.requestFocus(),
+              onTap: otpFocusNode.requestFocus,
               child: Row(
                 children: List.generate(6, (i) {
                   final has      = otpDigits[i].isNotEmpty;
@@ -1043,13 +1058,12 @@ class _BlinkingCursorState extends State<_BlinkingCursor>
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _controller,
-      child: Container(
-        width:  2,
-        height: 24,
+      child: DecoratedBox(
         decoration: BoxDecoration(
           color:        const Color(0xFF1E3A5F),
           borderRadius: BorderRadius.circular(1),
         ),
+        child: const SizedBox(width: 2, height: 24),
       ),
     );
   }

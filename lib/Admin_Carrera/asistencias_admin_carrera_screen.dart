@@ -91,6 +91,7 @@ class _AsistenciasAdminCarreraScreenState
           'facultad': d['facultad'] ?? '',
           'carreraNombre': d['carreraNombre'] ?? d['carrera'] ?? '',
           'carrera': d['carrera'] ?? '',
+          'carreraId': d['carreraId'] ?? '',
         };
       }).toList();
 
@@ -128,55 +129,70 @@ class _AsistenciasAdminCarreraScreenState
   });
 
   try {
-    // ── 1. Obtener IDs desde AMBAS fuentes ────────────────────────────────
-    final snapProyectos = await _firestore
-        .collection('events')
-        .doc(eventoId)
-        .collection('asistencias')
-        .get();
+    // ── 1. Las tres fuentes en paralelo ──────────────────────────────────
+    final results = await Future.wait([
+      _firestore
+          .collection('events')
+          .doc(eventoId)
+          .collection('asistencias')
+          .get(),
+      _firestore
+          .collection('events')
+          .doc(eventoId)
+          .collection('asistencias_personales')
+          .get(),
+      _firestore
+          .collectionGroup('registros')
+          .where('eventId', isEqualTo: eventoId)
+          .where('type', isEqualTo: 'asistencia_personal')
+          .get(),
+    ]);
 
-    final snapPersonales = await _firestore
-        .collection('events')
-        .doc(eventoId)
-        .collection('asistencias_personales')
-        .get();
+    final snapProyectos  = results[0];
+    final snapPersonales = results[1];
+    final snapHuerfanos  = results[2];
 
-    // ── 2. Recopilar todos los studentIds únicos ──────────────────────────
-    // De proyectos: el docId ES el studentId
-    final Map<String, DocumentSnapshot?> porStudentId = {};
-    for (final doc in snapProyectos.docs) {
-      porStudentId.putIfAbsent(doc.id, () => doc);
-    }
+    // ── 2. IDs de asistencias personales que AÚN EXISTEN ─────────────────
+    final Set<String> asistenciasExistentes =
+        snapPersonales.docs.map((d) => d.id).toSet();
 
-    // De personales: cada subcolección 'registros' tiene docId = studentId
-    // Cargamos los registros de cada asistencia personal
-    final List<Future<QuerySnapshot>> registrosFutures = snapPersonales.docs
-        .map((asistDoc) => _firestore
-            .collection('events')
-            .doc(eventoId)
-            .collection('asistencias_personales')
-            .doc(asistDoc.id)
-            .collection('registros')
-            .get())
-        .toList();
+    // ── 3. Cargar registros de asistencias vivas ──────────────────────────
+    final List<Future<QuerySnapshot>> registrosFutures =
+        snapPersonales.docs
+            .map((asistDoc) => _firestore
+                .collection('events')
+                .doc(eventoId)
+                .collection('asistencias_personales')
+                .doc(asistDoc.id)
+                .collection('registros')
+                .get())
+            .toList();
 
     final registrosSnaps = await Future.wait(registrosFutures);
 
-    for (final regSnap in registrosSnaps) {
-      for (final regDoc in regSnap.docs) {
-        // regDoc.id = studentId, regDoc.data() tiene los datos del estudiante
-        porStudentId.putIfAbsent(regDoc.id, () => null);
-        // Si aún no tiene doc de proyectos, guardamos el registro personal
-        // como fuente de datos del estudiante
-        if (porStudentId[regDoc.id] == null) {
-          porStudentId[regDoc.id] = regDoc;
-        }
+    // ── 4. Mapa asistenciaId → nombre (para mostrar en huérfanos) ─────────
+    final Map<String, String> nombrePorAsistenciaId = {};
+    for (final regDoc in snapHuerfanos.docs) {
+      final rd = regDoc.data();
+      final asistId = rd['asistenciaId']?.toString() ?? '';
+      final nombre  = rd['asistenciaNombre']?.toString() ?? 'Asistencia personal';
+      if (asistId.isNotEmpty) {
+        nombrePorAsistenciaId.putIfAbsent(asistId, () => nombre);
       }
     }
 
-    // ── 3. Cargar scans de proyectos y contar personales por estudiante ───
-    // Mapa: studentId → cantidad de sellos personales
+    // ── 5. Filtrar solo registros verdaderamente huérfanos ─────────────────
+    // (cuyo doc padre NO existe en snapPersonales)
+    final huerfanosReales = snapHuerfanos.docs.where((regDoc) {
+      final rd = regDoc.data();
+      final asistId = rd['asistenciaId']?.toString() ?? '';
+      return !asistenciasExistentes.contains(asistId);
+    }).toList();
+
+    // ── 6. Contar sellos personales por estudiante ────────────────────────
     final Map<String, int> sellosPersonalesPorEstudiante = {};
+
+    // De asistencias vivas
     for (final regSnap in registrosSnaps) {
       for (final regDoc in regSnap.docs) {
         final sid = regDoc.id;
@@ -185,13 +201,39 @@ class _AsistenciasAdminCarreraScreenState
       }
     }
 
-    // ── 4. Procesar cada estudiante único ─────────────────────────────────
+    // De asistencias huérfanas (solo las que no están duplicadas)
+    for (final regDoc in huerfanosReales) {
+      final sid = regDoc.id;
+      sellosPersonalesPorEstudiante[sid] =
+          (sellosPersonalesPorEstudiante[sid] ?? 0) + 1;
+    }
+
+    // ── 7. Recopilar todos los studentIds únicos ──────────────────────────
+    final Map<String, DocumentSnapshot?> porStudentId = {};
+
+    for (final doc in snapProyectos.docs) {
+      porStudentId.putIfAbsent(doc.id, () => doc);
+    }
+    for (final regSnap in registrosSnaps) {
+      for (final regDoc in regSnap.docs) {
+        porStudentId.putIfAbsent(regDoc.id, () => null);
+        if (porStudentId[regDoc.id] == null) {
+          porStudentId[regDoc.id] = regDoc;
+        }
+      }
+    }
+    // Estudiantes que SOLO aparecen en huérfanos
+    for (final regDoc in huerfanosReales) {
+      porStudentId.putIfAbsent(regDoc.id, () => regDoc);
+    }
+
+    // ── 8. Procesar cada estudiante ───────────────────────────────────────
     final futures = porStudentId.entries.map((entry) async {
       final studentId = entry.key;
       final sourceDoc = entry.value;
       final data = (sourceDoc?.data() ?? {}) as Map<String, dynamic>;
 
-      // Scans de proyectos (puede ser 0 si solo tiene personales)
+      // Scans de proyectos
       QuerySnapshot? scansSnap;
       try {
         scansSnap = await _firestore
@@ -203,19 +245,17 @@ class _AsistenciasAdminCarreraScreenState
             .get();
       } catch (_) {}
 
-      final sellosProyectos = scansSnap?.docs.length ?? 0;
-      final sellosPersonales =
-          sellosPersonalesPorEstudiante[studentId] ?? 0;
+      final sellosProyectos  = scansSnap?.docs.length ?? 0;
+      final sellosPersonales = sellosPersonalesPorEstudiante[studentId] ?? 0;
 
-      // Ciclo y grupo
+      // Ciclo y grupo — intentar desde el doc, si no desde users
       String? ciclo = data['ciclo']?.toString();
       String? grupo = data['grupo']?.toString();
 
       if (ciclo == null || grupo == null) {
         try {
           final carreraPath = data['carrera'];
-          final username = data['studentUsername'] ??
-              data['username'];
+          final username = data['studentUsername'] ?? data['username'];
           if (carreraPath != null &&
               username != null &&
               (username as String).isNotEmpty) {
@@ -235,7 +275,7 @@ class _AsistenciasAdminCarreraScreenState
         } catch (_) {}
       }
 
-      // Scans de proyectos para el detalle
+      // Lista de scans de proyectos con detalle
       final scans = (scansSnap?.docs ?? []).map((s) {
         final sd = s.data() as Map<String, dynamic>;
         return {
@@ -255,7 +295,55 @@ class _AsistenciasAdminCarreraScreenState
         return tB.compareTo(tA);
       });
 
-      // lastScan: el más reciente entre proyectos y personales
+      // ── Asistencias personales de este estudiante ─────────────────────
+      final List<Map<String, dynamic>> personales = [];
+
+      // De asistencias cuyo doc padre AÚN EXISTE
+      for (int idx = 0; idx < snapPersonales.docs.length; idx++) {
+        final asistDoc = snapPersonales.docs[idx];
+        final asistData = asistDoc.data();
+        final regSnap = registrosSnaps[idx];
+        for (final regDoc in regSnap.docs) {
+          if (regDoc.id != studentId) continue;
+          final rd = regDoc.data() as Map<String, dynamic>;
+          personales.add({
+            'id': regDoc.id,
+            'asistenciaId': asistDoc.id,
+            'asistenciaNombre': rd['asistenciaNombre'] ??
+                asistData['nombre'] ??
+                'Asistencia personal',
+            'asistenciaTipo': rd['asistenciaTipo'] ??
+                asistData['tipo'] ??
+                'Asistencia Personal',
+            'timestamp': rd['timestamp'],
+          });
+        }
+      }
+
+      // De asistencias HUÉRFANAS (doc padre fue borrado)
+      for (final regDoc in huerfanosReales) {
+        if (regDoc.id != studentId) continue;
+        final rd = regDoc.data();
+        final asistId = rd['asistenciaId']?.toString() ?? '';
+        personales.add({
+          'id': regDoc.id,
+          'asistenciaId': asistId,
+          'asistenciaNombre': rd['asistenciaNombre'] ??
+              nombrePorAsistenciaId[asistId] ??
+              'Asistencia personal',
+          'asistenciaTipo':
+              rd['asistenciaTipo'] ?? 'Asistencia Personal',
+          'timestamp': rd['timestamp'],
+        });
+      }
+
+      personales.sort((a, b) {
+        final tA = (a['timestamp'] as Timestamp?)?.toDate();
+        final tB = (b['timestamp'] as Timestamp?)?.toDate();
+        if (tA == null || tB == null) return 0;
+        return tB.compareTo(tA);
+      });
+
       dynamic lastScan = data['lastScan'];
 
       return {
@@ -263,8 +351,8 @@ class _AsistenciasAdminCarreraScreenState
         'nombre': data['studentName'] ?? data['nombre'] ?? 'Sin nombre',
         'username': data['studentUsername'] ?? data['username'] ?? '',
         'dni': data['studentDNI'] ?? data['dni'] ?? '',
-        'codigo': data['studentCodigo'] ??
-            data['codigoUniversitario'] ?? '',
+        'codigo':
+            data['studentCodigo'] ?? data['codigoUniversitario'] ?? '',
         'facultad': data['facultad'] ?? '',
         'carrera': data['carrera'] ?? '',
         'ciclo': ciclo ?? 'N/A',
@@ -272,6 +360,7 @@ class _AsistenciasAdminCarreraScreenState
         'totalScans': sellosProyectos + sellosPersonales,
         'lastScan': lastScan,
         'scans': scans,
+        'personales': personales,
       };
     }).toList();
 
@@ -389,8 +478,11 @@ class _AsistenciasAdminCarreraScreenState
       final rutaArchivo = await _excelService.generarReporteAsistencias(
         estudiantes: _estudiantesEvento,
         eventoNombre: eventoNombre,
+        eventoId: _eventoSeleccionadoId!,
+        filialId: widget.filialId,
         filialNombre: widget.filialNombre,
         facultad: widget.facultad,
+        carreraId: _eventoSeleccionadoData?['carreraId']?.toString(),
         carrera: widget.carrera,
       );
 
@@ -491,8 +583,7 @@ class _AsistenciasAdminCarreraScreenState
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF1E3A5F),
                         foregroundColor: Colors.white,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 13),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -519,8 +610,7 @@ class _AsistenciasAdminCarreraScreenState
                       ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFF1E3A5F),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 13),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
                         side: const BorderSide(
                             color: Color(0xFF1E3A5F), width: 1.5),
                         shape: RoundedRectangleBorder(
@@ -627,12 +717,11 @@ class _AsistenciasAdminCarreraScreenState
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        CircularProgressIndicator(
-                            color: Color(0xFF1E3A5F)),
+                        CircularProgressIndicator(color: Color(0xFF1E3A5F)),
                         SizedBox(height: 14),
                         Text('Cargando eventos...',
-                            style: TextStyle(
-                                color: Colors.grey, fontSize: 15)),
+                            style:
+                                TextStyle(color: Colors.grey, fontSize: 15)),
                       ],
                     ),
                   )
@@ -696,8 +785,7 @@ class _AsistenciasAdminCarreraScreenState
                 const SizedBox(height: 3),
                 Text(
                   widget.facultad,
-                  style:
-                      const TextStyle(color: Colors.white70, fontSize: 12),
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
@@ -760,19 +848,16 @@ class _AsistenciasAdminCarreraScreenState
             decoration: BoxDecoration(
               color: Colors.blue.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
-              border:
-                  Border.all(color: Colors.blue.withValues(alpha: 0.25)),
+              border: Border.all(color: Colors.blue.withValues(alpha: 0.25)),
             ),
             child: Row(
               children: [
-                Icon(Icons.info_outline,
-                    size: 16, color: Colors.blue[700]),
+                Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'Selecciona un evento para ver sus asistencias o exportar el reporte Excel.',
-                    style:
-                        TextStyle(fontSize: 12, color: Colors.blue[700]),
+                    style: TextStyle(fontSize: 12, color: Colors.blue[700]),
                   ),
                 ),
               ],
@@ -794,11 +879,10 @@ class _AsistenciasAdminCarreraScreenState
               ),
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 2),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color:
-                      const Color(0xFF1E3A5F).withValues(alpha: 0.1),
+                  color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -816,7 +900,8 @@ class _AsistenciasAdminCarreraScreenState
                 child: Container(
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E3A5F).withValues(alpha: 0.08),
+                    color:
+                        const Color(0xFF1E3A5F).withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(Icons.refresh,
@@ -831,8 +916,8 @@ class _AsistenciasAdminCarreraScreenState
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 32),
                 child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                      Color(0xFF1E3A5F)),
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(Color(0xFF1E3A5F)),
                 ),
               ),
             )
@@ -899,9 +984,8 @@ class _AsistenciasAdminCarreraScreenState
 
   Widget _buildEventoItem(Map<String, dynamic> evento) {
     final nombre = (evento['name'] as String?) ?? '';
-    final inicial = nombre.isNotEmpty
-        ? nombre.substring(0, 1).toUpperCase()
-        : '?';
+    final inicial =
+        nombre.isNotEmpty ? nombre.substring(0, 1).toUpperCase() : '?';
     final isSelected = _eventoSeleccionadoId == evento['id'];
 
     return GestureDetector(
@@ -939,11 +1023,11 @@ class _AsistenciasAdminCarreraScreenState
                   colors: isSelected
                       ? [
                           const Color(0xFF1E3A5F),
-                          const Color(0xFF2D5F8D)
+                          const Color(0xFF2D5F8D),
                         ]
                       : [
                           const Color(0xFF4A90E2),
-                          const Color(0xFF357ABD)
+                          const Color(0xFF357ABD),
                         ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -1165,8 +1249,7 @@ class _AsistenciasAdminCarreraScreenState
               : _isLoadingResumen
                   ? 'Cargando datos...'
                   : 'Exportar Reporte Excel',
-          style:
-              const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF27AE60),

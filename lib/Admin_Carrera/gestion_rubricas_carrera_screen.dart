@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '/prefs_helper.dart';
 import '/admin/logica/gestion_criterios.dart';
-import 'package:flutter/foundation.dart';
 
 class GestionRubricasCarreraScreen extends StatefulWidget {
   const GestionRubricasCarreraScreen({super.key});
@@ -1138,7 +1137,7 @@ class _EditarRubricaCarreraScreenState
 
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-    final ok = resultados[1] as bool;
+    final ok = resultados[1];
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(ok

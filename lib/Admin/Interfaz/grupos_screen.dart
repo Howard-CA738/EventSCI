@@ -938,7 +938,30 @@ class _GruposScreenState extends State<GruposScreen>
       },
     );
   }
+  
+Future<void> _corregirSalasTemporal() async {
+  const Map<String, String> codigoSala = {
+    '001': 'E-302', '002': 'E-302', '003': 'E-302', '004': 'E-302', '005': 'E-302', '006': 'E-302',
+    '007': 'E-303', '008': 'E-303', '009': 'E-303', '010': 'E-303', '011': 'E-303', '012': 'E-303', '013': 'E-303',
+    '014': 'E-304', '015': 'E-304', '016': 'E-304', '017': 'E-304', '018': 'E-304', '019': 'E-304', '020': 'E-304',
+    '021': 'E-307', '022': 'E-307', '023': 'E-307', '024': 'E-307', '025': 'E-307', '026': 'E-307',
+    '027': 'E-308', '028': 'E-308', '029': 'E-308', '030': 'E-308', '031': 'E-308', '032': 'E-308',
+    '033': 'E-401', '034': 'E-401', '035': 'E-401', '036': 'E-401', '037': 'E-401', '038': 'E-401', '039': 'E-401',
+  };
 
+  try {
+    final n = await _gruposService.corregirSalasPorCodigo(
+      widget.eventData['id'],
+      codigoSala,
+    );
+    if (!mounted) return;
+    _mostrarMensaje('Salas corregidas: $n proyectos actualizados', Colors.green);
+    await _cargarProyectosExistentes();
+  } catch (e) {
+    if (!mounted) return;
+    _mostrarError('Error al corregir salas: $e');
+  }
+}
   Future<void> _eliminarTodosLosProyectos() async {
     setState(() => _isLoadingProjects = true);
     try {
@@ -1678,20 +1701,21 @@ class DetalleProyectoScreen extends StatelessWidget {
                 child: const Text('Cancelar',
                     style: TextStyle(color: Colors.grey))),
             ElevatedButton(
-              onPressed: () async {
-                final nuevosDatos = {
-                  'Código': codigoCtrl.text.trim(),
-                  'Título': tituloCtrl.text.trim(),
-                  'Integrantes': integrantesCtrl.text.trim(),
-                  'Clasificación': clasificacionCtrl.text.trim(),
-                  'Sala': salaCtrl.text.trim(),
-                };
-                Navigator.pop(ctx);
-                if (context.mounted) {
-                  await _actualizarProyecto(context, nuevosDatos);
-                  if (context.mounted) Navigator.pop(context);
-                }
-              },
+            onPressed: () {
+  final nuevosDatos = {
+    'Código': codigoCtrl.text.trim(),
+    'Título': tituloCtrl.text.trim(),
+    'Integrantes': integrantesCtrl.text.trim(),
+    'Clasificación': clasificacionCtrl.text.trim(),
+    'Sala': salaCtrl.text.trim(),
+  };
+  Navigator.pop(ctx);
+  if (context.mounted) {
+    _actualizarProyecto(context, nuevosDatos).then((_) {
+      if (context.mounted) Navigator.pop(context);
+    });
+  }
+},
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF2196F3),
                 foregroundColor: Colors.white,
@@ -1836,11 +1860,12 @@ class DetalleProyectoScreen extends StatelessWidget {
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancelar')),
           ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await _eliminarProyectoConfirmado(context);
-              if (context.mounted) Navigator.pop(context);
-            },
+      onPressed: () {
+  Navigator.pop(ctx);
+  _eliminarProyectoConfirmado(context).then((_) {
+    if (context.mounted) Navigator.pop(context);
+  });
+},
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFF44336),
               foregroundColor: Colors.white,
@@ -1853,6 +1878,9 @@ class DetalleProyectoScreen extends StatelessWidget {
       ),
     );
   }
+
+
+
 
   Future<void> _eliminarProyectoConfirmado(BuildContext context) async {
     try {

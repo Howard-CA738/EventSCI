@@ -799,7 +799,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
 
   Widget _buildDropdownFilial() {
     return DropdownButtonFormField<String>(
-      value: _filialSeleccionada,
+      initialValue: _filialSeleccionada,
       isExpanded: true,
       menuMaxHeight: 300,
       decoration: _inputDecoration('Filial', Icons.location_city),
@@ -821,7 +821,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
 
   Widget _buildDropdownFacultad() {
     return DropdownButtonFormField<String>(
-      value: _facultadSeleccionada,
+      initialValue: _facultadSeleccionada,
       isExpanded: true,
       menuMaxHeight: 300,
       decoration: _inputDecoration('Facultad', Icons.school),
@@ -842,7 +842,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
 
   Widget _buildDropdownCarrera() {
     return DropdownButtonFormField<String>(
-      value: _carreraSeleccionada,
+      initialValue: _carreraSeleccionada,
       isExpanded: true,
       menuMaxHeight: 300,
       decoration: _inputDecoration('Carrera (opcional)', Icons.menu_book),
@@ -895,7 +895,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       icon: Icons.event,
       titulo: '2. Seleccionar Evento',
       child: DropdownButtonFormField<String>(
-        value: _eventoSeleccionado,
+        initialValue: _eventoSeleccionado,
         isExpanded: true,
         menuMaxHeight: 300,
         decoration: _inputDecoration('Evento', Icons.event_note),
@@ -928,7 +928,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
                   mensaje: 'No hay jurados para este evento',
                 )
               : DropdownButtonFormField<String>(
-                  value: _juradoSeleccionado,
+                  initialValue: _juradoSeleccionado,
                   isExpanded: true,
                   menuMaxHeight: 300,
                   decoration: _inputDecoration('Jurado', Icons.badge),
@@ -1009,7 +1009,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
 
   Widget _buildDropdownRubricas() {
     return DropdownButtonFormField<String>(
-      value: _rubricaSeleccionada?.id,
+      initialValue: _rubricaSeleccionada?.id,
       isExpanded: true,
       menuMaxHeight: 300,
       decoration: _inputDecoration('Selecciona una rúbrica', Icons.assignment),

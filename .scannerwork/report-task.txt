@@ -1,0 +1,6 @@
+projectKey=EventSCI
+serverUrl=http://localhost:9000
+serverVersion=10.7.0.96327
+dashboardUrl=http://localhost:9000/dashboard?id=EventSCI
+ceTaskId=c7c47f2e-050f-47f2-a1f6-db97fa04109c
+ceTaskUrl=http://localhost:9000/api/ce/task?id=c7c47f2e-050f-47f2-a1f6-db97fa04109c
