@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'reporte_usuarios_service.dart';
 import 'usuarios_excel_service.dart';
@@ -277,7 +277,7 @@ class _ReporteUsuariosScreenState extends State<ReporteUsuariosScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.insights, color: Colors.white, size: 24),
@@ -306,12 +306,10 @@ class _ReporteUsuariosScreenState extends State<ReporteUsuariosScreen> {
 
   Widget _buildContenido(List<FilialResumen> data) {
     int totalEventos = 0;
-    int totalMatriculados = 0;
     int totalPagaron = 0;
     int totalAsistieron = 0;
     for (final f in data) {
       totalEventos += f.totalEventos;
-      totalMatriculados += f.totalMatriculados;
       for (final fa in f.facultades) {
         for (final c in fa.carreras) {
           totalPagaron += c.totalPagaron;
@@ -358,7 +356,7 @@ class _ReporteUsuariosScreenState extends State<ReporteUsuariosScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8),
         ],
       ),
       child: Column(
@@ -587,7 +585,7 @@ class _ReporteUsuariosScreenState extends State<ReporteUsuariosScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: soft ? _navy.withOpacity(0.08) : _navy,
+        color: soft ? _navy.withValues(alpha: 0.08) : _navy,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -641,7 +639,7 @@ class _ReporteUsuariosScreenState extends State<ReporteUsuariosScreen> {
   Widget _buildOverlay() {
     return Positioned.fill(
       child: Container(
-        color: Colors.black.withOpacity(0.55),
+        color: Colors.black.withValues(alpha: 0.55),
         child: Center(
           child: Container(
             padding: const EdgeInsets.all(28),
@@ -1033,7 +1031,7 @@ class _CertificadosSheetState extends State<_CertificadosSheet> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8),
         ],
       ),
       child: Column(
@@ -1168,9 +1166,9 @@ class _CertificadosSheetState extends State<_CertificadosSheet> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1179,7 +1177,7 @@ class _CertificadosSheetState extends State<_CertificadosSheet> {
               style: TextStyle(
                   fontSize: 18, fontWeight: FontWeight.bold, color: color)),
           Text(label,
-              style: TextStyle(fontSize: 11, color: color.withOpacity(0.8)),
+              style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.8)),
               maxLines: 1, overflow: TextOverflow.ellipsis),
         ],
       ),

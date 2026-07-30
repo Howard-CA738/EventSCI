@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '/encryption_helper.dart';
-import '/resolver_nombres_service.dart';
 
 /// Una escuela (carrera) dentro de la estructura filial→facultad→escuela.
 class EscuelaItem {

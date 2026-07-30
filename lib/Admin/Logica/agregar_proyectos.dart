@@ -5,7 +5,6 @@ import '/admin/logica/grupos.dart';
 
 class _C {
   static const navy    = Color(0xFF0F2342);
-  static const accent  = Color(0xFF3B82F6);
   static const teal    = Color(0xFF0F9D58);
   static const tealL   = Color(0xFFD7F5E6);
   static const surface = Color(0xFFF8FAFC);

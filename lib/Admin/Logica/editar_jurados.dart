@@ -24,7 +24,6 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
   List<Map<String, dynamic>> _carrerasDisponibles = [];
   List<Map<String, dynamic>> _jurados = [];
 
-  bool _isLoadingFiliales = true;
   bool _isLoadingJurados = false;
 
   @override
@@ -35,25 +34,15 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
 
   // ✅ NUEVO: Cargar filiales
   Future<void> _cargarFiliales() async {
-    setState(() {
-      _isLoadingFiliales = true;
-    });
-
     try {
       final filiales = await _rubricasService.getFiliales();
       if (mounted) {
         setState(() {
           _filialesDisponibles = filiales;
-          _isLoadingFiliales = false;
         });
       }
     } catch (e) {
       debugPrint('Error al cargar filiales: $e');
-      if (mounted) {
-        setState(() {
-          _isLoadingFiliales = false;
-        });
-      }
     }
   }
 

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:convert';
@@ -371,7 +371,7 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
         border: Border.all(color: _borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -415,7 +415,7 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
                     const SizedBox(width: 8),
                     Icon(
                       Icons.qr_code_rounded,
-                      color: _primaryColor.withOpacity(0.5),
+                      color: _primaryColor.withValues(alpha: 0.5),
                       size: 22,
                     ),
                   ],
@@ -547,7 +547,7 @@ class _ProyectosCategoriaScreenState extends State<ProyectosCategoriaScreen>
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: _primaryColor.withOpacity(0.15),
+                    color: _primaryColor.withValues(alpha: 0.15),
                     blurRadius: 20,
                     offset: const Offset(0, 4),
                   ),

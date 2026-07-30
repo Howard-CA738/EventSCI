@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
@@ -398,7 +398,7 @@ class _AsignarProyectosCarreraScreenState
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.12),
+                color: Colors.black.withValues(alpha: 0.12),
                 blurRadius: 30,
                 offset: const Offset(0, 10),
               ),
@@ -416,7 +416,7 @@ class _AsignarProyectosCarreraScreenState
                       color: (_modoEdicion
                               ? const Color(0xFF2E9E6E)
                               : const Color(0xFF1E3A5F))
-                          .withOpacity(0.1),
+                          .withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
@@ -714,7 +714,7 @@ class _AsignarProyectosCarreraScreenState
           preferredSize: const Size.fromHeight(1),
           child: Container(
             height: 1,
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.1),
           ),
         ),
       ),
@@ -771,7 +771,7 @@ class _AsignarProyectosCarreraScreenState
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1E3A5F).withOpacity(0.3),
+            color: const Color(0xFF1E3A5F).withValues(alpha: 0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -783,7 +783,7 @@ class _AsignarProyectosCarreraScreenState
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Icon(Icons.school_rounded,
@@ -809,7 +809,7 @@ class _AsignarProyectosCarreraScreenState
                 Text(
                   _facultad ?? '—',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.75),
+                    color: Colors.white.withValues(alpha: 0.75),
                     fontSize: 12,
                   ),
                   maxLines: 1,
@@ -840,10 +840,10 @@ class _AsignarProyectosCarreraScreenState
             padding: const EdgeInsets.symmetric(
                 horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                  color: Colors.white.withOpacity(0.25)),
+                  color: Colors.white.withValues(alpha: 0.25)),
             ),
             child: const Text(
               'Tu carrera',
@@ -935,7 +935,7 @@ class _AsignarProyectosCarreraScreenState
               padding: const EdgeInsets.symmetric(
                   horizontal: 9, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E3A5F).withOpacity(0.1),
+                color: const Color(0xFF1E3A5F).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
@@ -954,10 +954,10 @@ class _AsignarProyectosCarreraScreenState
           padding: const EdgeInsets.symmetric(
               horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.blue.withOpacity(0.07),
+            color: Colors.blue.withValues(alpha: 0.07),
             borderRadius: BorderRadius.circular(10),
             border:
-                Border.all(color: Colors.blue.withOpacity(0.2)),
+                Border.all(color: Colors.blue.withValues(alpha: 0.2)),
           ),
           child: Row(
             children: [
@@ -1001,7 +1001,7 @@ class _AsignarProyectosCarreraScreenState
             border: Border.all(color: const Color(0xFFE8EDF5)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 10,
                 offset: const Offset(0, 3),
               ),
@@ -1119,7 +1119,7 @@ class _AsignarProyectosCarreraScreenState
             Border.all(color: const Color(0xFF2E9E6E), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2E9E6E).withOpacity(0.12),
+            color: const Color(0xFF2E9E6E).withValues(alpha: 0.12),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -1131,7 +1131,7 @@ class _AsignarProyectosCarreraScreenState
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: const Color(0xFF2E9E6E).withOpacity(0.12),
+              color: const Color(0xFF2E9E6E).withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(Icons.event_available_rounded,
@@ -1199,7 +1199,7 @@ class _AsignarProyectosCarreraScreenState
                     horizontal: 10, vertical: 8),
                 minimumSize: const Size(44, 44),
                 backgroundColor:
-                    const Color(0xFF1E3A5F).withOpacity(0.07),
+                    const Color(0xFF1E3A5F).withValues(alpha: 0.07),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1285,7 +1285,7 @@ class _AsignarProyectosCarreraScreenState
                               height: 36,
                               decoration: BoxDecoration(
                                 color: const Color(0xFFD4863B)
-                                    .withOpacity(0.1),
+                                    .withValues(alpha: 0.1),
                                 borderRadius:
                                     BorderRadius.circular(10),
                               ),
@@ -1372,8 +1372,8 @@ class _AsignarProyectosCarreraScreenState
             horizontal: 7, vertical: 2),
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFFD4863B).withOpacity(0.15)
-              : const Color(0xFF1E3A5F).withOpacity(0.07),
+              ? const Color(0xFFD4863B).withValues(alpha: 0.15)
+              : const Color(0xFF1E3A5F).withValues(alpha: 0.07),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
@@ -1396,7 +1396,7 @@ class _AsignarProyectosCarreraScreenState
           padding: const EdgeInsets.symmetric(
               horizontal: 7, vertical: 2),
           decoration: BoxDecoration(
-            color: Colors.grey.withOpacity(0.12),
+            color: Colors.grey.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Text(
@@ -1436,14 +1436,14 @@ class _AsignarProyectosCarreraScreenState
                 ? [
                     BoxShadow(
                       color:
-                          const Color(0xFFD4863B).withOpacity(0.15),
+                          const Color(0xFFD4863B).withValues(alpha: 0.15),
                       blurRadius: 10,
                       offset: const Offset(0, 3),
                     ),
                   ]
                 : [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withValues(alpha: 0.03),
                       blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),
@@ -1570,7 +1570,7 @@ class _AsignarProyectosCarreraScreenState
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2E9E6E).withOpacity(0.15),
+                      color: const Color(0xFF2E9E6E).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.check_circle_rounded,
@@ -1636,7 +1636,7 @@ class _AsignarProyectosCarreraScreenState
         padding: const EdgeInsets.symmetric(
             horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: const Color(0xFF3B6FD4).withOpacity(0.1),
+          color: const Color(0xFF3B6FD4).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -1704,10 +1704,10 @@ class _AsignarProyectosCarreraScreenState
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-            color: color.withOpacity(0.25), width: 1.5),
+            color: color.withValues(alpha: 0.25), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1885,9 +1885,9 @@ class _AsignarProyectosCarreraScreenState
       padding: const EdgeInsets.symmetric(
           horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Text(
         label,
@@ -2059,7 +2059,7 @@ class _AsignarProyectosCarreraScreenState
                   shadowColor: (_modoEdicion
                           ? const Color(0xFF2E9E6E)
                           : const Color(0xFF1E3A5F))
-                      .withOpacity(0.4),
+                      .withValues(alpha: 0.4),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
                 ),
@@ -2172,7 +2172,7 @@ class _AsignarProyectosCarreraScreenState
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),

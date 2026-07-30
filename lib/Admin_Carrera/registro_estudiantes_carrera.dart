@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
 import 'estudiantes_registrados_carrera.dart';
 import '/admin/logica/datos_excel.dart';
@@ -29,7 +29,6 @@ class _RegistroEstudiantesCarreraScreenState
   late Animation<Offset> _headerSlideAnimation;
   late Animation<double> _formFadeAnimation;
 
-  String _adminCarreraFilial = '';
   String _adminCarreraFilialNombre = '';
   String _adminCarreraFacultad = '';
   String _adminCarreraCarrera = '';
@@ -94,7 +93,6 @@ class _RegistroEstudiantesCarreraScreenState
       final adminData = await PrefsHelper.getAdminCarreraData();
       if (adminData != null && mounted) {
         setState(() {
-          _adminCarreraFilial = adminData['filial'] ?? '';
           _adminCarreraFilialNombre =
               adminData['filialNombre'] ?? adminData['filial'] ?? '';
           _adminCarreraFacultad = adminData['facultad'] ?? '';
@@ -362,7 +360,7 @@ class _RegistroEstudiantesCarreraScreenState
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: _primaryColor.withOpacity(0.1),
+                    color: _primaryColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(icon, color: _primaryColor, size: 24),
@@ -400,7 +398,7 @@ class _RegistroEstudiantesCarreraScreenState
             backgroundColor: _primaryColor,
             foregroundColor: Colors.white,
             elevation: 3,
-            shadowColor: _primaryColor.withOpacity(0.4),
+            shadowColor: _primaryColor.withValues(alpha: 0.4),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16)),
             minimumSize: const Size(double.infinity, 56),

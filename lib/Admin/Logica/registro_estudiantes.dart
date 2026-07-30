@@ -39,7 +39,6 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
   String? _selectedFilial;
   String? _selectedFacultad;
   String? _selectedCarrera;
-  String? _selectedCarreraId;
   String? _selectedCiclo;
   String? _selectedGrupo;
   String? _selectedPago;
@@ -135,7 +134,6 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
       _selectedFilial = filial;
       _selectedFacultad = null;
       _selectedCarrera = null;
-      _selectedCarreraId = null;
       _facultadesDisponibles = [];
       _carrerasDisponibles = [];
 
@@ -153,7 +151,6 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
     setState(() {
       _selectedFacultad = facultad;
       _selectedCarrera = null;
-      _selectedCarreraId = null;
       _carrerasDisponibles = [];
 
       if (_selectedFilial != null &&
@@ -280,7 +277,6 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
       _selectedFilial = null;
       _selectedFacultad = null;
       _selectedCarrera = null;
-      _selectedCarreraId = null;
       _selectedCiclo = null;
       _selectedGrupo = null;
       _selectedPago = null;
@@ -905,11 +901,6 @@ class _RegistroEstudiantesScreenState extends State<RegistroEstudiantesScreen>
                                             .toList(),
                                         onChanged: (v) => setState(() {
                                           _selectedCarrera = v;
-                                          final found =
-                                              _carrerasDisponibles.firstWhere(
-                                                  (c) => c['nombre'] == v,
-                                                  orElse: () => {});
-                                          _selectedCarreraId = found['id'];
                                         }),
                                         validator: (v) => v == null
                                             ? 'Selecciona una carrera'

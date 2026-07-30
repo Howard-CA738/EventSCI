@@ -834,7 +834,6 @@ class _ListaEventosScreenState extends State<ListaEventosScreen>
 final List<Map<String, dynamic>> _periodos = [];
 
   late AnimationController _animationController;
-  bool _isLoadingFilters = true;
 
 // ListaEventosScreen.initState()
 @override
@@ -869,12 +868,9 @@ void initState() {
 
       setState(() {
         _filiales = results[0] as List<Map<String, String>>;
-        _isLoadingFilters = false;
       });
     } catch (e) {
       debugPrint('Error cargando datos de filtros: $e');
-      if (!mounted) return;
-      setState(() => _isLoadingFilters = false);
     }
   }
 

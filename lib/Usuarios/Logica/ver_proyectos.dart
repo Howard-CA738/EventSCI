@@ -72,7 +72,6 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
   bool _isLoadingProjects = false;
 
   String? _studentFilial;
-  String? _studentFilialId;
   String? _studentFacultad;
   String? _studentCarrera;
 
@@ -119,7 +118,6 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
       if (!mounted) return;
       setState(() {
         _studentFilial = userData['filial']?.toString();
-        _studentFilialId = userData['filialId']?.toString();
         _studentFacultad = userData['facultad']?.toString();
         _studentCarrera = userData['carrera']?.toString();
       });

@@ -1,11 +1,10 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/admin/logica/filiales_service.dart';
 import 'listas_certificados_importados_screen.dart';
 
 const _kPrimario       = Color(0xFF1E3A5F);
-const _kPrimario10     = Color(0x1A1E3A5F);
 const _kPrimario40     = Color(0x661E3A5F);
 const _kTextoGris      = Color(0xFF64748B);
 const _kTextoGrisClaro = Color(0xFF94A3B8);
@@ -101,8 +100,8 @@ class _CodigoEntry {
   final int    linea;
   final String codigoEstudiante;
 
-  _Estado estado;
-  String  mensaje;
+  _Estado estado = _Estado.noEncontrado;
+  String  mensaje = '';
 
   String? estudianteId;
   String? estudianteNombre;
@@ -121,8 +120,6 @@ class _CodigoEntry {
   _CodigoEntry({
     required this.linea,
     required this.codigoEstudiante,
-    this.estado  = _Estado.noEncontrado,
-    this.mensaje = '',
   });
 
   // Válido para avanzar al campo 2: código correcto (con o sin certificado
@@ -817,7 +814,7 @@ class _ImportarCodigosCertificadoScreenState
           Container(
             width: 34, height: 34,
             decoration: BoxDecoration(
-                color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
             child: Icon(icon, color: color, size: 18),
           ),
           const SizedBox(width: 10),
@@ -1079,10 +1076,10 @@ class _ImportarCodigosCertificadoScreenState
   Widget _statMini(String value, String label, Color color) => Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-            color: color.withOpacity(0.08), borderRadius: BorderRadius.circular(10)),
+            color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10)),
         child: Column(children: [
           Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 16)),
-          Text(label, style: TextStyle(fontSize: 9, color: color.withOpacity(0.85))),
+          Text(label, style: TextStyle(fontSize: 9, color: color.withValues(alpha: 0.85))),
         ]),
       );
 
@@ -1093,7 +1090,7 @@ class _ImportarCodigosCertificadoScreenState
           decoration: BoxDecoration(
             color: selected ? _kAzulInfo : Colors.white,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: _kAzulInfo.withOpacity(0.5)),
+            border: Border.all(color: _kAzulInfo.withValues(alpha: 0.5)),
           ),
           child: Text(label,
               style: TextStyle(
@@ -1117,9 +1114,9 @@ class _ImportarCodigosCertificadoScreenState
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.06),
+        color: color.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.25)),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Icon(icon, size: 16, color: color),
@@ -1287,7 +1284,7 @@ class _ImportarCodigosCertificadoScreenState
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                            color: _kAzulInfo.withOpacity(0.1),
+                            color: _kAzulInfo.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(6)),
                         child: Text(
                           e.generarCompleto ? 'Nuevo · completo' : 'Nuevo · solo código',

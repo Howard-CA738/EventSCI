@@ -14,19 +14,15 @@ import 'control_pagos.dart';
 import 'crear_filiales.dart';
 import 'editar_admin.dart';
 import 'gestion_grupos.dart';
-import 'buscar_estudiante_global_screen.dart';
 import 'gestion_rubricas.dart';
 import 'periodos.dart';
 import 'registro_estudiantes.dart';
 import 'gestion_sesiones_super_admin.dart';
 import 'reporte_usuarios.dart';
 import 'control_bloqueo_escaner.dart';
-import 'ver_ganadores_por_sala.dart';
 import 'importar_notas_docente.dart';
 import 'importar_codigos_certificado_screen.dart';
 import 'evaluacion_final_super_admin.dart';
-import 'comparador_codigos_certificado_screen.dart';
-import 'limpieza_duplicados_screen.dart';
 
 
 class AdminScreen extends StatefulWidget {
@@ -142,12 +138,6 @@ class _AdminScreenState extends State<AdminScreen> {
       builder: () => const GestionSesionesSuperAdminScreen(),
     ),
     _AdminMenuItem(
-  imagePath: 'assets/icons/notas.png',
-  title: 'Ganadores\npor Sala',
-  subtitle: '1 ganador por sala',
-  builder: () => const VerGanadoresPorSalaScreen(),
-),
-    _AdminMenuItem(
       imagePath: 'assets/icons/admin_carrera.png',
       title: 'Gestión de\nJurados',
       subtitle: 'Jurados por filial, facultad y carrera',
@@ -170,24 +160,6 @@ _AdminMenuItem(
   title: 'Importar Códigos\nde Certificado',
   subtitle: 'Asignar códigos en bloque desde Excel',
   builder: () => const ImportarCodigosCertificadoScreen(),
-),
-_AdminMenuItem(
-  imagePath: 'assets/icons/usuario.png', // puedes usar otro ícono si tienes uno de lupa/búsqueda
-  title: 'Buscar\nEstudiante',
-  subtitle: 'Buscar por código, nombre o apellido',
-  builder: () => const BuscarEstudianteGlobalScreen(),
-),
-_AdminMenuItem(
-  imagePath: 'assets/icons/notas.png',
-  title: 'Comparar\nCódigos',
-  subtitle: 'Buscar códigos y su certificado',
-  builder: () => const ComparadorCodigosCertificadoScreen(),
-),
-_AdminMenuItem(
-  imagePath: 'assets/icons/notas.png', // reusa el que prefieras
-  title: 'Limpieza de\nDuplicados',
-  subtitle: 'TEMPORAL: revisar carreras duplicadas',
-  builder: () => const LimpiezaDuplicadosScreen(),
 ),
     _AdminMenuItem(
       imagePath: 'assets/icons/admin.png',

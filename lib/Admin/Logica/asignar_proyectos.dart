@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'crear_jurados.dart';
 import 'gestion_criterios.dart';
@@ -42,8 +42,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
   bool _isLoadingProyectos = false;
   bool _isAsignando = false;
 
-  String _nombreFilialSeleccionada = '';
-
   final Map<String, String> _filialNombresCache = {};
 
   @override
@@ -71,15 +69,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
     }
   }
 
-  Future<String> _getNombreFilialCached(String filialId) async {
-    if (_filialNombresCache.containsKey(filialId)) {
-      return _filialNombresCache[filialId]!;
-    }
-    final nombre = await _rubricasService.getNombreFilial(filialId);
-    _filialNombresCache[filialId] = nombre;
-    return nombre;
-  }
-
   Future<void> _onFilialChanged(String? filial) async {
     setState(() {
       _filialSeleccionada = filial;
@@ -100,7 +89,6 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
     });
 
     if (filial != null) {
-      _nombreFilialSeleccionada = await _getNombreFilialCached(filial);
       final facultades = await _rubricasService.getFacultadesByFilial(filial);
       if (mounted) {
         setState(() => _facultadesDisponibles = facultades);
@@ -1158,7 +1146,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
                     vertical: 5,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2196F3).withOpacity(0.1),
+                    color: const Color(0xFF2196F3).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -1264,7 +1252,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.3), width: 2),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 2),
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -1300,7 +1288,7 @@ class _AsignarProyectosScreenState extends State<AsignarProyectosScreen> {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [color, color.withOpacity(0.75)],
+                  colors: [color, color.withValues(alpha: 0.75)],
                 ),
                 borderRadius: BorderRadius.circular(10),
               ),

@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -397,7 +397,7 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1E3A5F).withOpacity(0.25),
+            color: const Color(0xFF1E3A5F).withValues(alpha: 0.25),
             blurRadius: 12, offset: const Offset(0, 4),
           ),
         ],
@@ -427,9 +427,9 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.25),
+                    color: color.withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: color.withOpacity(0.5)),
+                    border: Border.all(color: color.withValues(alpha: 0.5)),
                   ),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     Icon(_iconPorRol(e.key), size: 12, color: Colors.white),
@@ -448,7 +448,7 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
           Text(
             'Desliza hacia abajo para actualizar',
             style: TextStyle(
-                fontSize: 10, color: Colors.white.withOpacity(0.6)),
+                fontSize: 10, color: Colors.white.withValues(alpha: 0.6)),
           ),
         ],
       ),
@@ -465,10 +465,10 @@ Widget _buildCertCard(_CertItem cert) {
     decoration: BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: color.withOpacity(0.2), width: 1.5),
+      border: Border.all(color: color.withValues(alpha: 0.2), width: 1.5),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.05),
+          color: Colors.black.withValues(alpha: 0.05),
           blurRadius: 8, offset: const Offset(0, 3),
         ),
       ],
@@ -478,7 +478,7 @@ Widget _buildCertCard(_CertItem cert) {
         Container(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.06),
+            color: color.withValues(alpha: 0.06),
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(16),
               topRight: Radius.circular(16),
@@ -582,7 +582,7 @@ Widget _buildCertCard(_CertItem cert) {
                           style: TextStyle(fontSize: 13)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: color,
-                        side: BorderSide(color: color.withOpacity(0.5)),
+                        side: BorderSide(color: color.withValues(alpha: 0.5)),
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10)),

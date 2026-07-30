@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:printing/printing.dart';
@@ -578,7 +578,7 @@ class _ListasCertificadosImportadosScreenState
                 backgroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(color: color.withOpacity(activo ? 0 : 0.4)),
+                  side: BorderSide(color: color.withValues(alpha: activo ? 0 : 0.4)),
                 ),
                 onSelected: (_) => setState(() => _filtroRol = r),
               ),
@@ -694,7 +694,7 @@ class _ListasCertificadosImportadosScreenState
               Container(
                 width: 40, height: 40,
                 decoration: BoxDecoration(
-                    color: esJuradoLista ? _kJurado.withOpacity(0.1) : _kPrimario10,
+                    color: esJuradoLista ? _kJurado.withValues(alpha: 0.1) : _kPrimario10,
                     borderRadius: BorderRadius.circular(10)),
                 child: Icon(esJuradoLista ? Icons.gavel_rounded : Icons.qr_code_2_rounded,
                     color: esJuradoLista ? _kJurado : _kPrimario, size: 20),
@@ -744,7 +744,7 @@ class _ListasCertificadosImportadosScreenState
 
   Widget _badge(IconData icon, String label, Color color) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 4),
@@ -1157,7 +1157,7 @@ class _DetalleListaScreenState extends State<_DetalleListaScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: esManual ? _kAzulInfo.withOpacity(0.4) : const Color(0xFFE2E8F0)),
+            color: esManual ? _kAzulInfo.withValues(alpha: 0.4) : const Color(0xFFE2E8F0)),
       ),
       child: Row(children: [
         if (esJurado)
@@ -1198,7 +1198,7 @@ class _DetalleListaScreenState extends State<_DetalleListaScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                      color: _kAzulInfo.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                      color: _kAzulInfo.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
                   child: const Text('Manual',
                       style: TextStyle(fontSize: 9, color: _kAzulInfo, fontWeight: FontWeight.w600)),
                 ),
@@ -1208,7 +1208,7 @@ class _DetalleListaScreenState extends State<_DetalleListaScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                      color: _kVerde.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                      color: _kVerde.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
                   child: const Text('Enviado',
                       style: TextStyle(fontSize: 9, color: _kVerde, fontWeight: FontWeight.w600)),
                 ),
@@ -1684,7 +1684,7 @@ Future<void> _agregarCertificadoManual() async {
             width: double.infinity,
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-                color: _kAzulInfo.withOpacity(0.08), borderRadius: BorderRadius.circular(10)),
+                color: _kAzulInfo.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10)),
             child: Text(
               'Se agregará a la lista "${_data['evento'] ?? ''}". Como no está en '
               'el sistema, este certificado se podrá descargar junto con los '
@@ -2566,8 +2566,8 @@ bool _bloqueaJurado(_EstadoJuradoBloque e) =>
 class _JuradoBloqueEntry {
   final int linea;
   final String nombreIngresado;
-  _EstadoJuradoBloque estado;
-  String mensaje;
+  _EstadoJuradoBloque estado = _EstadoJuradoBloque.creadoManual;
+  String mensaje = '';
 
   String? juradoId;
   String  dni = '';
@@ -2578,8 +2578,6 @@ class _JuradoBloqueEntry {
   _JuradoBloqueEntry({
     required this.linea,
     required this.nombreIngresado,
-    this.estado = _EstadoJuradoBloque.creadoManual,
-    this.mensaje = '',
   });
 
   bool get esValido => !_bloqueaJurado(estado);
@@ -3171,7 +3169,7 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
   Widget _sectionTitle(IconData icon, String title, {Color color = _kJurado}) => Row(children: [
         Container(
           width: 34, height: 34,
-          decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
           child: Icon(icon, color: color, size: 18),
         ),
         const SizedBox(width: 10),
@@ -3283,10 +3281,10 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
 
   Widget _statMini(String value, String label, Color color) => Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(color: color.withOpacity(0.08), borderRadius: BorderRadius.circular(10)),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10)),
         child: Column(children: [
           Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 16)),
-          Text(label, style: TextStyle(fontSize: 9, color: color.withOpacity(0.85))),
+          Text(label, style: TextStyle(fontSize: 9, color: color.withValues(alpha: 0.85))),
         ]),
       );
 
@@ -3302,9 +3300,9 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.06),
+        color: color.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.25)),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Icon(icon, size: 16, color: color),
@@ -3454,7 +3452,7 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: badgeColor.withOpacity(0.1),
+                          color: badgeColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(badgeTexto,

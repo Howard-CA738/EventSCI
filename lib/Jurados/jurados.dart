@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
@@ -348,7 +348,7 @@ await _cargarProyectosAsignados();
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
+                  color: Colors.white.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(Icons.gavel, color: Colors.white, size: 22),
@@ -372,7 +372,7 @@ await _cargarProyectosAsignados();
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.white.withOpacity(0.75),
+                        color: Colors.white.withValues(alpha: 0.75),
                       ),
                     ),
                   ],
@@ -423,7 +423,7 @@ await _cargarProyectosAsignados();
                     child: LinearProgressIndicator(
                       value: progreso,
                       minHeight: 6,
-                      backgroundColor: Colors.white.withOpacity(0.25),
+                      backgroundColor: Colors.white.withValues(alpha: 0.25),
                       valueColor:
                           const AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
@@ -434,7 +434,7 @@ await _cargarProyectosAsignados();
                   '$_totalEvaluados/$_totalProyectos evaluados',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.white.withOpacity(0.85),
+                    color: Colors.white.withValues(alpha: 0.85),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -452,7 +452,7 @@ await _cargarProyectosAsignados();
       child: Container(
         height: 44,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.12),
+          color: Colors.white.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(12),
         ),
         child: TabBar(
@@ -464,7 +464,7 @@ await _cargarProyectosAsignados();
           indicatorSize: TabBarIndicatorSize.tab,
           dividerColor: Colors.transparent,
           labelColor: const Color(0xFF1E3A5F),
-          unselectedLabelColor: Colors.white.withOpacity(0.75),
+          unselectedLabelColor: Colors.white.withValues(alpha: 0.75),
           labelStyle:
               const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
           unselectedLabelStyle:
@@ -597,7 +597,7 @@ await _cargarProyectosAsignados();
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -609,7 +609,7 @@ await _cargarProyectosAsignados();
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E3A5F).withOpacity(0.05),
+              color: const Color(0xFF1E3A5F).withValues(alpha: 0.05),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(18),
                 topRight: Radius.circular(18),
@@ -747,7 +747,7 @@ await _cargarProyectosAsignados();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(text,
@@ -787,7 +787,7 @@ await _cargarProyectosAsignados();
         color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: estadoColor.withOpacity(0.25),
+          color: estadoColor.withValues(alpha: 0.25),
           width: 1.5,
         ),
       ),
@@ -825,7 +825,7 @@ await _cargarProyectosAsignados();
                     padding: const EdgeInsets.symmetric(
                         horizontal: 9, vertical: 4),
                     decoration: BoxDecoration(
-                      color: estadoColor.withOpacity(0.1),
+                      color: estadoColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
@@ -901,10 +901,10 @@ await _cargarProyectosAsignados();
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 7),
                       decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.1),
+                        color: Colors.green.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                            color: Colors.green.withOpacity(0.3)),
+                            color: Colors.green.withValues(alpha: 0.3)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1008,7 +1008,7 @@ class _BotonNota extends StatelessWidget {
             border: Border.all(
               color: seleccionado
                   ? const Color(0xFF1E3A5F)
-                  : const Color(0xFF1E3A5F).withOpacity(0.2),
+                  : const Color(0xFF1E3A5F).withValues(alpha: 0.2),
             ),
           ),
           child: Center(
@@ -1302,7 +1302,7 @@ class _EvaluacionProyectoScreenState
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                               fontSize: 12,
-                              color: Colors.white.withOpacity(0.75)),
+                              color: Colors.white.withValues(alpha: 0.75)),
                         ),
                       ],
                     ),
@@ -1332,7 +1332,7 @@ class _EvaluacionProyectoScreenState
                           value: progresoEval,
                           minHeight: 6,
                           backgroundColor:
-                              Colors.white.withOpacity(0.25),
+                              Colors.white.withValues(alpha: 0.25),
                           valueColor: AlwaysStoppedAnimation<Color>(
                             progresoEval == 1.0
                                 ? Colors.greenAccent
@@ -1349,7 +1349,7 @@ class _EvaluacionProyectoScreenState
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                             fontSize: 12,
-                            color: Colors.white.withOpacity(0.85),
+                            color: Colors.white.withValues(alpha: 0.85),
                             fontWeight: FontWeight.w600),
                       ),
                     ),
@@ -1403,13 +1403,13 @@ class _EvaluacionProyectoScreenState
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: _estaBloqueado
-            ? Colors.red.withOpacity(0.08)
-            : Colors.green.withOpacity(0.08),
+            ? Colors.red.withValues(alpha: 0.08)
+            : Colors.green.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: _estaBloqueado
-              ? Colors.red.withOpacity(0.3)
-              : Colors.green.withOpacity(0.3),
+              ? Colors.red.withValues(alpha: 0.3)
+              : Colors.green.withValues(alpha: 0.3),
         ),
       ),
       child: Row(
@@ -1440,7 +1440,7 @@ class _EvaluacionProyectoScreenState
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.withOpacity(0.15)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1502,8 +1502,8 @@ class _EvaluacionProyectoScreenState
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: seccionCompleta
-              ? Colors.green.withOpacity(0.3)
-              : Colors.grey.withOpacity(0.15),
+              ? Colors.green.withValues(alpha: 0.3)
+              : Colors.grey.withValues(alpha: 0.15),
         ),
       ),
       child: Theme(
@@ -1517,8 +1517,8 @@ class _EvaluacionProyectoScreenState
             padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
               color: seccionCompleta
-                  ? Colors.green.withOpacity(0.12)
-                  : const Color(0xFF1E3A5F).withOpacity(0.08),
+                  ? Colors.green.withValues(alpha: 0.12)
+                  : const Color(0xFF1E3A5F).withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
@@ -1560,13 +1560,13 @@ class _EvaluacionProyectoScreenState
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: calificado
-            ? Colors.green.withOpacity(0.04)
+            ? Colors.green.withValues(alpha: 0.04)
             : const Color(0xFFFAFAFA),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: calificado
-              ? Colors.green.withOpacity(0.25)
-              : Colors.grey.withOpacity(0.2),
+              ? Colors.green.withValues(alpha: 0.25)
+              : Colors.grey.withValues(alpha: 0.2),
           width: calificado ? 1.5 : 1,
         ),
       ),
@@ -1704,7 +1704,7 @@ class _EvaluacionProyectoScreenState
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(
-                  color: const Color(0xFF1E3A5F).withOpacity(0.3)),
+                  color: const Color(0xFF1E3A5F).withValues(alpha: 0.3)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
@@ -1714,7 +1714,7 @@ class _EvaluacionProyectoScreenState
             disabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide:
-                  BorderSide(color: Colors.grey.withOpacity(0.2)),
+                  BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
             ),
             filled: true,
             fillColor: soloLectura ? Colors.grey[100] : Colors.white,

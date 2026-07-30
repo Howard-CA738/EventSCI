@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 
@@ -308,7 +308,7 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
             if (_isSaving)
               Positioned.fill(
                 child: ColoredBox(
-                  color: Colors.black.withOpacity(0.15),
+                  color: Colors.black.withValues(alpha: 0.15),
                   child: const Center(
                     child: CircularProgressIndicator(
                       color: Color(0xFF1E3A5F),
@@ -333,7 +333,7 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(Icons.manage_accounts_rounded,
@@ -373,7 +373,7 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.07),
+              color: Colors.black.withValues(alpha: 0.07),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],
@@ -471,7 +471,7 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
             : Border.all(color: Colors.transparent),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],
@@ -600,7 +600,7 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
                                     color: isActive
                                         ? rInfo['color'] as Color
                                         : (rInfo['color'] as Color)
-                                            .withOpacity(0.3),
+                                            .withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: Row(
@@ -660,7 +660,7 @@ class _GestionRolesScreenState extends State<GestionRolesScreen> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withOpacity(0.07),
+                      color: Colors.black.withValues(alpha: 0.07),
                       blurRadius: 12)
                 ],
               ),

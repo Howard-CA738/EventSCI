@@ -22,7 +22,6 @@ class AdminCarreraScreen extends StatefulWidget {
 }
 
 class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
-  String _adminName = '';
   String _carrera = '';
   String _facultad = '';
   String _sede = '';
@@ -41,7 +40,6 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
       final adminData = await PrefsHelper.getAdminCarreraData();
       if (adminData != null) {
         setState(() {
-          _adminName = adminData['userName'] ?? 'Administrador';
           _carrera = adminData['carrera'] ?? '';
           _facultad = adminData['facultad'] ?? '';
           _sede = adminData['filialNombre'] ?? '';

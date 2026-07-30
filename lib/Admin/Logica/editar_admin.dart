@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '/prefs_helper.dart';
@@ -266,7 +266,7 @@ class _EditarAdminScreenState extends State<EditarAdminScreen>
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.12),
+                color: Colors.white.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(Icons.arrow_back_ios_new,
@@ -396,7 +396,7 @@ class _EditarAdminScreenState extends State<EditarAdminScreen>
                                     backgroundColor: _navy,
                                     foregroundColor: Colors.white,
                                     disabledBackgroundColor:
-                                        _navy.withOpacity(0.5),
+                                        _navy.withValues(alpha: 0.5),
                                     elevation: 0,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),
@@ -463,7 +463,7 @@ class _EditarAdminScreenState extends State<EditarAdminScreen>
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color:      _navy.withOpacity(0.25),
+              color:      _navy.withValues(alpha: 0.25),
               blurRadius: 20,
               offset:     const Offset(0, 8),
             ),
@@ -517,7 +517,7 @@ class _EditarAdminScreenState extends State<EditarAdminScreen>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color:      Colors.black.withOpacity(0.05),
+            color:      Colors.black.withValues(alpha: 0.05),
             blurRadius: 12,
             offset:     const Offset(0, 4),
           ),
@@ -535,7 +535,7 @@ class _EditarAdminScreenState extends State<EditarAdminScreen>
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: _navy.withOpacity(0.08),
+                    color: _navy.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(icon, size: 16, color: _navy),
@@ -680,9 +680,9 @@ class _EditarAdminScreenState extends State<EditarAdminScreen>
 
     return Container(
       decoration: BoxDecoration(
-        color: _navy.withOpacity(0.04),
+        color: _navy.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _navy.withOpacity(0.08)),
+        border: Border.all(color: _navy.withValues(alpha: 0.08)),
       ),
       padding: const EdgeInsets.all(16),
       child: Column(

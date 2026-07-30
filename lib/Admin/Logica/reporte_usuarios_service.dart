@@ -217,7 +217,6 @@ class ReporteUsuariosService {
             ..sort((a, b) => a.eventName
                 .toLowerCase()
                 .compareTo(b.eventName.toLowerCase()));
-          final src = mapaEventos[lista.first.eventId]!;
           return CarreraResumen(
             carreraPath: lista.first.carreraPath,
             filialId: fid,

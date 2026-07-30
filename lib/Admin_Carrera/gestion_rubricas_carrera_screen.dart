@@ -18,7 +18,6 @@ class _GestionRubricasCarreraScreenState
   String? _filialId;
   String? _filialNombre;
   String? _facultad;
-  String? _carreraId;
   String? _carreraNombre;
 
   List<Rubrica> _rubricas = [];
@@ -39,7 +38,6 @@ class _GestionRubricasCarreraScreenState
         _filialId = adminData['filial'];
         _filialNombre = adminData['filialNombre'];
         _facultad = adminData['facultad'];
-        _carreraId = adminData['carreraId'];
         _carreraNombre = adminData['carrera'];
       }
     } catch (e) {

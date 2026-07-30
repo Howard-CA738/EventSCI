@@ -47,7 +47,6 @@ class _AsistenciasPersonalesScreenState
 
   int _paso = 0;
 
-  int _tabActual = 0;
   late TabController _tabController;
 
   final _formKey = GlobalKey<FormState>();
@@ -55,8 +54,6 @@ class _AsistenciasPersonalesScreenState
   final _descripcionCtrl = TextEditingController();
 
   String? _qrData;
-  String? _qrId;
-  String? _asistenciaDocId;
   bool _creandoQR = false;
   Map<String, dynamic>? _asistenciaCreada;
 
@@ -92,7 +89,6 @@ class _AsistenciasPersonalesScreenState
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
-      if (mounted) setState(() => _tabActual = _tabController.index);
       if (_tabController.index == 1) _cargarMisAsistencias();
     });
     _fadeCtrl = AnimationController(
@@ -694,8 +690,6 @@ class _AsistenciasPersonalesScreenState
 
       setState(() {
         _qrData = qrDataJson;
-        _qrId = qrId;
-        _asistenciaDocId = asistenciaId;
         _asistenciaCreada = {
           'nombre': _nombreCtrl.text.trim(),
           'descripcion': _descripcionCtrl.text.trim(),
@@ -722,8 +716,6 @@ class _AsistenciasPersonalesScreenState
       _paso = 0;
       _eventoSeleccionado = null;
       _qrData = null;
-      _qrId = null;
-      _asistenciaDocId = null;
       _asistenciaCreada = null;
       _nombreCtrl.clear();
       _descripcionCtrl.clear();

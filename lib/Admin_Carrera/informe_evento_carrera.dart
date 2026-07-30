@@ -19,7 +19,6 @@ class _InformeEventoCarreraScreenState
   String? _filialNombre;
   String? _facultad;
   String? _carrera;
-  String? _carreraId;
 
   List<Map<String, dynamic>> _eventos = [];
   Map<String, dynamic>? _eventoSeleccionado;
@@ -55,7 +54,6 @@ class _InformeEventoCarreraScreenState
       _filialNombre = adminData['filialNombre'] as String?;
       _facultad = adminData['facultad'] as String?;
       _carrera = adminData['carrera'] as String?;
-      _carreraId = adminData['carreraId'] ?? adminData['carrera'];
       await _cargarEventos();
     } catch (e) {
       if (mounted) {

@@ -344,8 +344,6 @@ class ParticipantesCarreraExcelService {
       final conEval = proyectos.where((p) => p['tieneEvaluaciones'] == true).toList();
       if (conEval.isNotEmpty) {
         final promedios = conEval.map((p) => (p['promedio'] as num).toDouble()).toList();
-        final maxCat = promedios.reduce((a, b) => a > b ? a : b);
-        final minCat = promedios.reduce((a, b) => a < b ? a : b);
         final avgCat = promedios.reduce((a, b) => a + b) / promedios.length;
 
         _cel(sheet, fila, 0,
@@ -729,12 +727,6 @@ class ParticipantesCarreraExcelService {
   void _cel(Sheet sheet, int row, int col, String value, CellStyle style) {
     final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));
     cell.value = TextCellValue(value);
-    cell.cellStyle = style;
-  }
-
-  void _celNum(Sheet sheet, int row, int col, int value, CellStyle style) {
-    final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));
-    cell.value = IntCellValue(value);
     cell.cellStyle = style;
   }
 

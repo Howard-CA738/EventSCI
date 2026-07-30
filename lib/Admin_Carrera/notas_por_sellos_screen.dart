@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 
@@ -423,7 +423,7 @@ sellosPersonales = resultados.where((doc) => doc.exists).length;
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4)),
         ],
@@ -435,7 +435,7 @@ sellosPersonales = resultados.where((doc) => doc.exists).length;
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF16A34A).withOpacity(0.1),
+                color: const Color(0xFF16A34A).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(Icons.event,
@@ -711,7 +711,7 @@ sellosPersonales = resultados.where((doc) => doc.exists).length;
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: const Color(0xFF1E3A5F).withOpacity(0.3),
+              color: const Color(0xFF1E3A5F).withValues(alpha: 0.3),
               blurRadius: 12,
               offset: const Offset(0, 4)),
         ],
@@ -737,7 +737,7 @@ sellosPersonales = resultados.where((doc) => doc.exists).length;
                 padding: const EdgeInsets.symmetric(
                     horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -805,7 +805,7 @@ sellosPersonales = resultados.where((doc) => doc.exists).length;
           ),
           Text(label,
               style: TextStyle(
-                  color: Colors.white.withOpacity(0.7), fontSize: 10),
+                  color: Colors.white.withValues(alpha: 0.7), fontSize: 10),
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
               textAlign: TextAlign.center),
@@ -818,7 +818,7 @@ sellosPersonales = resultados.where((doc) => doc.exists).length;
     return Container(
       width: 1,
       height: 40,
-      color: Colors.white.withOpacity(0.2),
+      color: Colors.white.withValues(alpha: 0.2),
       margin: const EdgeInsets.symmetric(horizontal: 4),
     );
   }
@@ -833,7 +833,7 @@ sellosPersonales = resultados.where((doc) => doc.exists).length;
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 6,
                   offset: const Offset(0, 2))
             ],
@@ -932,7 +932,7 @@ sellosPersonales = resultados.where((doc) => doc.exists).length;
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: const Offset(0, 3))
         ],
@@ -1006,10 +1006,10 @@ sellosPersonales = resultados.where((doc) => doc.exists).length;
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: color.withOpacity(0.12),
+                        color: color.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                            color: color.withOpacity(0.4), width: 1.5),
+                            color: color.withValues(alpha: 0.4), width: 1.5),
                       ),
                       child: Text(nota.toStringAsFixed(1),
                           style: TextStyle(
@@ -1091,7 +1091,7 @@ sellosPersonales = resultados.where((doc) => doc.exists).length;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(label,

@@ -16,7 +16,6 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
   final FilialesService _filialesService = FilialesService();
 
   String? _selectedFilialId;
-  String? _selectedFilialNombre;
   String? _selectedFacultad;
   String? _selectedCarreraId;
   String? _selectedCarreraNombre;
@@ -86,7 +85,6 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
 
         if (_filiales.isNotEmpty) {
           _selectedFilialId = _filiales.first['id'];
-          _selectedFilialNombre = _filiales.first['nombre'];
           _loadFacultades(_selectedFilialId!);
         }
       });
@@ -279,12 +277,8 @@ class _GestionGruposScreenState extends State<GestionGruposScreen>
                     }).toList(),
                     onChanged: (value) {
                       if (value != null) {
-                        final filial = _filiales.firstWhere(
-                          (f) => f['id'] == value,
-                        );
                         setState(() {
                           _selectedFilialId = value;
-                          _selectedFilialNombre = filial['nombre'];
                         });
                         _loadFacultades(value);
                       }

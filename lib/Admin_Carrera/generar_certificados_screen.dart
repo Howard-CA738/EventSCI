@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -94,7 +94,6 @@ class _GenerarCertificadosScreenState
   String _facultad  = '';
   String _filial    = '';
   String _filialId  = '';
-  String _carreraId = '';
 
   String get _docKeyEstudiantes => '${_filial}_$_carrera';
 
@@ -104,8 +103,7 @@ class _GenerarCertificadosScreenState
   // ── Listas base (cargadas una vez por rol) ─────────────────────────────────
   List<_Persona> _estudiantes = [];
   List<_Persona> _jurados     = [];
-  bool _isLoading        = true;
-  bool _isLoadingPersona = false;
+  bool _isLoading = true;
 
   List<_Persona> get _fuenteActiva => _rol == 'JURADO' ? _jurados : _estudiantes;
 
@@ -142,7 +140,6 @@ class _GenerarCertificadosScreenState
       _facultad  = data['facultad']     ?? '';
       _filial    = data['filialNombre'] ?? '';
       _filialId  = data['filial']       ?? '';
-      _carreraId = data['carreraId']    ?? data['carrera'] ?? '';
     }
     await Future.wait([_cargarEstudiantes(), _cargarJurados()]);
     if (mounted) setState(() => _isLoading = false);
@@ -549,7 +546,7 @@ class _GenerarCertificadosScreenState
           Row(children: [
             Container(
               width: 38, height: 38,
-              decoration: BoxDecoration(color: accentColor.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+              decoration: BoxDecoration(color: accentColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
               child: Center(
                 child: Text(p.nombre.isNotEmpty ? p.nombre[0].toUpperCase() : '?',
                     style: TextStyle(fontWeight: FontWeight.bold, color: accentColor, fontSize: 16)),
@@ -634,7 +631,7 @@ class _GenerarCertificadosScreenState
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: tieneCodigo ? _kVerde.withOpacity(0.1) : _kAmbar.withOpacity(0.1),
+              color: tieneCodigo ? _kVerde.withValues(alpha: 0.1) : _kAmbar.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(

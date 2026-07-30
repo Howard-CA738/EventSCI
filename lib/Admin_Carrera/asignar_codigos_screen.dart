@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
@@ -740,7 +740,7 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
+        color: Colors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -935,7 +935,7 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
           constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: selected ? c.withOpacity(0.12) : _kCampoFondo2,
+            color: selected ? c.withValues(alpha: 0.12) : _kCampoFondo2,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: selected ? c : Colors.transparent,
@@ -1063,7 +1063,7 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     return Card(
       key: key,
       elevation: 2,
-      shadowColor: Colors.black.withOpacity(0.08),
+      shadowColor: Colors.black.withValues(alpha: 0.08),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       color: Colors.white,
       child: Padding(
@@ -1078,7 +1078,7 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
                 Container(
                   width: 44, height: 44,
                   decoration: BoxDecoration(
-                    color: rolColor.withOpacity(0.12),
+                    color: rolColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Center(
@@ -1120,7 +1120,7 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF0F6E56).withOpacity(0.10),
+                                color: const Color(0xFF0F6E56).withValues(alpha: 0.10),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: const Text(
@@ -1329,7 +1329,7 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.10),
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
@@ -1350,7 +1350,7 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
         height: 36,
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: _kVerde.withOpacity(0.10),
+          color: _kVerde.withValues(alpha: 0.10),
           shape: BoxShape.circle,
         ),
         child: const Icon(Icons.check_circle_rounded,
@@ -1362,8 +1362,8 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: tieneCodigo
-            ? _kVerde.withOpacity(0.10)
-            : _kAmbar.withOpacity(0.10),
+            ? _kVerde.withValues(alpha: 0.10)
+            : _kAmbar.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [

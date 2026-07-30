@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter analyze *)",
+      "Bash(sed \"s/ - deprecated_member_use//\")",
+      "Bash(sort -t: -k1,1 -k2,2n)"
+    ]
+  }
+}

@@ -18,7 +18,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
   String? _currentUserName;
 
   String? _studentFilial;
-  String? _studentFilialId;
   String? _studentFacultad;
   String? _studentCarrera;
   String? _studentCiclo;
@@ -75,7 +74,6 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
           _currentUserName = userName;
           if (userData != null) {
             _studentFilial = userData['filial']?.toString();
-            _studentFilialId = userData['filialId']?.toString();
             _studentFacultad = userData['facultad']?.toString();
             _studentCarrera = userData['carrera']?.toString();
             _studentCiclo = userData['ciclo']?.toString();

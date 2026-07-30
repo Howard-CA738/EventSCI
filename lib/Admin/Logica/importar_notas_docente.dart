@@ -13,16 +13,12 @@ class _C {
   static const navy    = Color(0xFF1E3A5F);
   static const accent  = Color(0xFF3B82F6);
   static const green   = Color(0xFF059669);
-  static const greenL  = Color(0xFFD1FAE5);
   static const orange  = Color(0xFFD97706);
-  static const orangeL = Color(0xFFFEF3C7);
   static const red     = Color(0xFFDC2626);
-  static const redL    = Color(0xFFFEE2E2);
   static const purple  = Color(0xFF7C3AED);
   static const surface = Color(0xFFE8EDF2);
   static const card    = Colors.white;
   static const border  = Color(0xFFE2E8F0);
-  static const txt1    = Color(0xFF0F172A);
   static const txt2    = Color(0xFF475569);
   static const txt3    = Color(0xFF94A3B8);
 
@@ -79,7 +75,6 @@ class _ImportarNotasDocenteScreenState
   // ── Eventos ──────────────────────────────────────────────────
   List<Map<String, dynamic>> _eventos = [];
   String? _eventoId;
-  String? _eventoNombre;
   bool _cargandoEventos = false;
 
   // ── Archivo procesado ────────────────────────────────────────
@@ -176,7 +171,6 @@ class _ImportarNotasDocenteScreenState
   void _resetEvento() {
     _eventos = [];
     _eventoId = null;
-    _eventoNombre = null;
     _resetArchivo();
   }
 
@@ -755,12 +749,8 @@ class _ImportarNotasDocenteScreenState
                       .toList(),
                   onChanged: (v) {
                     if (v == null) return;
-                    final nombre =
-                        _eventos.firstWhere((e) => e['id'] == v)['name']
-                            as String;
                     setState(() {
                       _eventoId = v;
-                      _eventoNombre = nombre;
                       _resetArchivo();
                     });
                   },

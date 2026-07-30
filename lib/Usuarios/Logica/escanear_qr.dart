@@ -41,8 +41,6 @@ static const String _keyCooldown = 'ultimo_escaneo_global';
   late Animation<double> _pulseAnimation;
 
   String? _studentFilial;
-  String? _studentFacultad;
-  String? _studentCarrera;
 
   @override
   void initState() {
@@ -180,8 +178,6 @@ Future<void> _getCurrentUser() async {
 
   if (userData != null) {
     _studentFilial = userData['filial']?.toString();
-    _studentFacultad = userData['facultad']?.toString();
-    _studentCarrera = userData['carrera']?.toString();
   }
   _usuarioCargado = true; // ← SOLO AGREGAR ESTA LÍNEA
 });
@@ -559,8 +555,6 @@ void _mostrarDialogoCodigo() async {
       _cachedUserData ??= await PrefsHelper.getPersistedStudentData();   // ← último recurso
       if (_cachedUserData != null) {
         _studentFilial = _cachedUserData!['filial']?.toString();
-        _studentFacultad = _cachedUserData!['facultad']?.toString();
-        _studentCarrera = _cachedUserData!['carrera']?.toString();
       }
     }
 

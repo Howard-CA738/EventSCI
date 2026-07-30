@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -23,7 +23,7 @@ class _ControlAsistenciasScreenState extends State<ControlAsistenciasScreen> {
 
   static final List<BoxShadow> _cardShadow = [
     BoxShadow(
-      color: _primary.withOpacity(0.07),
+      color: _primary.withValues(alpha: 0.07),
       blurRadius: 12,
       offset: const Offset(0, 4),
     ),
@@ -715,7 +715,7 @@ Future<void> _agregarAsistenciaManual() async {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: colorConfirmar.withOpacity(0.1),
+                    color: colorConfirmar.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(Icons.warning_amber_rounded,
@@ -800,7 +800,7 @@ Future<void> _agregarAsistenciaManual() async {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.admin_panel_settings,
@@ -828,7 +828,7 @@ Future<void> _agregarAsistenciaManual() async {
                             '',
                         style: TextStyle(
                           fontSize: 11,
-                          color: Colors.white.withOpacity(0.75),
+                          color: Colors.white.withValues(alpha: 0.75),
                         ),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
@@ -1036,7 +1036,7 @@ Future<void> _agregarAsistenciaManual() async {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8)),
               child: const Icon(Icons.event, color: Colors.white, size: 20),
             ),
@@ -1059,7 +1059,7 @@ Future<void> _agregarAsistenciaManual() async {
                   Text(
                     '${_eventoSeleccionado!['filialNombre'] ?? ''} · ${_eventoSeleccionado!['facultad'] ?? ''}',
                     style: TextStyle(
-                        color: Colors.white.withOpacity(0.75),
+                        color: Colors.white.withValues(alpha: 0.75),
                         fontSize: 11),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1070,7 +1070,7 @@ Future<void> _agregarAsistenciaManual() async {
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
@@ -1284,9 +1284,9 @@ Future<void> _agregarAsistenciaManual() async {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(0.05),
+        color: Colors.blue.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.blue.withOpacity(0.2)),
+        border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Container(
@@ -1323,10 +1323,10 @@ Future<void> _agregarAsistenciaManual() async {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: Colors.orange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                     border:
-                        Border.all(color: Colors.orange.withOpacity(0.3)),
+                        Border.all(color: Colors.orange.withValues(alpha: 0.3)),
                   ),
                   child: const Text('Registrado manualmente',
                       style: TextStyle(
@@ -1384,10 +1384,10 @@ Future<void> _agregarAsistenciaManual() async {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.deepPurple.withOpacity(0.05),
+        color: Colors.deepPurple.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(10),
         border:
-            Border.all(color: Colors.deepPurple.withOpacity(0.2)),
+            Border.all(color: Colors.deepPurple.withValues(alpha: 0.2)),
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Container(
@@ -1419,10 +1419,10 @@ Future<void> _agregarAsistenciaManual() async {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: Colors.orange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                     border:
-                        Border.all(color: Colors.orange.withOpacity(0.3)),
+                        Border.all(color: Colors.orange.withValues(alpha: 0.3)),
                   ),
                   child: const Text('Registrado manualmente',
                       style: TextStyle(
@@ -1465,9 +1465,9 @@ Future<void> _agregarAsistenciaManual() async {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.25)),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Text(label,
           style: TextStyle(
@@ -1605,7 +1605,7 @@ class _DialogEditarScanState extends State<_DialogEditarScan> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: _primary.withOpacity(0.1),
+                  color: _primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(Icons.edit, color: _primary, size: 20),
@@ -1811,7 +1811,7 @@ class _DialogEditarRegistroPersonalState
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurple.withOpacity(0.1),
+                  color: Colors.deepPurple.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(Icons.edit,
@@ -1908,7 +1908,7 @@ class _DialogEditarRegistroPersonalState
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: _primary.withOpacity(0.08),
+                      color: _primary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(Icons.edit_calendar_outlined,
@@ -2262,7 +2262,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                    color: _primary.withOpacity(0.1),
+                    color: _primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8)),
                 child: const Icon(Icons.group_add, color: _primary, size: 20),
               ),
@@ -2345,9 +2345,9 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: _primary.withOpacity(0.04),
+                  color: _primary.withValues(alpha: 0.04),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: _primary.withOpacity(0.15)),
+                  border: Border.all(color: _primary.withValues(alpha: 0.15)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2370,7 +2370,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
                           deleteIcon:
                               const Icon(Icons.close, size: 14),
                           onDeleted: () => _toggleAlumno(a),
-                          backgroundColor: _primary.withOpacity(0.08),
+                          backgroundColor: _primary.withValues(alpha: 0.08),
                           deleteIconColor: _primary,
                           labelStyle: const TextStyle(color: _primary),
                           visualDensity: VisualDensity.compact,
@@ -2720,13 +2720,13 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: selec
-                                    ? color.withOpacity(0.1)
-                                    : color.withOpacity(0.04),
+                                    ? color.withValues(alpha: 0.1)
+                                    : color.withValues(alpha: 0.04),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: selec
-                                      ? color.withOpacity(0.6)
-                                      : color.withOpacity(0.2),
+                                      ? color.withValues(alpha: 0.6)
+                                      : color.withValues(alpha: 0.2),
                                   width: selec ? 1.5 : 1,
                                 ),
                               ),
@@ -2896,7 +2896,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
                     Text(
                       '${alumnos.length} alumno${alumnos.length != 1 ? 's' : ''} × ${asistencias.length} asistencia${asistencias.length != 1 ? 's' : ''}',
                       style: TextStyle(
-                          color: Colors.white.withOpacity(0.8),
+                          color: Colors.white.withValues(alpha: 0.8),
                           fontSize: 12),
                     ),
                   ],
@@ -2966,7 +2966,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: _primary.withOpacity(0.08),
+                    color: _primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(Icons.edit_calendar_outlined,
@@ -2981,9 +2981,9 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: _warning.withOpacity(0.08),
+              color: _warning.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _warning.withOpacity(0.3)),
+              border: Border.all(color: _warning.withValues(alpha: 0.3)),
             ),
             child: Row(children: [
               const Icon(Icons.warning_amber_rounded, 
@@ -3033,9 +3033,9 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.05),
+        color: color.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3058,7 +3058,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.08),
+                  color: color.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(label,

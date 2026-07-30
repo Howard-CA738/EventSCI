@@ -25,9 +25,6 @@ class AsistenciasCarreraExcelService {
   static const _purpleLight = '#EDE9FE';
   static const _orange      = '#EA580C';
   static const _orangeLight = '#FFF7ED';
-  static const _teal        = '#0D9488';
-  static const _tealLight   = '#CCFBF1';
-
   // ── Punto de entrada principal ───────────────────────────────────────────────
   Future<String?> generarReporteAsistencias({
     required List<Map<String, dynamic>> estudiantes,

@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
@@ -475,7 +475,7 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
               Container(
                 padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
-                    color: color.withOpacity(0.12),
+                    color: color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8)),
                 child: Icon(icono, color: color, size: 18),
               ),
@@ -550,7 +550,7 @@ class _ConfigurarFirmasScreenState extends State<ConfigurarFirmasScreen>
     decoration: BoxDecoration(
       color: _kPrimario10,
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: _kPrimario.withOpacity(0.2)),
+      border: Border.all(color: _kPrimario.withValues(alpha: 0.2)),
     ),
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Icon(icono, color: _kPrimario, size: 16),
@@ -748,10 +748,10 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
         borderRadius: BorderRadius.circular(18),
         side: BorderSide(
           color: completo
-              ? _kVerde.withOpacity(0.4)
+              ? _kVerde.withValues(alpha: 0.4)
               : parcial
-                  ? _kAmbar.withOpacity(0.5)
-                  : _kRojo.withOpacity(0.3),
+                  ? _kAmbar.withValues(alpha: 0.5)
+                  : _kRojo.withValues(alpha: 0.3),
           width: 1.2,
         ),
       ),
@@ -762,7 +762,7 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                  color: widget.color.withOpacity(0.12),
+                  color: widget.color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10)),
               child: Icon(widget.icono, color: widget.color, size: 20),
             ),
@@ -1081,7 +1081,7 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
             style: ElevatedButton.styleFrom(
               backgroundColor: widget.color,
               foregroundColor: Colors.white,
-              disabledBackgroundColor: widget.color.withOpacity(0.5),
+              disabledBackgroundColor: widget.color.withValues(alpha: 0.5),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
             ),
@@ -1127,9 +1127,9 @@ class _TarjetaFirmanteState extends State<_TarjetaFirmante> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(icono, color: color, size: 12),

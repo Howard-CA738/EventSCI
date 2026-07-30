@@ -443,12 +443,11 @@ class _CrearListaJuradosScreenState extends State<CrearListaJuradosScreen> {
 
 class _JuradoOpcion {
   final String id, nombre, dni, usuario;
-  bool seleccionado;
+  bool seleccionado = false;
   _JuradoOpcion({
     required this.id,
     required this.nombre,
     this.dni = '',
     this.usuario = '',
-    this.seleccionado = false,
   });
 }

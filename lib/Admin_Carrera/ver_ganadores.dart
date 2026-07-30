@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 import '/resolver_nombres_service.dart';
@@ -67,7 +67,7 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
   /// Notas docente cargadas para el evento seleccionado.
   /// Mapa { codigoEstudiante → notaDocente (0–20) }
   Map<String, double> _notasDocente = {};
-  bool _notasDocenteCargadas = false;
+
 
   _ModoVista _modoVista = _ModoVista.lista;
   final _resolverNombres = ResolverNombresService();
@@ -156,7 +156,6 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
       _eventoSeleccionado = evento;
       _ganadoresPorCategoria = {};
       _notasDocente = {};
-      _notasDocenteCargadas = false;
       _isLoadingGanadores = true;
       _modoVista = _ModoVista.lista;
     });
@@ -178,7 +177,6 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
       if (mounted) {
         setState(() {
           _notasDocente = notasDoc;
-          _notasDocenteCargadas = true;
           _ganadoresPorCategoria = ganadores;
           _isLoadingGanadores = false;
         });
@@ -223,7 +221,6 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
       if (mounted) {
         setState(() {
           _notasDocente = notasDoc;
-          _notasDocenteCargadas = true;
           _ganadoresPorCategoria = ganadores;
           _isImportandoNotas = false;
         });
@@ -279,7 +276,6 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
       if (mounted) {
         setState(() {
           _notasDocente = {};
-          _notasDocenteCargadas = true;
           _ganadoresPorCategoria = ganadores;
           _isImportandoNotas = false;
         });
@@ -639,7 +635,6 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
             _eventoSeleccionado = null;
             _ganadoresPorCategoria = {};
             _notasDocente = {};
-            _notasDocenteCargadas = false;
           }),
         ),
         Expanded(
@@ -709,12 +704,12 @@ class _NotaDocenteButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: tieneNotas
-                ? Colors.green.withOpacity(0.25)
-                : Colors.white.withOpacity(0.15),
+                ? Colors.green.withValues(alpha: 0.25)
+                : Colors.white.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: tieneNotas
-                  ? Colors.greenAccent.withOpacity(0.6)
+                  ? Colors.greenAccent.withValues(alpha: 0.6)
                   : Colors.white30,
               width: 1,
             ),
@@ -1152,7 +1147,7 @@ class _FormulaDesglose extends StatelessWidget {
         color: const Color(0xFFF0FFF4),
         borderRadius: BorderRadius.circular(12),
         border:
-            Border.all(color: Colors.green.withOpacity(0.3)),
+            Border.all(color: Colors.green.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2450,7 +2445,7 @@ class _GanadorCard extends StatelessWidget {
                       if (tieneNotaDocente)
                         _MiniChip(
                           label: '+ Docente',
-                          bg: Colors.green.withOpacity(0.12),
+                          bg: Colors.green.withValues(alpha: 0.12),
                           fg: Colors.green[700]!,
                         ),
                     ],
