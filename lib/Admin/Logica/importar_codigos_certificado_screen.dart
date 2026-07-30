@@ -16,18 +16,18 @@ const _kAmbar          = Color(0xFFF59E0B);
 const _kRojo           = Color(0xFFDC2626);
 const _kAzulInfo       = Color(0xFF2563EB);
 
-/// Estado de validación de cada código de estudiante pegado.
+
 enum _Estado {
-  ok,               // encontrado en esta carrera, certificado pendiente listo
-  yaTieneCodigo,    // encontrado, pero el certificado ya tiene código asignado
-  sinCertificado,   // encontrado en esta carrera, pero no tiene cert de ese evento+rol
-  otraCarrera,      // encontrado, pero en otra filial/facultad/carrera
-  noEncontrado,     // no existe en ningún lado
-  duplicado,        // el código se repite dentro de lo pegado
+  ok,
+  yaTieneCodigo,
+  sinCertificado,
+  otraCarrera,
+  noEncontrado,
+  duplicado,
 }
 
-/// Firmante cargado desde config_firmas (mismo esquema que
-/// GenerarCertificadosScreen: grado, nombre, cargo, storageUrl).
+
+
 class _Firmante {
   final String nombre;
   final String cargo;
@@ -53,8 +53,8 @@ String _generarFacultadId(String texto) => texto
     .replaceAll(RegExp(r'_+'), '_')
     .replaceAll(RegExp(r'^_|_$'), '');
 
-/// Motivo del certificado según el rol. PONENTE ahora usa un motivo fijo
-/// por lote (igual que ORGANIZADOR/ASISTENTE), sin título de investigación.
+
+
 String _motivoPorRolImport({
   required String rol,
   required String evento,
@@ -88,8 +88,8 @@ String _fechaActualImport() {
   return '${now.day} de ${meses[now.month]} de ${now.year}';
 }
 
-/// Estados que impiden avanzar al campo 2 (problemas reales de identificación
-/// del estudiante, de un código ya asignado para ese rol, o duplicados).
+
+
 bool _bloqueaCampo1(_Estado estado) =>
     estado == _Estado.otraCarrera ||
     estado == _Estado.noEncontrado ||
@@ -109,12 +109,12 @@ class _CodigoEntry {
   String? certId;
   String  codigoActual = '';
 
-  // Solo aplica cuando estado == sinCertificado.
-  // false = crear el documento de certificado solo con el código.
-  // true  = crear el documento de certificado completo.
+
+
+
   bool generarCompleto = false;
 
-  // Se llena al pegar el segundo campo.
+
   String codigoCertificadoNuevo = '';
 
   _CodigoEntry({
@@ -122,8 +122,8 @@ class _CodigoEntry {
     required this.codigoEstudiante,
   });
 
-  // Válido para avanzar al campo 2: código correcto (con o sin certificado
-  // ya existente).
+
+
   bool get esValido => !_bloqueaCampo1(estado);
 }
 
@@ -138,7 +138,7 @@ class ImportarCodigosCertificadoScreen extends StatefulWidget {
 class _ImportarCodigosCertificadoScreenState
     extends State<ImportarCodigosCertificadoScreen> {
 
-  // ── Selección manual (super admin) ────────────────────────────────
+
   final FilialesService _filialesService = FilialesService();
   Map<String, dynamic> _estructuraFiliales = {};
   bool _estructuraCargada = false;
@@ -156,26 +156,26 @@ class _ImportarCodigosCertificadoScreenState
 
   String get _docKey => '${_selectedFilialNombre}_$_selectedCarrera';
 
-  // ── Eventos y rol ─────────────────────────────────────────────────
+
   List<Map<String, dynamic>> _eventos = [];
   Map<String, dynamic>? _eventoSeleccionado;
   String _rol = 'ASISTENTE';
   static const _roles = ['ASISTENTE', 'PONENTE', 'ORGANIZADOR'];
 
-  // ── Campos de texto ───────────────────────────────────────────────
+
   final _codigosEstudianteController  = TextEditingController();
   final _codigosCertificadoController = TextEditingController();
 
-  // ── Datos para "generar completo" (solo ASISTENTE/ORGANIZADOR) ────
+
   late final TextEditingController _fechaGenController;
   final _horasGenController = TextEditingController(text: '16');
 
-  // ── Estado del proceso ────────────────────────────────────────────
+
   bool _isLoading    = true;
   bool _validando    = false;
   bool _guardando    = false;
-  bool _campo1Listo  = false; // true si no hay códigos con problemas bloqueantes
-  bool _previewListo = false; // true cuando ya se emparejó campo 2
+  bool _campo1Listo  = false;
+  bool _previewListo = false;
 
   List<_CodigoEntry> _entries = [];
 
@@ -319,7 +319,7 @@ class _ImportarCodigosCertificadoScreenState
     ));
   }
 
-  // ── Parseo de texto pegado ────────────────────────────────────────
+
   List<String> _parsearLineas(String texto) {
     return texto
         .split(RegExp(r'[\s,;]+'))
@@ -328,7 +328,7 @@ class _ImportarCodigosCertificadoScreenState
         .toList();
   }
 
-  // ── VALIDACIÓN DEL CAMPO 1 ────────────────────────────────────────
+
   Future<void> _validarCodigosEstudiante() async {
     if (_eventoSeleccionado == null) {
       _snack('⚠️ Selecciona primero un evento', color: _kAmbar);
@@ -349,7 +349,7 @@ class _ImportarCodigosCertificadoScreenState
 
     final eventoNombre = _eventoSeleccionado!['name'] as String;
 
-    // 1) Cargar todos los estudiantes de la carrera actual en un mapa.
+
     final Map<String, Map<String, dynamic>> estudiantesLocales = {};
     try {
       final snap = await FirebaseFirestore.instance
@@ -388,7 +388,7 @@ class _ImportarCodigosCertificadoScreenState
 
       final local = estudiantesLocales[codigo];
       if (local == null) {
-        // Buscar en todo el sistema (otras filiales/carreras).
+
         await _buscarEnOtraCarrera(entry, codigo);
         nuevas.add(entry);
         continue;
@@ -398,7 +398,7 @@ class _ImportarCodigosCertificadoScreenState
       entry.estudianteNombre = local['name'] as String;
       entry.estudianteDni    = local['dni'] as String? ?? '';
 
-      // Buscar el certificado de este evento + rol para este estudiante.
+
       try {
         final certsSnap = await FirebaseFirestore.instance
             .collection('users')
@@ -418,7 +418,7 @@ class _ImportarCodigosCertificadoScreenState
               'Elige abajo si quieres solo guardar el código o generar el '
               'certificado completo.';
         } else {
-          // Si hay más de uno, tomar el más reciente por timestamp del certId.
+
           final docsOrdenados = [...docsFiltrados]
             ..sort((a, b) => _timestampDeCertId(b.id)
                 .compareTo(_timestampDeCertId(a.id)));
@@ -530,7 +530,7 @@ class _ImportarCodigosCertificadoScreenState
     }
   }
 
-  // ── EMPAREJAR CAMPO 2 ─────────────────────────────────────────────
+
   void _procesarCodigosCertificado() {
     final codigos = _parsearLineas(_codigosCertificadoController.text);
     if (codigos.isEmpty) {
@@ -551,7 +551,7 @@ class _ImportarCodigosCertificadoScreenState
     setState(() => _previewListo = true);
   }
 
-  // ── GUARDAR EN FIRESTORE ──────────────────────────────────────────
+
   Future<void> _confirmarYGuardar() async {
     final aCrear = _entries.where((e) => e.estado == _Estado.sinCertificado).length;
     final aActualizar = _entries.length - aCrear;
@@ -592,10 +592,10 @@ class _ImportarCodigosCertificadoScreenState
     int exitosos = 0;
     int errores  = 0;
 
-    // Si hay al menos un caso "generar completo", cargamos los firmantes
-    // reales una sola vez y calculamos un único motivo para todo el lote
-    // (mismo motivo para todos los estudiantes de esta importación,
-    // incluido PONENTE).
+
+
+
+
     final necesitaCompleto = _entries.any(
         (e) => e.estado == _Estado.sinCertificado && e.generarCompleto);
     _Firmante firma1 = const _Firmante();
@@ -630,7 +630,7 @@ class _ImportarCodigosCertificadoScreenState
             .collection('certificados');
 
         if (e.estado == _Estado.sinCertificado) {
-          // No existía certificado de este evento+rol: se crea uno nuevo.
+
           final nuevoId = '${_rol}_${DateTime.now().millisecondsSinceEpoch}_${e.linea}';
           final ref = coleccionCert.doc(nuevoId);
           Map<String, dynamic> data;
@@ -677,7 +677,7 @@ class _ImportarCodigosCertificadoScreenState
       }
     }
 
-    // Registrar la lista de importación (Filial + Carrera + Evento + Rol).
+
     if (errores == 0) {
       try {
         await FirebaseFirestore.instance.collection('listas_certificados').add({
@@ -719,9 +719,9 @@ class _ImportarCodigosCertificadoScreenState
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  // BUILD
-  // ══════════════════════════════════════════════════════════════════
+
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -826,7 +826,7 @@ class _ImportarCodigosCertificadoScreenState
         ],
       );
 
-  // ── Filtros: filial/facultad/carrera + evento + rol ────────────────
+
   Widget _buildFiltrosCard() {
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -977,7 +977,7 @@ class _ImportarCodigosCertificadoScreenState
     );
   }
 
-  // ── Campo 1 ────────────────────────────────────────────────────────
+
   Widget _buildCampo1Card() {
     final habilitado = _eventoSeleccionado != null;
     return _card(
@@ -1023,7 +1023,7 @@ class _ImportarCodigosCertificadoScreenState
     );
   }
 
-  // ── Resultados de validación ───────────────────────────────────────
+
   Widget _buildResultadosValidacion() {
     final ok        = _entries.where((e) => e.estado == _Estado.ok).length;
     final sinCert   = _entries.where((e) => e.estado == _Estado.sinCertificado).length;
@@ -1153,7 +1153,7 @@ class _ImportarCodigosCertificadoScreenState
     );
   }
 
-  // ── Datos para certificado completo ────────────────────────────────
+
   Widget _buildDatosCertificadoCompletoCard() {
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1199,7 +1199,7 @@ class _ImportarCodigosCertificadoScreenState
     );
   }
 
-  // ── Campo 2 ────────────────────────────────────────────────────────
+
   Widget _buildCampo2Card() {
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1247,7 +1247,7 @@ class _ImportarCodigosCertificadoScreenState
     );
   }
 
-  // ── Vista previa final + guardar ──────────────────────────────────
+
   Widget _buildPreviewFinal() {
     return _card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

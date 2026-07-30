@@ -18,7 +18,7 @@ class _EvaluacionesCarreraScreenState
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final RubricasService _rubricasService = RubricasService();
 final ResolverNombresService _resolverNombres = ResolverNombresService();
-  
+
 
   String? _filialId;
   String? _filialNombre;
@@ -59,7 +59,7 @@ final ResolverNombresService _resolverNombres = ResolverNombresService();
       _carrera = adminData['carrera'] as String?;
       _carreraId = adminData['carreraId'] ?? adminData['carrera'];
 
-      // Cargar caché de nombres para resolver códigos → nombres
+
       if ((_filialNombre ?? '').isNotEmpty && (_carrera ?? '').isNotEmpty) {
         await _resolverNombres.cargarEstudiantes(
           filialNombre: _filialNombre!,

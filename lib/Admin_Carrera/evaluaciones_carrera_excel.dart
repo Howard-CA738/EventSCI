@@ -130,7 +130,7 @@ class EvaluacionesCarreraExcelService {
       verticalAlign: VerticalAlign.Top,
       textWrapping: TextWrapping.WrapText,
     );
-    // Códigos: centrados arriba, mismo alto que nombres
+
     final sCodCen = CellStyle(
       fontSize: 9,
       fontColorHex: ExcelColor.fromHexString(_gray700),
@@ -155,7 +155,7 @@ class EvaluacionesCarreraExcelService {
 
     _cel(sheet, 0, 0, '  REPORTE DE EVALUACIONES POR PROYECTO', sTitulo);
     _cel(sheet, 1, 0, '  ${eventoNombre.toUpperCase()}', sSubtitulo);
-    const lastCol = 6; // 7 columnas (0..6)
+    const lastCol = 6;
     for (int c = 0; c <= lastCol; c++) _cel(sheet, 2, c, '', sSep);
     sheet.setRowHeight(2, 4);
 
@@ -206,13 +206,13 @@ class EvaluacionesCarreraExcelService {
       final codigo = evs.first['codigo']?.toString() ?? '—';
       final titulo = evs.first['titulo']?.toString() ?? 'Sin título';
 
-      // Listas paralelas de nombres y códigos
+
       List<String> nombres = (evs.first['integrantesNombres']?.toString() ?? '')
           .split('\n').where((s) => s.trim().isNotEmpty).toList();
       List<String> codigos = (evs.first['integrantesCodigos']?.toString() ?? '')
           .split('\n').where((s) => s.trim().isNotEmpty).toList();
 
-      // Fallback si no llegaron los campos nuevos: usa 'integrantes' crudo
+
       if (codigos.isEmpty) {
         final crudo = evs.first['integrantes'];
         if (crudo is List) {
@@ -226,7 +226,7 @@ class EvaluacionesCarreraExcelService {
               .toList();
         }
       }
-      // Si no hay nombres, repite el código para no dejar vacío
+
       if (nombres.isEmpty) nombres = List<String>.from(codigos);
 
       final nombresTexto = nombres.isEmpty ? '—' : nombres.join('\n');
@@ -254,7 +254,7 @@ class EvaluacionesCarreraExcelService {
       _cel(sheet, fila, 5, nombresJurados.isEmpty ? '—' : nombresJurados, sLeft);
       _celDec(sheet, fila, 6, promedio, sCen);
 
-      // Altura dinámica según el contenido más alto
+
       final nomLineas = nombres.isEmpty ? 1 : nombres.length;
       final codLineas = codigos.isEmpty ? 1 : codigos.length;
       final jurLineas =
@@ -283,13 +283,13 @@ class EvaluacionesCarreraExcelService {
     _merge(sheet, 0, 0, 0, lastCol);
     _merge(sheet, 1, 0, 1, lastCol);
 
-    sheet.setColumnWidth(0, 5);   // N°
-    sheet.setColumnWidth(1, 12);  // CÓDIGO proyecto
-    sheet.setColumnWidth(2, 32);  // TÍTULO
-    sheet.setColumnWidth(3, 30);  // ESTUDIANTE (nombre)
-    sheet.setColumnWidth(4, 16);  // CÓDIGO ESTUDIANTE
-    sheet.setColumnWidth(5, 24);  // JURADOS
-    sheet.setColumnWidth(6, 11);  // NOTA FINAL
+    sheet.setColumnWidth(0, 5);
+    sheet.setColumnWidth(1, 12);
+    sheet.setColumnWidth(2, 32);
+    sheet.setColumnWidth(3, 30);
+    sheet.setColumnWidth(4, 16);
+    sheet.setColumnWidth(5, 24);
+    sheet.setColumnWidth(6, 11);
     sheet.setRowHeight(0, 34);
     sheet.setRowHeight(1, 22);
   }

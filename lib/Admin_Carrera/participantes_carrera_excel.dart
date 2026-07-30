@@ -91,11 +91,11 @@ class ParticipantesCarreraExcelService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // HOJA 1 — Resumen por Categoría
-  // Columnas: 0=CATEGORÍA, 1=POS, 2=CÓDIGO, 3=TÍTULO, 4=INTEGRANTES,
-  //           5=SALA, 6=PROMEDIO, 7=JURADOS  → total 8 cols (0-7)
-  // ═══════════════════════════════════════════════════════════════════════════
+
+
+
+
+
   void _crearHojaResumenCategorias({
     required Excel excel,
     required Map<String, List<Map<String, dynamic>>> participantesPorCategoria,
@@ -232,7 +232,7 @@ class ParticipantesCarreraExcelService {
       horizontalAlign: HorizontalAlign.Center,
     );
 
-    // Banner
+
     _cel(sheet, 0, 0, '  REPORTE DE PARTICIPANTES', sTitulo);
     _cel(sheet, 1, 0, '  ${eventoNombre.toUpperCase()}', sSubtitulo);
     for (int c = 0; c <= 7; c++) _cel(sheet, 2, c, '', sSeparador);
@@ -241,7 +241,7 @@ class ParticipantesCarreraExcelService {
     _merge(sheet, 0, 0, 0, 7);
     _merge(sheet, 1, 0, 1, 7);
 
-    // Metadatos
+
     final fechaGen = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final totalProyectos = participantesPorCategoria.values.fold(0, (s, l) => s + l.length);
     final totalEvaluados = participantesPorCategoria.values
@@ -265,7 +265,7 @@ class ParticipantesCarreraExcelService {
     }
     sheet.setRowHeight(9, 8);
 
-    // Encabezados de tabla (fila 10)
+
     const fEnc = 10;
     final encabezados = [
       'CATEGORÍA', 'POS', 'CÓDIGO', 'TÍTULO DEL PROYECTO',
@@ -277,7 +277,7 @@ class ParticipantesCarreraExcelService {
     }
     sheet.setRowHeight(fEnc, 28);
 
-    // Filas de datos
+
     int fila = fEnc + 1;
     int filaGlobal = 0;
 
@@ -340,7 +340,7 @@ class ParticipantesCarreraExcelService {
         filaGlobal++;
       }
 
-      // Fila estadísticas de la categoría
+
       final conEval = proyectos.where((p) => p['tieneEvaluaciones'] == true).toList();
       if (conEval.isNotEmpty) {
         final promedios = conEval.map((p) => (p['promedio'] as num).toDouble()).toList();
@@ -360,7 +360,7 @@ class ParticipantesCarreraExcelService {
       fila++;
     }
 
-    // Anchos de columna
+
     sheet.setColumnWidth(0, 24);
     sheet.setColumnWidth(1, 9);
     sheet.setColumnWidth(2, 12);
@@ -374,11 +374,11 @@ class ParticipantesCarreraExcelService {
     sheet.setRowHeight(1, 22);
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // HOJA 2 — Lista Completa de Proyectos
-  // Columnas: 0=N°, 1=CÓDIGO, 2=TÍTULO, 3=CATEGORÍA, 4=INTEGRANTES,
-  //           5=SALA, 6=PROMEDIO, 7=JURADOS  → total 8 cols (0-7)
-  // ═══════════════════════════════════════════════════════════════════════════
+
+
+
+
+
   void _crearHojaListaCompleta({
     required Excel excel,
     required List<Map<String, dynamic>> todos,
@@ -452,7 +452,7 @@ class ParticipantesCarreraExcelService {
       horizontalAlign: HorizontalAlign.Center,
     );
 
-    // Banner
+
     _cel(sheet, 0, 0, '  LISTA COMPLETA DE PROYECTOS', sTitulo);
     _cel(sheet, 1, 0, '  ${eventoNombre.toUpperCase()}', sSubtitulo);
     for (int c = 0; c <= 7; c++) _cel(sheet, 2, c, '', sSeparador);
@@ -461,7 +461,7 @@ class ParticipantesCarreraExcelService {
     _merge(sheet, 0, 0, 0, 7);
     _merge(sheet, 1, 0, 1, 7);
 
-    // Metadatos
+
     final fechaGen = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final totalEval = todos.where((p) => p['tieneEvaluaciones'] == true).length;
     final metas = [
@@ -480,7 +480,7 @@ class ParticipantesCarreraExcelService {
     }
     sheet.setRowHeight(9, 8);
 
-    // Encabezados de tabla
+
     const fEnc = 10;
     final encabezados = [
       'N°', 'CÓDIGO', 'TÍTULO DEL PROYECTO',
@@ -492,7 +492,7 @@ class ParticipantesCarreraExcelService {
     }
     sheet.setRowHeight(fEnc, 28);
 
-    // Filas de datos
+
     for (int i = 0; i < todos.length; i++) {
       final p = todos[i];
       final fila = fEnc + 1 + i;
@@ -523,7 +523,7 @@ class ParticipantesCarreraExcelService {
       sheet.setRowHeight(fila, 18);
     }
 
-    // Anchos
+
     sheet.setColumnWidth(0, 5);
     sheet.setColumnWidth(1, 12);
     sheet.setColumnWidth(2, 40);
@@ -537,9 +537,9 @@ class ParticipantesCarreraExcelService {
     sheet.setRowHeight(1, 22);
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // HOJA 3 — Podio por Categoría
-  // ═══════════════════════════════════════════════════════════════════════════
+
+
+
   void _crearHojaPodio({
     required Excel excel,
     required Map<String, List<Map<String, dynamic>>> participantesPorCategoria,
@@ -638,7 +638,7 @@ class ParticipantesCarreraExcelService {
       verticalAlign: VerticalAlign.Center,
     );
 
-    // Banner
+
     _cel(sheet, 0, 0, '  PODIO DE GANADORES POR CATEGORÍA', sTitulo);
     _cel(sheet, 1, 0, '  ${eventoNombre.toUpperCase()}', sSubtitulo);
     for (int c = 0; c <= 6; c++) _cel(sheet, 2, c, '', sSeparador);
@@ -711,7 +711,7 @@ class ParticipantesCarreraExcelService {
       fila++;
     }
 
-    // Anchos
+
     sheet.setColumnWidth(0, 14);
     sheet.setColumnWidth(1, 22);
     sheet.setColumnWidth(2, 22);
@@ -721,9 +721,9 @@ class ParticipantesCarreraExcelService {
     sheet.setColumnWidth(6, 22);
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Helpers internos
-  // ═══════════════════════════════════════════════════════════════════════════
+
+
+
   void _cel(Sheet sheet, int row, int col, String value, CellStyle style) {
     final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));
     cell.value = TextCellValue(value);

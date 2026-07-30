@@ -22,13 +22,13 @@ const _kJurado         = Color(0xFF0F6E56);
 
 const _kRoles = ['ASISTENTE', 'PONENTE', 'JURADO', 'ORGANIZADOR'];
 
-/// Persona buscable (estudiante o jurado). Sin estado de selección:
-/// esta pantalla es de solo lectura.
+
+
 class _Persona {
   final String id;
   final String nombre;
   final String dni;
-  final String codigo; // codigoUniversitario (estudiante) o usuario (jurado)
+  final String codigo;
   final bool esJurado;
 
   _Persona({
@@ -40,7 +40,7 @@ class _Persona {
   });
 }
 
-/// Un certificado ya enviado, tal como está guardado en Firestore.
+
 class _CertificadoEnviado {
   final String id;
   final String evento;
@@ -60,9 +60,9 @@ class _CertificadoEnviado {
     required this.raw,
   });
 
-  // Un certificado solo se puede generar en PDF si tiene el motivo guardado
-  // (los certificados creados "solo con código" desde la importación no
-  // tienen estos datos completos).
+
+
+
   bool get tieneDatosCompletos => (raw['motivo'] as String? ?? '').trim().isNotEmpty;
 
   factory _CertificadoEnviado.fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
@@ -89,7 +89,7 @@ class GenerarCertificadosScreen extends StatefulWidget {
 
 class _GenerarCertificadosScreenState
     extends State<GenerarCertificadosScreen> {
-  // ── Contexto de la carrera del admin ──────────────────────────────────────
+
   String _carrera   = '';
   String _facultad  = '';
   String _filial    = '';
@@ -97,26 +97,26 @@ class _GenerarCertificadosScreenState
 
   String get _docKeyEstudiantes => '${_filial}_$_carrera';
 
-  // ── Rol activo ─────────────────────────────────────────────────────────────
+
   String _rol = 'ASISTENTE';
 
-  // ── Listas base (cargadas una vez por rol) ─────────────────────────────────
+
   List<_Persona> _estudiantes = [];
   List<_Persona> _jurados     = [];
   bool _isLoading = true;
 
   List<_Persona> get _fuenteActiva => _rol == 'JURADO' ? _jurados : _estudiantes;
 
-  // ── Búsqueda ──────────────────────────────────────────────────────────────
+
   final _searchController = TextEditingController();
   String _searchQuery = '';
   Timer? _debounce;
   List<_Persona> _resultados = [];
 
-  // ── Cache de certificados por persona (para no re-consultar Firestore) ────
+
   final Map<String, Future<List<_CertificadoEnviado>>> _certsCache = {};
 
-  // ── IDs de certificados actualmente generando su PDF (ver o descargar) ────
+
   final Set<String> _generandoIds = {};
 
   @override
@@ -145,7 +145,7 @@ class _GenerarCertificadosScreenState
     if (mounted) setState(() => _isLoading = false);
   }
 
-  // ── Carga de personas (sin filtro de pago, sin filtro de evento) ──────────
+
   Future<void> _cargarEstudiantes() async {
     if (_filial.isEmpty || _carrera.isEmpty) return;
     try {
@@ -197,7 +197,7 @@ class _GenerarCertificadosScreenState
     }
   }
 
-  // ── Búsqueda local (por nombre, dni o código) ─────────────────────────────
+
   void _onSearchChanged(String q) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 250), () {
@@ -229,7 +229,7 @@ class _GenerarCertificadosScreenState
     });
   }
 
-  // ── Certificados enviados de una persona, para el rol activo ──────────────
+
   Future<List<_CertificadoEnviado>> _certificadosDe(_Persona p) {
     final key = '${p.id}_$_rol';
     return _certsCache.putIfAbsent(key, () async {
@@ -268,7 +268,7 @@ class _GenerarCertificadosScreenState
     ));
   }
 
-  // ── Descarga de firma (con reintento vía Firebase Storage si la URL venció) ─
+
   Future<Uint8List?> _descargarFirma(String url) async {
     if (url.isEmpty) return null;
     try {
@@ -291,8 +291,8 @@ class _GenerarCertificadosScreenState
     return null;
   }
 
-  // ── Regenera el PDF de un certificado ya enviado, a partir de los datos
-  //    guardados en su propio documento de Firestore. ────────────────────────
+
+
   Future<Uint8List?> _generarPdfCertificado(_Persona p, _CertificadoEnviado c) async {
     if (!c.tieneDatosCompletos) {
       _snack('Este certificado no tiene datos completos guardados, no se puede generar el PDF',
@@ -354,9 +354,9 @@ class _GenerarCertificadosScreenState
     await Printing.sharePdf(bytes: bytes, filename: nombreArchivo);
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // BUILD
-  // ══════════════════════════════════════════════════════════════════════════
+
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -426,7 +426,7 @@ class _GenerarCertificadosScreenState
     );
   }
 
-  // ── Card: selector de rol ──────────────────────────────────────────────────
+
   Widget _buildCardRol() {
     return _Card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -459,7 +459,7 @@ class _GenerarCertificadosScreenState
     );
   }
 
-  // ── Card: búsqueda ─────────────────────────────────────────────────────────
+
   Widget _buildCardBusqueda() {
     final esJuradoRol = _rol == 'JURADO';
     return _Card(
@@ -502,7 +502,7 @@ class _GenerarCertificadosScreenState
     );
   }
 
-  // ── Resultados ─────────────────────────────────────────────────────────────
+
   Widget _buildResultados() {
     if (_searchQuery.isEmpty) {
       return _Card(
@@ -695,7 +695,7 @@ class _GenerarCertificadosScreenState
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+
 class _Card extends StatelessWidget {
   final Widget child;
   const _Card({required this.child});

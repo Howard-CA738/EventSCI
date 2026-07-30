@@ -494,7 +494,7 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
                                     AsistenciasScreen()),
                           ),
                         ),
-                        // En la lista menuItems:
+
 _buildMenuCard(
   imagePath: 'assets/icons/lugar_evento.png',
   title: 'Proyectos',

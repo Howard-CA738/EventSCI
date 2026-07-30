@@ -6,7 +6,7 @@ class PerfilController with ChangeNotifier {
   bool isLoading = true;
   String? errorMessage;
 
-  // 🔥 INYECCIÓN PARA TESTING (NUEVO)
+
   final Future<Map<String, dynamic>?> Function()? fetchUserData;
 
   PerfilController({this.fetchUserData});
@@ -17,7 +17,7 @@ class PerfilController with ChangeNotifier {
       errorMessage = null;
       notifyListeners();
 
-      // 👇 USA MOCK EN TEST O PREFS EN PRODUCCIÓN
+
       final data = fetchUserData != null
           ? await fetchUserData!()
           : await PrefsHelper.getCurrentUserData();
@@ -35,7 +35,7 @@ class PerfilController with ChangeNotifier {
     }
   }
 
-  /// Devuelve el nombre de la filial/sede del estudiante.
+
   String? getSede() {
     final sede   = userData?['sede']?.toString()   ?? '';
     final filial = userData?['filial']?.toString() ?? '';
@@ -44,7 +44,7 @@ class PerfilController with ChangeNotifier {
     return null;
   }
 
-  /// Retorna el valor de un campo si no está vacío.
+
   String? getCampo(String key) {
     final valor = (userData?[key] ?? '').toString();
     return valor.isNotEmpty ? valor : null;

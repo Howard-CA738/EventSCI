@@ -4,9 +4,9 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/admin/logica/filiales_service.dart';
-import 'package:flutter/foundation.dart';   // compute
-import 'package:archive/archive.dart';      // descomprimir el .xlsx
-import 'package:xml/xml_events.dart';       // leer el XML en streaming
+import 'package:flutter/foundation.dart';
+import 'package:archive/archive.dart';
+import 'package:xml/xml_events.dart';
 
 class ImportacionPagosScreen extends StatefulWidget {
   const ImportacionPagosScreen({super.key});
@@ -36,7 +36,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
   String? _selectedEventoNombre;
 
   bool _isLoading = false;
-  bool _isParsing = false; // ← NUEVO: lectura del Excel en curso
+  bool _isParsing = false;
   bool _fileSelected = false;
   String? _fileName;
   List<Map<String, dynamic>> _previewData = [];
@@ -475,7 +475,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
       );
       if (result != null && mounted) {
         setState(() {
-          _isParsing       = true; // ← muestra el indicador de lectura
+          _isParsing       = true;
           _fileName        = result.files.single.name;
           _notFoundList    = [];
           _successCount    = 0;
@@ -499,7 +499,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
 
   Future<void> _readExcelFile(File file) async {
     try {
-      // Todo el trabajo pesado corre en un isolate aparte (no congela la UI).
+
       final resultado = await compute(
         _parseExcelPagosIsolate,
         (file.path, _columnMapping),
@@ -657,13 +657,13 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
 
   debugPrint('💳 Procesando (modo aditivo) → "$carreraPath" | evento "$eventoId"');
 
-  // 1) Códigos del Excel = los que pagaron en esta importación
+
   final Set<String> pagaron = _allData
       .map((r) => (r['codigoUniversitario'] ?? '').toString().trim())
       .where((c) => c.isNotEmpty)
       .toSet();
 
-  // 2) TODOS los estudiantes de la carrera (para poder matchear por código)
+
   final snapshot = await _firestore
       .collection('users')
       .doc(carreraPath)
@@ -673,11 +673,11 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
   if (!mounted) return;
 
   setState(() {
-    _totalRows       = pagaron.length; // referencia: cuántos códigos trae el Excel
+    _totalRows       = pagaron.length;
     _currentProgress = 0;
   });
 
-  // Set para saber qué códigos del Excel sí se encontraron en la BD
+
   final Set<String> encontrados = {};
 
   const batchSize = 450;
@@ -690,7 +690,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     final data   = doc.data();
     final codigo = (data['codigoUniversitario'] ?? '').toString().trim();
 
-    // Solo tocamos al estudiante si su código está en el Excel
+
     if (codigo.isNotEmpty && pagaron.contains(codigo)) {
       encontrados.add(codigo);
 
@@ -714,7 +714,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
 
   if (opsInBatch > 0) await batch.commit();
 
-  // 3) Códigos del Excel que NO se encontraron en la BD (para reportar)
+
   final noEncontrados = pagaron.difference(encontrados);
   _notFoundCount = noEncontrados.length;
   _notFoundList  = noEncontrados
@@ -1114,7 +1114,7 @@ class _ImportacionPagosScreenState extends State<ImportacionPagosScreen>
     );
   }
 
-  // Indicador mientras se lee el Excel (en isolate)
+
   Widget _buildParsingView() {
     return Center(
       child: Column(
@@ -1884,14 +1884,14 @@ class _SheetItem {
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// PARSEO DEL EXCEL EN ISOLATE (fuera de la clase)
-// No bloquea la UI. Detección de columnas tolerante a tildes, mayúsculas
-// y espacios. La estructura de salida es idéntica a la original.
-// ═══════════════════════════════════════════════════════════════════════════
+
+
+
+
+
 typedef _ParseResult = ({bool headersValidos, List<Map<String, dynamic>> data});
 
-// Normaliza un encabezado: minúsculas, sin tildes, espacios colapsados.
+
 String _normalizarHeader(String? h) {
   if (h == null) return '';
   var s = h.trim().toLowerCase();
@@ -1908,31 +1908,31 @@ String _normalizarHeader(String? h) {
   return s;
 }
 
-// Quita el prefijo de namespace de un nombre de elemento/atributo XML.
+
 String _local(String name) =>
     name.contains(':') ? name.split(':').last : name;
 
-// Convierte la parte de letras de una referencia de celda (ej. "AB12") a
-// índice de columna base 0 (A=0, B=1, ... Z=25, AA=26 ...).
+
+
 int _colIndex(String cellRef) {
   int idx = 0;
   bool huboLetra = false;
   for (int i = 0; i < cellRef.length; i++) {
     final ch = cellRef.codeUnitAt(i);
-    if (ch >= 65 && ch <= 90) {        // A-Z
+    if (ch >= 65 && ch <= 90) {
       idx = idx * 26 + (ch - 64);
       huboLetra = true;
-    } else if (ch >= 97 && ch <= 122) { // a-z
+    } else if (ch >= 97 && ch <= 122) {
       idx = idx * 26 + (ch - 96);
       huboLetra = true;
     } else {
-      break; // llegó a los dígitos
+      break;
     }
   }
   return huboLetra ? idx - 1 : -1;
 }
 
-// Busca un archivo dentro del zip por su ruta exacta.
+
 ArchiveFile? _findFile(Archive a, String name) {
   for (final f in a.files) {
     if (f.name == name) return f;
@@ -1940,7 +1940,7 @@ ArchiveFile? _findFile(Archive a, String name) {
   return null;
 }
 
-// Ubica la ruta de la primera hoja del libro (con respaldo a sheet1.xml).
+
 String _firstSheetPath(Archive archive) {
   try {
     final wbFile   = _findFile(archive, 'xl/workbook.xml');
@@ -1954,7 +1954,7 @@ String _firstSheetPath(Archive archive) {
           for (final at in ev.attributes) {
             if (_local(at.name) == 'id') { rid = at.value; break; }
           }
-          break; // primera hoja
+          break;
         }
       }
       if (rid != null) {
@@ -1977,7 +1977,7 @@ String _firstSheetPath(Archive archive) {
         }
       }
     }
-  } catch (_) {/* respaldo abajo */}
+  } catch (_) {}
 
   final sheets = archive.files
       .map((f) => f.name)
@@ -1987,17 +1987,17 @@ String _firstSheetPath(Archive archive) {
   return sheets.isNotEmpty ? sheets.first : 'xl/worksheets/sheet1.xml';
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// LECTOR EN STREAMING — recorre el XML del .xlsx leyendo SOLO las celdas con
-// valor. Ignora por completo las filas vacías (aunque haya un millón), por lo
-// que no se cuelga ni consume memoria de más. La salida es idéntica a la
-// versión anterior: List<Map> con los mismos campos, deduplicada por código.
-// ───────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
 _ParseResult _parseExcelPagosIsolate(
     (String path, Map<String, String> mapping) args) {
   final (path, columnMapping) = args;
 
-  // Mapeo normalizado: tolera mayúsculas/tildes/espacios en los encabezados.
+
   final normMapping = <String, String>{};
   columnMapping.forEach((k, v) => normMapping[_normalizarHeader(k)] = v);
 
@@ -2009,7 +2009,7 @@ _ParseResult _parseExcelPagosIsolate(
     return (headersValidos: true, data: <Map<String, dynamic>>[]);
   }
 
-  // 1) Cadenas compartidas (para celdas de texto, ej. nombres).
+
   final sharedStrings = <String>[];
   final ssFile = _findFile(archive, 'xl/sharedStrings.xml');
   if (ssFile != null) {
@@ -2041,7 +2041,7 @@ _ParseResult _parseExcelPagosIsolate(
     }
   }
 
-  // 2) Hoja de cálculo (primera hoja).
+
   final sheetPath = _firstSheetPath(archive);
   final wsFile = _findFile(archive, sheetPath) ??
       _findFile(archive, 'xl/worksheets/sheet1.xml');
@@ -2050,12 +2050,12 @@ _ParseResult _parseExcelPagosIsolate(
   }
   final wsXml = utf8.decode(wsFile.content as List<int>, allowMalformed: true);
 
-  final colToField = <int, String>{}; // índice de columna -> campo
+  final colToField = <int, String>{};
   bool headersListos = false;
   bool tieneCodigo   = false;
   final out = <Map<String, dynamic>>[];
 
-  // Estado de la celda en curso.
+
   int curCol = -1;
   String curType = '';
   bool inV = false;
@@ -2063,7 +2063,7 @@ _ParseResult _parseExcelPagosIsolate(
   final cellBuf = StringBuffer();
   int autoCol = 0;
 
-  // Celdas con valor de la fila en curso: índiceCol -> valor (texto).
+
   var rowCells = <int, String>{};
 
   for (final ev in parseEvents(wsXml)) {
@@ -2085,7 +2085,7 @@ _ParseResult _parseExcelPagosIsolate(
         }
         if (curCol < 0) curCol = autoCol;
         autoCol = curCol + 1;
-        if (ev.isSelfClosing) curCol = -1; // celda vacía
+        if (ev.isSelfClosing) curCol = -1;
       } else if (n == 'v') {
         inV = true;
       } else if (n == 't' && curType == 'inlineStr') {
@@ -2117,7 +2117,7 @@ _ParseResult _parseExcelPagosIsolate(
         curCol = -1;
       } else if (n == 'row') {
         if (!headersListos) {
-          // Primera fila no vacía = encabezados.
+
           if (rowCells.isNotEmpty) {
             rowCells.forEach((col, val) {
               final field = normMapping[_normalizarHeader(val)];
@@ -2129,7 +2129,7 @@ _ParseResult _parseExcelPagosIsolate(
             headersListos = true;
           }
         } else {
-          // Fila de datos.
+
           final rowData = <String, dynamic>{};
           rowCells.forEach((col, val) {
             final field = colToField[col];
@@ -2145,7 +2145,7 @@ _ParseResult _parseExcelPagosIsolate(
     return (headersValidos: false, data: <Map<String, dynamic>>[]);
   }
 
-  // Dedupe por código universitario (igual que antes).
+
   final uniqueMap = <String, Map<String, dynamic>>{};
   for (final row in out) {
     final codigo = (row['codigoUniversitario'] ?? '').toString().trim();

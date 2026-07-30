@@ -37,11 +37,11 @@ class UsuariosExcelService {
     }
   }
 
-  // ───────────────────────────────────────────────────────────────────────
-  // HOJA: RESUMEN por evento (Filial → Facultad → Carrera → Evento)
-  // Columnas: FILIAL | FACULTAD | CARRERA | EVENTO | PERÍODO |
-  //           MATRICULADOS | INSCRITOS | ASISTIERON | % ASIST/INSCR
-  // ───────────────────────────────────────────────────────────────────────
+
+
+
+
+
   void _crearHojaResumen(Excel excel, List<FilialResumen> resumen) {
     final sheet = excel['Resumen'];
 
@@ -117,7 +117,7 @@ class UsuariosExcelService {
       horizontalAlign: HorizontalAlign.Center,
     );
 
-    const lastCol = 8; // 0..8 → 9 columnas
+    const lastCol = 8;
 
     _cel(sheet, 0, 0, '  REPORTE DE EVENTOS POR CARRERA', sTitulo);
     _cel(sheet, 1, 0,
@@ -128,7 +128,7 @@ class UsuariosExcelService {
     }
     sheet.setRowHeight(2, 4);
 
-    // Totales generales
+
     int totalEventos = 0;
     int totalPagaron = 0;
     int totalAsistieron = 0;
@@ -172,7 +172,7 @@ class UsuariosExcelService {
     int fila = fEnc + 1;
     int idx = 0;
     for (final f in resumen) {
-      // Banda de filial
+
       _cel(sheet, fila, 0, '  ${f.filialNombre}', sFilialBand);
       _merge(sheet, fila, 0, fila, lastCol);
       sheet.setRowHeight(fila, 18);
@@ -208,7 +208,7 @@ class UsuariosExcelService {
         }
       }
 
-      // Subtotal de la filial
+
       _cel(sheet, fila, 0, '  Subtotal ${f.filialNombre}', sSubtotal);
       _merge(sheet, fila, 0, fila, 5);
       _celNum(sheet, fila, 6, filialPago, sSubtotal);
@@ -222,7 +222,7 @@ class UsuariosExcelService {
       fila++;
     }
 
-    // Total general
+
     _cel(sheet, fila, 0, '  TOTAL GENERAL', sTotGen);
     _merge(sheet, fila, 0, fila, 5);
     _celNum(sheet, fila, 6, totalPagaron, sTotGen);
@@ -250,7 +250,7 @@ class UsuariosExcelService {
     sheet.setRowHeight(1, 20);
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+
   void _cel(Sheet sheet, int row, int col, String value, CellStyle style) {
     final cell = sheet
         .cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));

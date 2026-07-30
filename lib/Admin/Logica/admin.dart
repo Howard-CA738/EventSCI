@@ -33,7 +33,7 @@ class AdminScreen extends StatefulWidget {
 }
 
 class _AdminScreenState extends State<AdminScreen> {
-  // Paleta centralizada para evitar repetir colores "mágicos".
+
   static const Color _primaryColor = Color(0xFF1E3A5F);
   static const Color _panelColor = Color(0xFFE8EDF2);
   static const Color _cardIconBg = Color(0xFFF5F5F5);
@@ -44,8 +44,8 @@ class _AdminScreenState extends State<AdminScreen> {
 
   String _adminName = 'Administrador';
 
-  // El menú se define como datos (no como widgets repetidos).
-  // Agregar una opción nueva es solo añadir un elemento a esta lista.
+
+
   final List<_AdminMenuItem> _menuItems = <_AdminMenuItem>[
     _AdminMenuItem(
       imagePath: 'assets/icons/usuario.png',
@@ -144,7 +144,7 @@ class _AdminScreenState extends State<AdminScreen> {
       builder: () => const GestionJuradosSuperAdminScreen(),
     ),
     _AdminMenuItem(
-  imagePath: 'assets/icons/asistencias.png', // reusa o pon un icono de reloj
+  imagePath: 'assets/icons/asistencias.png',
   title: 'Bloqueo de\nEscáner',
   subtitle: 'Controlar tiempo de espera del escáner',
   builder: () => const ControlBloqueoEscanerScreen(),
@@ -156,7 +156,7 @@ _AdminMenuItem(
   builder: () => const EvaluacionFinalSuperAdminScreen(),
 ),
 _AdminMenuItem(
-  imagePath: 'assets/icons/notas.png', // reusa el que prefieras
+  imagePath: 'assets/icons/notas.png',
   title: 'Importar Códigos\nde Certificado',
   subtitle: 'Asignar códigos en bloque desde Excel',
   builder: () => const ImportarCodigosCertificadoScreen(),
@@ -172,8 +172,8 @@ _AdminMenuItem(
   @override
   void initState() {
     super.initState();
-    // unawaited() declara de forma explícita que no esperamos este Future
-    // (carga en segundo plano). Resuelve discarded_futures.
+
+
     unawaited(_loadAdminData());
   }
 
@@ -189,8 +189,8 @@ _AdminMenuItem(
 
   Future<void> _logout() async {
     await SuperAdminAuthService.logout();
-    // Guarda obligatoria tras un await antes de usar el context
-    // (evita use_build_context_synchronously).
+
+
     if (!mounted) {
       return;
     }
@@ -334,8 +334,8 @@ _AdminMenuItem(
         ),
         child: Padding(
           padding: EdgeInsets.all(padding),
-          // GridView.builder construye las tarjetas de forma perezosa
-          // (mejor rendimiento que GridView.count con 14 hijos fijos).
+
+
           child: GridView.builder(
             itemCount: _menuItems.length,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -426,7 +426,7 @@ _AdminMenuItem(
   }
 }
 
-/// Modelo inmutable de una opción del menú de administrador.
+
 class _AdminMenuItem {
   const _AdminMenuItem({
     required this.imagePath,

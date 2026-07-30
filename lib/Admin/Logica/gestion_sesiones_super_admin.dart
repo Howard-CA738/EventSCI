@@ -2,11 +2,11 @@
     import 'package:cloud_firestore/cloud_firestore.dart';
     import '/admin/logica/filiales_service.dart';
 
-    /// Pantalla de Control de Sesiones GLOBAL para el Super Admin.
-    ///
-    /// A diferencia de [GestionSesionesScreen] (que está fijada a la carrera del
-    /// admin de carrera vía PrefsHelper), aquí el super admin selecciona cualquier
-    /// Filial → Facultad → Carrera y gestiona las sesiones de esos estudiantes.
+
+
+
+
+
     class GestionSesionesSuperAdminScreen extends StatefulWidget {
       const GestionSesionesSuperAdminScreen({super.key});
 
@@ -22,28 +22,28 @@
 
       final FilialesService _filialesService = FilialesService();
 
-      // ── Estructura de filiales / facultades / carreras ──────────────────
+
       Map<String, dynamic> _estructura = {};
       bool _isLoadingEstructura = true;
 
-      // ── Selección en cascada ────────────────────────────────────────────
-      String? _selectedFilial; // id, ej. 'lima'
-      String? _selectedFacultad; // nombre de la facultad
-      String? _selectedCarrera; // nombre de la carrera
+
+      String? _selectedFilial;
+      String? _selectedFacultad;
+      String? _selectedCarrera;
 
       List<String> _facultadesDisponibles = [];
       List<Map<String, dynamic>> _carrerasDisponibles = [];
 
-      // ── Estado de estudiantes (igual que la pantalla original) ──────────
+
       String _carreraPath = '';
       bool _isLoadingEstudiantes = false;
-      bool _yaConsultado = false; // para distinguir "aún no buscó" de "sin datos"
+      bool _yaConsultado = false;
       List<Map<String, dynamic>> _estudiantes = [];
       List<Map<String, dynamic>> _filtrados = [];
       final TextEditingController _searchController = TextEditingController();
       String _filtroEstado = 'todos';
 
-      // ── Selección múltiple ──────────────────────────────────────────────
+
       bool _modoSeleccion = false;
       final Set<String> _seleccionados = {};
 
@@ -59,9 +59,9 @@
         super.dispose();
       }
 
-      // ====================================================================
-      // CARGA DE LA ESTRUCTURA (filiales/facultades/carreras)
-      // ====================================================================
+
+
+
       Future<void> _cargarEstructura() async {
         setState(() => _isLoadingEstructura = true);
         try {
@@ -142,9 +142,9 @@ if (facultades != null && facultades.containsKey(facultad)) {
         _filtroEstado = 'todos';
       }
 
-      // ====================================================================
-      // CARGA DE ESTUDIANTES (resuelve el doc de la colección users)
-      // ====================================================================
+
+
+
       Future<void> _loadEstudiantes() async {
         if (_selectedFilial == null || _selectedCarrera == null) return;
 
@@ -244,9 +244,9 @@ if (facultades != null && facultades.containsKey(facultad)) {
         });
       }
 
-      // ====================================================================
-      // SELECCIÓN MÚLTIPLE
-      // ====================================================================
+
+
+
       void _toggleModoSeleccion() {
         setState(() {
           _modoSeleccion = !_modoSeleccion;
@@ -546,9 +546,9 @@ if (facultades != null && facultades.containsKey(facultad)) {
         return _EstadoSesion.reseteado;
       }
 
-      // ====================================================================
-      // BUILD
-      // ====================================================================
+
+
+
       @override
       Widget build(BuildContext context) {
         final bool carreraElegida = _selectedCarrera != null;
@@ -618,7 +618,7 @@ if (facultades != null && facultades.containsKey(facultad)) {
         );
       }
 
-      // ── Panel de selectores en cascada ──────────────────────────────────
+
       Widget _buildSelectores() {
         return Container(
           color: _primaryColor,
@@ -703,7 +703,7 @@ if (facultades != null && facultades.containsKey(facultad)) {
         );
       }
 
-      // ── Header con buscador, contadores y filtros ───────────────────────
+
       Widget _buildHeaderEstudiantes({
         required int totalSinSesion,
         required int totalBloqueados,
@@ -1230,7 +1230,7 @@ if (facultades != null && facultades.containsKey(facultad)) {
         );
       }
 
-      // toLocal() convierte UTC → hora local del dispositivo (Perú UTC-5)
+
       String _formatDate(DateTime dt) {
         final local = dt.toLocal();
         return '${local.day.toString().padLeft(2, '0')}/'

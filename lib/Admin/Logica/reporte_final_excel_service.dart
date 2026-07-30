@@ -38,7 +38,7 @@ class ReporteFinalExcelService {
   void _crearHoja(Excel excel, List<EventoFinalRow> filas) {
     final sheet = excel['Reporte Final'];
 
-    // Estilos
+
     final sTitulo = CellStyle(
       bold: true, fontSize: 14,
       fontColorHex: ExcelColor.fromHexString(_white),
@@ -85,7 +85,7 @@ class ReporteFinalExcelService {
       verticalAlign: VerticalAlign.Center,
     );
 
-    // Encabezados (orden EXACTO de tu plantilla + columna FILIAL agregada)
+
     final headers = <String>[
       'Nro',
       'FILIAL',
@@ -108,10 +108,10 @@ class ReporteFinalExcelService {
       'N° DOCENTES RENACYT',
       'LINK DE ONEDRIVE (FOTOS DEL EVENTO)',
     ];
-    final lastCol = headers.length - 1; // 19
+    final lastCol = headers.length - 1;
 
-    // Índices de columnas que SÍ se llenan
-   // Índices de columnas que SÍ se llenan
+
+
 const colNro = 0,
     colFilial = 1,
     colFacultad = 2,
@@ -121,26 +121,26 @@ const colNro = 0,
     colFecha = 6,
     colMatric = 8,
     colInscritos = 9,
-    colOrales = 10,      // ← nuevo
-    colPoster = 11,      // ← nuevo
+    colOrales = 10,
+    colPoster = 11,
     colJurados = 13;
 
-// Columnas que quedan vacías
-const vacias = {7, 12, 14, 15, 16, 17, 18, 19};  // ← se quitan 10 y 11
 
-    // Título
+const vacias = {7, 12, 14, 15, 16, 17, 18, 19};
+
+
     _cel(sheet, 0, 0, '  REPORTE FINAL DE EVENTOS CIENTÍFICOS', sTitulo);
     _merge(sheet, 0, 0, 0, lastCol);
     sheet.setRowHeight(0, 26);
 
-    // Encabezados
+
     const fEnc = 1;
     for (int c = 0; c < headers.length; c++) {
       _cel(sheet, fEnc, c, headers[c], sEnc);
     }
     sheet.setRowHeight(fEnc, 56);
 
-    // Filas de datos
+
     int fila = fEnc + 1;
     int totMatric = 0, totInscritos = 0, totJurados = 0;
 
@@ -159,11 +159,11 @@ _cel(sheet, fila, colEvento, r.nombreEvento, sT);
 _cel(sheet, fila, colFecha, r.fechaEvento, sN);
 _celNum(sheet, fila, colMatric, r.matriculados, sN);
 _celNum(sheet, fila, colInscritos, r.inscritos, sN);
-_celNum(sheet, fila, colOrales, r.ponenciasOrales, sN);   // ← nuevo
-_celNum(sheet, fila, colPoster, r.ponenciasPoster, sN);   // ← nuevo
+_celNum(sheet, fila, colOrales, r.ponenciasOrales, sN);
+_celNum(sheet, fila, colPoster, r.ponenciasPoster, sN);
 _celNum(sheet, fila, colJurados, r.juradosEvaluadores, sN);
 
-      // Pintar las columnas vacías
+
       for (final c in vacias) {
         _cel(sheet, fila, c, '', sVacio);
       }
@@ -175,7 +175,7 @@ _celNum(sheet, fila, colJurados, r.juradosEvaluadores, sN);
       fila++;
     }
 
-    // Fila TOTALES
+
     _cel(sheet, fila, 0, '  TOTALES', sTotal);
     _merge(sheet, fila, 0, fila, colEscuela);
     for (int c = colEscuela + 1; c <= lastCol; c++) {
@@ -191,7 +191,7 @@ _celNum(sheet, fila, colJurados, r.juradosEvaluadores, sN);
     }
     sheet.setRowHeight(fila, 20);
 
-    // Anchos
+
     final anchos = <int, double>{
       0: 6, 1: 14, 2: 12, 3: 18, 4: 30, 5: 34, 6: 18, 7: 22, 8: 13, 9: 16,
       10: 14, 11: 14, 12: 18, 13: 16, 14: 14, 15: 14, 16: 22, 17: 22, 18: 14,
@@ -200,7 +200,7 @@ _celNum(sheet, fila, colJurados, r.juradosEvaluadores, sN);
     anchos.forEach((c, w) => sheet.setColumnWidth(c, w));
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+
   void _cel(Sheet sheet, int row, int col, String value, CellStyle style) {
     final cell = sheet
         .cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));

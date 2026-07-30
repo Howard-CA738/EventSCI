@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'filiales_service.dart';
 
-/// Modelo para un criterio individual de evaluación
+
 class Criterio {
   String id;
   String descripcion;
@@ -29,9 +29,9 @@ class Criterio {
     return Criterio(
       id: map['id'] as String? ?? '',
       descripcion: map['descripcion'] as String? ?? '',
-      // FIX L32: cast explícito a num? para evitar dynamic call en .toDouble()
+
       peso: (map['peso'] as num? ?? 0).toDouble(),
-      // FIX L33: ídem
+
       puntajeObtenido: (map['puntajeObtenido'] as num? ?? 0).toDouble(),
     );
   }
@@ -51,7 +51,7 @@ class Criterio {
   }
 }
 
-/// Modelo para una sección de la rúbrica
+
 class SeccionRubrica {
   String id;
   String nombre;
@@ -83,13 +83,13 @@ class SeccionRubrica {
               ?.map((c) => Criterio.fromMap(c as Map<String, dynamic>))
               .toList() ??
           [],
-      // FIX L84: cast explícito a num? para evitar dynamic call en .toDouble()
+
       pesoTotal: (map['pesoTotal'] as num? ?? 10).toDouble(),
     );
   }
 
   double get totalPesosCriterios {
-    // FIX L89: renombrar parámetro sum → acc (sum colisiona con tipo visible)
+
     return criterios.fold(0.0, (double acc, Criterio criterio) => acc + criterio.peso);
   }
 
@@ -112,7 +112,7 @@ class SeccionRubrica {
   }
 }
 
-/// Modelo principal para una rúbrica completa
+
 class Rubrica {
   String id;
   String nombre;
@@ -166,7 +166,7 @@ class Rubrica {
       juradosAsignados: List<String>.from(map['juradosAsignados'] as List? ?? []),
       fechaCreacion:
           (map['fechaCreacion'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      // FIX L165: cast explícito a num? para evitar dynamic call en .toDouble()
+
       puntajeMaximo: (map['puntajeMaximo'] as num? ?? 20).toDouble(),
       filial: map['filial'] as String? ?? 'lima',
       facultad: map['facultad'] as String? ?? '',
@@ -188,15 +188,15 @@ class Rubrica {
   bool get estaCompleta {
     if (nombre.isEmpty) return false;
     if (secciones.isEmpty) return false;
-    // FIX L186: var → final
+
     for (final seccion in secciones) {
       if (seccion.criterios.isEmpty) return false;
     }
     return true;
   }
 
-  // FIX L175: renombrar parámetro sum → acc en totalCriterios (consistencia)
-  // (ya corregido arriba en totalCriterios con tipo explícito)
+
+
 
   Rubrica copyWith({
     String? id,
@@ -225,7 +225,7 @@ class Rubrica {
   }
 }
 
-/// Servicio de rúbricas con todos los fixes aplicados
+
 class RubricasService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FilialesService _filialesService = FilialesService();
@@ -248,14 +248,14 @@ class RubricasService {
 
   Future<String> getNombreFilial(String filialId) async {
     final estructura = await getEstructuraCompleta();
-    // FIX L242: cast explícito para evitar dynamic call en operador []
+
     final filialMap = estructura[filialId] as Map<String, dynamic>?;
     return filialMap?['nombre'] as String? ?? filialId;
   }
 
   Future<List<String>> getFacultadesByFilial(String filialId) async {
     final estructura = await getEstructuraCompleta();
-    // FIX L249: cast explícito para evitar dynamic calls
+
     final filialMap = estructura[filialId] as Map<String, dynamic>?;
     if (filialMap == null) return [];
     final facultades = filialMap['facultades'] as Map<String, dynamic>;
@@ -319,7 +319,7 @@ class RubricasService {
     try {
       final doc = await _firestore.collection(_collection).doc(id).get();
       if (doc.exists) {
-        // FIX L388: null-check explícito antes del cast en lugar de !
+
         final rawData = doc.data();
         if (rawData != null) {
           return Rubrica.fromMap(rawData);
@@ -400,14 +400,14 @@ class RubricasService {
         final data = doc.data() as Map<String, dynamic>;
         return {
           'id': doc.id,
-          // FIX L242 (equivalente en obtenerJurados): cast explícito en accesos
+
           'nombre': (data['name'] as String?) ?? (data['nombre'] as String?) ?? '',
           'usuario': data['usuario'] as String? ?? '',
           'filial': data['filial'] as String? ?? '',
           'facultad': data['facultad'] as String? ?? '',
           'carrera': data['carrera'] as String? ?? '',
           'categoria': data['categoria'] as String? ?? '',
-          // campo categorias (lista) para que el selector de proyectos lo use
+
           'categorias': data['categorias'] ?? <dynamic>[],
           'eventoNombre': data['eventoNombre'] as String? ?? '',
           'eventoId': data['eventoId'] as String? ?? '',
@@ -442,9 +442,9 @@ class RubricasService {
         final eventoId = eventosSnapshot.docs[i].id;
         final proyectos = proyectosSnapshotList[i].docs;
 
-        // FIX L441: var → final
+
         for (final proyectoDoc in proyectos) {
-          // FIX L442: var → final
+
           for (final juradoId in juradosIds) {
             refsAVerificar.add(_firestore
                 .collection('events')
@@ -464,7 +464,7 @@ class RubricasService {
       final WriteBatch batch = _firestore.batch();
       int eliminadas = 0;
 
-      // FIX L466: var → final
+
       for (final doc in evaluacionesDocs) {
         if (doc.exists) {
           final data = doc.data() as Map<String, dynamic>?;

@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'reporte_usuarios_service.dart';
 
-/// Una fila del Reporte Final = un evento científico.
+
 class EventoFinalRow {
   final int nro;
   final String filial;
@@ -11,9 +11,9 @@ class EventoFinalRow {
   final String epNombreCorto;
   final String escuelaProfesional;
   final String nombreEvento;
-  final String fechaEvento; // derivada de las asistencias (>20)
+  final String fechaEvento;
   final int matriculados;
-  final int inscritos; // = pagaron
+  final int inscritos;
   final int juradosEvaluadores;
   final int ponenciasOrales;
   final int ponenciasPoster;
@@ -43,13 +43,13 @@ class _Mapeo {
 class ReporteFinalService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // El día del evento se toma como el primer día con MÁS de este nº de alumnos.
+
   static const int _umbralEstudiantes = 20;
 
-  // ───────────────────────────────────────────────────────────────────────
-  // OVERRIDES de FACULTAD corta + EP NOMBRE CORTO (clave = carrera normalizada)
-  // Si un carreraNombre no coincide, edita/añade la clave aquí.
-  // ───────────────────────────────────────────────────────────────────────
+
+
+
+
   static final Map<String, _Mapeo> _overrides = {
     'ep contabilidad - presencial': _Mapeo('FCE', 'CONTABILIDAD'),
     'ep administracion - presencial': _Mapeo('FCE', 'ADMINISTRACIÓN'),
@@ -76,11 +76,11 @@ class ReporteFinalService {
     'ep tecnologia medica': _Mapeo('FCS', 'TEC MEDICA'),
   };
 
-  // ───────────────────────────────────────────────────────────────────────
+
   Future<List<EventoFinalRow>> getReporteFinal({
     required List<FilialResumen> resumen,
   }) async {
-    // 1) Reunir todos los eventIds
+
     final eventIds = <String>[];
     for (final f in resumen) {
       for (final fa in f.facultades) {
@@ -92,10 +92,10 @@ class ReporteFinalService {
       }
     }
 
-    // 2) Jurados por evento (1 sola lectura)
+
     final juradosPorEvento = await _contarJuradosPorEvento();
 
-    // 3) Fecha (>20) por evento, en lotes para no saturar
+
     final fechaPorEvento = <String, String>{};
     const lote = 6;
     for (var i = 0; i < eventIds.length; i += lote) {
@@ -105,7 +105,7 @@ class ReporteFinalService {
       );
       fechaPorEvento.addEntries(res);
     }
-// 3.5) Ponencias orales/poster por evento (en lotes)
+
     final ponenciasPorEvento = <String, ({int orales, int poster})>{};
     for (var i = 0; i < eventIds.length; i += lote) {
       final slice = eventIds.skip(i).take(lote).toList();
@@ -114,7 +114,7 @@ class ReporteFinalService {
       );
       ponenciasPorEvento.addEntries(res);
     }
-    // 4) Construir filas
+
     final filas = <EventoFinalRow>[];
     int nro = 1;
     for (final f in resumen) {
@@ -145,7 +145,7 @@ class ReporteFinalService {
     return filas;
   }
 
-  // ── Jurados agrupados por eventoId ──────────────────────────────────────
+
   Future<Map<String, int>> _contarJuradosPorEvento() async {
     final map = <String, int>{};
     try {
@@ -164,8 +164,8 @@ class ReporteFinalService {
     return map;
   }
 
-  // ── Ponencias orales/poster de un evento (todos los proyectos importados) ──
-  // Regla (igual que informe_word): código con "banner"/"baner" = poster; resto = oral.
+
+
   Future<({int orales, int poster})> _contarPonencias(String eventId) async {
     int orales = 0;
     int poster = 0;
@@ -192,13 +192,13 @@ class ReporteFinalService {
     return (orales: orales, poster: poster);
   }
 
-  // ── Día con MÁS de 20 estudiantes (únicos) que asistieron ───────────────
+
   Future<String> _fechaMayorAsistencia(String eventId) async {
     try {
       final porDia = <DateTime, Set<String>>{};
       DateTime soloFecha(DateTime d) => DateTime(d.year, d.month, d.day);
 
-      // QR de proyecto: 1 doc resumen por estudiante (doc.id == studentId)
+
       final asisSnap = await _firestore
           .collection('events')
           .doc(eventId)
@@ -211,7 +211,7 @@ class ReporteFinalService {
         }
       }
 
-      // Asistencias personales: registros/{studentId}
+
       final personalDefs = await _firestore
           .collection('events')
           .doc(eventId)
@@ -229,7 +229,7 @@ class ReporteFinalService {
 
       if (porDia.isEmpty) return '';
 
-      // Días que superan el umbral → el más temprano
+
       final superan = porDia.entries
           .where((e) => e.value.length > _umbralEstudiantes)
           .toList()
@@ -250,7 +250,7 @@ class ReporteFinalService {
     }
   }
 
-  // ── Mapeo de facultad corta + nombre corto ──────────────────────────────
+
   _Mapeo _mapear(String facultad, String carrera) {
     final clave = _normalizar(carrera);
     final ov = _overrides[clave];
@@ -275,7 +275,7 @@ class ReporteFinalService {
         f.contains('derecho') ||
         f.contains('comunica')) return 'FACIHED';
 
-    // Fallback: iniciales de las palabras significativas
+
     final palabras = f
         .replaceAll('facultad de ', '')
         .split(' ')

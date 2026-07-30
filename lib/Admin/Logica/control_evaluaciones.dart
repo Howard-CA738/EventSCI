@@ -12,7 +12,7 @@ class ControlEvaluacionesScreen extends StatefulWidget {
 
 class _ControlEvaluacionesScreenState
     extends State<ControlEvaluacionesScreen> {
-  // ── Design tokens ─────────────────────────────────────────────
+
   static const Color _primary = Color(0xFF1E3A5F);
   static const Color _primaryLight = Color(0xFF2D5F8D);
   static const Color _bg = Color(0xFFE8EDF2);
@@ -32,27 +32,27 @@ class _ControlEvaluacionesScreenState
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ── Estado ────────────────────────────────────────────────────
+
   List<Map<String, dynamic>> _eventos = [];
   bool _cargandoEventos = true;
   Map<String, dynamic>? _eventoSeleccionado;
 
-  // Evaluaciones del evento seleccionado
-  // Estructura: lista de {proyectoId, proyectoCodigo, proyectoTitulo,
-  //   evaluaciones: [{juradoId, juradoNombre, evaluada, bloqueada,
-  //                   notaTotal, puntajeMaximo, rubricaId, rubricaNombre,
-  //                   fechaEvaluacion, notas}]}
+
+
+
+
+
   List<Map<String, dynamic>> _proyectos = [];
   bool _cargandoEvaluaciones = false;
 
-  // Búsqueda
+
   final TextEditingController _buscarEventoCtrl = TextEditingController();
   String _queryEvento = '';
   final TextEditingController _buscarProyectoCtrl = TextEditingController();
   String _queryProyecto = '';
 
-  // Filtro estado
-  String _filtroEstado = 'todos'; // 'todos' | 'evaluadas' | 'pendientes'
+
+  String _filtroEstado = 'todos';
 
   @override
   void initState() {
@@ -67,7 +67,7 @@ class _ControlEvaluacionesScreenState
     super.dispose();
   }
 
-  // ── Snackbar ──────────────────────────────────────────────────
+
   void _snack(String msg, {bool error = false, bool warn = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -110,7 +110,7 @@ class _ControlEvaluacionesScreenState
     }
   }
 
-  // ── Carga de eventos ──────────────────────────────────────────
+
   Future<void> _cargarEventos() async {
     setState(() => _cargandoEventos = true);
     try {
@@ -148,7 +148,7 @@ class _ControlEvaluacionesScreenState
     }).toList();
   }
 
-  // ── Carga de evaluaciones del evento ──────────────────────────
+
   Future<void> _cargarEvaluaciones(String eventId) async {
     setState(() {
       _cargandoEvaluaciones = true;
@@ -193,7 +193,7 @@ class _ControlEvaluacionesScreenState
           };
         }).toList();
 
-        // Solo incluir proyectos que tienen evaluaciones asignadas
+
         if (evaluaciones.isEmpty) return null;
 
         return {
@@ -226,7 +226,7 @@ class _ControlEvaluacionesScreenState
   List<Map<String, dynamic>> get _proyectosFiltrados {
     var lista = _proyectos;
 
-    // Filtro por búsqueda
+
     if (_queryProyecto.trim().isNotEmpty) {
       final q = _queryProyecto.toLowerCase();
       lista = lista.where((p) {
@@ -237,7 +237,7 @@ class _ControlEvaluacionesScreenState
       }).toList();
     }
 
-    // Filtro por estado
+
     if (_filtroEstado != 'todos') {
       lista = lista.where((p) {
         final evals = List<Map<String, dynamic>>.from(p['evaluaciones'] ?? []);
@@ -252,7 +252,7 @@ class _ControlEvaluacionesScreenState
     return lista;
   }
 
-  // ── Estadísticas del evento ───────────────────────────────────
+
   Map<String, int> get _stats {
     int totalEvals = 0;
     int evaluadas = 0;
@@ -277,7 +277,7 @@ class _ControlEvaluacionesScreenState
     };
   }
 
-  // ── RESET evaluación individual ───────────────────────────────
+
   Future<void> _resetearEvaluacion({
     required String eventId,
     required String proyectoId,
@@ -322,7 +322,7 @@ class _ControlEvaluacionesScreenState
     }
   }
 
-  // ── RESET TODAS las evaluaciones de un proyecto ───────────────
+
   Future<void> _resetearTodasEvaluacionesProyecto({
     required String eventId,
     required Map<String, dynamic> proyecto,
@@ -371,7 +371,7 @@ class _ControlEvaluacionesScreenState
     }
   }
 
-  // ── RESET TODAS las evaluaciones del evento ───────────────────
+
   Future<void> _resetearTodasEvaluacionesEvento() async {
     final eventoNombre = _eventoSeleccionado?['name'] ??
         _eventoSeleccionado?['nombre'] ??
@@ -438,7 +438,7 @@ class _ControlEvaluacionesScreenState
     }
   }
 
-  // ── Diálogo de confirmación ───────────────────────────────────
+
   Future<bool?> _dialogConfirmar({
     required String titulo,
     required String mensaje,
@@ -531,9 +531,9 @@ class _ControlEvaluacionesScreenState
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // BUILD PRINCIPAL
-  // ─────────────────────────────────────────────────────────────
+
+
+
   @override
   Widget build(BuildContext context) {
     final sw = MediaQuery.of(context).size.width;
@@ -544,7 +544,7 @@ class _ControlEvaluacionesScreenState
       backgroundColor: _primary,
       body: SafeArea(
         child: Column(children: [
-          // ── Header ──────────────────────────────────────────
+
           Padding(
             padding: EdgeInsets.fromLTRB(8, 14, hPad, 14),
             child: Row(children: [
@@ -622,7 +622,7 @@ class _ControlEvaluacionesScreenState
             ]),
           ),
 
-          // ── Cuerpo ───────────────────────────────────────────
+
           Expanded(
             child: Container(
               decoration: const BoxDecoration(
@@ -642,9 +642,9 @@ class _ControlEvaluacionesScreenState
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // LISTA DE EVENTOS
-  // ─────────────────────────────────────────────────────────────
+
+
+
   Widget _buildListaEventos(double hPad) {
     return Column(children: [
       Padding(
@@ -791,15 +791,15 @@ class _ControlEvaluacionesScreenState
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // PANTALLA DE EVALUACIONES DEL EVENTO
-  // ─────────────────────────────────────────────────────────────
+
+
+
   Widget _buildPantallaEvaluaciones(double hPad) {
     final stats = _stats;
     final eventId = _eventoSeleccionado!['id'] as String;
 
     return Column(children: [
-      // ── Banner evento ──────────────────────────────────────
+
       Padding(
         padding: EdgeInsets.fromLTRB(hPad, 20, hPad, 0),
         child: Container(
@@ -850,7 +850,7 @@ class _ControlEvaluacionesScreenState
                     ],
                   ),
                 ),
-                // Botón reset total
+
                 if (!_cargandoEvaluaciones && _proyectos.isNotEmpty)
                   Tooltip(
                     message: 'Resetear todo el evento',
@@ -885,7 +885,7 @@ class _ControlEvaluacionesScreenState
                   ),
               ]),
 
-              // Stats
+
               if (!_cargandoEvaluaciones && _proyectos.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Row(children: [
@@ -910,7 +910,7 @@ class _ControlEvaluacionesScreenState
         ),
       ),
 
-      // ── Buscador + filtros ─────────────────────────────────
+
       Padding(
         padding: EdgeInsets.fromLTRB(hPad, 12, hPad, 0),
         child: Column(children: [
@@ -942,7 +942,7 @@ class _ControlEvaluacionesScreenState
             ),
           ),
           const SizedBox(height: 8),
-          // Chips de filtro
+
           Row(children: [
             _filtroChip('todos', 'Todos'),
             const SizedBox(width: 8),
@@ -953,7 +953,7 @@ class _ControlEvaluacionesScreenState
         ]),
       ),
 
-      // ── Lista de proyectos ─────────────────────────────────
+
       Expanded(
         child: _cargandoEvaluaciones
             ? const Center(
@@ -1054,9 +1054,9 @@ class _ControlEvaluacionesScreenState
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // TARJETA DE PROYECTO
-  // ─────────────────────────────────────────────────────────────
+
+
+
   Widget _buildProyectoCard(
       Map<String, dynamic> proyecto, String eventId) {
     final codigo = (proyecto['proyectoCodigo'] ?? '').toString();
@@ -1155,7 +1155,7 @@ class _ControlEvaluacionesScreenState
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Reset proyecto completo
+
               Tooltip(
                 message: 'Resetear todas las evaluaciones del proyecto',
                 child: IconButton(
@@ -1189,9 +1189,9 @@ class _ControlEvaluacionesScreenState
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // FILA DE EVALUACIÓN (jurado)
-  // ─────────────────────────────────────────────────────────────
+
+
+
   Widget _buildEvaluacionRow(
     Map<String, dynamic> eval,
     String eventId,
@@ -1243,7 +1243,7 @@ class _ControlEvaluacionesScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            // Avatar jurado
+
             Container(
               width: 38,
               height: 38,
@@ -1278,7 +1278,7 @@ class _ControlEvaluacionesScreenState
                 ],
               ),
             ),
-            // Estado
+
             Container(
               padding: const EdgeInsets.symmetric(
                   horizontal: 8, vertical: 4),
@@ -1300,11 +1300,11 @@ class _ControlEvaluacionesScreenState
             ),
           ]),
 
-          // Nota y detalles si está evaluada
+
           if (evaluada) ...[
             const SizedBox(height: 10),
             Row(children: [
-              // Nota total
+
               Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 12, vertical: 8),
@@ -1336,7 +1336,7 @@ class _ControlEvaluacionesScreenState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Barra de progreso de la nota
+
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
@@ -1380,7 +1380,7 @@ class _ControlEvaluacionesScreenState
               ),
             ]),
 
-            // Criterios evaluados (resumen)
+
             if (notas.isNotEmpty) ...[
               const SizedBox(height: 8),
               Container(
@@ -1404,7 +1404,7 @@ class _ControlEvaluacionesScreenState
             ],
           ],
 
-          // Botón de reset individual
+
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,
@@ -1433,7 +1433,7 @@ class _ControlEvaluacionesScreenState
     );
   }
 
-  // ── Helpers ──────────────────────────────────────────────────
+
   Widget _chip(String label, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),

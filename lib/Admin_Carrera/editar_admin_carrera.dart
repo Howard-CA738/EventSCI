@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
 import 'admin_carrera_service.dart';
-import '/password_helper.dart'; // asegúrate de importarlo
+import '/password_helper.dart';
 
 class EditarAdminCarreraScreen extends StatefulWidget {
   const EditarAdminCarreraScreen({super.key});
@@ -32,12 +32,12 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
   String _facultad = '';
   String _sede = '';
 
-  // ── CORRECCIÓN 1 ──────────────────────────────────────────────────────────
-  // Guardamos el hash de la contraseña, NO el texto plano.
-  // Nunca se muestra en pantalla; solo se usa para verificar con
-  // PasswordHelper.verifyPassword() al momento de guardar.
+
+
+
+
   String _passwordHashActual = '';
-  // ─────────────────────────────────────────────────────────────────────────
+
 
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
@@ -83,12 +83,12 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
             _facultad = adminCompleto['facultad'] ?? '';
             _sede = adminCompleto['filialNombre'] ?? '';
 
-            // ── CORRECCIÓN 1 ───────────────────────────────────────────────
-            // Guardamos el hash (campo 'password') para poder verificar
-            // después con PasswordHelper.verifyPassword().
-            // No lo ponemos en ningún TextEditingController ni lo mostramos.
+
+
+
+
             _passwordHashActual = adminCompleto['password'] ?? '';
-            // ──────────────────────────────────────────────────────────────
+
           });
         }
       }
@@ -103,14 +103,14 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
   Future<void> _guardarCambios() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // ── CORRECCIÓN 2 ──────────────────────────────────────────────────────
-    // Si el usuario quiere cambiar la contraseña, verificamos la actual
-    // usando PasswordHelper.verifyPassword() contra el hash almacenado.
-    // Esto funciona correctamente tanto si el hash es SHA-256 como si
-    // fuera texto plano (contraseñas antiguas no migradas).
+
+
+
+
+
     if (_passwordActualController.text.isNotEmpty ||
         _passwordNuevaController.text.isNotEmpty) {
-      // Requiere que ambos campos estén llenos si se toca alguno
+
       if (_passwordActualController.text.isEmpty) {
         _showMessage('Ingresa tu contraseña actual', isError: true);
         return;
@@ -120,7 +120,7 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
         return;
       }
 
-      // Verificar contraseña actual contra el hash de Firestore
+
       final esCorrecta = PasswordHelper.verifyPassword(
         _passwordActualController.text,
         _passwordHashActual,
@@ -130,14 +130,14 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
         return;
       }
 
-      // Verificar que nueva y confirmación coincidan
+
       if (_passwordNuevaController.text !=
           _passwordConfirmarController.text) {
         _showMessage('Las contraseñas nuevas no coinciden', isError: true);
         return;
       }
     }
-    // ─────────────────────────────────────────────────────────────────────
+
 
     setState(() => _isSaving = true);
 
@@ -145,14 +145,14 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
       final success = await _service.actualizarAdminCarrera(
         adminId: _adminId,
         usuario: _usuarioController.text.trim(),
-        // Solo enviamos la nueva contraseña si el campo está lleno
+
         password: _passwordNuevaController.text.isNotEmpty
             ? _passwordNuevaController.text
             : null,
       );
 
       if (success) {
-        // Actualizar SharedPreferences con el nuevo username
+
         final filial = await PrefsHelper.getAdminCarreraFilial();
         final filialNombre =
             await PrefsHelper.getAdminCarreraFilialNombre();
@@ -185,11 +185,11 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
         _passwordNuevaController.clear();
         _passwordConfirmarController.clear();
 
-        // ── CORRECCIÓN 3 ──────────────────────────────────────────────────
-        // Recargar para actualizar _passwordHashActual con el nuevo hash,
-        // en caso de que el admin haya cambiado su contraseña.
+
+
+
         await _loadAdminData();
-        // ──────────────────────────────────────────────────────────────────
+
       } else {
         _showMessage('Ya existe otro admin con ese usuario',
             isError: true);
@@ -415,16 +415,16 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
       headerSubtitle: 'Deja los campos vacíos si no deseas cambiarla',
       child: Column(
         children: [
-          // ── Campo: contraseña actual ──────────────────────────────────
+
           TextFormField(
             controller: _passwordActualController,
-            // CORRECCIÓN: obscureText controlado por _obscurePasswordActual
+
             obscureText: _obscurePasswordActual,
             textInputAction: TextInputAction.next,
             decoration: _inputDecoration(
               label: 'Contraseña actual',
               icon: Icons.lock_outline_rounded,
-              // CORRECCIÓN: sufixIcon funciona correctamente con setState
+
               suffixIcon: IconButton(
                 icon: Icon(
                   _obscurePasswordActual
@@ -441,8 +441,8 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
                 ),
               ),
             ),
-            // No es requerido a menos que el usuario empiece a llenar
-            // los campos de nueva contraseña
+
+
             validator: (value) {
               if (_passwordNuevaController.text.isNotEmpty &&
                   (value == null || value.isEmpty)) {
@@ -453,7 +453,7 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
           ),
           const SizedBox(height: 14),
 
-          // ── Campo: nueva contraseña ───────────────────────────────────
+
           TextFormField(
             controller: _passwordNuevaController,
             obscureText: _obscurePasswordNueva,
@@ -489,7 +489,7 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
           ),
           const SizedBox(height: 14),
 
-          // ── Campo: confirmar nueva contraseña ─────────────────────────
+
           TextFormField(
             controller: _passwordConfirmarController,
             obscureText: _obscurePasswordConfirmar,
@@ -528,7 +528,7 @@ class _EditarAdminCarreraScreenState extends State<EditarAdminCarreraScreen>
             },
           ),
 
-          // ── Medidor de seguridad ──────────────────────────────────────
+
           if (_passwordNuevaController.text.isNotEmpty) ...[
             const SizedBox(height: 14),
             _buildPasswordStrength(_passwordNuevaController.text),

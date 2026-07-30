@@ -18,7 +18,7 @@ import 'package:flutter/foundation.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
+
   if (!kIsWeb) {
     await FirebaseAppCheck.instance.activate(
       androidProvider: kDebugMode
@@ -29,7 +29,7 @@ void main() async {
           : AppleProvider.deviceCheck,
     );
   }
-  
+
   runApp(const MyApp());
 }
 
@@ -270,7 +270,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
               } else if (userType == PrefsHelper.userTypeStudent) {
                 return const EstudianteScreen();
               } else if (userType == PrefsHelper.userTypeAdminCarrera) {
-                // 🔐 AdminCarrera también necesita su pantalla
+
                 return const AdminCarreraScreen();
               } else {
                 debugPrint('❌ Tipo de usuario desconocido: $userType');
@@ -294,7 +294,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
       final userType = await PrefsHelper.getUserType();
 
-      // SuperAdmin: Firebase Auth maneja su sesión
+
       if (userType == 'superAdmin') {
         final activa = await SuperAdminAuthService.sesionActiva();
         if (!activa) {

@@ -8,9 +8,9 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import '/admin_Carrera/certificado_builder.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MODELO LOCAL
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 class CertificadoItem {
   final String id;
   final DatosCertificado datos;
@@ -25,9 +25,9 @@ class CertificadoItem {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CONTROLADOR — lógica pura, sin widgets
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 class VerCertificadosController with ChangeNotifier {
   bool isLoading = true;
   List<CertificadoItem> certificados = [];
@@ -35,12 +35,12 @@ class VerCertificadosController with ChangeNotifier {
 
   String nombreEstudiante = '';
 
-  /// Flags para evitar doble tap en Ver / Descargar.
+
   final Set<String> procesando = {};
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // CARGA
-  // ─────────────────────────────────────────────────────────────────────────
+
+
+
   Future<void> cargarCertificados() async {
     isLoading = true;
     error     = null;
@@ -87,8 +87,8 @@ class VerCertificadosController with ChangeNotifier {
     }
   }
 
-  /// Resuelve (carreraPath, studentId) desde los datos del usuario.
-  /// Retorna null si no se pueden determinar ambos valores.
+
+
   Future<(String, String)?> resolverIds(Map<String, dynamic> userData) async {
     String carreraPath = userData['carreraPath']?.toString() ?? '';
     String studentId   = userData['id']?.toString()          ?? '';
@@ -113,9 +113,9 @@ class VerCertificadosController with ChangeNotifier {
     notifyListeners();
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // GENERACIÓN DE PDF (on-demand, sin guardar en Firestore)
-  // ─────────────────────────────────────────────────────────────────────────
+
+
+
   Future<Uint8List?> generarPdf(
     CertificadoItem cert, {
     required void Function(String) onError,
@@ -143,10 +143,10 @@ class VerCertificadosController with ChangeNotifier {
         bytesFirma1: bytes1,
         bytesFirma2: bytes2,
         bytesFirma3: bytes3,
-        codigoCertificado: cert.datos.codigoCertificado, // ← imprime el código
+        codigoCertificado: cert.datos.codigoCertificado,
       );
 
-      // Usa el nombre guardado en Firestore, con fallback a PrefsHelper.
+
       final nombre = cert.nombreEstudiante.isNotEmpty
           ? cert.nombreEstudiante
           : nombreEstudiante;
@@ -167,12 +167,12 @@ class VerCertificadosController with ChangeNotifier {
     }
   }
 
-  // Descarga directa por URL (sin necesitar permisos de Storage SDK)
+
   Future<Uint8List?> _descargarPorUrl(String? url) async {
     if (url == null || url.isEmpty) return null;
 
     try {
-      // Intento 1: refrescar URL desde Storage SDK (más confiable)
+
       final storagePath = _extraerStoragePath(url);
       if (storagePath != null) {
         final freshUrl = await FirebaseStorage.instance
@@ -184,7 +184,7 @@ class VerCertificadosController with ChangeNotifier {
         if (response.statusCode == 200) return response.bodyBytes;
       }
 
-      // Intento 2: usar la URL directamente como fallback
+
       if (url.startsWith('https://')) {
         final response = await http
             .get(Uri.parse(url))
@@ -259,9 +259,9 @@ class VerCertificadosController with ChangeNotifier {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // HELPERS PUROS
-  // ─────────────────────────────────────────────────────────────────────────
+
+
+
   Color colorPorRol(String rol) {
     switch (rol) {
       case 'PONENTE':     return const Color(0xFF7C3AED);
@@ -288,7 +288,7 @@ class VerCertificadosController with ChangeNotifier {
     return '${dt.day} ${meses[dt.month]} ${dt.year}';
   }
 
-  /// Devuelve un mapa rol → cantidad para el widget de resumen.
+
   Map<String, int> contarPorRol() {
     final roles = <String, int>{};
     for (final c in certificados) {

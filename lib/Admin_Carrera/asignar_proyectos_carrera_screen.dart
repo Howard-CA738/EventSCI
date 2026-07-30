@@ -35,7 +35,7 @@ class _AsignarProyectosCarreraScreenState
   List<Map<String, dynamic>> _juradosDisponibles = [];
   List<Map<String, dynamic>> _proyectosDisponibles = [];
   Map<String, List<Map<String, dynamic>>> _proyectosPorCategoria = {};
-  // FIX L37: referencia nunca se reasigna → final
+
   final Set<String> _proyectosSeleccionados = {};
 
   bool _isLoadingSession = true;
@@ -97,7 +97,7 @@ class _AsignarProyectosCarreraScreenState
     } finally {
       if (mounted) {
         setState(() => _isLoadingSession = false);
-        // FIX L98: TickerFuture no necesita await; unawaited() silencia el warning
+
         unawaited(_fadeController.forward());
       }
     }
@@ -284,7 +284,7 @@ class _AsignarProyectosCarreraScreenState
 
       List<String> categoriasJurado = [];
       if (juradoDoc.exists) {
-        // FIX L885: data() puede ser null → null-check antes del cast
+
         final rawData = juradoDoc.data();
         if (rawData != null) {
           final d = rawData as Map<String, dynamic>;
@@ -304,19 +304,19 @@ class _AsignarProyectosCarreraScreenState
       }
 
       final proyectosAsignados = <String>{};
-      // FIX L300: var → final
+
       for (final doc in evaluacionesSnap.docs) {
         final parts = doc.reference.path.split('/');
         if (parts.length >= 4) proyectosAsignados.add(parts[3]);
       }
 
       final Map<String, Map<String, dynamic>> proyectosMap = {};
-      // FIX L306: var → final; FIX L307: null-check en data()
+
       for (final doc in proyectosSnap.docs) {
         final rawDoc = doc.data();
         if (rawDoc == null) continue;
         final d             = rawDoc as Map<String, dynamic>;
-        // FIX L318: cast explícito desde dynamic
+
         final codigo        = (d['Código']        as String?) ?? '';
         final clasificacion = (d['Clasificación'] as String?) ?? 'Sin categoría';
 
@@ -339,7 +339,7 @@ class _AsignarProyectosCarreraScreenState
             (a['titulo'] as String).compareTo(b['titulo'] as String));
 
       final Map<String, List<Map<String, dynamic>>> grupos = {};
-      // FIX L339: var → final
+
       for (final p in proyectosList) {
         final cat = p['clasificacion'] as String;
         grupos.putIfAbsent(cat, () => []).add(p);
@@ -347,7 +347,7 @@ class _AsignarProyectosCarreraScreenState
 
       if (mounted) {
         _proyectosSeleccionados.clear();
-        // FIX L569 (equivalente): var → final
+
         for (final p in proyectosList) {
           if (p['yaAsignado'] == true) {
             _proyectosSeleccionados.add(p['id'] as String);
@@ -1360,7 +1360,7 @@ class _AsignarProyectosCarreraScreenState
   Widget _buildJuradoItem(Map<String, dynamic> jurado) {
     final id         = jurado['id']     as String;
     final nombre     = jurado['nombre'] as String? ?? '—';
-    // FIX L213: cast explícito desde dynamic antes de List.from
+
     final categorias = List<dynamic>.from(
         jurado['categorias'] as List<dynamic>? ?? <dynamic>[]);
     final isSelected = _juradoSeleccionado == id;
@@ -1377,7 +1377,7 @@ class _AsignarProyectosCarreraScreenState
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
-          // FIX L1037: cast explícito a Object antes de toString()
+
           (cat as Object).toString(),
           style: TextStyle(
             fontSize: 10,
@@ -1760,7 +1760,7 @@ class _AsignarProyectosCarreraScreenState
           ),
           childrenPadding:
               const EdgeInsets.fromLTRB(10, 0, 10, 10),
-          // FIX L1159: pasar key explícito para evitar dynamic implícito
+
           children: proyectos
               .map((p) => _buildProyectoItem(p, key: ValueKey(p['id'] as String)))
               .toList(),
@@ -1942,7 +1942,7 @@ class _AsignarProyectosCarreraScreenState
                       setState(() {
                         _modoEdicion = false;
                         _proyectosSeleccionados.clear();
-                        // FIX L1931: var → final
+
                         for (final p in _proyectosDisponibles) {
                           if (p['yaAsignado'] == true) {
                             _proyectosSeleccionados

@@ -45,7 +45,7 @@ class ReporteCertificadosExcelService {
     }
   }
 
-  // ── Estilos reutilizables ──────────────────────────────────────────────
+
   CellStyle get _sTitulo => CellStyle(
         bold: true, fontSize: 14,
         fontColorHex: ExcelColor.fromHexString(_white),
@@ -90,7 +90,7 @@ class ReporteCertificadosExcelService {
         horizontalAlign: HorizontalAlign.Center,
       );
 
-  // ── HOJA ASISTENTE ───────────────────────────────────────────────────────
+
   void _hojaAsistentes(
     Excel excel,
     EscuelaItem escuela,
@@ -149,7 +149,7 @@ class ReporteCertificadosExcelService {
     sheet.setColumnWidth(6, 10);
   }
 
-  // ── HOJA PONENTE ───────────────────────────────────────────────────────
+
   void _hojaPonentes(
     Excel excel,
     EscuelaItem escuela,
@@ -204,7 +204,7 @@ class ReporteCertificadosExcelService {
     sheet.setColumnWidth(6, 12);
   }
 
-  // ── HOJA JURADO ────────────────────────────────────────────────────────
+
   void _hojaJurados(
     Excel excel,
     EscuelaItem escuela,
@@ -251,7 +251,7 @@ class ReporteCertificadosExcelService {
     sheet.setColumnWidth(2, 22);
   }
 
-  // ── HOJA ORGANIZADOR ─────────────────────────────────────────────────────
+
   void _hojaOrganizadores(
     Excel excel,
     EscuelaItem escuela,
@@ -304,7 +304,7 @@ class ReporteCertificadosExcelService {
     sheet.setColumnWidth(5, 8);
   }
 
-  // ── Metadatos comunes (filas 1..5) ───────────────────────────────────────
+
   void _metaFilas(Sheet sheet, EscuelaItem escuela, String eventoNombre,
       int lastCol, {required String extra}) {
     _cel(sheet, 1, 0, '  Filial: ${escuela.filialNombre}', _sMeta);
@@ -322,7 +322,7 @@ class ReporteCertificadosExcelService {
     }
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+
   void _cel(Sheet sheet, int row, int col, String value, CellStyle style) {
     final cell = sheet
         .cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));

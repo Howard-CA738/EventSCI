@@ -128,7 +128,7 @@ class _NotasPorSellosScreenState extends State<NotasPorSellosScreen>
     });
 
     try {
-      // ── 1. Verificar configuración de sellos ──────────────────────
+
       final docIdConfig = _docIdConfig(eventoId);
       final configDoc = await _firestore
           .collection('sellos_asistencia')
@@ -160,7 +160,7 @@ class _NotasPorSellosScreenState extends State<NotasPorSellosScreen>
       _metaSellos = metaInt;
       _tieneConfig = true;
 
-      // ── 2. Buscar la lista de estudiantes ─────────────────────────
+
       final candidatos = [
         '${widget.filialNombre}_$_carreraNombre',
         '${widget.filialNombre}_$_carreraId',
@@ -190,12 +190,12 @@ class _NotasPorSellosScreenState extends State<NotasPorSellosScreen>
         return;
       }
 
-      // ── 3. Para cada estudiante: contar scans de proyectos
-      //       + registros de asistencias personales ─────────────────
+
+
       final List<Map<String, dynamic>> notas = [];
 
-      // Traemos de una vez todas las asistencias_personales del evento
-      // para evitar un query por cada estudiante.
+
+
       final asistPersonalesSnap = await _firestore
           .collection('events')
           .doc(eventoId)
@@ -206,7 +206,7 @@ class _NotasPorSellosScreenState extends State<NotasPorSellosScreen>
         final studentData = studentDoc.data();
         final studentId   = studentDoc.id;
 
-        // Scans de proyectos
+
         int sellosProyectos = 0;
         try {
           final scansSnap = await _firestore
@@ -219,7 +219,7 @@ class _NotasPorSellosScreenState extends State<NotasPorSellosScreen>
           sellosProyectos = scansSnap.docs.length;
         } catch (_) {}
 
-        // Registros de asistencias personales
+
         int sellosPersonales = 0;
         try {
           final resultados = await Future.wait(
@@ -318,9 +318,9 @@ sellosPersonales = resultados.where((doc) => doc.exists).length;
     ));
   }
 
-  // ─────────────────────────────────────────────────────────────────
-  // BUILD
-  // ─────────────────────────────────────────────────────────────────
+
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1029,7 +1029,7 @@ sellosPersonales = resultados.where((doc) => doc.exists).length;
             ),
             const SizedBox(height: 12),
 
-            // Desglose de sellos: proyectos + personales
+
             Row(children: [
               Icon(Icons.workspace_premium,
                   size: 14, color: Colors.amber.shade600),
@@ -1052,7 +1052,7 @@ sellosPersonales = resultados.where((doc) => doc.exists).length;
                       fontWeight: FontWeight.bold)),
             ]),
 
-            // Mini desglose proyectos vs personales
+
             if (sellosP > 0 || sellosPerso > 0) ...[
               const SizedBox(height: 4),
               Wrap(spacing: 6, children: [

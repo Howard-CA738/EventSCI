@@ -6,9 +6,9 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-// ═══════════════════════════════════════════════════════════════════════════
-// MODELOS
-// ═══════════════════════════════════════════════════════════════════════════
+
+
+
 
 class EvalFinalConfig {
   final double pctAsistNoSel;
@@ -62,13 +62,13 @@ class NotaFinalItem {
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SERVICIO PRINCIPAL
-// ═══════════════════════════════════════════════════════════════════════════
+
+
+
 
 class ReporteEvaluacionFinalExcelService {
 
-  // ── Paleta ─────────────────────────────────────────────────────────────────
+
   static const _cobalt    = '#1A3A6E';
   static const _teal      = '#0F9D58';
   static const _tealLight = '#D7F5E6';
@@ -82,7 +82,7 @@ class ReporteEvaluacionFinalExcelService {
   static const _white     = '#FFFFFF';
   static const _surface   = '#F8FAFC';
 
-  // ── Punto de entrada ───────────────────────────────────────────────────────
+
   Future<String?> generarReporte({
     required List<NotaFinalItem> notas,
     required EvalFinalConfig config,
@@ -94,7 +94,7 @@ class ReporteEvaluacionFinalExcelService {
     try {
       final excel = Excel.createExcel();
 
-      // Orden: ciclo → grupo (numérico) → grupo único al final → nombre
+
       final seleccionados = notas.where((n) => n.seleccionado).toList()
         ..sort(_ordenCicloGrupo);
       final noSeleccionados = notas.where((n) => !n.seleccionado).toList()
@@ -136,8 +136,8 @@ class ReporteEvaluacionFinalExcelService {
       final dir = await getTemporaryDirectory();
       final fecha = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
 
-      // Nombre del archivo: prioriza el evento; si está vacío usa carrera;
-      // si todo falla, un nombre genérico.
+
+
       final base = eventoNombre.trim().isNotEmpty
           ? eventoNombre
           : (carrera.trim().isNotEmpty ? carrera : 'Reporte');
@@ -151,9 +151,9 @@ class ReporteEvaluacionFinalExcelService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // HOJA GENÉRICA (usada tanto para SELECCIONADOS como NO SELECCIONADOS)
-  // ═══════════════════════════════════════════════════════════════════════════
+
+
+
   void _crearHoja({
     required Excel  excel,
     required String nombreHoja,
@@ -169,7 +169,7 @@ class ReporteEvaluacionFinalExcelService {
   }) {
     final sheet = excel[nombreHoja];
 
-    // ── Estilos base ──────────────────────────────────────────────────────────
+
     final sTitulo = CellStyle(
       bold: true, fontSize: 15,
       fontColorHex: ExcelColor.fromHexString(_white),
@@ -197,20 +197,20 @@ class ReporteEvaluacionFinalExcelService {
       fontColorHex: ExcelColor.fromHexString(_gray900),
     );
 
-    // Calcular lastCol dinámico:
-    // Columnas fijas: N°(0), NOMBRE(1), CÓDIGO(2), CICLO(3), GRUPO(4) = 5 cols
-    // + N1(5) siempre
-    // + N2(6) si mostrarJurado
-    // + N3   si mostrarDocente
-    // + NOTA FINAL al final
-    int lastCol = 5; // N1
-    if (mostrarJurado)  lastCol++; // N2
-    if (mostrarDocente) lastCol++; // N3
-    // NOTA FINAL
-    final colNotaFinal = lastCol;
-    lastCol = colNotaFinal; // ya está en su lugar
 
-    // ── Banner ────────────────────────────────────────────────────────────────
+
+
+
+
+
+    int lastCol = 5;
+    if (mostrarJurado)  lastCol++;
+    if (mostrarDocente) lastCol++;
+
+    final colNotaFinal = lastCol;
+    lastCol = colNotaFinal;
+
+
     _cel(sheet, 0, 0, '  $nombreHoja — EVALUACIÓN FINAL', sTitulo);
     _cel(sheet, 1, 0, '  ${eventoNombre.toUpperCase()}', sSubtitulo);
     for (int c = 0; c <= lastCol; c++) _cel(sheet, 2, c, '', sSep);
@@ -220,7 +220,7 @@ class ReporteEvaluacionFinalExcelService {
     sheet.setRowHeight(1, 24);
     sheet.setRowHeight(2, 4);
 
-    // ── Metadatos (sin PONDERACIÓN) ───────────────────────────────────────────
+
     final fechaGen = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final metas = [
       ['  FILIAL',    filialNombre],
@@ -236,7 +236,7 @@ class ReporteEvaluacionFinalExcelService {
     }
     sheet.setRowHeight(7, 8);
 
-    // ── Encabezados ───────────────────────────────────────────────────────────
+
     final sEncBase = CellStyle(
       bold: true, fontSize: 9,
       fontColorHex: ExcelColor.fromHexString(_white),
@@ -266,7 +266,7 @@ class ReporteEvaluacionFinalExcelService {
       horizontalAlign: HorizontalAlign.Center,
       verticalAlign: VerticalAlign.Center,
     );
-    // NOTA FINAL: mismo color que encabezados base (cobalt), sin semáforo
+
     final sEncFinal = CellStyle(
       bold: true, fontSize: 9,
       fontColorHex: ExcelColor.fromHexString(_white),
@@ -288,7 +288,7 @@ class ReporteEvaluacionFinalExcelService {
     _cel(sheet, fEnc, col,   'NOTA FINAL',      sEncFinal);
     sheet.setRowHeight(fEnc, 28);
 
-    // ── Estilos de filas de datos ─────────────────────────────────────────────
+
     final sIzq  = CellStyle(fontSize: 9, fontColorHex: ExcelColor.fromHexString(_gray900));
     final sCen  = CellStyle(fontSize: 9, fontColorHex: ExcelColor.fromHexString(_gray900),
         horizontalAlign: HorizontalAlign.Center);
@@ -298,8 +298,8 @@ class ReporteEvaluacionFinalExcelService {
         backgroundColorHex: ExcelColor.fromHexString(_surface),
         horizontalAlign: HorizontalAlign.Center);
 
-    // NOTA FINAL: estilo neutro igual que las demás celdas centradas
-    // (sin color de semáforo — solo bold para destacar)
+
+
     final sNotaFinalN = CellStyle(
       bold: true, fontSize: 11,
       fontColorHex: ExcelColor.fromHexString(_cobalt),
@@ -314,7 +314,7 @@ class ReporteEvaluacionFinalExcelService {
       verticalAlign: VerticalAlign.Center,
     );
 
-    // ── Filas de datos ────────────────────────────────────────────────────────
+
     for (int i = 0; i < notas.length; i++) {
       final n    = notas[i];
       final fila = fEnc + 1 + i;
@@ -336,7 +336,7 @@ class ReporteEvaluacionFinalExcelService {
       sheet.setRowHeight(fila, 18);
     }
 
-    // ── Fila de estadísticas ──────────────────────────────────────────────────
+
     if (notas.isNotEmpty) {
       final fTot = fEnc + 1 + notas.length;
       final prom = notas.map((n) => n.notaFinal).reduce((a, b) => a + b) / notas.length;
@@ -359,22 +359,22 @@ class ReporteEvaluacionFinalExcelService {
       sheet.setRowHeight(fTot, 20);
     }
 
-    // ── Anchos ────────────────────────────────────────────────────────────────
-    sheet.setColumnWidth(0,  5);   // N°
-    sheet.setColumnWidth(1,  34);  // Nombre
-    sheet.setColumnWidth(2,  16);  // Código
-    sheet.setColumnWidth(3,  8);   // Ciclo
-    sheet.setColumnWidth(4,  10);  // Grupo
+
+    sheet.setColumnWidth(0,  5);
+    sheet.setColumnWidth(1,  34);
+    sheet.setColumnWidth(2,  16);
+    sheet.setColumnWidth(3,  8);
+    sheet.setColumnWidth(4,  10);
     int wCol = 5;
-    sheet.setColumnWidth(wCol++, 14); // N1
-    if (mostrarJurado)  sheet.setColumnWidth(wCol++, 14); // N2
-    if (mostrarDocente) sheet.setColumnWidth(wCol++, 14); // N3
-    sheet.setColumnWidth(wCol, 14);   // Nota final
+    sheet.setColumnWidth(wCol++, 14);
+    if (mostrarJurado)  sheet.setColumnWidth(wCol++, 14);
+    if (mostrarDocente) sheet.setColumnWidth(wCol++, 14);
+    sheet.setColumnWidth(wCol, 14);
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // HELPERS DE ORDEN (ciclo → grupo → único al final → nombre)
-  // ═══════════════════════════════════════════════════════════════════════════
+
+
+
   int _ciclo(String c) {
     if (c.trim().isEmpty || c == 'N/A') return 999;
     final m = RegExp(r'\d+').firstMatch(c);
@@ -384,7 +384,7 @@ class ReporteEvaluacionFinalExcelService {
   int _grupo(String g) {
     final s = g.toLowerCase().trim();
     if (s.isEmpty || s == 'n/a') return 9999;
-    if (s.contains('único') || s.contains('unico')) return 9998; // único al final
+    if (s.contains('único') || s.contains('unico')) return 9998;
     final m = RegExp(r'\d+').firstMatch(g);
     return m != null ? int.parse(m.group(0)!) : 9999;
   }
@@ -397,9 +397,9 @@ class ReporteEvaluacionFinalExcelService {
     return a.nombre.compareTo(b.nombre);
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // HELPERS DE CELDAS
-  // ═══════════════════════════════════════════════════════════════════════════
+
+
+
   void _cel(Sheet sheet, int row, int col, String value, CellStyle style) {
     final cell = sheet.cell(
         CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));
@@ -437,9 +437,9 @@ class ReporteEvaluacionFinalExcelService {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// BOTÓN DE EXPORTAR
-// ═══════════════════════════════════════════════════════════════════════════
+
+
+
 class BotonExportarEvaluacionFinal extends StatefulWidget {
   final List<NotaFinalItem> notas;
   final EvalFinalConfig config;

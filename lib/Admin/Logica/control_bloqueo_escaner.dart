@@ -16,7 +16,7 @@ class _ControlBloqueoEscanerScreenState
   final _customCtrl = TextEditingController();
   bool _guardando = false;
 
-  // Presets en segundos.
+
   final List<_Preset> _presets = const [
     _Preset('Desactivado', 0),
     _Preset('30 segundos', 30),
@@ -140,7 +140,7 @@ class _ControlBloqueoEscanerScreenState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Valor actual (en vivo)
+
                       StreamBuilder<int>(
                         stream: EscanerConfigService.watchCooldownSegundos(),
                         builder: (context, snap) {

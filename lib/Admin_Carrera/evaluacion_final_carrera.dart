@@ -24,28 +24,28 @@ class _C {
   static const txt3    = Color(0xFF94A3B8);
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// MODELOS
-// ═══════════════════════════════════════════════════════════════════
 
-/// Configuración de pesos y modalidad guardada en Firestore
+
+
+
+
 class _Config {
-  // Porcentajes para NO seleccionados
-  double pctAsistNoSel;  // N1
-  double pctDocenteNoSel; // N3 (solo si incluirDocente=true)
+
+  double pctAsistNoSel;
+  double pctDocenteNoSel;
   bool   incluirDocenteNoSel;
 
-  // Modalidad para SELECCIONADOS
-  String modalidad; // 'jurado' | 'mixta'
 
-  // Porcentajes para SELECCIONADOS - modalidad "solo jurado"
-  double pctAsistSel;   // N1
-  double pctJuradoSel;  // N2
+  String modalidad;
 
-  // Porcentajes para SELECCIONADOS - modalidad "mixta"
-  double pctAsistSelMixta;   // N1
-  double pctJuradoSelMixta;  // N2
-  double pctDocenteSelMixta; // N3
+
+  double pctAsistSel;
+  double pctJuradoSel;
+
+
+  double pctAsistSelMixta;
+  double pctJuradoSelMixta;
+  double pctDocenteSelMixta;
 
   _Config({
     this.pctAsistNoSel      = 100,
@@ -85,19 +85,19 @@ class _Config {
   };
 }
 
-/// Resultado calculado para un estudiante
+
 class _NotaFinal {
   final String studentId;
   final String nombre;
   final String codigo;
   final String ciclo;
   final String grupo;
-  final bool   seleccionado;    // aparece en proyectos
-  final String proyectoCodigo;  // código del proyecto al que pertenece (si seleccionado)
-  final double notaAsist;       // N1 (0-20)
-  final double notaJurado;      // N2 (0-20), 0 si no seleccionado
-  final double notaDocente;     // N3 (0-20), siempre 0 por ahora
-  final double notaFinal;       // promedio ponderado final (0-20)
+  final bool   seleccionado;
+  final String proyectoCodigo;
+  final double notaAsist;
+  final double notaJurado;
+  final double notaDocente;
+  final double notaFinal;
 
   const _NotaFinal({
     required this.studentId,
@@ -125,9 +125,9 @@ class _IntegranteRef {
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// PANTALLA PRINCIPAL
-// ═══════════════════════════════════════════════════════════════════
+
+
+
 class EvaluacionFinalCarreraScreen extends StatefulWidget {
   final String filialId;
   final String filialNombre;
@@ -152,35 +152,35 @@ class _EvaluacionFinalCarreraScreenState
     with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ── Sesión ─────────────────────────────────────────────────────
+
   String? _filialId;
   String? _facultad;
   String? _carreraId;
   bool _isLoadingSession = true;
 
-  // ── Eventos ────────────────────────────────────────────────────
+
   List<Map<String, dynamic>> _eventos = [];
   String? _eventoId;
   String? _eventoNombre;
   bool _isLoadingEventos = false;
 
-  // ── Config ─────────────────────────────────────────────────────
+
   _Config _config = _Config();
   bool _configCargada = false;
 
-  // ── Resultados ─────────────────────────────────────────────────
+
   List<_NotaFinal> _notas = [];
   bool _isCalculando = false;
   bool _calculoDone  = false;
 
-  // ── Búsqueda y orden ───────────────────────────────────────────
+
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQ = '';
   bool   _ordenDesc = true;
-  // Filtro: 'todos' | 'seleccionados' | 'no_seleccionados'
+
   String _filtro = 'todos';
 
-  // ── Animación ──────────────────────────────────────────────────
+
   late AnimationController _animCtrl;
   late Animation<double>   _fadeAnim;
 
@@ -212,9 +212,9 @@ class _EvaluacionFinalCarreraScreenState
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // SESIÓN
-  // ─────────────────────────────────────────────────────────────
+
+
+
   Future<void> _loadSession() async {
     setState(() => _isLoadingSession = true);
     try {
@@ -234,9 +234,9 @@ class _EvaluacionFinalCarreraScreenState
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // EVENTOS
-  // ─────────────────────────────────────────────────────────────
+
+
+
   Future<void> _cargarEventos() async {
     setState(() => _isLoadingEventos = true);
     try {
@@ -261,9 +261,9 @@ class _EvaluacionFinalCarreraScreenState
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // CARGAR CONFIG
-  // ─────────────────────────────────────────────────────────────
+
+
+
   Future<void> _cargarConfig(String eventoId) async {
     try {
       final doc = await _firestore
@@ -283,13 +283,13 @@ class _EvaluacionFinalCarreraScreenState
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // GUARDAR CONFIG
-  // ─────────────────────────────────────────────────────────────
+
+
+
   Future<void> _guardarConfig() async {
     if (_eventoId == null) return;
 
-    // Validaciones de suma = 100
+
     if (_config.incluirDocenteNoSel) {
       final sum = _config.pctAsistNoSel + _config.pctDocenteNoSel;
       if ((sum - 100).abs() > 0.5) {
@@ -343,7 +343,7 @@ String _normalizarNombre(String s) {
     });
 
     try {
-      // ── 1. Estudiantes de la carrera ────────────────────────
+
       final candidatos = [
         '${widget.filialNombre}_${widget.carrera}',
         '${widget.filialNombre}_$_carreraId',
@@ -372,8 +372,8 @@ debugPrint('✅ Total estudiantes cargados: ${estudianteDocs.length}');
         return;
       }
 
-      // ── 2. Proyectos del evento (para saber quién expone) ──
-      // El campo 'Integrantes' guarda NOMBRES → cruzamos por nombre.
+
+
       final List<_IntegranteRef> integrantesProyecto = [];
 
       final proyectosSnap = await _firestore
@@ -388,7 +388,7 @@ debugPrint('✅ Total estudiantes cargados: ${estudianteDocs.length}');
         final integrantesRaw = pData['Integrantes'] ?? pData['integrantes'];
         List<String> integrantes = [];
         if (integrantesRaw is List) {
-          // Cada elemento puede ser un solo código O varios separados por coma
+
           for (final e in integrantesRaw) {
             integrantes.addAll(
               e.toString()
@@ -415,34 +415,34 @@ debugPrint('✅ Total estudiantes cargados: ${estudianteDocs.length}');
         }
       }
 
-      // ▼▼▼ LOG 1 ▼▼▼
+
       debugPrint('📦 Proyectos encontrados: ${proyectosSnap.docs.length}');
       debugPrint('👥 Total integrantes acumulados: ${integrantesProyecto.length}');
       for (final ref in integrantesProyecto.take(10)) {
         debugPrint('   → proyecto ${ref.proyectoCodigo} | integrante "${ref.codigo}"');
       }
-      // ▲▲▲ LOG 1 ▲▲▲
-      // Índice por nombre normalizado (para proyectos que guardan nombres)
+
+
       final Map<String, _IntegranteRef> integrantesPorNombre = {};
       for (final ref in integrantesProyecto) {
         integrantesPorNombre[_normalizarNombre(ref.codigo)] = ref;
       }
 
-      // ── 3. Notas de jurados por proyecto ───────────────────
-      // Para cada proyectoDocId → promedio (normalizado a 20) de sus
-      // evaluaciones evaluadas.
+
+
+
       final Map<String, double> promedioJuradoPorProyecto = {};
 
       final proyectoIdsUnicos =
           integrantesProyecto.map((e) => e.proyectoDocId).toSet();
 
-      // Todas las consultas de jurado en paralelo (antes era secuencial)
-      // ── Notas de jurado vía collectionGroup (recupera aunque cambien IDs) ──
-      // En vez de bajar por events/{id}/proyectos/{pDocId}/evaluaciones (que
-      // falla si el evento se recreó), buscamos TODAS las evaluaciones y las
-      // agrupamos por el doc de proyecto padre real (igual que el jurado).
+
+
+
+
+
       try {
-        // notaTotal/puntajeMaximo acumulados por proyectoDocId
+
         final Map<String, double> sumNormPorProyecto = {};
         final Map<String, int>    countPorProyecto   = {};
 
@@ -452,15 +452,15 @@ debugPrint('✅ Total estudiantes cargados: ${estudianteDocs.length}');
             .get();
 
         for (final eDoc in evalGroupSnap.docs) {
-          // Subir: evaluación → proyecto
+
           final proyectoRef = eDoc.reference.parent.parent;
           if (proyectoRef == null) continue;
-          // Subir: proyecto → evento, y filtrar SOLO este evento
+
           final evtId = proyectoRef.parent.parent?.id;
           if (evtId != eventoId) continue;
 
           final pDocId = proyectoRef.id;
-          // Solo proyectos que tienen integrantes en esta carrera
+
           if (!proyectoIdsUnicos.contains(pDocId)) continue;
 
           final eData = eDoc.data();
@@ -485,7 +485,7 @@ debugPrint('✅ Total estudiantes cargados: ${estudianteDocs.length}');
         debugPrint('❌ Error leyendo evaluaciones (collectionGroup): $e');
       }
 
-      // ── 4. Meta de sellos ───────────────────────────────────
+
       int metaSellos = 0;
       try {
         final configSellos = await _firestore
@@ -503,18 +503,18 @@ try {
   final docentesSnap = await _firestore
     .collection('events')
     .doc(eventoId)
-    .collection('notas_docente')          // ← antes 'notasDocentes'
+    .collection('notas_docente')
     .get();
 for (final d in docentesSnap.docs) {
-  final n = ((d.data()['nota'] ?? 0) as num).toDouble();   // ← antes 'notaDocente'
+  final n = ((d.data()['nota'] ?? 0) as num).toDouble();
   notaDocentePorCodigo[d.id.trim()] = n.clamp(0.0, 20.0);
 }
 } catch (_) {}
 
-      // ── 4b. Sellos personales: leer cada sesión UNA sola vez ─
-      // Antes esto se hacía DENTRO del bucle de estudiantes, así que la
-      // colección completa se leía 1 vez por alumno (lentísimo). Ahora se
-      // arma un mapa studentId → cantidad de sellos personales.
+
+
+
+
       final Map<String, int> sellosPersonalesPorStudent = {};
       if (metaSellos > 0) {
         try {
@@ -547,11 +547,11 @@ for (final d in docentesSnap.docs) {
         final sData = sDoc.data();
         final codigoUniv = sData['codigoUniversitario']?.toString() ?? '';
 
-        // N1: asistencias (proyectos + personales)
+
         double notaAsist = 0;
         if (metaSellos > 0) {
           try {
-            // Conteo de scans SIN descargar los documentos (aggregate)
+
             final scansCount = await _firestore
                 .collection('events')
                 .doc(eventoId)
@@ -562,7 +562,7 @@ for (final d in docentesSnap.docs) {
                 .get();
             final sellosProyectos = scansCount.count ?? 0;
 
-            // Personales: del mapa precalculado (sin lecturas extra)
+
             final sellosPersonales =
                 sellosPersonalesPorStudent[sDoc.id] ?? 0;
 
@@ -577,7 +577,7 @@ for (final d in docentesSnap.docs) {
         String proyectoDocId  = '';
         String proyectoCodigo = '';
 
-        // 1) Match por código
+
         if (codAlumno.isNotEmpty) {
           for (final ref in integrantesProyecto) {
             if (ref.codigo == codAlumno) {
@@ -587,7 +587,7 @@ for (final d in docentesSnap.docs) {
             }
           }
         }
-        // 2) Si no hubo match por código, intentar por nombre normalizado
+
         if (proyectoDocId.isEmpty && nombreNorm.isNotEmpty) {
           final ref = integrantesPorNombre[nombreNorm];
           if (ref != null) {
@@ -598,35 +598,35 @@ for (final d in docentesSnap.docs) {
 
         final seleccionado = proyectoDocId.isNotEmpty;
 
-        // N2: nota de jurado
+
         final notaJurado = seleccionado
             ? (promedioJuradoPorProyecto[proyectoDocId] ?? 0)
             : 0.0;
 
-        // N3: nota docente (vacía por ahora)
+
         final notaDocente = notaDocentePorCodigo[codigoUniv.trim()] ?? 0.0;
 
-        // Calcular nota final según configuración
+
         double notaFinal;
 
         if (!seleccionado) {
-          // No seleccionado
+
           if (_config.incluirDocenteNoSel) {
             notaFinal =
                 (notaAsist   * _config.pctAsistNoSel   / 100) +
                 (notaDocente * _config.pctDocenteNoSel / 100);
          } else {
-            // Aplica el porcentaje de asistencias aunque no haya docente
+
             notaFinal = notaAsist * _config.pctAsistNoSel / 100;
           }
         } else {
-          // Seleccionado
+
           if (_config.modalidad == 'jurado') {
             notaFinal =
                 (notaAsist  * _config.pctAsistSel  / 100) +
                 (notaJurado * _config.pctJuradoSel / 100);
           } else {
-            // Mixta
+
             notaFinal =
                 (notaAsist   * _config.pctAsistSelMixta   / 100) +
                 (notaJurado  * _config.pctJuradoSelMixta  / 100) +
@@ -669,9 +669,9 @@ for (final d in docentesSnap.docs) {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // HELPERS
-  // ─────────────────────────────────────────────────────────────
+
+
+
   List<_NotaFinal> get _notasFiltradas {
     final lista = _notas.where((n) {
       if (_filtro == 'seleccionados')    return n.seleccionado;
@@ -711,9 +711,9 @@ for (final d in docentesSnap.docs) {
     ));
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // BUILD
-  // ─────────────────────────────────────────────────────────────
+
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -780,7 +780,7 @@ for (final d in docentesSnap.docs) {
               ],
             ),
           ),
-          // Botón config
+
           if (_eventoId != null)
             GestureDetector(
               onTap: _abrirConfig,
@@ -816,13 +816,13 @@ for (final d in docentesSnap.docs) {
   Widget _buildBody() {
     return Column(
       children: [
-        // Selector de evento
+
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
           child: _buildSelectorEvento(),
         ),
 
-        // Contenido
+
         Expanded(
           child: _isCalculando
               ? _buildCalculando()
@@ -834,7 +834,7 @@ for (final d in docentesSnap.docs) {
     );
   }
 
-  // ── Selector de evento ─────────────────────────────────────────
+
   Widget _buildSelectorEvento() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -943,7 +943,7 @@ for (final d in docentesSnap.docs) {
               ),
             ),
 
-          // Botón calcular
+
           if (_eventoId != null) ...[
             const SizedBox(height: 12),
             SizedBox(
@@ -972,7 +972,7 @@ for (final d in docentesSnap.docs) {
     );
   }
 
-  // ── Estado inicial ─────────────────────────────────────────────
+
   Widget _buildEstadoInicial() {
     return Center(
       child: Padding(
@@ -1014,7 +1014,7 @@ for (final d in docentesSnap.docs) {
     );
   }
 
-  // ── Calculando ─────────────────────────────────────────────────
+
   Widget _buildCalculando() {
     return const Center(
       child: Column(
@@ -1032,7 +1032,7 @@ for (final d in docentesSnap.docs) {
     );
   }
 
-  // ── Resultados ─────────────────────────────────────────────────
+
   Widget _buildResultados() {
     final filtradas = _notasFiltradas;
 
@@ -1040,7 +1040,7 @@ for (final d in docentesSnap.docs) {
       opacity: _fadeAnim,
       child: Column(
         children: [
-          // Stats + filtros
+
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
             child: Column(
@@ -1054,7 +1054,7 @@ for (final d in docentesSnap.docs) {
             ),
           ),
 
-          // Lista
+
           Expanded(
             child: filtradas.isEmpty
                 ? Center(
@@ -1172,7 +1172,7 @@ for (final d in docentesSnap.docs) {
   Widget _buildFiltrosYBusqueda() {
     return Row(
       children: [
-        // Búsqueda
+
         Expanded(
           child: Container(
             height: 42,
@@ -1209,10 +1209,10 @@ for (final d in docentesSnap.docs) {
           ),
         ),
         const SizedBox(width: 8),
-        // Filtro
+
         _filtroBtn(),
         const SizedBox(width: 8),
-        // Orden
+
         GestureDetector(
           onTap: () => setState(() => _ordenDesc = !_ordenDesc),
           child: Container(
@@ -1325,7 +1325,7 @@ for (final d in docentesSnap.docs) {
     );
   }
 
-  // ── Card de estudiante ─────────────────────────────────────────
+
   Widget _buildStudentCard(_NotaFinal n, int index) {
     final color = _colorNota(n.notaFinal);
 
@@ -1352,10 +1352,10 @@ for (final d in docentesSnap.docs) {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Fila superior
+
             Row(
               children: [
-                // Posición
+
                 Container(
                   width: 30,
                   height: 30,
@@ -1380,7 +1380,7 @@ for (final d in docentesSnap.docs) {
                   ),
                 ),
                 const SizedBox(width: 10),
-                // Nombre
+
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1407,7 +1407,7 @@ for (final d in docentesSnap.docs) {
                             _miniTag('C${n.ciclo}', _C.accent),
                           if (n.grupo.isNotEmpty)
                             _miniTag('G${n.grupo}', _C.purple),
-                          // Badge seleccionado
+
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 2),
@@ -1447,7 +1447,7 @@ for (final d in docentesSnap.docs) {
                     ],
                   ),
                 ),
-                // Nota final
+
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 12, vertical: 8),
@@ -1471,7 +1471,7 @@ for (final d in docentesSnap.docs) {
 
             const SizedBox(height: 10),
 
-            // Desglose de notas
+
             Row(
               children: [
                 _notaChip('Asist.', n.notaAsist, _C.accent),
@@ -1574,7 +1574,7 @@ for (final d in docentesSnap.docs) {
     );
   }
 
-  // ── Resumen de config activa ───────────────────────────────────
+
   Widget _buildResumenConfig() {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1617,9 +1617,9 @@ for (final d in docentesSnap.docs) {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // DIÁLOGO DE CONFIGURACIÓN
-  // ═══════════════════════════════════════════════════════════════
+
+
+
   void _abrirConfig() {
     showModalBottomSheet(
       context: context,
@@ -1627,7 +1627,7 @@ for (final d in docentesSnap.docs) {
       backgroundColor: Colors.transparent,
       builder: (_) => _ConfigBottomSheet(
         config: _Config.fromMap(_config.toMap()
-          ..remove('updatedAt')), // copia
+          ..remove('updatedAt')),
         onGuardar: (nuevaConfig) async {
           setState(() => _config = nuevaConfig);
           await _guardarConfig();
@@ -1661,7 +1661,7 @@ class _ConfigBottomSheetState extends State<_ConfigBottomSheet> {
     _cfg = widget.config;
   }
 
-  // Validación rápida para mostrar aviso
+
   String? _validar() {
     if (_cfg.incluirDocenteNoSel) {
       final s = _cfg.pctAsistNoSel + _cfg.pctDocenteNoSel;
@@ -1703,7 +1703,7 @@ class _ConfigBottomSheetState extends State<_ConfigBottomSheet> {
         ),
         child: Column(
           children: [
-            // Handle
+
             Container(
               margin: const EdgeInsets.only(top: 10, bottom: 4),
               width: 36,
@@ -1712,7 +1712,7 @@ class _ConfigBottomSheetState extends State<_ConfigBottomSheet> {
                   color: _C.border,
                   borderRadius: BorderRadius.circular(2)),
             ),
-            // Título
+
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
               child: Row(
@@ -1742,13 +1742,13 @@ class _ConfigBottomSheetState extends State<_ConfigBottomSheet> {
                 margin: const EdgeInsets.only(top: 14),
                 color: _C.border),
 
-            // Contenido
+
             Expanded(
               child: ListView(
                 controller: scroll,
                 padding: const EdgeInsets.all(20),
                 children: [
-                  // ── Estudiantes SIN exponer ──────────────────
+
                   _seccionLabel(
                       'Estudiantes sin exponer (no seleccionados)',
                       Icons.person_rounded,
@@ -1773,7 +1773,7 @@ class _ConfigBottomSheetState extends State<_ConfigBottomSheet> {
                     enabled: true,
                   ),
 
-                  // Toggle docente no seleccionado
+
                   _toggleRow(
                     label:   'Incluir nota docente (N3)',
                     value:   _cfg.incluirDocenteNoSel,
@@ -1808,14 +1808,14 @@ class _ConfigBottomSheetState extends State<_ConfigBottomSheet> {
                   Container(height: 1, color: _C.border),
                   const SizedBox(height: 24),
 
-                  // ── Estudiantes QUE EXPONEN ──────────────────
+
                   _seccionLabel(
                       'Estudiantes que exponen (seleccionados)',
                       Icons.present_to_all_rounded,
                       _C.teal),
                   const SizedBox(height: 10),
 
-                  // Modalidad
+
                   const Text('Modalidad de calificación',
                       style: TextStyle(
                           fontSize: 13,
@@ -1911,7 +1911,7 @@ class _ConfigBottomSheetState extends State<_ConfigBottomSheet> {
                     ),
                   ],
 
-                  // Error de validación
+
                   if (error != null) ...[
                     const SizedBox(height: 16),
                     Container(
@@ -1942,7 +1942,7 @@ class _ConfigBottomSheetState extends State<_ConfigBottomSheet> {
 
                   const SizedBox(height: 32),
 
-                  // Botón guardar
+
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(

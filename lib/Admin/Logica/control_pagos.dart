@@ -671,7 +671,7 @@ Future<void> _togglePagoMasivo(bool nuevoEstado) async {
 
   if (confirmado != true) return;
 
-  // Mostrar progreso
+
   int procesados = 0;
   int errores = 0;
   final total = _estudiantes.length;
@@ -742,20 +742,20 @@ Future<void> _togglePagoMasivo(bool nuevoEstado) async {
 
     if (opsInBatch > 0) await batch.commit();
 
-    // Actualizar lista local
+
     setState(() {
       for (int i = 0; i < _estudiantes.length; i++) {
         _estudiantes[i] = {..._estudiantes[i], 'pagado': nuevoEstado};
       }
     });
 
-    if (mounted) Navigator.pop(context); // cierra progreso
+    if (mounted) Navigator.pop(context);
 
     _showMessage(nuevoEstado
         ? '✅ $total estudiantes marcados como PAGADO'
         : '⚠️ $total estudiantes marcados como PENDIENTE');
   } catch (e) {
-    if (mounted) Navigator.pop(context); // cierra progreso
+    if (mounted) Navigator.pop(context);
     _showMessage('Error en actualización masiva: $e. Procesados: $procesados, Errores: $errores');
   }
 }

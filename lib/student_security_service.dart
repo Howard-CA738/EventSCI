@@ -28,17 +28,17 @@ class StudentSecurityService {
   static Future<String> decryptDni({
     required String carreraPath,
     required String studentId,
-    // Pasar studentData para descifrar local si dniEncrypted existe
+
     Map<String, dynamic>? studentData,
   }) async {
-    // ── Intento 1: descifrar local si dniEncrypted ya está en los datos ──
+
     final encryptedLocal = studentData?['dniEncrypted'] as String? ?? '';
     if (encryptedLocal.isNotEmpty) {
       final dni = EncryptionHelper.decryptDni(encryptedLocal);
       if (dni.isNotEmpty && dni != '(error)') return dni;
     }
 
-    // ── Intento 2: llamar Cloud Function como respaldo ──
+
     try {
       final adminId  = await PrefsHelper.getCurrentUserId() ?? '';
       final callable = _functions.httpsCallable('decryptStudentDni');

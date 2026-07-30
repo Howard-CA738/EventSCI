@@ -1,9 +1,9 @@
-// firmante_model.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// ── Utilidad: detecta MIME y extensión real del archivo ──────────────────────
-/// Devuelve ('image/png', 'png') o ('image/jpeg', 'jpeg') según la extensión.
-/// Nunca lanza excepción — si no reconoce la ext devuelve png por defecto.
+
+
+
 ({String mime, String ext}) mimeDesdeRuta(String ruta) {
   final e = ruta.split('.').last.toLowerCase();
   if (e == 'jpg' || e == 'jpeg') return (mime: 'image/jpeg', ext: 'jpeg');
@@ -16,7 +16,7 @@ class FirmanteModel {
   final String nombre;
   final String cargo;
   final String storageUrl;
-  final String storagePath; // ruta base SIN extensión, ej: "firmas/vicerrector"
+  final String storagePath;
 
   const FirmanteModel({
     required this.docId,
@@ -31,9 +31,9 @@ class FirmanteModel {
   bool get tieneDatos  => nombre.isNotEmpty;
   String get nombreCompleto => '$grado $nombre'.trim();
 
-  // ── storageBasePath: ruta base sin extensión ─────────────────────────────
-  // Se guarda así para que al subir un JPG la ruta sea "firmas/vicerrector.jpeg"
-  // y no "firmas/vicerrector.png" con MIME incorrecto.
+
+
+
 
   factory FirmanteModel.vacio(String docId, String storageBasePath) =>
       FirmanteModel(

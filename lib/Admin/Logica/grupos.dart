@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 class GruposService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ── Cargar proyectos existentes desde Firebase ────────────────────────────
+
   Future<List<Map<String, dynamic>>> cargarProyectosExistentes(
     String eventId,
   ) async {
@@ -33,14 +33,14 @@ Future<int> corregirSalasPorCodigo(
   String eventId,
   Map<String, String> codigoSala,
 ) async {
-  // Normaliza un código: quita espacios y ceros a la izquierda.
+
   String norm(String c) {
     final t = c.trim();
     final sinCeros = t.replaceFirst(RegExp(r'^0+'), '');
     return sinCeros.isEmpty ? t : sinCeros;
   }
 
-  // Mapa normalizado para comparar sin importar el formato de los ceros.
+
   final Map<String, String> mapaNorm = {
     for (final e in codigoSala.entries) norm(e.key): e.value,
   };
@@ -76,8 +76,8 @@ Future<int> corregirSalasPorCodigo(
   }
   return actualizados;
 }
-  // ── Actualizar categoría de scans por proyecto ────────────────────────────
-  // FIX: batches parciales para no superar el límite de 500 operaciones
+
+
   Future<void> actualizarCategoriaDeScansPorProyecto(
     String eventId,
     String codigoProyecto,
@@ -137,7 +137,7 @@ WriteBatch currentBatch = _firestore.batch();
     }
   }
 
-  // ── Importar Excel y retornar los datos procesados ────────────────────────
+
   Future<List<Map<String, dynamic>>?> importarExcel() async {
     try {
       final FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -161,7 +161,7 @@ WriteBatch currentBatch = _firestore.batch();
     }
   }
 
-  // ── Procesar archivo Excel desde bytes con DETECCIÓN AUTOMÁTICA ───────────
+
   Future<List<Map<String, dynamic>>> procesarArchivoBytesExcel(
     Uint8List bytes,
   ) async {
@@ -173,9 +173,9 @@ WriteBatch currentBatch = _firestore.batch();
         final sheet = excel.tables[table];
         if (sheet == null || sheet.maxRows < 2) continue;
 
-        final List<String> headers = [];              // L130: final
+        final List<String> headers = [];
         final headerRow = sheet.rows.first;
-        for (final cell in headerRow) {              // L132: final
+        for (final cell in headerRow) {
           headers.add(cell?.value?.toString().trim() ?? '');
         }
 
@@ -227,21 +227,21 @@ WriteBatch currentBatch = _firestore.batch();
     }
   }
 
-  // ── Detectar el formato del Excel basado en los headers ───────────────────
+
   String detectarFormatoExcel(List<String> headers) {
     final headersUpper = headers.map((h) => h.toUpperCase().trim()).toList();
 
-    final bool tieneEvento = headersUpper.any((h) => h.contains('EVENTO'));          // L188: final
-    final bool tieneSubeventos = headersUpper.any((h) => h.contains('SUBEVENTOS')); // L189: final
-    final bool tieneEncargado = headersUpper.any((h) => h.contains('ENCARGADO'));   // L190: final
-    final bool tieneLugar = headersUpper.any((h) => h.contains('LUGAR'));           // L191: final
+    final bool tieneEvento = headersUpper.any((h) => h.contains('EVENTO'));
+    final bool tieneSubeventos = headersUpper.any((h) => h.contains('SUBEVENTOS'));
+    final bool tieneEncargado = headersUpper.any((h) => h.contains('ENCARGADO'));
+    final bool tieneLugar = headersUpper.any((h) => h.contains('LUGAR'));
 
     if (tieneEvento || tieneSubeventos || tieneEncargado || tieneLugar) {
       return 'EVENTOS';
     }
 
-    final bool tieneCodigo = headersUpper.any((h) => h.contains('CÓDIGO'));         // L197: final
-    final bool tieneClasificacion = headersUpper.any(                               // L198: final
+    final bool tieneCodigo = headersUpper.any((h) => h.contains('CÓDIGO'));
+    final bool tieneClasificacion = headersUpper.any(
       (h) => h.contains('CLASIFICACIÓN'),
     );
 
@@ -278,7 +278,7 @@ WriteBatch currentBatch = _firestore.batch();
     Map<String, dynamic>? proyectoActual;
     List<String> integrantesActuales = [];
 
-    // ── Memoria de celdas combinadas (merge) ──
+
     String ultimaClasificacion = '';
     String ultimaSala = '';
 
@@ -305,7 +305,7 @@ WriteBatch currentBatch = _firestore.batch();
       final String clasificacion = _cellValue(row, idxClasificacion);
       final String sala = _cellValue(row, idxSala);
 
-      // ── Arrastrar hacia abajo el último valor visto de columnas combinadas ──
+
       if (clasificacion.isNotEmpty) ultimaClasificacion = clasificacion;
       if (sala.isNotEmpty) ultimaSala = sala;
 
@@ -331,14 +331,14 @@ WriteBatch currentBatch = _firestore.batch();
           integrantesActuales.add(integrante);
           debugPrint('   ➕ Integrante añadido: $integrante');
         }
-        // Si el proyecto se abrió sin clasificación pero luego aparece
-        // (o ya teníamos una arrastrada), completarla.
+
+
         if (proyectoActual != null &&
             (proyectoActual!['Clasificación'] as String).isEmpty &&
             ultimaClasificacion.isNotEmpty) {
           proyectoActual!['Clasificación'] = ultimaClasificacion;
         }
-        // Igual para la sala, por si el proyecto se abrió antes de verla.
+
         if (proyectoActual != null &&
             (proyectoActual!['Sala'] == null ||
                 (proyectoActual!['Sala'] as String).isEmpty) &&
@@ -359,7 +359,7 @@ WriteBatch currentBatch = _firestore.batch();
     }).toList();
   }
 
-  // ── Helper: encontrar índice de columna por posibles nombres ─────────────
+
   int _findHeaderIndex(List<String> headers, List<String> posibleNombres) {
     for (int i = 0; i < headers.length; i++) {
       final h = headers[i].toUpperCase().trim();
@@ -370,18 +370,18 @@ WriteBatch currentBatch = _firestore.batch();
     return -1;
   }
 
-  // ── Helper: leer valor de celda de forma segura ───────────────────────────
+
   String _cellValue(List<Data?> row, int index) {
     if (index < 0 || index >= row.length) return '';
     return row[index]?.value?.toString().trim() ?? '';
   }
 
-  // ── Procesar formato PROYECTOS legado ─────────────────────────────────────
+
   Map<String, dynamic> procesarFormatoProyectos(
     List<String> headers,
     List<Data?> row,
   ) {
-    final Map<String, dynamic> proyecto = {};    // L338: final
+    final Map<String, dynamic> proyecto = {};
     for (int j = 0; j < headers.length && j < row.length; j++) {
       final cellValue = row[j]?.value?.toString().trim();
       if (cellValue != null && cellValue.isNotEmpty) {
@@ -391,7 +391,7 @@ WriteBatch currentBatch = _firestore.batch();
     return proyecto;
   }
 
-  // ── Procesar formato EVENTOS ──────────────────────────────────────────────
+
   Map<String, dynamic> procesarFormatoEventos(
     List<String> headers,
     List<Data?> row,
@@ -399,8 +399,8 @@ WriteBatch currentBatch = _firestore.batch();
     String? ultimoSubevento,
     String? ultimoEvento,
   ) {
-    final Map<String, dynamic> proyecto = {};    // L356: final
-    final Map<String, String> datosRaw = {};     // L357: final
+    final Map<String, dynamic> proyecto = {};
+    final Map<String, String> datosRaw = {};
 
     for (int j = 0; j < headers.length && j < row.length; j++) {
       final cellValue = row[j]?.value?.toString().trim();
@@ -413,7 +413,7 @@ WriteBatch currentBatch = _firestore.batch();
       }
     }
 
-    final String titulo = datosRaw['TÍTULO DE PROGRAMA / PONENCIA'] ?? ''; // L370: final
+    final String titulo = datosRaw['TÍTULO DE PROGRAMA / PONENCIA'] ?? '';
     if (titulo.isEmpty) return {};
     proyecto['Título'] = titulo;
     proyecto['Código'] = 'PON-${rowIndex.toString().padLeft(3, '0')}';
@@ -463,7 +463,7 @@ WriteBatch currentBatch = _firestore.batch();
     return proyecto;
   }
 
-  // ── Normalizar claves del Excel ───────────────────────────────────────────
+
   String normalizarClaveProyectos(String clave) {
     switch (clave.toUpperCase().trim()) {
       case 'CÓDIGO':
@@ -486,7 +486,7 @@ WriteBatch currentBatch = _firestore.batch();
     }
   }
 
-  // ── Guardar proyectos en Firebase ─────────────────────────────────────────
+
   Future<void> guardarProyectosEnEvento(
     String eventId,
     List<Map<String, dynamic>> proyectos, {
@@ -500,7 +500,7 @@ WriteBatch currentBatch = _firestore.batch();
       final String? carreraId = eventData?['carreraId'] as String?;
       final String? carreraNombre = eventData?['carreraNombre'] as String?;
 
-      // FIX: lotes de 500 para no superar el límite de Firestore
+
       for (int i = 0; i < proyectos.length; i += 500) {
         final batch = _firestore.batch();
         final lote = proyectos.skip(i).take(500);
@@ -548,7 +548,7 @@ WriteBatch currentBatch = _firestore.batch();
     }
   }
 
-  // ── Actualizar proyecto ───────────────────────────────────────────────────
+
   Future<void> actualizarProyecto(
     String eventId,
     String docId,
@@ -602,8 +602,8 @@ WriteBatch currentBatch = _firestore.batch();
     }
   }
 
-  // ── Resolver nombres de estudiantes por sus códigos universitarios ─────────
-  // FIX: lotes correctos y break cuando ya se resolvieron todos
+
+
   Future<Map<String, String>> resolverNombresPorCodigos(
     List<String> codigos, {
     String? filialId,
@@ -614,7 +614,7 @@ WriteBatch currentBatch = _firestore.batch();
     final Map<String, String> resultado = {};
 
     try {
-      // Primero buscar en el doc de la filial/carrera del evento
+
       if (filialId != null && carreraId != null) {
         final docKey = '${filialId}_$carreraId';
         for (int i = 0; i < codigos.length; i += 10) {
@@ -636,7 +636,7 @@ WriteBatch currentBatch = _firestore.batch();
         }
       }
 
-      // FIX: calcular pendientes dinámicamente y hacer break cuando terminen
+
       final codigosNoResueltos =
           codigos.where((c) => !resultado.containsKey(c)).toList();
 
@@ -678,7 +678,7 @@ WriteBatch currentBatch = _firestore.batch();
     return resultado;
   }
 
-  // ── Eliminar un proyecto individual ──────────────────────────────────────
+
   Future<void> eliminarProyectoIndividual(String eventId, String docId) async {
     try {
       await _firestore
@@ -697,8 +697,8 @@ WriteBatch currentBatch = _firestore.batch();
     }
   }
 
-  // ── Eliminar todos los proyectos ──────────────────────────────────────────
-  // FIX: lotes de 500 para no superar el límite de Firestore
+
+
   Future<void> eliminarTodosLosProyectos(String eventId) async {
     try {
       final querySnapshot = await _firestore
@@ -725,7 +725,7 @@ WriteBatch currentBatch = _firestore.batch();
     }
   }
 
-  // ── Agrupar proyectos por categoría ──────────────────────────────────────
+
   Map<String, List<Map<String, dynamic>>> agruparPorCategoria(
     List<Map<String, dynamic>> proyectos,
   ) {
@@ -737,7 +737,7 @@ WriteBatch currentBatch = _firestore.batch();
     return grupos;
   }
 
-  // ── Formatear fecha de timestamp ──────────────────────────────────────────
+
   String formatDate(dynamic timestamp) {
     if (timestamp is Timestamp) {
       final date = timestamp.toDate();

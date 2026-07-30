@@ -408,7 +408,7 @@ Widget _buildCrearAsistenciaButton() {
             if (_facultad == null && _carreraNombre == null)
               _buildSinDatosCard()
             else ...[
-              _buildCrearAsistenciaButton(), 
+              _buildCrearAsistenciaButton(),
               if (_selectedEventId != null) ...[
                 _buildEventoSeleccionadoCard(),
                 const SizedBox(height: 16),

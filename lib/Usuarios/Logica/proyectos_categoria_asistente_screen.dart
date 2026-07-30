@@ -36,7 +36,7 @@ class _ProyectosCategoriaAsistenteScreenState
   bool _isLoading = true;
 
   String? _qrDataGenerado;
-  String? _codigoGenerado; // código de 6 dígitos ligado al QR activo
+  String? _codigoGenerado;
   Map<String, dynamic>? _proyectoSeleccionado;
   String? _qrId;
   bool _qrFinalizado = false;
@@ -81,7 +81,7 @@ class _ProyectosCategoriaAsistenteScreenState
         'activo': false,
         'finalizadoAt': FieldValue.serverTimestamp(),
       });
-      // Limpiamos también el código manual para no dejarlo huérfano.
+
       if (_codigoGenerado != null) {
         await CodigoAsistenciaService.eliminar(_codigoGenerado!);
       }
@@ -163,8 +163,8 @@ class _ProyectosCategoriaAsistenteScreenState
     try {
       final qrJson = jsonEncode(qrPayload);
 
-      // Código de 6 dígitos ligado a este QR (lleva el MISMO qrData).
-      // Al escribirlo, el alumno cae en la misma lógica que al escanear.
+
+
       final codigo = await CodigoAsistenciaService.generarYRegistrar(
         eventId: widget.eventId,
         qrId: qrId,
@@ -221,7 +221,7 @@ class _ProyectosCategoriaAsistenteScreenState
         'finalizadoAt': FieldValue.serverTimestamp(),
       });
 
-      // Limpiamos el código manual asociado.
+
       if (_codigoGenerado != null) {
         await CodigoAsistenciaService.eliminar(_codigoGenerado!);
       }
@@ -781,7 +781,7 @@ class _ProyectosCategoriaAsistenteScreenState
                         ],
                       ),
 
-                      // ── CÓDIGO PARA INGRESO MANUAL ──────────────────
+
                       if (_codigoGenerado != null && !_qrFinalizado) ...[
                         const SizedBox(height: 18),
                         _buildCodigoManual(_codigoGenerado!),
@@ -943,7 +943,7 @@ class _ProyectosCategoriaAsistenteScreenState
     );
   }
 
-  // Caja grande con el código de 6 dígitos para ingreso manual.
+
   Widget _buildCodigoManual(String codigo) {
     return Container(
       width: double.infinity,

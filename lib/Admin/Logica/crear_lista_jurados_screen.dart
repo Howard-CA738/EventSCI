@@ -124,7 +124,7 @@ class _CrearListaJuradosScreenState extends State<CrearListaJuradosScreen> {
     if (mounted) setState(() => _cargandoEventos = false);
   }
 
-  // Mismo criterio que _cargarJurados() de GenerarCertificadosScreen.
+
   Future<void> _cargarJurados() async {
     if (_filialId == null || _facultad == null || _carrera == null) return;
     setState(() => _cargandoJurados = true);
@@ -177,12 +177,12 @@ class _CrearListaJuradosScreenState extends State<CrearListaJuradosScreen> {
               'estudianteId': j.id,
               'nombre': j.nombre,
               'dni': j.dni,
-              'codigoEstudiante': j.usuario,   // "usuario" del jurado, no codigoUniversitario
+              'codigoEstudiante': j.usuario,
               'codigoCertificado': '',
-              'certId': null,                  // se crea recién al enviar
+              'certId': null,
               'generadoCompleto': false,
               'esJurado': true,
-              'seleccionadoEnvio': true,        // se puede desmarcar antes de enviar
+              'seleccionadoEnvio': true,
             }).toList(),
       });
       if (mounted) {
@@ -328,15 +328,15 @@ class _CrearListaJuradosScreenState extends State<CrearListaJuradosScreen> {
 
  Widget _dropdown(String label, String? value, List<DropdownMenuItem<String>> items,
     ValueChanged<String?>? onChanged) {
-  // Deduplica por value: si hay 2+ items con el mismo texto (p. ej.
-  // carreras repetidas en la estructura de Firestore), solo se queda con
-  // el primero. Evita el crash "exactly one item with value X".
+
+
+
   final vistos = <String>{};
   final itemsUnicos = items.where((it) => vistos.add(it.value!)).toList();
 
-  // Si el value seleccionado ya no existe entre los items (p. ej. cambiaste
-  // de facultad y el nombre no aplica aquí), lo tratamos como null en vez
-  // de dejar que el DropdownButtonFormField lance la excepción.
+
+
+
   final valueValido = value != null && itemsUnicos.any((it) => it.value == value)
       ? value
       : null;

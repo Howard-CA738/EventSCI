@@ -30,15 +30,15 @@ class DatosExcelScreen extends StatefulWidget {
 class _DatosExcelScreenState extends State<DatosExcelScreen>
     with SingleTickerProviderStateMixin {
 
-  // ── Rol ────────────────────────────────────────────────────────────
+
   bool _isAdminCarrera = false;
 
-  // Admin carrera: datos fijos de sesión
+
   String? _adminCarreraFilial;
   String? _adminCarreraFacultad;
   String? _adminCarreraCarrera;
 
-  // Super admin: selección manual
+
   final FilialesService _filialesService = FilialesService();
   Map<String, dynamic> _estructuraFiliales = {};
   bool _estructuraCargada = false;
@@ -48,7 +48,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
   String? _selectedFacultad;
   String? _selectedCarrera;
 
-  // Verdadero cuando la selección de destino está lista
+
   bool get _destinoListo {
     if (_isAdminCarrera) return true;
     return _selectedFilialNombre != null &&
@@ -56,7 +56,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
         _selectedCarrera != null;
   }
 
-  // Valores efectivos (sea admin carrera o super admin)
+
   String get _filialEfectiva =>
       _isAdminCarrera ? _adminCarreraFilial! : _selectedFilialNombre!;
   String get _facultadEfectiva =>
@@ -65,7 +65,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       _isAdminCarrera ? _adminCarreraCarrera! : _selectedCarrera!;
   String get _carreraPathEfectiva => '${_filialEfectiva}_$_carreraEfectiva';
 
-  // ── Estado de importación ──────────────────────────────────────────
+
   bool _isLoading = false;
   bool _fileSelected = false;
   String? _fileName;
@@ -86,7 +86,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
 
   static const int BATCH_SIZE = 500;
 
-  // ── Columnas del Excel ─────────────────────────────────────────────
+
   final Map<String, String> _columnMapping = {
     'Ciclo'             : 'ciclo',
     'Grupo'             : 'grupo',
@@ -129,7 +129,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     super.dispose();
   }
 
-  // ── Inicializar sesión ─────────────────────────────────────────────
+
   Future<void> _initSession() async {
     final isAdminCarrera = await PrefsHelper.isAdminCarrera();
     if (isAdminCarrera) {
@@ -144,7 +144,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
         debugPrint('✅ Admin carrera detectado. Filial: $_adminCarreraFilial');
       }
     } else {
-      // Super admin: cargar estructura de filiales
+
       setState(() => _isLoading = true);
       try {
         await _filialesService.inicializarSiEsNecesario();
@@ -160,7 +160,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     }
   }
 
-  // ── Helpers de estructura (super admin) ───────────────────────────
+
   List<String> get _filialesDisponibles => _estructuraFiliales.keys.toList();
 
   List<String> _getFacultades(String filialId) {
@@ -181,14 +181,14 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
   String _getNombreFilial(String filialId) =>
       _estructuraFiliales[filialId]?['nombre'] ?? filialId;
 
-  // ── Cambios de selección (super admin) ───────────────────────────
+
   void _onFilialChanged(String? filialId) {
     setState(() {
       _selectedFilialId     = filialId;
       _selectedFilialNombre = filialId != null ? _getNombreFilial(filialId) : null;
       _selectedFacultad     = null;
       _selectedCarrera      = null;
-      // Resetear archivo si ya había uno seleccionado
+
       _fileSelected  = false;
       _fileName      = null;
       _allData       = [];
@@ -220,7 +220,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     });
   }
 
-  // ── Selectores bottom sheet ───────────────────────────────────────
+
   void _showFilialSelector() {
     _showSelectorSheet(
       title: 'Seleccionar Sede',
@@ -383,7 +383,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     );
   }
 
-  // ── Normalizar nombre ─────────────────────────────────────────────
+
   String _normalizeStudentName(String name) {
     String normalized = name.trim().toLowerCase();
     const accents = {
@@ -410,7 +410,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     return unique;
   }
 
-  // ── Selección de archivo ──────────────────────────────────────────
+
   Future<void> _pickExcelFile() async {
     if (!_destinoListo) {
       _showMessage('⚠️ Completa la selección de carrera destino primero');
@@ -444,7 +444,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     }
   }
 
-  // ── Leer Excel ────────────────────────────────────────────────────
+
   Future<void> _readExcelFile(File file) async {
     try {
       final bytes     = file.readAsBytesSync();
@@ -524,7 +524,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     return true;
   }
 
-  // ── Confirmar e importar ──────────────────────────────────────────
+
   Future<void> _importData() async {
     if (_allData.isEmpty) {
       _showMessage('No hay datos para importar');
@@ -559,7 +559,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Destino
+
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -658,9 +658,9 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     _showResultsDialog();
   }
 
-  // ── Proceso de importación ────────────────────────────────────────
-  // CLAVE: tanto admin carrera como super admin usan el mismo docKey
-  // construido con _carreraPathEfectiva. El Excel ya no determina el destino.
+
+
+
   Future<void> _processBatchImport() async {
     final docKey = _carreraPathEfectiva;
     debugPrint('📦 Importando todo a: "$docKey"');
@@ -694,7 +694,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       setState(() => _currentProgress++);
     }
 
-    // Añadir al progreso los duplicados del Excel
+
     setState(() => _currentProgress += _duplicatesDetected);
 
     await _batchWriteToFirestore(docKey, validStudents);
@@ -705,7 +705,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     }
   }
 
-  // ── Usuarios existentes ───────────────────────────────────────────
+
   Future<Set<Map<String, String>>> _getExistingUsersInCarrera(
       String docKey) async {
     try {
@@ -745,9 +745,9 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
         e['username'] == username);
   }
 
-  // ── Preparar datos del estudiante ─────────────────────────────────
-  // Siempre usa los valores efectivos (no los del Excel) para
-  // filial, facultad y carrera, garantizando consistencia.
+
+
+
   Map<String, dynamic> _prepareStudentData(
       Map<String, dynamic> rawData, int index) {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -770,7 +770,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       'dni'                 : dniHash,
       'documento'           : dniHash,
       'dniEncrypted'        : dniEncrypted,
-      // Siempre los valores efectivos del destino seleccionado
+
       'filial'              : _filialEfectiva,
       'facultad'            : _facultadEfectiva,
       'carrera'             : _carreraEfectiva,
@@ -783,13 +783,13 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     };
   }
 
-  // ── Escritura en Firestore ────────────────────────────────────────
+
   Future<void> _batchWriteToFirestore(
       String docKey, List<Map<String, dynamic>> students) async {
     try {
       final carreraDocRef = _firestore.collection('users').doc(docKey);
 
-      // Doc padre con metadatos correctos
+
       await carreraDocRef.set({
         'name'      : docKey,
         'filial'    : _filialEfectiva,
@@ -824,7 +824,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
         _successCount += (end - i);
         setState(() {});
 
-        // Índices en batch
+
         final indexBatch = _firestore.batch();
         for (final item in indexQueue) {
           final entryRef = _firestore
@@ -851,7 +851,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────
+
   String _getFieldValue(
       Map<String, dynamic> data, String field, String? defaultValue) {
     final value = data[field];
@@ -874,7 +874,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     return parts.isNotEmpty ? parts[0] : 'usuario';
   }
 
-  // ── Diálogo de resultados ─────────────────────────────────────────
+
   void _showResultsDialog() {
     showDialog(
       context: context,
@@ -916,7 +916,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Destino
+
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -1098,7 +1098,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     }
   }
 
-  // ── BUILD ─────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1106,7 +1106,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
       body: SafeArea(
         child: Column(
           children: [
-            // Header
+
             Padding(
               padding: const EdgeInsets.all(20.0),
               child: Row(
@@ -1138,7 +1138,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
               ),
             ),
 
-            // Body
+
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -1169,7 +1169,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     );
   }
 
-  // ── Loading view ──────────────────────────────────────────────────
+
   Widget _buildLoadingView() {
     return Center(
       child: Column(
@@ -1277,7 +1277,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     );
   }
 
-  // ── Contenido principal ───────────────────────────────────────────
+
   Widget _buildMainContent() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
@@ -1285,13 +1285,13 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
 
-          // ── Panel de destino (solo super admin) ───────────────────
+
           if (!_isAdminCarrera) ...[
             _buildDestinoCard(),
             const SizedBox(height: 16),
           ],
 
-          // ── Card principal de carga ───────────────────────────────
+
           Card(
             elevation: 4,
             shadowColor: Colors.black26,
@@ -1413,7 +1413,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
             ),
           ),
 
-          // ── Vista previa ──────────────────────────────────────────
+
           if (_fileSelected && _previewData.isNotEmpty) ...[
             const SizedBox(height: 20),
             _buildPreviewCard(),
@@ -1458,7 +1458,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     );
   }
 
-  // ── Card de selección de destino (solo super admin) ───────────────
+
   Widget _buildDestinoCard() {
     return Card(
       elevation: 3,
@@ -1515,7 +1515,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
             ),
             const SizedBox(height: 14),
 
-            // Sede
+
             _filterBtn(
               label:   'Sede',
               value:   _selectedFilialNombre,
@@ -1525,7 +1525,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
             ),
             const SizedBox(height: 10),
 
-            // Facultad
+
             _filterBtn(
               label:   'Facultad',
               value:   _selectedFacultad != null
@@ -1537,7 +1537,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
             ),
             const SizedBox(height: 10),
 
-            // Carrera
+
             _filterBtn(
               label:   'Carrera',
               value:   _selectedCarrera,
@@ -1546,7 +1546,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
               enabled: _selectedFacultad != null,
             ),
 
-            // Resumen del path
+
             if (_destinoListo) ...[
               const SizedBox(height: 14),
               Container(
@@ -1659,7 +1659,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
     );
   }
 
-  // ── Vista previa ──────────────────────────────────────────────────
+
   Widget _buildPreviewCard() {
     return Card(
       elevation: 4,
@@ -1706,7 +1706,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
               ],
             ),
 
-            // Banner de destino en la preview
+
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(
@@ -1864,7 +1864,7 @@ class _DatosExcelScreenState extends State<DatosExcelScreen>
   }
 }
 
-// ── Helper para items del bottom sheet ────────────────────────────────
+
 class _SheetItem {
   final String value;
   final String label;

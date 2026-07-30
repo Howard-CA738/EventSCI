@@ -4,8 +4,8 @@ import 'package:crypto/crypto.dart';
 class PasswordHelper {
   static const String _appSalt = 'eventsci_salt_2024_upeu';
 
-  /// Retorna el hash SHA-256 de [password] + salt.
-  /// Siempre retorna una cadena hexadecimal de 64 caracteres.
+
+
   static String hashPassword(String password) {
     final saltedInput = '$_appSalt:${password.trim()}';
     final bytes = utf8.encode(saltedInput);
@@ -13,8 +13,8 @@ class PasswordHelper {
     return digest.toString();
   }
 
-  /// Compara [plainPassword] con [storedHash].
-  /// Retorna true si coinciden.
+
+
   static bool verifyPassword(String plainPassword, String storedHash) {
     if (plainPassword.isEmpty || storedHash.isEmpty) return false;
     if (!_isSha256Hash(storedHash)) {

@@ -7,9 +7,9 @@ import 'package:printing/printing.dart';
 import 'package:http/http.dart' as http;
 import '/admin_Carrera/certificado_builder.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MODELO
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 class _CertItem {
   final String id;
   final DatosCertificado datos;
@@ -24,11 +24,11 @@ class _CertItem {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// WIDGET PRINCIPAL
-// Úsalo así dentro de JuradosScreen:
-//   JuradoCertificadosTab(juradoId: _userId, juradoNombre: _userName)
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
 class JuradoCertificadosTab extends StatefulWidget {
   final String juradoId;
   final String juradoNombre;
@@ -50,7 +50,7 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
   String? _error;
   List<_CertItem> _certificados = [];
 
-  /// IDs de certificados que están siendo procesados (ver/descargar)
+
   final Set<String> _procesando = {};
 
   @override
@@ -59,7 +59,7 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
     _cargar();
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+
   Future<void> _cargar() async {
     if (widget.juradoId.isEmpty) {
       setState(() {
@@ -75,8 +75,8 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
     });
 
     try {
-      // Los certificados de jurados se guardan en:
-      // users/{juradoId}/certificados
+
+
       final snap = await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.juradoId)
@@ -111,9 +111,9 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // GENERACIÓN DE PDF
-  // ─────────────────────────────────────────────────────────────────────────
+
+
+
   Future<Uint8List?> _generarPdf(_CertItem cert) async {
     try {
       final bytes1 = await _descargarPorUrl(cert.datos.urlFirma1);
@@ -138,7 +138,7 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
         bytesFirma1: bytes1,
         bytesFirma2: bytes2,
         bytesFirma3: bytes3,
-        codigoCertificado: cert.datos.codigoCertificado, // ← imprime el código
+        codigoCertificado: cert.datos.codigoCertificado,
       );
 
       final nombre = cert.nombreJurado.isNotEmpty
@@ -161,7 +161,7 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
   Future<Uint8List?> _descargarPorUrl(String? url) async {
     if (url == null || url.isEmpty) return null;
     try {
-      // Intento 1: refrescar desde Storage SDK
+
       final storagePath = _extraerStoragePath(url);
       if (storagePath != null) {
         final freshUrl = await FirebaseStorage.instance
@@ -172,7 +172,7 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
             .timeout(const Duration(seconds: 30));
         if (r.statusCode == 200) return r.bodyBytes;
       }
-      // Intento 2: URL directa
+
       if (url.startsWith('https://')) {
         final r = await http
             .get(Uri.parse(url))
@@ -204,9 +204,9 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // ACCIONES
-  // ─────────────────────────────────────────────────────────────────────────
+
+
+
   Future<void> _verCertificado(_CertItem cert) async {
     if (_procesando.contains(cert.id)) return;
     setState(() => _procesando.add(cert.id));
@@ -254,9 +254,9 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
     ));
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // HELPERS VISUALES
-  // ─────────────────────────────────────────────────────────────────────────
+
+
+
   Color _colorPorRol(String rol) {
     switch (rol) {
       case 'JURADO':      return const Color(0xFF0F6E56);
@@ -283,9 +283,9 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
     return '${dt.day} ${meses[dt.month]} ${dt.year}';
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // BUILD
-  // ─────────────────────────────────────────────────────────────────────────
+
+
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -369,17 +369,17 @@ class _JuradoCertificadosTabState extends State<JuradoCertificadosTab> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          // Resumen
+
           _buildResumen(),
           const SizedBox(height: 16),
-          // Lista de certificados
+
           ..._certificados.map(_buildCertCard),
         ],
       ),
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+
   Widget _buildResumen() {
     final porRol = <String, int>{};
     for (final c in _certificados) {

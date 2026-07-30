@@ -35,7 +35,7 @@ class _CrearEventosScreenState extends State<CrearEventosScreen>
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
-  // CrearEventosScreen.initState()
+
 @override
 void initState() {
   super.initState();
@@ -47,11 +47,11 @@ void initState() {
     parent: _fadeController,
     curve: Curves.easeIn,
   );
-  unawaited(_fadeController.forward());   // ← cambio
+  unawaited(_fadeController.forward());
   _loadInitialData().ignore();
 }
 
- 
+
 
   @override
   void dispose() {
@@ -653,7 +653,7 @@ void initState() {
         ),
       ],
     ),
-    child: DropdownButtonFormField<String?>(  // <- String? aquí
+    child: DropdownButtonFormField<String?>(
       value: value,
       isExpanded: true,
       decoration: InputDecoration(
@@ -671,7 +671,7 @@ void initState() {
         ),
       ),
       items: List.generate(items.length, (index) {
-        return DropdownMenuItem<String?>(  // <- String? aquí
+        return DropdownMenuItem<String?>(
           value: items[index],
           child: Text(
             itemLabels != null ? itemLabels[index] : items[index],
@@ -835,7 +835,7 @@ final List<Map<String, dynamic>> _periodos = [];
 
   late AnimationController _animationController;
 
-// ListaEventosScreen.initState()
+
 @override
 void initState() {
   super.initState();
@@ -843,7 +843,7 @@ void initState() {
     duration: const Duration(milliseconds: 600),
     vsync: this,
   );
-  unawaited(_animationController.forward());  // ← cambio
+  unawaited(_animationController.forward());
   _startLoadFilterData();
 }
 
@@ -1133,7 +1133,7 @@ void initState() {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-             // ✅ CORRECCIÓN — dentro del onPressed del botón Guardar en _editEvent()
+
 onPressed: () async {
   final nameError = _eventosService.validateEventName(
     editNameController.text,

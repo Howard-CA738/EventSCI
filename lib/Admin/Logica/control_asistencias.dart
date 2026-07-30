@@ -140,7 +140,7 @@ Future<void> _cargarAsistentes(String eventId) async {
     _asistentes = [];
   });
   try {
-    // 1. Tres fuentes en paralelo (igual que el reporte Excel)
+
     final futures = await Future.wait([
       _firestore
           .collection('events')
@@ -163,7 +163,7 @@ Future<void> _cargarAsistentes(String eventId) async {
     final personalesSnap = futures[1];
     final huerfanosSnap = futures[2];
 
-    // 2. Scans de proyectos: todas las subcollections en paralelo
+
     final scansResults = await Future.wait(
       resumenSnap.docs.map((resumenDoc) => _firestore
           .collection('events')
@@ -190,7 +190,7 @@ Future<void> _cargarAsistentes(String eventId) async {
       lista.add(rd);
     }
 
-    // 3. Registros de asistencias personales VIVAS (en paralelo)
+
     final registrosResults = await Future.wait(
       personalesSnap.docs.map((asistDoc) => _firestore
           .collection('events')
@@ -204,11 +204,11 @@ Future<void> _cargarAsistentes(String eventId) async {
     final Map<String, List<Map<String, dynamic>>> personalesPorEstudiante =
         {};
 
-    // IDs de asistencias personales que AÚN existen
+
     final Set<String> asistenciasVivas =
         personalesSnap.docs.map((d) => d.id).toSet();
 
-    // Mapa asistenciaId -> nombre (tomado de los huérfanos, para mostrarlo)
+
     final Map<String, String> nombrePorAsistenciaId = {};
     for (final regDoc in huerfanosSnap.docs) {
       final rd = regDoc.data();
@@ -220,7 +220,7 @@ Future<void> _cargarAsistentes(String eventId) async {
       }
     }
 
-    // 3a. Registros de asistencias vivas
+
     for (var i = 0; i < personalesSnap.docs.length; i++) {
       final asistDoc = personalesSnap.docs[i];
       final asistData = Map<String, dynamic>.from(asistDoc.data());
@@ -238,12 +238,12 @@ Future<void> _cargarAsistentes(String eventId) async {
       }
     }
 
-    // 3b. Registros HUÉRFANOS (cuyo doc padre fue borrado)
+
     for (final regDoc in huerfanosSnap.docs) {
       final regData = Map<String, dynamic>.from(regDoc.data());
       final asistId = regData['asistenciaId']?.toString() ?? '';
 
-      // Si su padre todavía existe, ya lo cargamos arriba: lo saltamos.
+
       if (asistenciasVivas.contains(asistId)) continue;
 
       regData['registroId'] = regDoc.id;
@@ -257,7 +257,7 @@ Future<void> _cargarAsistentes(String eventId) async {
       personalesPorEstudiante[sid]!.add(regData);
     }
 
-    // 4. Fusionar personales con la lista
+
     for (final entry in personalesPorEstudiante.entries) {
       final sid = entry.key;
       final registros = entry.value;
@@ -480,7 +480,7 @@ Future<void> _cargarAsistentes(String eventId) async {
     }
   }
 
-  // ── NUEVO: editar registro personal ───────────────────────────────────────
+
   Future<void> _editarRegistroPersonal({
     required String eventId,
     required String studentId,
@@ -852,7 +852,7 @@ Future<void> _agregarAsistenciaManual() async {
             ]),
           ),
           Expanded(
-            child: DecoratedBox(     
+            child: DecoratedBox(
               decoration: const BoxDecoration(
                 color: _bg,
                 borderRadius: BorderRadius.only(
@@ -1366,7 +1366,7 @@ Future<void> _agregarAsistenciaManual() async {
     );
   }
 
-  // ── ACTUALIZADO: ahora tiene botón de editar ──────────────────────────────
+
   Widget _buildPersonalRow({
     required Map<String, dynamic> registro,
     required String eventId,
@@ -1504,9 +1504,9 @@ Future<void> _agregarAsistenciaManual() async {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DIÁLOGO: EDITAR SCAN DE PROYECTO (sin cambios respecto al original)
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 class _DialogEditarScan extends StatefulWidget {
   final Map<String, dynamic> scan;
   const _DialogEditarScan({required this.scan});
@@ -1716,9 +1716,9 @@ class _DialogEditarScanState extends State<_DialogEditarScan> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DIÁLOGO NUEVO: EDITAR REGISTRO DE ASISTENCIA PERSONAL
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 class _DialogEditarRegistroPersonal extends StatefulWidget {
   final Map<String, dynamic> registro;
   const _DialogEditarRegistroPersonal({required this.registro});
@@ -1806,7 +1806,7 @@ class _DialogEditarRegistroPersonalState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Header ───────────────────────────────────────────────────
+
             Row(children: [
               Container(
                 padding: const EdgeInsets.all(8),
@@ -1833,7 +1833,7 @@ class _DialogEditarRegistroPersonalState
             ),
             const SizedBox(height: 20),
 
-            // ── Nombre ───────────────────────────────────────────────────
+
             TextField(
               controller: _nombreCtrl,
               textCapitalization: TextCapitalization.sentences,
@@ -1853,7 +1853,7 @@ class _DialogEditarRegistroPersonalState
             ),
             const SizedBox(height: 12),
 
-            // ── Tipo ─────────────────────────────────────────────────────
+
             TextField(
               controller: _tipoCtrl,
               textCapitalization: TextCapitalization.sentences,
@@ -1874,7 +1874,7 @@ class _DialogEditarRegistroPersonalState
             ),
             const SizedBox(height: 12),
 
-            // ── Fecha y hora ──────────────────────────────────────────────
+
             GestureDetector(
               onTap: _pickFechaHora,
               child: Container(
@@ -1919,7 +1919,7 @@ class _DialogEditarRegistroPersonalState
             ),
             const SizedBox(height: 24),
 
-            // ── Botones ───────────────────────────────────────────────────
+
             Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -1964,12 +1964,12 @@ class _DialogEditarRegistroPersonalState
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DIÁLOGO: AGREGAR ASISTENCIA (sin cambios respecto al original)
-// ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-// DIÁLOGO: AGREGAR ASISTENCIA BULK (múltiples alumnos × múltiples asistencias)
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
 class _DialogAgregarAsistencia extends StatefulWidget {
   final Map<String, dynamic> evento;
   final FirebaseFirestore firestore;
@@ -1992,13 +1992,13 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
 
   int _paso = 0;
 
-  // ── Paso 0: búsqueda de alumnos ──────────────────────────────────────────
+
   final TextEditingController _buscarCtrl = TextEditingController();
   bool _buscando = false;
   List<Map<String, dynamic>> _resultados = [];
   final List<Map<String, dynamic>> _alumnosSeleccionados = [];
 
-  // ── Paso 1: asistencias del evento ───────────────────────────────────────
+
   bool _cargandoAsist = false;
   List<Map<String, dynamic>> _personales = [];
   List<Map<String, dynamic>> _proyectos = [];
@@ -2006,7 +2006,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
   final TextEditingController _buscarAsistCtrl = TextEditingController();
   String _queryAsist = '';
 
-  // ── Paso 2: fecha/hora ────────────────────────────────────────────────────
+
   DateTime _fechaHora = DateTime.now();
 
   @override
@@ -2016,7 +2016,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
     super.dispose();
   }
 
-  // ── helpers ───────────────────────────────────────────────────────────────
+
   String _asistKey(Map<String, dynamic> a) {
     final kind = a['_kind'] as String;
     if (kind == 'personal') return 'p_${a['asistenciaId']}';
@@ -2056,7 +2056,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
   List<Map<String, dynamic>> get _asistSeleccionadasList =>
       _todasAsistencias.where((a) => _asistSeleccionadasIds.contains(_asistKey(a))).toList();
 
-  // ── búsqueda de estudiantes ───────────────────────────────────────────────
+
   Future<void> _buscarEstudiante() async {
     final q = _buscarCtrl.text.trim();
     if (q.isEmpty) return;
@@ -2128,7 +2128,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
   bool _alumnoEstaSeleccionado(String sid) =>
       _alumnosSeleccionados.any((a) => a['studentId'] == sid);
 
-  // ── carga de asistencias del evento ──────────────────────────────────────
+
   Future<void> _cargarAsistenciasEvento() async {
     setState(() {
       _cargandoAsist = true;
@@ -2185,7 +2185,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
     }
   }
 
-  // ── date/time picker ──────────────────────────────────────────────────────
+
   Future<void> _pickFechaHora() async {
     final fecha = await showDatePicker(
       context: context,
@@ -2217,7 +2217,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
     });
   }
 
-  // ── confirmar bulk ────────────────────────────────────────────────────────
+
   void _confirmar() {
     Navigator.pop(context, {
       'tipo': 'bulk',
@@ -2227,7 +2227,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
     });
   }
 
-  // ── build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -2244,9 +2244,9 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // PASO 0 — Seleccionar alumnos
-  // ══════════════════════════════════════════════════════════════════════════
+
+
+
   Widget _buildPasoAlumnos() {
     return ConstrainedBox(
       key: const ValueKey('paso0'),
@@ -2255,7 +2255,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Header
+
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 18, 16, 10),
             child: Row(children: [
@@ -2288,7 +2288,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
             ]),
           ),
 
-          // Buscador
+
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Row(children: [
@@ -2338,7 +2338,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
             ]),
           ),
 
-          // Chips de alumnos ya seleccionados
+
           if (_alumnosSeleccionados.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -2385,7 +2385,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
               ),
             ),
 
-          // Resultados
+
           Flexible(
             child: _resultados.isEmpty && !_buscando
                 ? Padding(
@@ -2472,7 +2472,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
                       ),
           ),
 
-          // Botón siguiente
+
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: SizedBox(
@@ -2508,9 +2508,9 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // PASO 1 — Seleccionar asistencias
-  // ══════════════════════════════════════════════════════════════════════════
+
+
+
   Widget _buildPasoAsistencias() {
     final filtradas = _asistenciasFiltradas;
     final totalSelec = _asistSeleccionadasIds.length;
@@ -2524,7 +2524,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Header
+
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 12, 16, 4),
             child: Row(children: [
@@ -2549,7 +2549,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
             ]),
           ),
 
-          // Buscador de asistencias
+
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: TextField(
@@ -2584,7 +2584,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
             ),
           ),
 
-          // Seleccionar todos (solo si hay resultados)
+
           if (!_cargandoAsist && filtradas.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
@@ -2632,7 +2632,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
 
           const Divider(height: 1),
 
-          // Lista
+
           Flexible(
             child: _cargandoAsist
                 ? const Center(
@@ -2788,7 +2788,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
                       ),
           ),
 
-          // Botón siguiente
+
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: SizedBox(
@@ -2825,9 +2825,9 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // PASO 2 — Confirmar bulk
-  // ══════════════════════════════════════════════════════════════════════════
+
+
+
   Widget _buildPasoConfirmar() {
     final asistencias = _asistSeleccionadasList;
     final alumnos = _alumnosSeleccionados;
@@ -2846,7 +2846,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+
           Row(children: [
             IconButton(
               icon: const Icon(Icons.arrow_back, color: _primary),
@@ -2869,7 +2869,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
           ]),
           const SizedBox(height: 12),
 
-          // Resumen badge
+
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -2906,7 +2906,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
           ),
           const SizedBox(height: 14),
 
-          // Alumnos
+
           _resumenSeccion(
             'Alumnos',
             Icons.group,
@@ -2919,7 +2919,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
           ),
           const SizedBox(height: 10),
 
-          // Asistencias
+
           _resumenSeccion(
             'Asistencias',
             Icons.assignment_turned_in_outlined,
@@ -2938,7 +2938,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
           ),
           const SizedBox(height: 10),
 
-          // Fecha y hora
+
           GestureDetector(
             onTap: _pickFechaHora,
             child: Container(
@@ -2977,7 +2977,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
           ),
           const SizedBox(height: 20),
 
-          // Advertencia
+
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
@@ -2986,7 +2986,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
               border: Border.all(color: _warning.withValues(alpha: 0.3)),
             ),
             child: Row(children: [
-              const Icon(Icons.warning_amber_rounded, 
+              const Icon(Icons.warning_amber_rounded,
                   color: _warning, size: 16),
               const SizedBox(width: 8),
               Expanded(
@@ -3002,7 +3002,7 @@ class _DialogAgregarAsistenciaState extends State<_DialogAgregarAsistencia> {
           ),
           const SizedBox(height: 16),
 
-          // Botón confirmar
+
           SizedBox(
             width: double.infinity,
             height: 50,

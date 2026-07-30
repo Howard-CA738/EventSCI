@@ -78,8 +78,8 @@ class _ParticipantesCompletoCarreraScreenState
   List<Map<String, dynamic>> _eventos = [];
   Map<String, dynamic>? _eventoSeleccionado;
 
-  /// Notas docente cargadas para el evento seleccionado.
-  /// Mapa { codigoEstudiante → notaDocente (0–20) }
+
+
   Map<String, double> _notasDocente = {};
 
   List<_CategoriaData> _categoriasData = [];
@@ -191,7 +191,7 @@ class _ParticipantesCompletoCarreraScreenState
     });
 
     try {
-      // Cargar notas docente existentes para este evento
+
       final notasDoc =
           await _notaDocenteService.obtenerNotasDocente(evento['id'] as String);
 
@@ -378,7 +378,7 @@ class _ParticipantesCompletoCarreraScreenState
       final notaMax     = notasNormalizadas.reduce((a, b) => a > b ? a : b);
       final notaMin     = notasNormalizadas.reduce((a, b) => a < b ? a : b);
 
-      // ── Nota docente: buscar por cualquier integrante del proyecto ──
+
       double? notaDoc;
       if (notasDocente.isNotEmpty) {
         final codigos = _extraerCodigos(d['Integrantes']);
@@ -390,9 +390,9 @@ class _ParticipantesCompletoCarreraScreenState
         }
       }
 
-      // ── Nota final ──
-      // Con docente: 50 % jurados + 50 % docente
-      // Sin docente: 100 % jurados
+
+
+
       final notaFinal =
           notaDoc != null ? (promedio + notaDoc) / 2.0 : promedio;
 
@@ -448,8 +448,8 @@ class _ParticipantesCompletoCarreraScreenState
     }
   }
 
-  /// Extrae códigos universitarios de un campo de integrantes.
-  /// Soporta List<String> y String separado por comas.
+
+
   List<String> _extraerCodigos(dynamic integrantes) {
     if (integrantes == null) return [];
     if (integrantes is List) {
@@ -504,7 +504,7 @@ class _ParticipantesCompletoCarreraScreenState
     });
   }
 
-  // ── Importar notas docente ───────────────────────────────────────────────
+
   Future<void> _importarNotasDocente() async {
     if (_eventoSeleccionado == null) return;
     final eventId = _eventoSeleccionado!['id'] as String;
@@ -514,7 +514,7 @@ class _ParticipantesCompletoCarreraScreenState
       final result = await _notaDocenteService.importarDesdeExcel(eventId);
 
       if (result == null) {
-        // usuario canceló el picker
+
         if (mounted) setState(() => _isImportandoNotas = false);
         return;
       }
@@ -526,7 +526,7 @@ class _ParticipantesCompletoCarreraScreenState
         );
       }
 
-      // Recargar notas y recalcular participantes
+
       final notasDoc = await _notaDocenteService.obtenerNotasDocente(eventId);
       final categorias = await _cargarParticipantes(eventId, notasDoc);
 
@@ -564,7 +564,7 @@ class _ParticipantesCompletoCarreraScreenState
     }
   }
 
-  /// Confirma y elimina las notas docente del evento actual.
+
   Future<void> _eliminarNotasDocente() async {
     if (_eventoSeleccionado == null) return;
     final confirmar = await showDialog<bool>(
@@ -872,7 +872,7 @@ class _ParticipantesCompletoCarreraScreenState
             ),
           ),
           if (_eventoSeleccionado != null) ...[
-            // Botón importar / quitar notas docente
+
             if (_isImportandoNotas)
               const SizedBox(
                 width: 24,
@@ -1137,7 +1137,7 @@ class _CategoriaData {
             proyectos.where((p) => p['tieneEvaluaciones'] == true).length;
 }
 
-// ── Widget: botón de notas docente ──────────────────────────────────────────
+
 class _NotaDocenteButton extends StatelessWidget {
   final bool tieneNotas;
   final VoidCallback onImportar;
@@ -2457,7 +2457,7 @@ class _DetalleProyectoSheet extends StatelessWidget {
                       ),
                     ),
 
-                  // ── Desglose de fórmula (cuando hay nota docente) ──
+
                   if (tieneEval && tieneNotaDocente) ...[
                     const SizedBox(height: 14),
                     _FormulaDesglose(
@@ -2612,7 +2612,7 @@ class _DetalleProyectoSheet extends StatelessWidget {
   }
 }
 
-// ── Widget: desglose de fórmula ──────────────────────────────────────────────
+
 class _FormulaDesglose extends StatelessWidget {
   final double promedioJurados;
   final double notaDocente;

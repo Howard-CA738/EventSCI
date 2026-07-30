@@ -15,7 +15,7 @@ class JuradoSecurityService {
     await callable.call({
       'juradoId': juradoId,
       'password': password,
-      'adminId':  adminId, // ✅ doc ID real del admin
+      'adminId':  adminId,
     });
   } on FirebaseFunctionsException catch (e) {
     debugPrint('❌ Error cifrando: ${e.code} - ${e.message}');
@@ -30,7 +30,7 @@ static Future<String> decryptPassword({
     final callable = _functions.httpsCallable('decryptJuradoPassword');
     final result = await callable.call({
       'juradoId': juradoId,
-      'adminId':  adminId, // ✅ doc ID real del admin
+      'adminId':  adminId,
     });
     return result.data['password'] as String? ?? '';
   } on FirebaseFunctionsException catch (e) {

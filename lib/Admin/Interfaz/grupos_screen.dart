@@ -938,7 +938,7 @@ class _GruposScreenState extends State<GruposScreen>
       },
     );
   }
-  
+
   Future<void> _eliminarTodosLosProyectos() async {
     setState(() => _isLoadingProjects = true);
     try {

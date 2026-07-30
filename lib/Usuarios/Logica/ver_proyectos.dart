@@ -3,11 +3,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 import '/resolver_nombres_service.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CACHÉ ESTÁTICO A NIVEL DE CLASE (vive mientras la app esté abierta)
-// Evita re-leer Firestore si el usuario sale y vuelve a la pantalla,
-// o si múltiples instancias intentan leer los mismos datos.
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
 class _ProyectosCache {
   static final Map<String, List<Map<String, dynamic>>> _proyectosPorEvento = {};
   static List<Map<String, dynamic>>? _eventosCache;
@@ -134,7 +134,7 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
   }
 
   Future<void> _loadEventos({bool forceRefresh = false}) async {
-    // ── OPTIMIZACIÓN 1: Usar caché si los datos siguen vigentes ──────────────
+
     if (!forceRefresh && _ProyectosCache.eventosVigentes) {
       if (mounted) {
         setState(() => _eventos = List.from(_ProyectosCache.eventos!));
@@ -157,14 +157,14 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
         query = query.where('filialNombre', isEqualTo: _studentFilial);
       }
 
-      // ── OPTIMIZACIÓN 2: Intentar primero desde caché offline de Firestore ──
-      // Esto evita una lectura de red si Firestore ya tiene los datos en disco.
+
+
       QuerySnapshot snap;
       try {
         snap = await query.get(const GetOptions(source: Source.cache));
         debugPrint('Eventos cargados desde caché Firestore offline');
       } catch (_) {
-        // Si no hay caché disponible, ir al servidor
+
         snap = await query.get(const GetOptions(source: Source.server));
         debugPrint('Eventos cargados desde servidor Firestore');
       }
@@ -180,7 +180,7 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
       setState(() => _eventos = eventos);
     } catch (e) {
       debugPrint('Error cargando eventos: $e');
-      // Si todo falla, intentar usar caché expirado antes que mostrar nada
+
       final cached = _ProyectosCache.eventos;
       if (cached != null && mounted) {
         setState(() => _eventos = List.from(cached));
@@ -200,9 +200,9 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
       _searchCtrl.clear();
     });
 
-    // ── OPTIMIZACIÓN 3: Usar caché en memoria para proyectos ─────────────────
-    // La subcolección de proyectos cambia muy poco (admin la carga 1 vez).
-    // Miles de estudiantes viendo el mismo evento usan memoria local.
+
+
+
     if (!forceRefresh && _ProyectosCache.proyectosVigentes(eventoId)) {
       final cached = _ProyectosCache.proyectos(eventoId)!;
       debugPrint('Proyectos cargados desde caché: ${cached.length} docs');
@@ -217,9 +217,9 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
     }
 
     try {
-      // ── OPTIMIZACIÓN 4: Quitar orderBy del servidor, ordenar en cliente ────
-      // orderBy en Firestore consume índices y lecturas adicionales.
-      // Con pocos cientos de proyectos, ordenar en cliente es trivial.
+
+
+
       final snap = await _firestore
           .collection('events')
           .doc(eventoId)
@@ -234,7 +234,7 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
         return d;
       }).toList();
 
-      // ── Ordenar en cliente por importedAt (evita índice en Firestore) ──────
+
       lista.sort((a, b) {
         final tA = a['importedAt'];
         final tB = b['importedAt'];
@@ -254,7 +254,7 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
       });
     } catch (e) {
       debugPrint('Error cargando proyectos: $e');
-      // Fallback: intentar caché expirado
+
       final cached = _ProyectosCache.proyectos(eventoId);
       if (cached != null && mounted) {
         setState(() {
@@ -326,8 +326,8 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
     });
   }
 
-  // ── OPTIMIZACIÓN 5: Forzar refresh manual solo cuando el usuario lo pide ──
-  // El botón de refresh ahora invalida el caché y re-lee desde el servidor.
+
+
   Future<void> _forceRefreshEventos() async {
     _ProyectosCache.invalidateEventos();
     await _loadEventos(forceRefresh: true);

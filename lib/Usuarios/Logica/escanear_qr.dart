@@ -94,7 +94,7 @@ static const String _keyCooldown = 'ultimo_escaneo_global';
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
   }
-/// Reintenta una operación de Firestore ante errores transitorios de red.
+
 Future<T> _conReintento<T>(
   Future<T> Function() operacion, {
   int maxIntentos = 4,
@@ -129,8 +129,8 @@ Future<T> _conReintento<T>(
   }
 }
 
-/// Solo VERIFICA el cooldown. No guarda nada.
-/// Devuelve true si PUEDE escanear, false si debe esperar.
+
+
 Future<bool> _puedeEscanear() async {
   if (_cooldownSegundos <= 0) return true;
   final prefs = await SharedPreferences.getInstance();
@@ -152,7 +152,7 @@ Future<bool> _puedeEscanear() async {
   return true;
 }
 
-/// Guarda el timestamp del cooldown. Llamar SOLO tras un registro exitoso.
+
 Future<void> _guardarCooldown() async {
   if (_cooldownSegundos <= 0) return;
   final prefs = await SharedPreferences.getInstance();
@@ -164,12 +164,12 @@ Future<void> _guardarCooldown() async {
 
 Future<void> _getCurrentUser() async {
     try {
-      await PrefsHelper.ensureAuthActiva();   // ← reestablece sesión al abrir el escáner
+      await PrefsHelper.ensureAuthActiva();
       _cooldownSegundos = await EscanerConfigService.getCooldownSegundos();
       final userId = await PrefsHelper.getCurrentUserId();
       final userName = await PrefsHelper.getUserName();
       final userData = await PrefsHelper.getCurrentUserData();
- 
+
    setState(() {
   _currentUserId = userId;
   _currentUserName = userName;
@@ -179,14 +179,14 @@ Future<void> _getCurrentUser() async {
   if (userData != null) {
     _studentFilial = userData['filial']?.toString();
   }
-  _usuarioCargado = true; // ← SOLO AGREGAR ESTA LÍNEA
+  _usuarioCargado = true;
 });
- 
+
     } catch (e) {
       _showSnackBar('Error al obtener usuario: $e', isError: true);
     }
   }
-  
+
   String _normalizar(String? valor) {
     if (valor == null) return '';
     const Map<String, String> tildes = {
@@ -228,7 +228,7 @@ Future<void> _getCurrentUser() async {
     return studentFilial.isEmpty || studentFilial == qrFilial;
   }
 void _mostrarDialogoCodigo() async {
-  if (!_usuarioCargado) { // ← AGREGAR ESTAS 3 LÍNEAS
+  if (!_usuarioCargado) {
     _showSnackBar('Cargando datos, espera un momento...', isError: false);
     return;
   }
@@ -533,10 +533,10 @@ void _mostrarDialogoCodigo() async {
       return;
     }
 
-    // ── Sesión / datos del usuario ──────────────────────────────────
-    // Si no hay sesión, sí es un login faltante.
+
+
     if (_currentUserId == null) {
-  _currentUserId = await PrefsHelper.getCurrentUserId(); // reintento
+  _currentUserId = await PrefsHelper.getCurrentUserId();
   if (_currentUserId == null) {
     _showResult(
       success: false,
@@ -547,18 +547,18 @@ void _mostrarDialogoCodigo() async {
   }
 }
 
-    // Hay sesión pero faltan los datos (suele ser una carga fallida por
-    // red): reintenta cargarlos antes de bloquear.
+
+
     if (_cachedUserData == null) {
       _cachedUserData =
           await PrefsHelper.getCurrentUserData(forceRefresh: true);
-      _cachedUserData ??= await PrefsHelper.getPersistedStudentData();   // ← último recurso
+      _cachedUserData ??= await PrefsHelper.getPersistedStudentData();
       if (_cachedUserData != null) {
         _studentFilial = _cachedUserData!['filial']?.toString();
       }
     }
 
-    // Si aún así no hay datos, es conexión: mensaje honesto.
+
     if (_cachedUserData == null) {
       _showResult(
         success: false,
@@ -989,7 +989,7 @@ void _mostrarDialogoCodigo() async {
           'type': 'asistencia_personal',
           'timestamp': FieldValue.serverTimestamp(),
           'registrationMethod': 'codigo_manual',
-          
+
         }));
         await _guardarCooldown();
 
@@ -1587,7 +1587,7 @@ void _mostrarDialogoCodigo() async {
     if (barcode.rawValue != null &&
         !_hasScanned &&
         !_isProcessing &&
-        _usuarioCargado) { // ← SOLO AGREGAR ESTA CONDICIÓN
+        _usuarioCargado) {
       _procesarQR(barcode.rawValue!);
       break;
     }

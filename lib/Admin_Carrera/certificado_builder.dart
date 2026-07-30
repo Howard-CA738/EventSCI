@@ -11,16 +11,16 @@ Future<Uint8List?> _procesarFirma(Uint8List? srcBytes) async {
   try {
     return await _extraerFirma(srcBytes);
   } catch (e) {
-    // Una firma defectuosa JAMÁS debe tumbar el certificado completo.
+
     debugPrint('Firma omitida (no se pudo procesar): $e');
     return null;
   }
 }
 
 Future<Uint8List> _extraerFirma(Uint8List srcBytes) async {
-  // 1) Decodificar. Si la imagen es enorme, la reducimos a un lado máximo
-  //    de 1600 px: procesa mucho más rápido y la firma en el PDF (~250 pt)
-  //    no pierde nitidez.
+
+
+
   const maxSide = 1600;
   var codec = await ui.instantiateImageCodec(srcBytes);
   var frame = await codec.getNextFrame();
@@ -43,7 +43,7 @@ Future<Uint8List> _extraerFirma(Uint8List srcBytes) async {
   final px = bd!.buffer.asUint8List();
   final out = Uint8List.fromList(px);
 
-  // 2) Color de fondo: promedio de una banda de 2 px en los 4 bordes.
+
   int sr = 0, sg = 0, sb = 0, n = 0;
   void sample(int x, int y) {
     final i = (y * w + x) * 4;
@@ -63,7 +63,7 @@ Future<Uint8List> _extraerFirma(Uint8List srcBytes) async {
   if (n == 0) n = 1;
   final bgR = sr / n, bgG = sg / n, bgB = sb / n;
 
-  // 3) Histograma de distancias al fondo (1 pasada) → umbral adaptativo.
+
   final hist = List<int>.filled(444, 0);
   for (int i = 0; i < px.length; i += 4) {
     final dr = px[i] - bgR, dg = px[i + 1] - bgG, db = px[i + 2] - bgB;
@@ -72,7 +72,7 @@ Future<Uint8List> _extraerFirma(Uint8List srcBytes) async {
     hist[d]++;
   }
   final total = w * h;
-  final cut   = (total * 0.995).floor();   // percentil 99.5
+  final cut   = (total * 0.995).floor();
   int acc = 0;
   double maxd = 1;
   for (int d = 0; d < hist.length; d++) {
@@ -81,12 +81,12 @@ Future<Uint8List> _extraerFirma(Uint8List srcBytes) async {
   }
   if (maxd < 1) maxd = 1;
 
-  final lo    = math.max(18.0, maxd * 0.12);  // por debajo = fondo (alpha 0)
-  final hi    = math.max(45.0, maxd * 0.55);  // por encima = tinta sólida
-  final gamma = maxd < 150 ? 0.55 : 0.8;      // firmas débiles → más sólidas
+  final lo    = math.max(18.0, maxd * 0.12);
+  final hi    = math.max(45.0, maxd * 0.55);
+  final gamma = maxd < 150 ? 0.55 : 0.8;
   final rango = (hi - lo) <= 0 ? 1.0 : (hi - lo);
 
-  // 4) Componer salida: alpha gradual + color de tinta conservado.
+
   for (int i = 0; i < out.length; i += 4) {
     final r = px[i], g = px[i + 1], b = px[i + 2];
     final dr = r - bgR, dg = g - bgG, db = b - bgB;
@@ -101,10 +101,10 @@ Future<Uint8List> _extraerFirma(Uint8List srcBytes) async {
     final chroma = maxc - minc;
 
     if (chroma < 28) {
-      // Tinta gris / negra → negro de tinta legible.
+
       out[i] = 20; out[i + 1] = 20; out[i + 2] = 20;
     } else {
-      // Tinta de color → conserva el tono, profundiza un poco.
+
       out[i]     = (r * 0.78).round().clamp(0, 255);
       out[i + 1] = (g * 0.78).round().clamp(0, 255);
       out[i + 2] = (b * 0.78).round().clamp(0, 255);
@@ -112,7 +112,7 @@ Future<Uint8List> _extraerFirma(Uint8List srcBytes) async {
     out[i + 3] = (a * 255).round().clamp(0, 255);
   }
 
-  // 5) Re-codificar a PNG con transparencia.
+
   final completer = Completer<ui.Image>();
   ui.decodeImageFromPixels(out, w, h, ui.PixelFormat.rgba8888,
       (im) => completer.complete(im));
@@ -121,17 +121,17 @@ Future<Uint8List> _extraerFirma(Uint8List srcBytes) async {
   return png!.buffer.asUint8List();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MODELO ESTUDIANTE — incluye codigoCertificado y motivo
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 class Estudiante {
   final String id, nombre, dni, codigo, email;
-  final String codigoCertificado; // ← campo para mostrar en el PDF
-  // Motivo individual del certificado de ESTE estudiante. Si viene vacío,
-  // buildPdf usa datos.motivo como respaldo (mismo patrón que
-  // codigoCertificado / datos.codigoCertificado). Se usa principalmente
-  // para PONENTE, donde cada estudiante tiene un título de investigación
-  // distinto y por lo tanto un motivo distinto.
+  final String codigoCertificado;
+
+
+
+
+
   final String motivo;
   final bool   pagado;
   bool         seleccionado;
@@ -149,9 +149,9 @@ class Estudiante {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Cache solo para assets estáticos
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 class _AssetCache {
   static pw.MemoryImage? templateImage;
   static pw.Font?        ttfRegular;
@@ -180,18 +180,18 @@ class _AssetCache {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DATOS DEL CERTIFICADO — incluye codigoCertificado
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 class DatosCertificado {
   final String evento, rol, fecha, horas, carrera, facultad, campus, motivo;
   final String director1, cargo1;
   final String director2, cargo2;
   final String director3, cargo3;
   final String urlFirma1, urlFirma2, urlFirma3;
-  final String codigoCertificado; // ← campo para mostrar en el PDF
+  final String codigoCertificado;
 
-  // Bytes procesados (en memoria, no se guardan en Firestore)
+
   final Uint8List? bytesFirma1;
   final Uint8List? bytesFirma2;
   final Uint8List? bytesFirma3;
@@ -222,7 +222,7 @@ class DatosCertificado {
     'urlFirma2': urlFirma2,
     'urlFirma3': urlFirma3,
     'codigoCertificado': codigoCertificado,
-    // bytesFirma no se guardan — son solo para memoria
+
   };
 
   factory DatosCertificado.fromMap(Map<String, dynamic> d) =>
@@ -241,9 +241,9 @@ class DatosCertificado {
       );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BUILDER DEL PDF
-// ─────────────────────────────────────────────────────────────────────────────
+
+
+
 class CertificadoBuilder {
   final DatosCertificado datos;
   CertificadoBuilder(this.datos);
@@ -299,10 +299,10 @@ class CertificadoBuilder {
           ? est.codigoCertificado
           : datos.codigoCertificado;
 
-      // Igual patrón que codigoFinal: si el estudiante trae su propio
-      // motivo (p. ej. PONENTE con título de investigación propio), se usa
-      // ese; si no, se usa el motivo general de datos (comportamiento
-      // idéntico al de antes para ASISTENTE/ORGANIZADOR/JURADO).
+
+
+
+
       final motivoFinal = est.motivo.isNotEmpty
           ? est.motivo
           : datos.motivo;
@@ -422,9 +422,9 @@ class CertificadoBuilder {
     return pdf.save();
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // HELPERS DE FIRMA
-  // ─────────────────────────────────────────────────────────────────────────
+
+
+
   pw.Widget _firmaBloque(
     pw.MemoryImage img, String nombre, String cargo,
     double ancho, double imgH,
@@ -500,9 +500,9 @@ class CertificadoBuilder {
     return cargo;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // HELPERS DE TEXTO
-  // ─────────────────────────────────────────────────────────────────────────
+
+
+
   String _facultadFmt(String raw) {
     final sin = raw.replaceFirst(
         RegExp(r'^FACULTAD\s+DE\s+', caseSensitive: false), '');

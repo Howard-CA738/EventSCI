@@ -2,7 +2,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 import '/resolver_nombres_service.dart';
-import 'nota_docente_service.dart'; // ← nuevo servicio
+import 'nota_docente_service.dart';
 
 class _C {
   static const primary = Color(0xFF1E3A5F);
@@ -12,7 +12,7 @@ class _C {
   static const bronze = Color(0xFFCD7F32);
   static const textSecondary = Color(0xFF64748B);
 
-  static const Color cuarto = Color(0xFF78909C); // azul grisáceo 4to
+  static const Color cuarto = Color(0xFF78909C);
   static const podioColors = [gold, silver, bronze, cuarto];
   static const podioFondos = [
     Color(0xFFFFFDE7),
@@ -64,8 +64,8 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
   Map<String, dynamic>? _eventoSeleccionado;
   Map<String, List<Map<String, dynamic>>> _ganadoresPorCategoria = {};
 
-  /// Notas docente cargadas para el evento seleccionado.
-  /// Mapa { codigoEstudiante → notaDocente (0–20) }
+
+
   Map<String, double> _notasDocente = {};
 
 
@@ -150,7 +150,7 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
     }
   }
 
-  // ── Selección de evento ──────────────────────────────────────────────────
+
   Future<void> _seleccionarEvento(Map<String, dynamic> evento) async {
     setState(() {
       _eventoSeleccionado = evento;
@@ -162,14 +162,14 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
     _animCtrl.reset();
 
     try {
-      // Cargar notas docente existentes y proyectos en paralelo
+
       final results = await Future.wait([
         _notaDocenteService.obtenerNotasDocente(evento['id'] as String),
         _calcularGanadores(evento['id'] as String, {}),
       ]);
 
       final notasDoc = results[0] as Map<String, double>;
-      // Recalcular con notas docente si las hay
+
       final ganadores = notasDoc.isNotEmpty
           ? await _calcularGanadores(evento['id'] as String, notasDoc)
           : results[1] as Map<String, List<Map<String, dynamic>>>;
@@ -190,7 +190,7 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
     }
   }
 
-  // ── Importar notas docente ───────────────────────────────────────────────
+
   Future<void> _importarNotasDocente() async {
     if (_eventoSeleccionado == null) return;
     final eventId = _eventoSeleccionado!['id'] as String;
@@ -201,7 +201,7 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
           await _notaDocenteService.importarDesdeExcel(eventId);
 
       if (result == null) {
-        // usuario canceló el picker
+
         setState(() => _isImportandoNotas = false);
         return;
       }
@@ -213,7 +213,7 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
         );
       }
 
-      // Recargar notas y recalcular ganadores
+
       final notasDoc =
           await _notaDocenteService.obtenerNotasDocente(eventId);
       final ganadores = await _calcularGanadores(eventId, notasDoc);
@@ -241,7 +241,7 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
     }
   }
 
-  /// Confirma y elimina las notas docente del evento actual.
+
   Future<void> _eliminarNotasDocente() async {
     if (_eventoSeleccionado == null) return;
     final confirmar = await showDialog<bool>(
@@ -292,11 +292,11 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
     }
   }
 
-  // ── Cálculo de ganadores ─────────────────────────────────────────────────
-  /// [notasDocente] mapa { codigoEstudiante → nota (0-20) }.
-  /// Si está vacío, el promedio final es solo el de los jurados.
-  /// Si tiene datos, la nota final = promedio( notaJurados, notaDocente )
-  /// donde ambas ya están normalizadas a base 20.
+
+
+
+
+
   Future<Map<String, List<Map<String, dynamic>>>> _calcularGanadores(
     String eventoId,
     Map<String, double> notasDocente,
@@ -327,7 +327,7 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
 
           final d = doc.data();
 
-          // ── Notas de jurado normalizadas ──
+
           final notasNormalizadas = <double>[];
           for (final e in evalSnap.docs) {
             final data = e.data();
@@ -353,7 +353,7 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
               notasNormalizadas.reduce((a, b) => a + b) /
                   notasNormalizadas.length;
 
-          // ── Nota docente: buscar por cualquier integrante del proyecto ──
+
           double? notaDoc;
           if (notasDocente.isNotEmpty) {
             final integrantesRaw =
@@ -367,9 +367,9 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
             }
           }
 
-          // ── Nota final ──
-          // Con docente: promedio 50 % jurados + 50 % docente
-          // Sin docente: 100 % jurados
+
+
+
           final notaFinal = notaDoc != null
               ? (promedioJurados + notaDoc) / 2.0
               : promedioJurados;
@@ -424,8 +424,8 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
     };
   }
 
-  /// Extrae códigos universitarios de un campo de integrantes.
-  /// Soporta List<String> y String separado por comas.
+
+
   List<String> _extraerCodigos(dynamic integrantes) {
     if (integrantes == null) return [];
     if (integrantes is List) {
@@ -441,7 +441,7 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
     return [];
   }
 
-  // ── Helpers UI ───────────────────────────────────────────────────────────
+
   void _snack(String msg, {bool isError = false, bool isSuccess = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -491,7 +491,7 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
     );
   }
 
-  // ── Build ────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
@@ -556,7 +556,7 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
             ),
           ),
           if (_eventoSeleccionado != null) ...[
-            // Botón importar / quitar notas docente
+
             if (_isImportandoNotas)
               const SizedBox(
                 width: 24,
@@ -681,7 +681,7 @@ class _VerGanadoresScreenState extends State<VerGanadoresScreen>
   }
 }
 
-// ── Widget: botón de notas docente ──────────────────────────────────────────
+
 class _NotaDocenteButton extends StatelessWidget {
   final bool tieneNotas;
   final VoidCallback onImportar;
@@ -739,7 +739,7 @@ class _NotaDocenteButton extends StatelessWidget {
   }
 }
 
-// ── Widget: toggle de vistas ─────────────────────────────────────────────────
+
 class _VistaToggle extends StatelessWidget {
   final _ModoVista modoActual;
   final ValueChanged<_ModoVista> onChange;
@@ -816,7 +816,7 @@ class _ToggleBtn extends StatelessWidget {
   }
 }
 
-// ── Detalle del proyecto (bottom sheet) ─────────────────────────────────────
+
 class _DetalleProyectoSheet extends StatelessWidget {
   final Map<String, dynamic> proyecto;
   final int posicion;
@@ -866,7 +866,7 @@ class _DetalleProyectoSheet extends StatelessWidget {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            // Encabezado
+
             Container(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
               child: Row(
@@ -932,7 +932,7 @@ class _DetalleProyectoSheet extends StatelessWidget {
                 controller: controller,
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                 children: [
-                  // ── Stats card ──
+
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -990,7 +990,7 @@ class _DetalleProyectoSheet extends StatelessWidget {
                     ),
                   ),
 
-                  // ── Desglose de fórmula ──
+
                   if (tieneNotaDocente) ...[
                     const SizedBox(height: 14),
                     _FormulaDesglose(
@@ -1002,7 +1002,7 @@ class _DetalleProyectoSheet extends StatelessWidget {
 
                   const SizedBox(height: 20),
 
-                  // ── Notas por jurado ──
+
                   if (notas.isNotEmpty) ...[
                     _SheetSection(
                       titulo: 'Notas por jurado',
@@ -1058,7 +1058,7 @@ class _DetalleProyectoSheet extends StatelessWidget {
                     const SizedBox(height: 20),
                   ],
 
-                  // ── Info proyecto ──
+
                   _SheetSection(
                     titulo: 'Información del proyecto',
                     icon: Icons.info_outline_rounded,
@@ -1127,7 +1127,7 @@ class _DetalleProyectoSheet extends StatelessWidget {
   }
 }
 
-// ── Widget: desglose de fórmula ──────────────────────────────────────────────
+
 class _FormulaDesglose extends StatelessWidget {
   final double promedioJurados;
   final double notaDocente;
@@ -1251,7 +1251,7 @@ class _FormulaRow extends StatelessWidget {
   }
 }
 
-// ── Vista tabla ──────────────────────────────────────────────────────────────
+
 class _VistaTabla extends StatelessWidget {
   final Map<String, List<Map<String, dynamic>>> ganadoresPorCategoria;
   final void Function(Map<String, dynamic> proyecto, int posicion) onTapFila;
@@ -1473,7 +1473,7 @@ class _VistaTabla extends StatelessWidget {
   }
 }
 
-// ── Vista gráfico ────────────────────────────────────────────────────────────
+
 class _VistaGrafico extends StatelessWidget {
   final Map<String, List<Map<String, dynamic>>> ganadoresPorCategoria;
 
@@ -1658,7 +1658,7 @@ class _VistaGrafico extends StatelessWidget {
   }
 }
 
-// ── Resto de widgets auxiliares (sin cambios funcionales) ────────────────────
+
 
 class _StatItem extends StatelessWidget {
   final String label;

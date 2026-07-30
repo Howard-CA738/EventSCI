@@ -1,9 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
-// ─────────────────────────────────────────────────────────────────────────
-// MODELOS DEL RESUMEN  (Filial → Facultad → Carrera → Evento)
-// ─────────────────────────────────────────────────────────────────────────
+
+
+
 class EventoResumen {
   final String eventId;
   final String eventName;
@@ -11,9 +11,9 @@ class EventoResumen {
   final DateTime? fecha;
   final String carreraPath;
 
-  final int matriculados; // todos los estudiantes de la carrera
-  final int pagaron;      // inscritos al evento (pagos.{eventId} == true)
-  final int asistieron;   // estudiantes únicos con ≥1 asistencia al evento
+  final int matriculados;
+  final int pagaron;
+  final int asistieron;
 
   const EventoResumen({
     required this.eventId,
@@ -26,11 +26,11 @@ class EventoResumen {
     required this.asistieron,
   });
 
-  // % de inscritos que efectivamente asistieron
+
   double get pctAsistioVsPago =>
       pagaron == 0 ? 0 : (asistieron / pagaron) * 100;
 
-  // % de matriculados que se inscribieron (pagaron)
+
   double get pctPagoVsMatricula =>
       matriculados == 0 ? 0 : (pagaron / matriculados) * 100;
 }
@@ -78,15 +78,15 @@ class FilialResumen {
       facultades.fold(0, (s, f) => s + f.totalMatriculados);
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// SERVICIO
-// ─────────────────────────────────────────────────────────────────────────
+
+
+
 class ReporteUsuariosService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   static const _filialesOrden = ['lima', 'juliaca', 'tarapoto'];
 
-  // ── Caché (evita relecturas durante 10 min) ──────────────────────────────
+
   List<FilialResumen>? _resumenCache;
   DateTime? _resumenTs;
   final Map<String, int> _matriculadosCache = {};
@@ -105,21 +105,21 @@ class ReporteUsuariosService {
       _resumenTs != null &&
       DateTime.now().difference(_resumenTs!) < _ttl;
 
-  // carreraPath de los estudiantes = "{filialNombre}_{carreraNombre}"
+
   String _buildCarreraPath(String filialNombre, String carreraNombre) =>
       '${filialNombre}_$carreraNombre';
 
-  // ───────────────────────────────────────────────────────────────────────
-  // RESUMEN COMPLETO
-  // 1 lectura de 'events' + count() por carrera (matriculados) +
-  // count() por evento (pagaron) + conteo de asistencias por evento.
-  // ───────────────────────────────────────────────────────────────────────
+
+
+
+
+
   Future<List<FilialResumen>> getResumen({bool forceRefresh = false}) async {
     if (!forceRefresh && _resumenFresco) return _resumenCache!;
 
     final eventsSnap = await _firestore.collection('events').get();
 
-    // ── Normalizar metadatos de cada evento ────────────────────────────────
+
     final eventosRaw = eventsSnap.docs.map((doc) {
       final d = doc.data();
       final filialId = (d['filialId'] ?? 'otros').toString();
@@ -146,7 +146,7 @@ class ReporteUsuariosService {
       );
     }).toList();
 
-    // ── Matriculados: un count() por carreraPath único ─────────────────────
+
     final carreraPaths = eventosRaw.map((e) => e.carreraPath).toSet().toList();
     await Future.wait(
       carreraPaths.map((p) async {
@@ -154,7 +154,7 @@ class ReporteUsuariosService {
       }),
     );
 
-    // ── Pagaron + Asistieron por evento (en lotes para no saturar) ──────────
+
     final List<EventoResumen> eventos = [];
     const lote = 6;
     for (var i = 0; i < eventosRaw.length; i += lote) {
@@ -176,8 +176,8 @@ class ReporteUsuariosService {
       eventos.addAll(res);
     }
 
-    // ── Agrupar: filial → facultad → carrera → eventos ─────────────────────
-    // Indexamos los eventos junto a sus metadatos de origen.
+
+
     final mapaEventos = <String, _EventoTmp>{
       for (final e in eventosRaw) e.eventId: e,
     };
@@ -196,7 +196,7 @@ class ReporteUsuariosService {
           .add(ev);
     }
 
-    // ── Ordenar filiales según _filialesOrden, el resto alfabético ─────────
+
     final filialesOrdenadas = agrupado.keys.toList()
       ..sort((a, b) {
         final ia = _filialesOrden.indexOf(a);
@@ -241,11 +241,11 @@ class ReporteUsuariosService {
     return resultado;
   }
 
-  // ───────────────────────────────────────────────────────────────────────
-  // CONTEOS INDIVIDUALES
-  // ───────────────────────────────────────────────────────────────────────
 
-  // Matriculados: todos los estudiantes de la carrera (sin filtrar por login).
+
+
+
+
   Future<int> _contarMatriculados(String carreraPath) async {
     if (_matriculadosCache.containsKey(carreraPath)) {
       return _matriculadosCache[carreraPath]!;
@@ -264,7 +264,7 @@ class ReporteUsuariosService {
     }
   }
 
-  // Inscritos = pagaron para ese evento (pagos.{eventId} == true).
+
   Future<int> _contarPagaron(String carreraPath, String eventId) async {
     try {
       final agg = await _firestore
@@ -281,14 +281,14 @@ class ReporteUsuariosService {
     }
   }
 
-  // Asistieron = estudiantes ÚNICOS con ≥1 asistencia (QR de proyecto y/o
-  // asistencia personal). Si un alumno hizo ambas, cuenta una sola vez.
+
+
   Future<int> _contarAsistieron(String eventId) async {
     if (_asistieronCache.containsKey(eventId)) {
       return _asistieronCache[eventId]!;
     }
     try {
-      // ¿Existen asistencias personales para este evento?
+
       final personalDefs = await _firestore
           .collection('events')
           .doc(eventId)
@@ -297,8 +297,8 @@ class ReporteUsuariosService {
 
       int total;
       if (personalDefs.docs.isEmpty) {
-        // Caso común: solo QR de proyecto. 'asistencias' tiene 1 doc por
-        // estudiante (doc.id == studentId), así que count() ya es único.
+
+
         final agg = await _firestore
             .collection('events')
             .doc(eventId)
@@ -307,7 +307,7 @@ class ReporteUsuariosService {
             .get();
         total = agg.count ?? 0;
       } else {
-        // Hay personal: unimos IDs de ambas fuentes para no contar doble.
+
         final ids = <String>{};
 
         final asisSnap = await _firestore
@@ -316,13 +316,13 @@ class ReporteUsuariosService {
             .collection('asistencias')
             .get();
         for (final d in asisSnap.docs) {
-          ids.add(d.id); // doc.id == studentId
+          ids.add(d.id);
         }
 
         for (final ap in personalDefs.docs) {
           final regs = await ap.reference.collection('registros').get();
           for (final r in regs.docs) {
-            ids.add(r.id); // doc.id == studentId
+            ids.add(r.id);
           }
         }
         total = ids.length;
@@ -337,7 +337,7 @@ class ReporteUsuariosService {
   }
 }
 
-// Estructura interna temporal para arrastrar metadatos del evento.
+
 class _EventoTmp {
   final String eventId;
   final String eventName;

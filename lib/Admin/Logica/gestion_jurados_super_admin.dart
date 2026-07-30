@@ -20,14 +20,14 @@
     final FirebaseFirestore _firestore = FirebaseFirestore.instance;
     final FilialesService _filialesService = FilialesService();
 
-    // ── Estructura de filiales ──────────────────────────────────────────
+
     Map<String, dynamic> _estructura = {};
     bool _isLoadingEstructura = true;
 
-    // ── Contexto seleccionado (igual que la pantalla original) ──────────
-    String? _filialId; // id, ej. 'lima'
-    String? _filialNombre; // 'Campus Lima'
-    String? _facultad; // nombre de la facultad
+
+    String? _filialId;
+    String? _filialNombre;
+    String? _facultad;
     String? _carreraId;
     String? _carreraNombre;
 
@@ -47,7 +47,7 @@
     List<Map<String, dynamic>> _jurados = [];
     bool _isLoadingJurados = false;
 
-    // Cache de eventos para no recargar cada vez que se abre el diálogo
+
     List<Map<String, dynamic>>? _eventosCache;
 
     late AnimationController _fadeController;
@@ -84,9 +84,9 @@
       super.dispose();
     }
 
-    // ====================================================================
-    // ESTRUCTURA Y SELECTORES EN CASCADA
-    // ====================================================================
+
+
+
     Future<void> _cargarEstructura() async {
       setState(() => _isLoadingEstructura = true);
       try {
@@ -180,9 +180,9 @@ if (facultades != null && facultades.containsKey(facultad)) {
       ]);
     }
 
-    // ====================================================================
-    // CARGA DE JURADOS Y EVENTOS (idéntica a la pantalla original)
-    // ====================================================================
+
+
+
     Future<void> _cargarJurados() async {
       if (_filialId == null || _facultad == null || _carreraNombre == null) {
         return;
@@ -502,7 +502,7 @@ if (facultades != null && facultades.containsKey(facultad)) {
       }
     }
 
-    // ─── DIÁLOGO INSTANTÁNEO ────────────────────────────────────────────────
+
     void _mostrarDialogoJurado({Map<String, dynamic>? jurado}) {
       final isEditing = jurado != null;
 
@@ -1097,7 +1097,7 @@ if (facultades != null && facultades.containsKey(facultad)) {
       );
     }
 
-    // ── Panel de selectores en cascada ──────────────────────────────────
+
     Widget _buildSelectores() {
       return Container(
         color: const Color(0xFF1E3A5F),

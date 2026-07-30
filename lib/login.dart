@@ -212,7 +212,7 @@ class _LoginScreenState extends State<LoginScreen> {
             studentId:   studentId,
           );
 
-          // ⬅️ DESHABILITADO (eliminación lógica): cuenta deshabilitada por el admin
+
           if (estadoSesion == 'deshabilitado') {
             await PrefsHelper.logout();
             if (mounted) {
@@ -598,7 +598,7 @@ class _LoginScreenState extends State<LoginScreen> {
         textoColor: const Color(0xFF78350F),
       );
 
-  // ⬅️ DESHABILITADO (eliminación lógica): diálogo para cuenta deshabilitada
+
   void _showCuentaDeshabilitadaDialog() => _showErrorDialog(
         icono:       Icons.no_accounts_rounded,
         iconColor:   Colors.red.shade700,

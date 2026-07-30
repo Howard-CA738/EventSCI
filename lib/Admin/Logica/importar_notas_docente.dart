@@ -22,17 +22,17 @@ class _C {
   static const txt2    = Color(0xFF475569);
   static const txt3    = Color(0xFF94A3B8);
 
-  // Nombres EXACTOS de las columnas esperadas en el Excel.
+
   static const colCodigo = 'Código Estudiante';
   static const colNota   = 'Nota Docente';
 }
 
-/// Una fila ya procesada del Excel, clasificada.
+
 class _FilaNota {
-  final String codigoCrudo;   // lo que venía en el Excel (para mostrar)
-  final String codigo;        // normalizado
-  final double? nota;         // null si inválida/vacía
-  final String? nombre;       // nombre del estudiante si cruzó
+  final String codigoCrudo;
+  final String codigo;
+  final double? nota;
+  final String? nombre;
   final _EstadoFila estado;
   const _FilaNota({
     required this.codigoCrudo,
@@ -58,26 +58,26 @@ class _ImportarNotasDocenteScreenState
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FilialesService _filialesService = FilialesService();
 
-  // ── Estructura filiales ──────────────────────────────────────
+
   Map<String, dynamic> _estructura = {};
   bool _cargandoEstructura = true;
 
-  // ── Selección en cascada ─────────────────────────────────────
-  String? _filialId;            // 'lima' | 'juliaca' | 'tarapoto'
-  String? _filialNombre;        // 'Campus Lima' ...
-  String? _facultad;            // nombre de la facultad
-  String? _carreraNombre;       // nombre de la carrera
-  String? _carreraId;           // id del doc de carrera
+
+  String? _filialId;
+  String? _filialNombre;
+  String? _facultad;
+  String? _carreraNombre;
+  String? _carreraId;
 
   List<String> _facultades = [];
   List<Map<String, dynamic>> _carreras = [];
 
-  // ── Eventos ──────────────────────────────────────────────────
+
   List<Map<String, dynamic>> _eventos = [];
   String? _eventoId;
   bool _cargandoEventos = false;
 
-  // ── Archivo procesado ────────────────────────────────────────
+
   String? _nombreArchivo;
   bool _procesando = false;
   List<_FilaNota> _filas = [];
@@ -113,9 +113,9 @@ class _ImportarNotasDocenteScreenState
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // CASCADA
-  // ─────────────────────────────────────────────────────────────
+
+
+
   void _onFilialChanged(String? filial) {
     setState(() {
       _filialId = filial;
@@ -180,14 +180,14 @@ class _ImportarNotasDocenteScreenState
     _huboProcesamiento = false;
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // EVENTOS
-  // ─────────────────────────────────────────────────────────────
+
+
+
   Future<void> _cargarEventos() async {
     setState(() => _cargandoEventos = true);
     try {
-      // Filtramos por filialId + facultad; la carrera se afina en cliente
-      // (carreraId O carreraNombre) para tolerar eventos antiguos.
+
+
       final snap = await _firestore
           .collection('events')
           .where('filialId', isEqualTo: _filialId)
@@ -214,9 +214,9 @@ class _ImportarNotasDocenteScreenState
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // PLANTILLA
-  // ─────────────────────────────────────────────────────────────
+
+
+
   Future<void> _descargarPlantilla() async {
     try {
       final excel = Excel.createExcel();
@@ -224,13 +224,13 @@ class _ImportarNotasDocenteScreenState
       excel.rename(hojaDefault, 'Notas');
       final sheet = excel['Notas'];
 
-      // Encabezados
+
       sheet.cell(CellIndex.indexByString('A1')).value =
           TextCellValue(_C.colCodigo);
       sheet.cell(CellIndex.indexByString('B1')).value =
           TextCellValue(_C.colNota);
 
-      // Fila de ejemplo (orientativa)
+
       sheet.cell(CellIndex.indexByString('A2')).value =
           TextCellValue('202612549');
       sheet.cell(CellIndex.indexByString('B2')).value = DoubleCellValue(16.5);
@@ -315,12 +315,12 @@ class _ImportarNotasDocenteScreenState
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // LECTURA Y PROCESAMIENTO DEL EXCEL
-  // ─────────────────────────────────────────────────────────────
 
-  /// Normaliza un valor de celda a String "limpio".
-  /// Quita el ".0" que el paquete excel suele añadir a códigos numéricos.
+
+
+
+
+
   String _celdaAString(CellValue? v) {
     if (v == null) return '';
     if (v is TextCellValue) {
@@ -331,19 +331,19 @@ class _ImportarNotasDocenteScreenState
     }
     if (v is DoubleCellValue) {
       final d = v.value;
-      // Si es entero (202612549.0) → "202612549"
+
       if (d == d.roundToDouble()) {
         return d.toInt().toString();
       }
       return d.toString().trim();
     }
-    // Cualquier otro tipo: a texto plano
+
     final s = v.toString().trim();
     if (s.endsWith('.0')) return s.substring(0, s.length - 2);
     return s;
   }
 
-  /// Intenta parsear la nota a double en escala 0–20.
+
   double? _parseNota(CellValue? v) {
     if (v == null) return null;
     if (v is IntCellValue) return v.value.toDouble();
@@ -399,7 +399,7 @@ class _ImportarNotasDocenteScreenState
       return;
     }
 
-    // Localizar columnas por nombre en la fila 0 (encabezados).
+
     final header = sheet.rows.first;
     int colCodigo = -1;
     int colNota = -1;
@@ -425,10 +425,10 @@ class _ImportarNotasDocenteScreenState
       return;
     }
 
-    // Cargar estudiantes reales de la carrera.
+
     final mapaEstudiantes = await _cargarEstudiantes();
 
-    // Nota heredada para celdas combinadas (merged cells).
+
     double? _ultimaNota;
 
     final List<_FilaNota> filas = [];
@@ -440,21 +440,21 @@ class _ImportarNotasDocenteScreenState
           ? _celdaAString(row[colCodigo]?.value)
           : '';
 
-      // Limpiar caracteres invisibles del código.
+
       final codigo = codigoCrudo
           .trim()
           .replaceAll('\t', '')
-          .replaceAll('\u00A0', ''); // espacio no separable
+          .replaceAll('\u00A0', '');
 
-      // Propagar nota de celdas combinadas: si la celda actual es null
-      // se hereda la última nota válida leída.
+
+
       final notaRaw = colNota < row.length
           ? _parseNota(row[colNota]?.value)
           : null;
       if (notaRaw != null) _ultimaNota = notaRaw;
       final notaVal = notaRaw ?? _ultimaNota;
 
-      // Fila completamente vacía → ignorar.
+
       if (codigo.isEmpty && notaVal == null) continue;
 
       if (codigo.isEmpty) {
@@ -515,8 +515,8 @@ class _ImportarNotasDocenteScreenState
   }
 }
 
-  /// Carga los estudiantes de la carrera y devuelve { codigoUniversitario: name }.
-  /// Prueba varias rutas candidatas (como hace la evaluación final).
+
+
   Future<Map<String, String>> _cargarEstudiantes() async {
     final candidatos = <String>[
       '${_filialNombre}_$_carreraNombre',
@@ -539,22 +539,22 @@ class _ImportarNotasDocenteScreenState
           final nom = (data['name'] ?? '').toString().trim();
           if (cod.isNotEmpty) mapa[cod] = nom.isEmpty ? cod : nom;
         }
-        break; // encontramos la ruta correcta
+        break;
       }
     }
     return mapa;
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // GUARDAR
-  // ─────────────────────────────────────────────────────────────
+
+
+
   Future<void> _guardar() async {
     final validas = _validas;
     if (_eventoId == null || validas.isEmpty) return;
 
     setState(() => _guardando = true);
     try {
-      // Batches de máximo 450 operaciones (límite Firestore = 500).
+
       const tope = 450;
       for (int i = 0; i < validas.length; i += tope) {
         final batch = _firestore.batch();
@@ -576,7 +576,7 @@ class _ImportarNotasDocenteScreenState
         await batch.commit();
       }
 
-      // Marca de última importación en el evento (estilo lastImportAt).
+
       await _firestore.collection('events').doc(_eventoId).set({
         'lastImportNotasDocenteAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
@@ -593,9 +593,9 @@ class _ImportarNotasDocenteScreenState
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // HELPERS
-  // ─────────────────────────────────────────────────────────────
+
+
+
   String _sinTildes(String s) => s
       .replaceAll('á', 'a')
       .replaceAll('é', 'e')
@@ -615,9 +615,9 @@ class _ImportarNotasDocenteScreenState
     ));
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // BUILD
-  // ─────────────────────────────────────────────────────────────
+
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -907,7 +907,7 @@ class _ImportarNotasDocenteScreenState
     );
   }
 
-  // ── Widgets reutilizables ──────────────────────────────────────
+
   Widget _cardWrap({
     required IconData icon,
     required Color color,

@@ -24,14 +24,14 @@ class _C {
   static const txt3    = Color(0xFF94A3B8);
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// MODELOS
-// ═══════════════════════════════════════════════════════════════════
+
+
+
 class _Config {
   double pctAsistNoSel;
   double pctDocenteNoSel;
   bool   incluirDocenteNoSel;
-  String modalidad; // 'jurado' | 'mixta'
+  String modalidad;
   double pctAsistSel;
   double pctJuradoSel;
   double pctAsistSelMixta;
@@ -115,9 +115,9 @@ class _IntegranteRef {
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// PANTALLA PRINCIPAL (SUPER ADMIN)
-// ═══════════════════════════════════════════════════════════════════
+
+
+
 class EvaluacionFinalSuperAdminScreen extends StatefulWidget {
   const EvaluacionFinalSuperAdminScreen({super.key});
 
@@ -132,42 +132,42 @@ class _EvaluacionFinalSuperAdminScreenState
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FilialesService _filialesService = FilialesService();
 
-  // ── Estructura de filiales ─────────────────────────────────────
+
   Map<String, dynamic> _estructura = {};
   bool _isLoadingEstructura = true;
 
-  // ── Selección (super admin) ────────────────────────────────────
-  String? _filialId;        // key
-  String? _filialNombre;    // display
-  String? _facultad;        // nombre
-  String? _carreraId;       // id
-  String? _carreraNombre;   // nombre
+
+  String? _filialId;
+  String? _filialNombre;
+  String? _facultad;
+  String? _carreraId;
+  String? _carreraNombre;
 
   List<String> _facultadesDisp = [];
   List<Map<String, dynamic>> _carrerasDisp = [];
 
-  // ── Eventos ────────────────────────────────────────────────────
+
   List<Map<String, dynamic>> _eventos = [];
   String? _eventoId;
   String? _eventoNombre;
   bool _isLoadingEventos = false;
 
-  // ── Config ─────────────────────────────────────────────────────
+
   _Config _config = _Config();
   bool _configCargada = false;
 
-  // ── Resultados ─────────────────────────────────────────────────
+
   List<_NotaFinal> _notas = [];
   bool _isCalculando = false;
   bool _calculoDone  = false;
 
-  // ── Búsqueda y orden ───────────────────────────────────────────
+
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQ = '';
   bool   _ordenDesc = true;
   String _filtro = 'todos';
 
-  // ── Animación ──────────────────────────────────────────────────
+
   late AnimationController _animCtrl;
   late Animation<double>   _fadeAnim;
 
@@ -199,9 +199,9 @@ class _EvaluacionFinalSuperAdminScreenState
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // ESTRUCTURA DE FILIALES
-  // ─────────────────────────────────────────────────────────────
+
+
+
   Future<void> _loadEstructura() async {
     setState(() => _isLoadingEstructura = true);
     try {
@@ -214,7 +214,7 @@ class _EvaluacionFinalSuperAdminScreenState
     }
   }
 
-  // ── Cascada de selección ───────────────────────────────────────
+
   void _resetResultados() {
     _eventos      = [];
     _eventoId     = null;
@@ -290,9 +290,9 @@ class _EvaluacionFinalSuperAdminScreenState
       _carreraNombre != null &&
       _carreraId != null;
 
-  // ─────────────────────────────────────────────────────────────
-  // EVENTOS
-  // ─────────────────────────────────────────────────────────────
+
+
+
   Future<void> _cargarEventos() async {
     setState(() => _isLoadingEventos = true);
     try {
@@ -317,9 +317,9 @@ class _EvaluacionFinalSuperAdminScreenState
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // CARGAR / GUARDAR CONFIG
-  // ─────────────────────────────────────────────────────────────
+
+
+
   Future<void> _cargarConfig(String eventoId) async {
     try {
       final doc = await _firestore
@@ -375,9 +375,9 @@ class _EvaluacionFinalSuperAdminScreenState
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // CÁLCULO DE NOTAS
-  // ─────────────────────────────────────────────────────────────
+
+
+
   Future<void> _calcularNotas() async {
     final eventoId = _eventoId;
     if (eventoId == null || !_seleccionCompleta) return;
@@ -388,7 +388,7 @@ class _EvaluacionFinalSuperAdminScreenState
     });
 
     try {
-      // ── 1. Estudiantes de la carrera ────────────────────────
+
       final candidatos = [
         '${_filialNombre}_$_carreraNombre',
         '${_filialNombre}_$_carreraId',
@@ -415,7 +415,7 @@ class _EvaluacionFinalSuperAdminScreenState
         return;
       }
 
-      // ── 2. Proyectos del evento ─────────────────────────────
+
       final List<_IntegranteRef> integrantesProyecto = [];
 
       final proyectosSnap = await _firestore
@@ -449,7 +449,7 @@ class _EvaluacionFinalSuperAdminScreenState
         }
       }
 
-      // ── 3. Notas de jurados por proyecto ───────────────────
+
       final Map<String, double> promedioJuradoPorProyecto = {};
       final proyectoIdsUnicos =
           integrantesProyecto.map((e) => e.proyectoDocId).toSet();
@@ -482,7 +482,7 @@ class _EvaluacionFinalSuperAdminScreenState
       );
       promedioJuradoPorProyecto.addEntries(juradoEntries);
 
-      // ── 4. Meta de sellos ───────────────────────────────────
+
       int metaSellos = 0;
       try {
         final configSellos = await _firestore
@@ -496,7 +496,7 @@ class _EvaluacionFinalSuperAdminScreenState
         }
       } catch (_) {}
 
-      // ── 4a. Notas docente ──────────────────────────────────
+
       final Map<String, double> notaDocentePorCodigo = {};
       try {
         final docentesSnap = await _firestore
@@ -510,7 +510,7 @@ class _EvaluacionFinalSuperAdminScreenState
         }
       } catch (_) {}
 
-      // ── 4b. Sellos personales ──────────────────────────────
+
       final Map<String, int> sellosPersonalesPorStudent = {};
       if (metaSellos > 0) {
         try {
@@ -539,13 +539,13 @@ class _EvaluacionFinalSuperAdminScreenState
         } catch (_) {}
       }
 
-      // ── 5. Cálculo por estudiante ──────────────────────────
+
       final List<Future<_NotaFinal>> futuros =
           estudianteDocs.map((sDoc) async {
         final sData = sDoc.data();
         final codigoUniv = sData['codigoUniversitario']?.toString() ?? '';
 
-        // N1: asistencias
+
         double notaAsist = 0;
         if (metaSellos > 0) {
           try {
@@ -566,7 +566,7 @@ class _EvaluacionFinalSuperAdminScreenState
           } catch (_) {}
         }
 
-        // ¿Expone?
+
         final codAlumno = codigoUniv.trim();
         String proyectoDocId  = '';
         String proyectoCodigo = '';
@@ -641,9 +641,9 @@ class _EvaluacionFinalSuperAdminScreenState
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // HELPERS
-  // ─────────────────────────────────────────────────────────────
+
+
+
   List<_NotaFinal> get _notasFiltradas {
     final lista = _notas.where((n) {
       if (_filtro == 'seleccionados')    return n.seleccionado;
@@ -683,9 +683,9 @@ class _EvaluacionFinalSuperAdminScreenState
     ));
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // BUILD
-  // ─────────────────────────────────────────────────────────────
+
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -809,7 +809,7 @@ class _EvaluacionFinalSuperAdminScreenState
     );
   }
 
-  // ── Selector filial / facultad / carrera ───────────────────────
+
   Widget _buildSelectorDestino() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -932,7 +932,7 @@ class _EvaluacionFinalSuperAdminScreenState
     );
   }
 
-  // ── Selector de evento ─────────────────────────────────────────
+
   Widget _buildSelectorEvento() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1076,7 +1076,7 @@ class _EvaluacionFinalSuperAdminScreenState
     );
   }
 
-  // ── Estados ────────────────────────────────────────────────────
+
   Widget _buildEstadoSinSeleccion() {
     return Center(
       child: Padding(
@@ -1168,7 +1168,7 @@ class _EvaluacionFinalSuperAdminScreenState
     );
   }
 
-  // ── Resultados ─────────────────────────────────────────────────
+
   Widget _buildResultados() {
     final filtradas = _notasFiltradas;
 
@@ -1452,7 +1452,7 @@ class _EvaluacionFinalSuperAdminScreenState
     );
   }
 
-  // ── Card de estudiante ─────────────────────────────────────────
+
   Widget _buildStudentCard(_NotaFinal n, int index) {
     final color = _colorNota(n.notaFinal);
 
@@ -1732,9 +1732,9 @@ class _EvaluacionFinalSuperAdminScreenState
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // DIÁLOGO DE CONFIGURACIÓN
-  // ═══════════════════════════════════════════════════════════════
+
+
+
   void _abrirConfig() {
     showModalBottomSheet(
       context: context,
@@ -1752,9 +1752,9 @@ class _EvaluacionFinalSuperAdminScreenState
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// BOTTOM SHEET DE CONFIGURACIÓN
-// ═══════════════════════════════════════════════════════════════════
+
+
+
 class _ConfigBottomSheet extends StatefulWidget {
   final _Config config;
   final Future<void> Function(_Config) onGuardar;

@@ -2,9 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:encrypt/encrypt.dart' as enc;
 
 class EncryptionHelper {
-  // 32 caracteres exactos, sin caracteres especiales
+
   static const String _aesKey = 'EvSc2024SecureKeyUPEUDNI32CharsX';
-  static const String _aesIV  = 'InitVector161616'; // 16 caracteres exactos
+  static const String _aesIV  = 'InitVector161616';
 
   static final _key = enc.Key.fromUtf8(_aesKey);
   static final _iv  = enc.IV.fromUtf8(_aesIV);

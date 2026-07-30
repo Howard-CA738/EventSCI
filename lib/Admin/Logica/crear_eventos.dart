@@ -5,7 +5,7 @@
     final FirebaseFirestore _firestore = FirebaseFirestore.instance;
     final FilialesService _filialesService = FilialesService();
 
-    // ✅ Obtener filiales disponibles
+
     Future<List<Map<String, String>>> getFiliales() async {
       final filiales = await _filialesService.getFiliales();
       return filiales.map((id) {
@@ -17,12 +17,12 @@
       }).toList();
     }
 
-    // ✅ Obtener facultades por filial
+
     Future<List<String>> getFacultadesByFilial(String filialId) async {
       return await _filialesService.getFacultadesByFilial(filialId);
     }
 
-    // ✅ Obtener carreras por facultad
+
     Future<List<Map<String, dynamic>>> getCarrerasByFacultad(
       String filialId,
       String facultadNombre,
@@ -33,19 +33,19 @@
       );
     }
 
-    // ✅ Verificar si requiere facultad
+
     bool requiereFacultad(String? filialId) {
-      // Siempre requiere facultad
+
       return filialId != null;
     }
 
-    // ✅ Verificar si requiere carrera
+
     bool requiereCarrera(String? facultadNombre) {
-      // Siempre requiere carrera si hay facultad
+
       return facultadNombre != null;
     }
 
-    // Crear nuevo evento
+
     Future<void> createEvent({
       required String name,
       required String filialId,
@@ -76,7 +76,7 @@
       await _firestore.collection('events').add(eventData);
     }
 
-    // Editar evento
+
     Future<void> updateEvent({
       required String eventId,
       required String name,
@@ -108,12 +108,12 @@
       await _firestore.collection('events').doc(eventId).update(updateData);
     }
 
-    // Eliminar evento
+
     Future<void> deleteEvent(String eventId) async {
       await _firestore.collection('events').doc(eventId).delete();
     }
 
-    // Obtener stream de eventos
+
     Stream<QuerySnapshot> getEventsStream() {
       return _firestore
           .collection('events')
@@ -121,12 +121,12 @@
           .snapshots();
     }
 
-    // Obtener conteo de eventos
+
     Stream<QuerySnapshot> getEventsCountStream() {
       return _firestore.collection('events').snapshots();
     }
 
-    // Validar nombre del evento
+
     String? validateEventName(String name) {
       if (name.trim().isEmpty) {
         return 'Por favor ingresa el nombre del evento';
@@ -134,7 +134,7 @@
       return null;
     }
 
-    // Validar filial
+
     String? validateFilial(String? filialId) {
       if (filialId == null) {
         return 'Por favor selecciona una filial';
@@ -142,7 +142,7 @@
       return null;
     }
 
-    // Validar facultad
+
     String? validateFacultad(String? facultad) {
       if (facultad == null) {
         return 'Por favor selecciona una facultad';
@@ -150,7 +150,7 @@
       return null;
     }
 
-    // Validar carrera
+
     String? validateCarrera(String? carreraId) {
       if (carreraId == null) {
         return 'Por favor selecciona una carrera';
@@ -158,7 +158,7 @@
       return null;
     }
 
-    // Validar período
+
     String? validatePeriodo(String? periodoId) {
       if (periodoId == null) {
         return 'Por favor selecciona un período';
@@ -166,12 +166,12 @@
       return null;
     }
 
-    // Formatear fecha
+
     String formatDate(DateTime date) {
       return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
     }
 
-    // Filtrar eventos por filial
+
     List<QueryDocumentSnapshot> filterByFilial(
       List<QueryDocumentSnapshot> events,
       String? filtroFilial,
@@ -183,7 +183,7 @@
       }).toList();
     }
 
-    // Filtrar eventos por facultad
+
     List<QueryDocumentSnapshot> filterByFacultad(
       List<QueryDocumentSnapshot> events,
       String? filtroFacultad,
@@ -195,7 +195,7 @@
       }).toList();
     }
 
-    // Filtrar eventos por carrera
+
     List<QueryDocumentSnapshot> filterByCarrera(
       List<QueryDocumentSnapshot> events,
       String? filtroCarreraId,
@@ -207,7 +207,7 @@
       }).toList();
     }
 
-    // Filtrar eventos por período
+
     List<QueryDocumentSnapshot> filterByPeriodo(
       List<QueryDocumentSnapshot> events,
       String? filtroPeriodo,

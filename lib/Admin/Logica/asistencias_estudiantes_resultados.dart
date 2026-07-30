@@ -61,17 +61,17 @@ class _AsistenciasEstudiantesResultadosScreenState
     setState(() => _isLoading = true);
 
     try {
-      // 1. Proyectos (resumen por estudiante: doc.id == studentId)
+
       final asistenciasSnapshot = await _firestore
           .collection('events').doc(widget.eventoId)
           .collection('asistencias').get();
 
-      // 2. Cabeceras de asistencias personales
+
       final asistPersonalesSnap = await _firestore
           .collection('events').doc(widget.eventoId)
           .collection('asistencias_personales').get();
 
-      // 3. Registros personales en paralelo
+
       final registrosSnaps = await Future.wait(
         asistPersonalesSnap.docs.map((a) => _firestore
             .collection('events').doc(widget.eventoId)
@@ -79,11 +79,11 @@ class _AsistenciasEstudiantesResultadosScreenState
             .collection('registros').get()),
       );
 
-      // 4. Reunir estudiantes desde AMBAS fuentes
+
       final Map<String, Map<String, dynamic>> base = {};
       final Map<String, List<Map<String, dynamic>>> personalesPorStudent = {};
 
-      // 4a. desde proyectos
+
       for (final doc in asistenciasSnapshot.docs) {
         final d = doc.data();
         base[doc.id] = {
@@ -100,7 +100,7 @@ class _AsistenciasEstudiantesResultadosScreenState
         };
       }
 
-      // 4b. desde personales (crea al estudiante si no vino de proyectos)
+
       for (int i = 0; i < asistPersonalesSnap.docs.length; i++) {
         final ad = asistPersonalesSnap.docs[i].data();
         for (final regDoc in registrosSnaps[i].docs) {
@@ -144,11 +144,11 @@ class _AsistenciasEstudiantesResultadosScreenState
         return;
       }
 
-      // 5. Procesar cada estudiante
+
       final futures = base.values.map((est) async {
         final studentId = est['id'] as String;
 
-        // scans de proyectos
+
         final List<Map<String, dynamic>> scans = [];
         try {
           final scansSnap = await _firestore
@@ -184,7 +184,7 @@ class _AsistenciasEstudiantesResultadosScreenState
           return tB.compareTo(tA);
         });
 
-        // lastScan = el más reciente de AMBOS tipos
+
         Timestamp? lastScan = est['lastScan'] as Timestamp?;
         for (final l in [...scans, ...personales]) {
           final ts = l['timestamp'] as Timestamp?;
@@ -193,7 +193,7 @@ class _AsistenciasEstudiantesResultadosScreenState
           }
         }
 
-        // ciclo/grupo si faltan (igual que antes)
+
         String? ciclo = est['ciclo']?.toString();
         String? grupo = est['grupo']?.toString();
         if (ciclo == null || grupo == null) {
@@ -430,7 +430,7 @@ Widget _fechaHoraTrailing(DateTime dt) {
                 ),
                 Divider(height: 1, color: Colors.grey.shade200),
 
-                // Info del estudiante
+
                 Container(
                   margin: const EdgeInsets.all(20),
                   padding: const EdgeInsets.all(16),
@@ -461,7 +461,7 @@ Widget _fechaHoraTrailing(DateTime dt) {
                   ),
                 ),
 
-                // Resumen de sellos
+
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(
@@ -481,7 +481,7 @@ Widget _fechaHoraTrailing(DateTime dt) {
                   ),
                 ),
 
-                // Leyenda si hay ambos tipos
+
                 if (scans.isNotEmpty && personales.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
@@ -509,7 +509,7 @@ Widget _fechaHoraTrailing(DateTime dt) {
                     controller: scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     children: [
-                      // Scans de proyectos
+
                       if (scans.isNotEmpty) ...[
                         if (personales.isNotEmpty)
                           Padding(
@@ -527,7 +527,7 @@ Widget _fechaHoraTrailing(DateTime dt) {
                             _buildScanCard(scan, esPersonal: false)),
                       ],
 
-                      // Asistencias personales
+
                       if (personales.isNotEmpty) ...[
                         if (scans.isNotEmpty)
                           Padding(
@@ -612,7 +612,7 @@ Widget _fechaHoraTrailing(DateTime dt) {
                 ],
               ),
             ),
-            if (timestamp != null) _fechaHoraTrailing(timestamp),      
+            if (timestamp != null) _fechaHoraTrailing(timestamp),
           ],
         ),
       );
@@ -792,7 +792,7 @@ Widget _fechaHoraTrailing(DateTime dt) {
                       padding: const EdgeInsets.all(20),
                       child: Column(
                         children: [
-                          // Resumen
+
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
@@ -850,7 +850,7 @@ Widget _fechaHoraTrailing(DateTime dt) {
 
                           const SizedBox(height: 16),
 
-                          // Buscador
+
                           TextField(
                             onChanged: (value) {
                               setState(() {
@@ -878,7 +878,7 @@ Widget _fechaHoraTrailing(DateTime dt) {
 
                           const SizedBox(height: 12),
 
-                          // Ordenamiento
+
                           Row(
                             children: [
                               const Icon(Icons.sort,
@@ -913,7 +913,7 @@ Widget _fechaHoraTrailing(DateTime dt) {
                       ),
                     ),
 
-                    // Lista
+
                     Expanded(
                       child: _isLoading
                           ? const Center(
@@ -1091,7 +1091,7 @@ Widget _fechaHoraTrailing(DateTime dt) {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                      // Mini leyenda de tipos
+
                       if (totalProyectos > 0 || totalPersonales > 0) ...[
                         const SizedBox(height: 4),
                         Wrap(

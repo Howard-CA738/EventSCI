@@ -53,7 +53,7 @@ class _ReporteUsuariosScreenState extends State<ReporteUsuariosScreen> {
     );
   }
 
-  // ── Exportar todo el reporte ───────────────────────────────────────────
+
   Future<void> _exportarTodo() async {
     setState(() {
       _isExporting = true;
@@ -82,7 +82,7 @@ class _ReporteUsuariosScreenState extends State<ReporteUsuariosScreen> {
     }
   }
 
-  // ── Exportar Reporte Final ──────────────────────────────────────────────
+
   Future<void> _exportarReporteFinal() async {
     setState(() {
       _isExporting = true;
@@ -112,7 +112,7 @@ class _ReporteUsuariosScreenState extends State<ReporteUsuariosScreen> {
     }
   }
 
-  // ── Reporte de Certificados (interactivo) ───────────────────────────────
+
   Future<void> _abrirReporteCertificados() async {
     setState(() {
       _isExporting = true;
@@ -148,7 +148,7 @@ class _ReporteUsuariosScreenState extends State<ReporteUsuariosScreen> {
     );
   }
 
-  // ── Exportar una sola carrera ──────────────────────────────────────────
+
   Future<void> _exportarCarrera(
     CarreraResumen c,
     String filialNombre,
@@ -524,7 +524,7 @@ class _ReporteUsuariosScreenState extends State<ReporteUsuariosScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          // Barra: asistieron vs inscritos
+
           Row(
             children: [
               Expanded(
@@ -670,14 +670,14 @@ class _ReporteUsuariosScreenState extends State<ReporteUsuariosScreen> {
   }
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// Modo de listado dentro del reporte de certificados.
-// ───────────────────────────────────────────────────────────────────────────
+
+
+
 enum _ModoRep { matriculados, inscritos, porSellos }
 
-// ───────────────────────────────────────────────────────────────────────────
-// BOTTOM SHEET: Reporte de Certificados (filial→facultad→escuela→evento→sellos)
-// ───────────────────────────────────────────────────────────────────────────
+
+
+
 class _CertificadosSheet extends StatefulWidget {
   final List<EscuelaItem> estructura;
   final ReporteCertificadosService service;
@@ -713,7 +713,7 @@ class _CertificadosSheetState extends State<_CertificadosSheet> {
 
   _ModoRep _modo = _ModoRep.porSellos;
 
-  // Derivados de la estructura
+
   List<String> get _filiales =>
       widget.estructura.map((e) => e.filialNombre).toSet().toList()..sort();
 
@@ -783,7 +783,7 @@ class _CertificadosSheetState extends State<_CertificadosSheet> {
     }
   }
 
-  // Carga las filas según el modo actual
+
   Future<List<CertificadoRow>> _cargarFilas(String eventoId) async {
     if (_modo == _ModoRep.matriculados) {
       return widget.service.getMatriculadosConSellos(
@@ -791,14 +791,14 @@ class _CertificadosSheetState extends State<_CertificadosSheet> {
         eventoId: eventoId,
       );
     }
-    // inscritos y porSellos usan la misma fuente (inscritos)
+
     return widget.service.getInscritosConSellos(
       escuela: _escuela!,
       eventoId: eventoId,
     );
   }
 
-  // Cambiar de modo recarga las filas del evento ya seleccionado
+
   Future<void> _cambiarModo(_ModoRep modo) async {
     if (_modo == modo) return;
     setState(() => _modo = modo);
@@ -818,14 +818,14 @@ class _CertificadosSheetState extends State<_CertificadosSheet> {
   Future<void> _generar() async {
     setState(() => _generando = true);
     try {
-      // Trae ponentes, jurados y organizadores (asistentes ya están en _filas)
+
       final roles = await widget.service.getReporteRoles(
         escuela: _escuela!,
         eventoId: _evento!.id,
         asistentes: _filas,
       );
 
-      // En matriculados/inscritos no se filtra por mínimo (pasa 0)
+
       final minEfectivo = _modo == _ModoRep.porSellos ? _minimo : 0;
 
       final path = await widget.excel.generarReporte(
@@ -899,7 +899,7 @@ class _CertificadosSheetState extends State<_CertificadosSheet> {
                 controller: scroll,
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
                 children: [
-                  // 1) Filial
+
                   _dropdown<String>(
                     label: 'Filial',
                     icon: Icons.location_city,
@@ -916,7 +916,7 @@ class _CertificadosSheetState extends State<_CertificadosSheet> {
                     }),
                   ),
                   const SizedBox(height: 10),
-                  // 2) Facultad
+
                   _dropdown<String>(
                     label: 'Facultad',
                     icon: Icons.business,
@@ -932,7 +932,7 @@ class _CertificadosSheetState extends State<_CertificadosSheet> {
                     }),
                   ),
                   const SizedBox(height: 10),
-                  // 3) Escuela
+
                   _dropdown<EscuelaItem>(
                     label: 'Escuela profesional',
                     icon: Icons.school,
@@ -944,7 +944,7 @@ class _CertificadosSheetState extends State<_CertificadosSheet> {
                     },
                   ),
                   const SizedBox(height: 10),
-                  // 4) Evento
+
                   if (_cargandoEventos)
                     const Padding(
                       padding: EdgeInsets.all(12),
@@ -964,7 +964,7 @@ class _CertificadosSheetState extends State<_CertificadosSheet> {
                     ),
                   const SizedBox(height: 16),
 
-                  // 5) Filtro de sellos + resultados
+
                   if (_cargandoConfig)
                     const Padding(
                       padding: EdgeInsets.all(20),
@@ -1037,7 +1037,7 @@ class _CertificadosSheetState extends State<_CertificadosSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Chips de modo
+
           Row(
             children: [
               _chipModo('Matriculados', _ModoRep.matriculados),
@@ -1069,7 +1069,7 @@ class _CertificadosSheetState extends State<_CertificadosSheet> {
               ),
             ],
           ),
-          // Slider solo en modo Por sellos
+
           if (_modo == _ModoRep.porSellos) ...[
             const SizedBox(height: 14),
             if (_meta <= 0)

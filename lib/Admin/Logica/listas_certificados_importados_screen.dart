@@ -18,10 +18,10 @@ const _kAmbar          = Color(0xFFF59E0B);
 const _kAzulInfo       = Color(0xFF2563EB);
 const _kJurado         = Color(0xFF0F6E56);
 
-// Roles disponibles para el filtro de la pantalla principal de listas.
+
 const List<String> _kRolesFiltro = ['TODOS', 'ASISTENTE', 'PONENTE', 'ORGANIZADOR', 'JURADO'];
 
-// ─── Firmante (mismo esquema que config_firmas) ─────────────────────────────
+
 class _Firmante {
   final String nombre;
   final String cargo;
@@ -46,7 +46,7 @@ String _generarFacultadId(String texto) => texto
     .replaceAll(RegExp(r'_+'), '_')
     .replaceAll(RegExp(r'^_|_$'), '');
 
-// 👇 AQUÍ agregas esto
+
 const List<String> _kTitulosAcademicos = [
   'dr','Dr','Mg','Psic', 'dra', 'ing', 'mg', 'mag', 'mtra', 'mtro', 'lic', 'abg',
   'msc', 'phd', 'prof', 'bach', 'econ', 'arq', 'cpc', 'psic',
@@ -121,14 +121,14 @@ class _ListasCertificadosImportadosScreenState
   bool _isLoading = true;
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _listas = [];
 
-  // ── Búsqueda por carrera ────────────────────────────────────────────
+
   final TextEditingController _busquedaCtrl = TextEditingController();
   String _busqueda = '';
 
-  // ── Filtro por rol ───────────────────────────────────────────────────
+
   String _filtroRol = 'TODOS';
 
-  // Lista filtrada por rol y por el texto de búsqueda (carrera).
+
   List<QueryDocumentSnapshot<Map<String, dynamic>>> get _listasFiltradas {
     final q = _busqueda.trim().toLowerCase();
     return _listas.where((doc) {
@@ -178,13 +178,13 @@ class _ListasCertificadosImportadosScreenState
     ));
   }
 
-  // ── Migración: agregar prefijo "S" a todos los códigos existentes ──
-  // Actualiza tanto el documento certificados/{certId} de cada estudiante
-  // (lo que realmente se imprime) como el array `estudiantes` dentro de
-  // cada lista (lo que se muestra en esta pantalla). Es idempotente: si
-  // el código ya empieza con "S" no se toca, así que se puede ejecutar
-  // más de una vez (incluso después de agregar listas nuevas) sin
-  // duplicar la letra.
+
+
+
+
+
+
+
   Future<void> _migrarPrefijoS() async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -237,8 +237,8 @@ class _ListasCertificadosImportadosScreenState
 
     try {
       final db = FirebaseFirestore.instance;
-      // Sin límite: trae TODAS las listas, no solo las 100 que se muestran
-      // en pantalla.
+
+
       final snap = await db.collection('listas_certificados').get();
 
       for (final doc in snap.docs) {
@@ -256,7 +256,7 @@ class _ListasCertificadosImportadosScreenState
           for (final e in estudiantes) {
             final codigoActual = (e['codigoCertificado'] ?? '').toString();
             if (codigoActual.isEmpty || codigoActual.toUpperCase().startsWith('S')) {
-              continue; // vacío o ya migrado
+              continue;
             }
             final nuevoCodigo = 'S$codigoActual';
             e['codigoCertificado'] = nuevoCodigo;
@@ -266,9 +266,9 @@ class _ListasCertificadosImportadosScreenState
             final estudianteId = e['estudianteId'] as String?;
             final certId       = e['certId'] as String?;
             if (estudianteId != null && certId != null) {
-              // Los jurados guardan su certificado directo en
-              // users/{juradoId}/certificados/{certId} (sin subcolección
-              // "students"), a diferencia de los demás roles.
+
+
+
               final ref = esJuradoLista
                   ? db.collection('users').doc(estudianteId)
                       .collection('certificados').doc(certId)
@@ -294,7 +294,7 @@ class _ListasCertificadosImportadosScreenState
       debugPrint('Error general en migración de prefijo S: $e');
     }
 
-    if (mounted) Navigator.pop(context); // cerrar el diálogo de carga
+    if (mounted) Navigator.pop(context);
     await _cargar();
 
     if (mounted) {
@@ -307,18 +307,18 @@ class _ListasCertificadosImportadosScreenState
     }
   }
 
-  // ── Generar listas de JURADO automáticamente por evento ────────────
-  // Recorre TODOS los jurados (users/{id} con userType == 'jurado'), los
-  // agrupa por filial + facultad + carrera + evento (usando los campos
-  // filial/facultad/carreraId/eventoId que ya trae cada jurado desde
-  // "Gestión de Jurados"), y por cada grupo:
-  //   - Si ya existe una lista JURADO para ese evento/carrera, agrega
-  //     solo los jurados nuevos que falten (no toca códigos ya
-  //     asignados ni ediciones previas: upsert).
-  //   - Si no existe, crea la lista desde cero.
-  // Un jurado que participa en varios eventos tiene un documento de
-  // "users" por cada evento (con su propio eventoId), así que cada uno
-  // cae naturalmente en el grupo/lista que le corresponde.
+
+
+
+
+
+
+
+
+
+
+
+
   Future<void> _generarListasJurados() async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -367,7 +367,7 @@ class _ListasCertificadosImportadosScreenState
     int listasCreadas = 0;
     int listasActualizadas = 0;
     int juradosAgregados = 0;
-    int juradosOmitidos = 0; // sin evento/carrera asignados
+    int juradosOmitidos = 0;
     int errores = 0;
 
     try {
@@ -377,7 +377,7 @@ class _ListasCertificadosImportadosScreenState
           .where('userType', isEqualTo: 'jurado')
           .get();
 
-      // Agrupar por filial + facultad + carrera + evento.
+
       final grupos = <String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>{};
       for (final doc in juradosSnap.docs) {
         final d = doc.data();
@@ -387,7 +387,7 @@ class _ListasCertificadosImportadosScreenState
         final eventoId  = (d['eventoId']  ?? '').toString();
         if (filialId.isEmpty || carreraId.isEmpty || eventoId.isEmpty) {
           juradosOmitidos++;
-          continue; // jurado sin evento asignado: no se puede agrupar
+          continue;
         }
         final key = '$filialId|$facultad|$carreraId|$eventoId';
         grupos.putIfAbsent(key, () => []).add(doc);
@@ -469,7 +469,7 @@ class _ListasCertificadosImportadosScreenState
       debugPrint('Error general generando listas de jurados: $e');
     }
 
-    if (mounted) Navigator.pop(context); // cerrar el diálogo de carga
+    if (mounted) Navigator.pop(context);
     await _cargar();
 
     if (mounted) {
@@ -527,7 +527,7 @@ class _ListasCertificadosImportadosScreenState
     );
   }
 
-  // ── Barra de búsqueda por carrera ───────────────────────────────────
+
   Widget _buildBuscador() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -558,7 +558,7 @@ class _ListasCertificadosImportadosScreenState
     );
   }
 
-  // ── Chips de filtro por rol ─────────────────────────────────────────
+
   Widget _buildFiltroRol() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -671,9 +671,9 @@ class _ListasCertificadosImportadosScreenState
     final fecha = (d['fecha'] as Timestamp?)?.toDate();
     final total = d['totalEstudiantes'] ?? (d['estudiantes'] as List?)?.length ?? 0;
     final estudiantes = List<Map<String, dynamic>>.from(d['estudiantes'] ?? []);
-    // Los certificados manuales (personas fuera del sistema) nunca se
-    // "envían" -no tienen estudianteId/certId reales-, así que no cuentan
-    // como pendientes de envío en esta tarjeta.
+
+
+
     final pendientes = estudiantes
         .where((e) => e['generadoCompleto'] != true && e['esManual'] != true)
         .length;
@@ -758,13 +758,13 @@ class _ListasCertificadosImportadosScreenState
     ));
   }
 
-  // ── Eliminar lista completa ────────────────────────────────────────
-  // Borra también, para cada estudiante/jurado de la lista, el documento
-  // de certificado que se le había asignado. Para roles normales está en
-  // users/{docKey}/students/{id}/certificados/{certId}; para JURADO está
-  // en users/{juradoId}/certificados/{certId} (sin subcolección
-  // "students"). Así el código de certificado queda libre y se puede
-  // volver a asignar en una nueva lista sin conflicto.
+
+
+
+
+
+
+
   Future<void> _eliminarLista(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
     final d = doc.data();
     final esJuradoLista = (d['rol'] ?? '') == 'JURADO';
@@ -803,7 +803,7 @@ class _ListasCertificadosImportadosScreenState
       final docKey = '${d['filialNombre']}_${d['carrera']}';
       final db = FirebaseFirestore.instance;
 
-      // Borrado en paralelo del certificado asignado a cada estudiante/jurado.
+
       final borrados = <Future<void>>[];
       for (final e in estudiantes) {
         final estudianteId = e['estudianteId'] as String?;
@@ -821,7 +821,7 @@ class _ListasCertificadosImportadosScreenState
       }
       await Future.wait(borrados);
 
-      // Borrar el documento de la lista.
+
       await doc.reference.delete();
 
       await _cargar();
@@ -832,9 +832,9 @@ class _ListasCertificadosImportadosScreenState
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// DETALLE DE LA LISTA
-// ═══════════════════════════════════════════════════════════════════════════
+
+
+
 class _DetalleListaScreen extends StatefulWidget {
   final QueryDocumentSnapshot<Map<String, dynamic>> doc;
   final Future<void> Function() onEnviado;
@@ -852,43 +852,43 @@ class _DetalleListaScreenState extends State<_DetalleListaScreen> {
   int  _totalDescargar = 0;
   late Map<String, dynamic> _data;
 
-  // ── Selección para envío de JURADO (a diferencia de los demás roles,
-  // aquí NO se envía automáticamente a todos los "pendientes": el usuario
-  // elige con checkbox a quién enviarle su certificado). Se guarda por
-  // estudianteId/manualId y se reinicia si se recarga la pantalla.
+
+
+
+
   final Set<String> _seleccionadosJurado = {};
 
-  // ── Nombre del evento tal como se imprimirá / guardará en el certificado.
-  // Se inicializa con el nombre real del evento de la lista, pero es
-  // independiente de él: editarlo NO cambia `_data['evento']`, que es el
-  // valor usado para el matching interno (ver _agregarEstudiante) y para
-  // la tarjeta de la lista en la pantalla anterior.
+
+
+
+
+
   late TextEditingController _nombreEventoCtrl;
 
-  // ── Nombre de la carrera/escuela a imprimir en el certificado (usado
-  // dentro del motivo: "...Escuela Profesional de X"). Igual que con el
-  // evento: es independiente de `_data['carrera']`, que sigue usándose
-  // para el docKey (ruta de Firestore) y el matching de estudiantes.
-  // Editar este campo NO afecta esa ruta.
+
+
+
+
+
   late TextEditingController _nombreCarreraCtrl;
 
   String get _docKey => '${_data['filialNombre']}_${_data['carrera']}';
 
-  // ── Rol de esta lista y helpers específicos de JURADO ───────────────
+
   bool get _esJurado => (_data['rol'] as String? ?? '') == 'JURADO';
 
   String _idDe(Map<String, dynamic> e) =>
       (e['estudianteId'] ?? e['manualId'] ?? '').toString();
 
-  // ── Auto-marcar checkboxes de jurados "listos para enviar" ──────────
-  // Un jurado se considera "listo" cuando ya tiene código de certificado
-  // asignado, NO es un certificado manual (esos nunca se envían) y aún
-  // no fue enviado antes (generadoCompleto != true). Se llama cada vez
-  // que cambia el array de estudiantes (al abrir la lista, tras editar un
-  // código, tras agregar jurados uno por uno o en bloque), para que el
-  // usuario no tenga que ir marcando manualmente cada checkbox: ya llegan
-  // pre-seleccionados y solo desmarca los que NO quiera enviar. No borra
-  // selecciones existentes, solo agrega las que ya están listas.
+
+
+
+
+
+
+
+
+
   void _autoSeleccionarListos() {
     if (!_esJurado) return;
     final estudiantes = List<Map<String, dynamic>>.from(_data['estudiantes'] ?? []);
@@ -902,9 +902,9 @@ class _DetalleListaScreenState extends State<_DetalleListaScreen> {
     }
   }
 
-  // Los jurados guardan su certificado directo en
-  // users/{juradoId}/certificados/{certId} (sin subcolección "students");
-  // el resto de roles usa users/{docKey}/students/{id}/certificados/{certId}.
+
+
+
   CollectionReference<Map<String, dynamic>> _certColeccion(String personId) {
     final db = FirebaseFirestore.instance;
     if (_esJurado) {
@@ -950,10 +950,10 @@ class _DetalleListaScreenState extends State<_DetalleListaScreen> {
     final esJurado = _esJurado;
     final accentColor = esJurado ? _kJurado : _kPrimario;
     final estudiantes = List<Map<String, dynamic>>.from(d['estudiantes'] ?? []);
-    // Los certificados manuales (personas fuera del sistema) se excluyen
-    // del envío automático por pendientes: nunca tienen estudianteId/certId
-    // reales, así que no pueden marcarse como "enviados" en Firestore. Solo
-    // se pueden descargar junto con el resto en "_descargarTodos".
+
+
+
+
     final pendientes = estudiantes
         .where((e) => e['generadoCompleto'] != true && e['esManual'] != true)
         .toList();
@@ -1252,7 +1252,7 @@ class _DetalleListaScreenState extends State<_DetalleListaScreen> {
     );
   }
 
-  // ── Editar código de certificado ──────────────────────────────────
+
   Future<void> _editarCodigo(Map<String, dynamic> entry) async {
     final ctrl = TextEditingController(text: entry['codigoCertificado'] ?? '');
     final nuevo = await showDialog<String>(
@@ -1287,11 +1287,11 @@ class _DetalleListaScreenState extends State<_DetalleListaScreen> {
     final certId       = entry['certId'] as String?;
     final manualId     = entry['manualId'] as String?;
 
-    // Para roles normales, si el certificado aún no existe (sin
-    // estudianteId), no se puede editar. Para JURADO recién agregado a la
-    // lista es normal que `certId` sea null (el certificado se crea
-    // recién al enviar); en ese caso el código nuevo se guarda solo en el
-    // array local y se usará cuando se cree el certificado.
+
+
+
+
+
     if (!esManual && estudianteId == null) {
       _snackLocal('No se pudo actualizar: falta información del certificado', color: _kAmbar);
       return;
@@ -1327,7 +1327,7 @@ class _DetalleListaScreenState extends State<_DetalleListaScreen> {
     if (mounted) setState(() => _procesando = false);
   }
 
-  // ── Quitar estudiante/jurado de la lista ──────────────────────────
+
   Future<void> _eliminarEstudiante(Map<String, dynamic> entry) async {
     final esManual = entry['esManual'] == true;
     final esJurado = _esJurado;
@@ -1345,9 +1345,9 @@ class _DetalleListaScreenState extends State<_DetalleListaScreen> {
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('¿Quitar a "${entry['nombre']}" de esta lista?',
               style: const TextStyle(fontSize: 13, color: _kTextoGris)),
-          // El certificado manual no existe como documento en Firestore
-          // (no tiene estudianteId/certId reales), así que no aplica la
-          // opción de "también eliminar el certificado".
+
+
+
           if (!esManual) ...[
             const SizedBox(height: 6),
             CheckboxListTile(
@@ -1403,7 +1403,7 @@ class _DetalleListaScreenState extends State<_DetalleListaScreen> {
     if (mounted) setState(() => _procesando = false);
   }
 
-  // ── Agregar estudiante a la lista (roles normales) ─────────────────
+
   Future<void> _agregarEstudiante() async {
     final codEstCtrl  = TextEditingController();
     final codCertCtrl = TextEditingController();
@@ -1480,10 +1480,10 @@ class _DetalleListaScreenState extends State<_DetalleListaScreen> {
         return;
       }
 
-      // NOTA: el matching de certificados existentes sigue usando el
-      // nombre "real" del evento (_data['evento']), NO el nombre editado
-      // para impresión (_nombreEventoCtrl), para no romper la relación
-      // entre esta lista y los documentos de certificados ya creados.
+
+
+
+
       final evento = _data['evento'] as String? ?? '';
       final rol    = _data['rol'] as String? ?? '';
 
@@ -1531,12 +1531,12 @@ class _DetalleListaScreenState extends State<_DetalleListaScreen> {
     if (mounted) setState(() => _procesando = false);
   }
 
-  // ── Agregar jurado existente a la lista (rol JURADO) ────────────────
-  // Busca en users/{id} un jurado (userType == 'jurado') que coincida con
-  // la filial/carrera/evento de esta lista y cuyo "usuario" (código) sea
-  // el ingresado. A diferencia de estudiantes, no crea un certificado al
-  // agregar: el certificado se crea recién al enviar (ver
-  // _confirmarEnvioJurados), así que `certId` queda en null hasta entonces.
+
+
+
+
+
+
   Future<void> _agregarJuradoExistente() async {
     final codigoCtrl = TextEditingController();
 
@@ -1635,14 +1635,14 @@ class _DetalleListaScreenState extends State<_DetalleListaScreen> {
     if (mounted) setState(() => _procesando = false);
   }
 
-  // ── Agregar jurados en bloque (pegar nombres + códigos) ─────────────
-  // Abre una pantalla dedicada con el mismo patrón de dos campos que
-  // ImportarCodigosCertificadoScreen: Campo 1 = nombres (uno por línea),
-  // se validan contra los jurados reales de este evento/carrera/filial;
-  // Campo 2 = códigos de certificado en el mismo orden. Los nombres que
-  // no coinciden con ningún jurado real se crean como certificado manual
-  // (no enviable, solo descargable). Al volver, se recarga la lista
-  // porque la pantalla ya persiste los cambios directo en Firestore.
+
+
+
+
+
+
+
+
   Future<void> _abrirAgregarJuradosBloque() async {
     await Navigator.push(context, MaterialPageRoute(
       builder: (_) => _AgregarJuradosBloqueScreen(
@@ -1763,7 +1763,7 @@ Future<void> _agregarCertificadoManual() async {
   if (mounted) setState(() => _procesando = false);
 }
 
-  // ── Descargar firma (igual que GenerarCertificadosScreen) ─────────
+
   Future<Uint8List?> _descargarFirma(String url) async {
     if (url.isEmpty) return null;
     try {
@@ -1786,10 +1786,10 @@ Future<void> _agregarCertificadoManual() async {
     return null;
   }
 
-  // ── Campo: nombre del evento a imprimir en el certificado ──────────
-  // Reutilizado en el diálogo de Descargar y en el de Enviar. Solo
-  // controla el texto que verá el estudiante/jurado en su certificado;
-  // no toca `_data['evento']`.
+
+
+
+
   Widget _buildCampoNombreEventoCertificado(StateSetter setStateDialog) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1822,12 +1822,12 @@ Future<void> _agregarCertificadoManual() async {
     );
   }
 
-  // ── Campo: nombre de la carrera/escuela a imprimir en el certificado ──
-  // Igual que el campo de evento: solo afecta el texto del motivo
-  // ("...Escuela Profesional de X...") y el campo `carrera` guardado en
-  // el certificado. No toca `_data['carrera']`, que sigue siendo el
-  // valor real usado para el docKey (ruta de Firestore) y el matching
-  // de estudiantes.
+
+
+
+
+
+
   Widget _buildCampoNombreCarreraCertificado(StateSetter setStateDialog) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1903,7 +1903,7 @@ Widget _buildSelectorHoras(
     ]);
   }
 
-  // ── Selector de fecha libre (calendario) ───────────────────────────
+
   Future<void> _seleccionarFecha(
     BuildContext dialogContext,
     TextEditingController fechaCtrl,
@@ -1927,18 +1927,18 @@ Widget _buildSelectorHoras(
     }
   }
 
-  // ── Descargar todos los certificados de la lista en un solo PDF ───
-  // Genera los certificados al vuelo (como el botón "Generar" de tu
-  // pantalla de certificados): NO escribe nada en Firestore, solo arma
-  // el PDF para descargar. Sirve tanto para los ya "enviados" como para
-  // los que aún están en "solo código". Funciona igual para JURADO.
-  //
-  // Todos los roles (incluido PONENTE y JURADO) usan ahora un único
-  // motivo para todo el lote, calculado una sola vez.
-  //
-  // OPTIMIZACIÓN: la descarga de firmas se hace en paralelo (Future.wait)
-  // y la generación de certificados usa una sola llamada vectorial a
-  // CertificadoBuilder.buildPdf con toda la lista.
+
+
+
+
+
+
+
+
+
+
+
+
   Future<void> _descargarTodos() async {
     final rol = _data['rol'] as String? ?? 'ASISTENTE';
 
@@ -2029,8 +2029,8 @@ Widget _buildSelectorHoras(
     setState(() { _descargando = true; _descargados = 0; _totalDescargar = estudiantes.length; });
 
     try {
-      // Firmantes actuales, calculados una sola vez para todo el lote.
-      // Los 3 gets se lanzan en paralelo.
+
+
       final facId = _generarFacultadId(_data['facultad'] as String? ?? '');
       final db    = FirebaseFirestore.instance;
 
@@ -2047,14 +2047,14 @@ Widget _buildSelectorHoras(
       final firma2 = _Firmante.fromDoc(decSnap.exists ? decSnap.data() : null);
       final firma3 = _Firmante.fromDoc(dSnap.exists ? dSnap.data() : null);
 
-      // El nombre del evento y de la carrera/escuela que van en el motivo
-      // y en el certificado son los editados por el usuario en el diálogo
-      // (_nombreEventoCtrl / _nombreCarreraCtrl), NO _data['evento'] ni
-      // _data['carrera'].
+
+
+
+
       final nombreEventoCertificado  = _nombreEventoCtrl.text.trim();
       final nombreCarreraCertificado = _nombreCarreraCtrl.text.trim();
 
-      // Motivo único para todo el lote (ASISTENTE, ORGANIZADOR, PONENTE y JURADO).
+
       final motivo = _motivoPorRol(
         rol: rol,
         evento: nombreEventoCertificado,
@@ -2063,7 +2063,7 @@ Widget _buildSelectorHoras(
         horas: horasCtrl.text,
       );
 
-      // Descarga de las 3 firmas en paralelo.
+
       final bytesFirmas = await Future.wait([
         _descargarFirma(firma1.urlFirma),
         _descargarFirma(firma2.urlFirma),
@@ -2073,11 +2073,11 @@ Widget _buildSelectorHoras(
       final bytes2 = bytesFirmas[1];
       final bytes3 = bytesFirmas[2];
 
-      // DatosCertificado común para todo el lote (igual que en
-      // GenerarCertificadosScreen). El código de certificado NO va aquí:
-      // cada Estudiante lleva el suyo propio en su campo codigoCertificado,
-      // y CertificadoBuilder.buildPdf ya usa ese valor individual por
-      // encima del de DatosCertificado (ver certificado_builder.dart).
+
+
+
+
+
       final datos = DatosCertificado(
         facultad: (_data['facultad'] ?? '').toString(),
         carrera:  nombreCarreraCertificado,
@@ -2102,7 +2102,7 @@ Widget _buildSelectorHoras(
   dni: (e['dni'] ?? '').toString(),
   codigo: (e['codigoEstudiante'] ?? '').toString(),
   codigoCertificado: (e['codigoCertificado'] ?? '').toString(),
-  motivo: '', 
+  motivo: '',
 )).toList();
 
       final builder     = CertificadoBuilder(datos);
@@ -2123,10 +2123,10 @@ Widget _buildSelectorHoras(
     if (mounted) setState(() => _descargando = false);
   }
 
-  // ── Enviar certificados (roles normales: ASISTENTE/PONENTE/ORGANIZADOR)
-  // Envía automáticamente a todos los "pendientes" (los que aún no tienen
-  // generadoCompleto == true). Escribe en
-  // users/{docKey}/students/{id}/certificados/{certId}.
+
+
+
+
   Future<void> _confirmarEnvio(
       List<Map<String, dynamic>> pendientes, Map<String, dynamic> lista) async {
     final rol = lista['rol'] as String? ?? 'ASISTENTE';
@@ -2213,7 +2213,7 @@ Widget _buildSelectorHoras(
       final facId = _generarFacultadId(lista['facultad'] as String? ?? '');
       final db = FirebaseFirestore.instance;
 
-      // Firmantes en paralelo (mismo criterio que en _descargarTodos).
+
       final resultadosFirmas = await Future.wait([
         db.collection('config_firmas').doc('vicerrector').get(),
         db.collection('config_firmas').doc('director_investigacion').get(),
@@ -2227,13 +2227,13 @@ Widget _buildSelectorHoras(
       final firma2 = _Firmante.fromDoc(decSnap.exists ? decSnap.data() : null);
       final firma3 = _Firmante.fromDoc(dSnap.exists ? dSnap.data() : null);
 
-      // El nombre del evento y de la carrera/escuela que se guardan en el
-      // certificado del estudiante/jurado son los editados por el usuario,
-      // NO lista['evento'] ni lista['carrera'].
+
+
+
       final nombreEventoCertificado  = _nombreEventoCtrl.text.trim();
       final nombreCarreraCertificado = _nombreCarreraCtrl.text.trim();
 
-      // Motivo único para todo el lote.
+
       final motivoGeneral = _motivoPorRol(
         rol: rol,
         evento: nombreEventoCertificado,
@@ -2280,10 +2280,10 @@ Widget _buildSelectorHoras(
             'codigoCertificado': e['codigoCertificado'],
           }, SetOptions(merge: true));
         }
-        // Cada lote toca documentos distintos entre sí, así que los
-        // commits se pueden lanzar en paralelo en vez de esperarse uno
-        // a uno. Dart es single-thread, así que los incrementos de
-        // exitosos/errores no tienen condición de carrera.
+
+
+
+
         commits.add(
           batch.commit().then((_) {
             exitosos += lote.length;
@@ -2295,7 +2295,7 @@ Widget _buildSelectorHoras(
       }
       await Future.wait(commits);
 
-      // Marcar como completados en el documento de la lista.
+
       final estudiantesActualizados = List<Map<String, dynamic>>.from(_data['estudiantes'] ?? []);
       for (final e in estudiantesActualizados) {
         if (pendientes.any((p) => p['estudianteId'] == e['estudianteId'])) {
@@ -2330,19 +2330,19 @@ Widget _buildSelectorHoras(
     if (mounted) setState(() => _enviando = false);
   }
 
-  // ── Enviar certificados de JURADO (solo los seleccionados) ─────────
-  // A diferencia de _confirmarEnvio, aquí NO se toman los "pendientes"
-  // automáticamente: se envía únicamente a quienes el usuario marcó con
-  // checkbox (seleccionadosJurado), sin importar si ya tenían
-  // generadoCompleto == true o no (permite reenviar). El certificado se
-  // escribe en users/{juradoId}/certificados/{certId} — sin subcolección
-  // "students" — y SIEMPRE incluye el código de certificado ya asignado
-  // (a diferencia de "Gestionar Certificados", que envía sin código).
-  //
-  // Si el jurado seleccionado aún no tenía un certId (porque fue
-  // agregado recién a la lista y nunca se le generó certificado), se crea
-  // uno nuevo aquí mismo y se persiste en el array de la lista para que
-  // quede enlazado de ahora en adelante.
+
+
+
+
+
+
+
+
+
+
+
+
+
   Future<void> _confirmarEnvioJurados(
       List<Map<String, dynamic>> seleccionados, Map<String, dynamic> lista) async {
     const rol = 'JURADO';
@@ -2448,9 +2448,9 @@ Widget _buildSelectorHoras(
       final ahora = Timestamp.now();
       int exitosos = 0, errores = 0;
 
-      // Copia local completa de la lista para poder persistir certId
-      // nuevos (jurados que nunca tuvieron certificado antes de enviar)
-      // y marcar generadoCompleto solo en los que sí se enviaron.
+
+
+
       final listaCompleta = List<Map<String, dynamic>>.from(_data['estudiantes'] ?? []);
 
       const batchSize = 500;
@@ -2484,8 +2484,8 @@ Widget _buildSelectorHoras(
             'urlFirma3': firma3.urlFirma,
             'creadoEn': ahora,
             'nombreEstudiante': e['nombre'],
-            // A diferencia de "Gestionar Certificados" (que envía sin
-            // código), aquí siempre va el código ya asignado en la lista.
+
+
             'codigoCertificado': e['codigoCertificado'],
           }, SetOptions(merge: true));
 
@@ -2539,25 +2539,25 @@ Widget _buildSelectorHoras(
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// AGREGAR JURADOS EN BLOQUE (pegar nombres + códigos, solo lista JURADO)
-// ═══════════════════════════════════════════════════════════════════════════
-//
-// Mismo patrón de dos campos que ImportarCodigosCertificadoScreen:
-//   Campo 1: nombres de jurado (uno por línea) -> se validan contra los
-//            jurados reales registrados para ESTE evento/carrera/filial.
-//   Campo 2: códigos de certificado en el mismo orden que los nombres.
-// Diferencia clave: si un nombre pegado NO coincide con ningún jurado real
-// del evento, no se bloquea el flujo -se crea como "certificado manual"
-// (esManual: true), igual que el certificado manual individual que ya
-// existe en la lista- y ese registro solo podrá descargarse en PDF, nunca
-// enviarse (no existe una cuenta real a la cual entregárselo).
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 enum _EstadoJuradoBloque {
-  encontrado,   // el nombre coincide con un jurado real de este evento
-  creadoManual, // no existe: se creará como certificado manual (no enviable)
-  duplicado,    // nombre repetido dentro de lo pegado
-  yaEnLista,    // ya está en esta lista (por nombre o por id)
+  encontrado,
+  creadoManual,
+  duplicado,
+  yaEnLista,
 }
 
 bool _bloqueaJurado(_EstadoJuradoBloque e) =>
@@ -2604,9 +2604,9 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
   bool _campo1Listo  = false;
   bool _previewListo = false;
   bool _guardando    = false;
-// Quita tildes/diacríticos y puntuación para comparar nombres sin
-  // depender de que el Excel y el sistema los escriban exactamente
-  // igual (tildes, puntos como en "B." o "D.", comas, etc.).
+
+
+
   String _normalizar(String s) {
     const con = 'áéíóúÁÉÍÓÚüÜñÑ';
     const sin = 'aeiouAEIOUuUnN';
@@ -2617,10 +2617,10 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
     return r.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\s]'), ' ');
   }
 
-  // Clave "por palabras": normaliza, separa en palabras y las ordena
-  // alfabéticamente. Así "Alex Danny Chambi Rodriguez" y
-  // "Chambi Rodriguez Alex Danny" generan la MISMA clave, sin importar el
-  // orden en que estén el nombre y el apellido.
+
+
+
+
   String _clavePorPalabras(String s) {
     final palabras = _normalizar(s)
         .split(RegExp(r'\s+'))
@@ -2630,8 +2630,8 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
     return palabras.join(' ');
   }
 
-  // Set de palabras normalizadas, para comparar nombres por contenido
-  // en vez de por texto completo.
+
+
   Set<String> _setPalabras(String s) => _normalizar(s)
       .split(RegExp(r'\s+'))
       .where((p) => p.isNotEmpty)
@@ -2651,12 +2651,12 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
       for (int j = 1; j <= lb; j++) {
         final costo = a[i - 1] == b[j - 1] ? 0 : 1;
         d[i][j] = [
-          d[i - 1][j] + 1,      // borrar
-          d[i][j - 1] + 1,      // insertar
-          d[i - 1][j - 1] + costo, // sustituir
+          d[i - 1][j] + 1,
+          d[i][j - 1] + 1,
+          d[i - 1][j - 1] + costo,
         ].reduce((x, y) => x < y ? x : y);
 
-        // Transposición: "ar" <-> "ra" cuesta 1, no 2.
+
         if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1]) {
           d[i][j] = [d[i][j], d[i - 2][j - 2] + 1].reduce((x, y) => x < y ? x : y);
         }
@@ -2665,17 +2665,17 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
     return d[la][lb];
   }
 
-  // Normaliza por "sonido": seseo (s/z/c suenan igual), yeísmo (ll/y),
-  // b/v, y colapsa consonantes dobles (ej. "Ccari" -> "Cari"). Sirve
-  // para tolerar variantes de tipeo comunes al transcribir apellidos
-  // desde Excel.
+
+
+
+
   String _claveFonetica(String palabra) {
     var r = palabra.toLowerCase();
     r = r.replaceAll('h', '');
     r = r.replaceAll(RegExp(r'[zsc]'), 's');
     r = r.replaceAll(RegExp(r'(ll|y)'), 'i');
     r = r.replaceAll('v', 'b');
-    r = r.replaceAllMapped(RegExp(r'(.)\1+'), (m) => m[1]!); // dobles -> una
+    r = r.replaceAllMapped(RegExp(r'(.)\1+'), (m) => m[1]!);
     return r;
   }
 
@@ -2691,17 +2691,17 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
     return _levenshtein(fa, fb) <= tol;
   }
 
-  // Coincidencia flexible entre dos sets de palabras: TODAS las palabras
-  // del conjunto más chico deben encontrar una pareja (exacta o con
-  // pequeño error de tipeo) dentro del conjunto más grande, sin repetir
-  // parejas. Cubre a la vez dos casos reales:
-  //  - nombre incompleto (ej. sistema "Carmen Heck" vs Excel
-  //    "Carmen Heck Franco": el más chico es subconjunto del más grande)
-  //  - error de tipeo (ej. "Olivarez" vs "Olivares"), incluso combinado
-  //    con nombre incompleto (ej. "Cecilia Olivarez" vs
-  //    "Cecilia Olivares Saldarriaga")
-  // Exige al menos 2 palabras en el conjunto chico, para no matchear
-  // por un solo nombre de pila común.
+
+
+
+
+
+
+
+
+
+
+
   bool _esCoincidenciaFlexible(Set<String> a, Set<String> b) {
     final corto = a.length <= b.length ? a : b;
     final largo = a.length <= b.length ? b : a;
@@ -2756,7 +2756,7 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
       .where((e) => e.isNotEmpty)
       .toList();
 
-// ── VALIDACIÓN DEL CAMPO 1 ────────────────────────────────────────
+
   Future<void> _validarNombres() async {
     final nombres = _parsearNombres(_nombresCtrl.text);
     if (nombres.isEmpty) {
@@ -2777,13 +2777,13 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
       final carreraId = (widget.listaData['carreraId'] ?? '').toString();
       final eventoId  = (widget.listaData['eventoId']  ?? '').toString();
 
-      // Tres formas de indexar a los jurados reales de este evento, de la
-      // más estricta a la más flexible:
-      //  1) por nombre exacto
-      //  2) por "clave de palabras" (mismas palabras, distinto orden)
-      //  3) lista completa con su set de palabras, para detectar nombres
-      //     INCOMPLETOS en el sistema (ej. sistema: "Carmen Heck", Excel:
-      //     "Carmen Heck Franco") mediante coincidencia por subconjunto.
+
+
+
+
+
+
+
       final Map<String, Map<String, dynamic>> juradosPorNombreExacto = {};
       final Map<String, Map<String, dynamic>> juradosPorClavePalabras = {};
       final List<Map<String, dynamic>> todosJurados = [];
@@ -2812,7 +2812,7 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
         }
       }
 
-      // Nombres/ids ya presentes en la lista actual, para no duplicar.
+
       final estudiantesActuales =
           List<Map<String, dynamic>>.from(widget.listaData['estudiantes'] ?? []);
       final nombresEnLista = estudiantesActuales
@@ -2843,18 +2843,18 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
         }
         vistos.add(clave);
 
-        // 1) match exacto o por palabras (mismas palabras, distinto orden).
+
         Map<String, dynamic>? match = juradosPorNombreExacto[key] ?? juradosPorClavePalabras[clave];
         String? tipoMatch = match != null
             ? (juradosPorNombreExacto[key] != null ? 'exacto' : 'permutado')
             : null;
 
-        // 2) si no hubo match exacto/permutado, se busca por subconjunto:
-        // el nombre más corto (sistema o Excel) contenido dentro del más
-        // largo, típico cuando el sistema tiene el nombre incompleto
-        // (ej. "Carmen Heck" vs "Carmen Heck Franco" en el Excel). Solo
-        // se acepta si hay EXACTAMENTE UN candidato, para no asignar el
-        // código de un jurado equivocado en caso de ambigüedad.
+
+
+
+
+
+
        if (match == null) {
           final palabrasExcel = _setPalabras(nombreOriginal);
           final candidatos = todosJurados
@@ -2928,7 +2928,7 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
     }
   }
 
-  // ── EMPAREJAR CAMPO 2 ─────────────────────────────────────────────
+
   void _procesarCodigos() {
     final codigos = _parsearCodigos(_codigosCtrl.text);
     if (codigos.isEmpty) {
@@ -2952,7 +2952,7 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
   bool get _hayManuales =>
       _entries.any((e) => e.estado == _EstadoJuradoBloque.creadoManual);
 
-// ── GUARDAR EN LA LISTA (Firestore) ───────────────────────────────
+
   Future<void> _confirmarYGuardar() async {
     final aCrearManual = _entries.where((e) => e.estado == _EstadoJuradoBloque.creadoManual).length;
     final encontrados  = _entries.where((e) => e.estado == _EstadoJuradoBloque.encontrado).length;
@@ -3002,12 +3002,12 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
 
       final actuales = List<Map<String, dynamic>>.from(widget.listaData['estudiantes'] ?? []);
 
-      // ── Actualizar nombre + código en los que YA estaban en la lista ──
-      // Match por estudianteId (más confiable), o por clave de palabras
-      // (mismas palabras, distinto orden), o por subconjunto (el nombre
-      // guardado en la lista quedó incompleto). El Excel manda: se
-      // sobrescribe el 'nombre' con el que trae el Excel, además del
-      // código de certificado.
+
+
+
+
+
+
       int actualizados = 0;
       for (final e in _entries.where((e) => e.estado == _EstadoJuradoBloque.yaEnLista)) {
         final claveIngresada    = _clavePorPalabras(e.nombreIngresado);
@@ -3020,15 +3020,15 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
               _esCoincidenciaFlexible(_setPalabras(nombreEx), palabrasIngresado);
           if (matchPorId || matchPorClave || matchFlexible) {
             ex['codigoCertificado'] = e.codigoCertificadoNuevo;
-            ex['nombre'] = e.nombreIngresado; // el Excel manda
+            ex['nombre'] = e.nombreIngresado;
             actualizados++;
             break;
           }
         }
       }
 
-      // ── Registros NUEVOS: encontrado (jurado real aún no en la lista)
-      // y creadoManual (fuera del sistema).
+
+
       final nuevosRegistros = _entries
           .where((e) =>
               e.estado == _EstadoJuradoBloque.encontrado ||
@@ -3037,7 +3037,7 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
         if (e.estado == _EstadoJuradoBloque.encontrado) {
           return {
             'estudianteId': e.juradoId,
-            'nombre': e.nombreIngresado, // el Excel manda
+            'nombre': e.nombreIngresado,
             'dni': e.dni,
             'codigoEstudiante': e.codigoUsuario,
             'codigoCertificado': e.codigoCertificadoNuevo,
@@ -3045,7 +3045,7 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
             'generadoCompleto': false,
           };
         }
-        // creadoManual: no existe como cuenta real, solo se descarga.
+
         return {
           'estudianteId': null,
           'certId': null,
@@ -3087,9 +3087,9 @@ class _AgregarJuradosBloqueScreenState extends State<_AgregarJuradosBloqueScreen
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  // BUILD
-  // ══════════════════════════════════════════════════════════════════
+
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

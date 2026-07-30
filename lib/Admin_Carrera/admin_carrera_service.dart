@@ -18,9 +18,9 @@ class AdminCarreraService {
     'eventos',
   ];
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ CREAR ADMIN DE CARRERA
-  // ═══════════════════════════════════════════════════════════════
+
+
+
   Future<bool> crearAdminCarrera({
     required String usuario,
     required String password,
@@ -43,7 +43,7 @@ class AdminCarreraService {
         return false;
       }
 
-      // 🔐 Hashear la contraseña antes de guardar
+
       final passwordHash = PasswordHelper.hashPassword(password);
 
       await _firestore.collection('admins_carrera').add({
@@ -67,9 +67,9 @@ class AdminCarreraService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ LOGIN ADMIN CARRERA
-  // ═══════════════════════════════════════════════════════════════
+
+
+
   Future<Map<String, dynamic>?> loginAdminCarrera({
     required String usuario,
     required String password,
@@ -92,14 +92,14 @@ class AdminCarreraService {
       final adminDoc  = adminQuery.docs.first;
       final adminData = adminDoc.data();
 
-      // 🔐 Verificar con soporte de migración texto plano → hash
+
       final stored = adminData['password']?.toString() ?? '';
       if (!PasswordHelper.verifyPassword(password, stored)) {
         debugPrint('❌ Contraseña incorrecta');
         return null;
       }
 
-      // 🔐 Si estaba en texto plano, migrar a hash ahora
+
       if (!_isSha256(stored)) {
         final hash = PasswordHelper.hashPassword(password);
         await _firestore
@@ -139,9 +139,9 @@ class AdminCarreraService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ OBTENER TODOS LOS ADMINS DE CARRERA
-  // ═══════════════════════════════════════════════════════════════
+
+
+
   Future<List<Map<String, dynamic>>> getAdminsCarrera() async {
     try {
       final adminsQuery = await _firestore
@@ -160,9 +160,9 @@ class AdminCarreraService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ OBTENER ADMIN POR ID
-  // ═══════════════════════════════════════════════════════════════
+
+
+
   Future<Map<String, dynamic>?> getAdminById(String adminId) async {
     try {
       final adminDoc = await _firestore
@@ -181,9 +181,9 @@ class AdminCarreraService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ ACTUALIZAR ADMIN DE CARRERA
-  // ═══════════════════════════════════════════════════════════════
+
+
+
   Future<bool> actualizarAdminCarrera({
     required String adminId,
     String? usuario,
@@ -216,7 +216,7 @@ class AdminCarreraService {
         updateData['usuario'] = usuario.trim().toLowerCase();
       }
 
-      // 🔐 Hashear la nueva contraseña si se proporciona
+
       if (password != null) {
         updateData['password'] = PasswordHelper.hashPassword(password);
       }
@@ -241,9 +241,9 @@ class AdminCarreraService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ ELIMINAR ADMIN DE CARRERA
-  // ═══════════════════════════════════════════════════════════════
+
+
+
   Future<bool> eliminarAdminCarrera(String adminId) async {
     try {
       await _firestore
@@ -258,9 +258,9 @@ class AdminCarreraService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ BUSCAR ADMINS CON FILTROS
-  // ═══════════════════════════════════════════════════════════════
+
+
+
   Future<List<Map<String, dynamic>>> buscarAdmins({
     String? filial,
     String? facultad,
@@ -296,9 +296,9 @@ class AdminCarreraService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ OBTENER ADMINS POR CARRERA
-  // ═══════════════════════════════════════════════════════════════
+
+
+
   Future<List<Map<String, dynamic>>> getAdminsPorCarrera(
       String carrera) async {
     try {
@@ -319,16 +319,16 @@ class AdminCarreraService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ VERIFICAR SI TIENE PERMISO
-  // ═══════════════════════════════════════════════════════════════
+
+
+
   bool tienePermiso(List<String> permisos, String permiso) {
     return permisos.contains(permiso);
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // 🔐 HELPER INTERNO — detecta si un valor ya está hasheado
-  // ═══════════════════════════════════════════════════════════════
+
+
+
   bool _isSha256(String value) {
     return value.length == 64 && RegExp(r'^[a-f0-9]+$').hasMatch(value);
   }

@@ -680,7 +680,7 @@ class _GenerarQRScreenState extends State<GenerarQRScreen>
         ),
       ),
       items: _eventos.map((evento) {
-        // FIX L683: cast nullable seguro
+
         final data = evento.data() as Map<String, dynamic>? ?? {};
         return DropdownMenuItem<String>(
           value: evento.id,
@@ -698,7 +698,7 @@ class _GenerarQRScreenState extends State<GenerarQRScreen>
           if (newValue != null) {
             final match = _eventos.where((e) => e.id == newValue);
             if (match.isNotEmpty) {
-              // FIX L701: cast nullable seguro
+
               final eventoData =
                   match.first.data() as Map<String, dynamic>? ?? {};
               _selectedEventName =

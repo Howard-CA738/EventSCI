@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 class PeriodosHelper {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Crear un nuevo período
+
   static Future<bool> createPeriodo({
     required String nombre,
     required DateTime fechaInicio,
@@ -12,7 +12,7 @@ class PeriodosHelper {
     bool activo = false,
   }) async {
     try {
-      // Verificar si ya existe un período con ese nombre
+
       final existingPeriodo = await _firestore
           .collection('periodos')
           .where('nombre', isEqualTo: nombre.trim())
@@ -23,10 +23,10 @@ class PeriodosHelper {
         return false;
       }
 
-      // ✅ CAMBIADO: Ya NO se desactivan los demás períodos
-      // Se permite que múltiples períodos estén activos
 
-      // Crear el período
+
+
+
       await _firestore.collection('periodos').add({
         'nombre': nombre.trim(),
         'fechaInicio': Timestamp.fromDate(fechaInicio),
@@ -43,7 +43,7 @@ class PeriodosHelper {
     }
   }
 
-  // Obtener todos los períodos
+
   static Future<List<Map<String, dynamic>>> getPeriodos() async {
     try {
       final periodosQuery = await _firestore
@@ -62,28 +62,28 @@ class PeriodosHelper {
     }
   }
 
-  // ✅ NUEVO: Obtener solo períodos activos
+
   static Future<List<Map<String, dynamic>>> getPeriodosActivos() async {
     try {
       final periodosQuery = await _firestore
           .collection('periodos')
           .where('activo', isEqualTo: true)
-          // ❌ REMOVIDO: .orderBy('createdAt', descending: true)
+
           .get();
 
-      // Ordenar manualmente en memoria
+
       final periodos = periodosQuery.docs.map((doc) {
         final data = doc.data();
         data['id'] = doc.id;
         return data;
       }).toList();
 
-      // Ordenar por createdAt si existe
+
       periodos.sort((a, b) {
         final aTime = a['createdAt'] as Timestamp?;
         final bTime = b['createdAt'] as Timestamp?;
         if (aTime == null || bTime == null) return 0;
-        return bTime.compareTo(aTime); // Descendente
+        return bTime.compareTo(aTime);
       });
 
       return periodos;
@@ -93,7 +93,7 @@ class PeriodosHelper {
     }
   }
 
-  // ✅ MODIFICADO: Obtener UN período activo (mantener por compatibilidad)
+
   static Future<Map<String, dynamic>?> getPeriodoActivo() async {
     try {
       final querySnapshot = await _firestore
@@ -120,7 +120,7 @@ class PeriodosHelper {
         .snapshots();
   }
 
-  // Actualizar un período
+
   static Future<bool> updatePeriodo({
     required String periodoId,
     String? nombre,
@@ -134,7 +134,7 @@ class PeriodosHelper {
       };
 
       if (nombre != null && nombre.isNotEmpty) {
-        // Verificar si ya existe otro período con ese nombre
+
         final existingPeriodo = await _firestore
             .collection('periodos')
             .where('nombre', isEqualTo: nombre.trim())
@@ -157,8 +157,8 @@ class PeriodosHelper {
       }
 
       if (activo != null) {
-        // ✅ CAMBIADO: Ya NO se desactivan los demás períodos
-        // Simplemente se actualiza el estado de este período
+
+
         updateData['activo'] = activo;
       }
 
@@ -171,7 +171,7 @@ class PeriodosHelper {
     }
   }
 
-  // ✅ MODIFICADO: Activar un período (ya NO desactiva los demás)
+
   static Future<bool> activarPeriodo(String periodoId) async {
     try {
       await _firestore.collection('periodos').doc(periodoId).update({
@@ -186,7 +186,7 @@ class PeriodosHelper {
     }
   }
 
-  // Desactivar un período
+
   static Future<bool> desactivarPeriodo(String periodoId) async {
     try {
       await _firestore.collection('periodos').doc(periodoId).update({
@@ -201,7 +201,7 @@ class PeriodosHelper {
     }
   }
 
-  // Eliminar un período
+
   static Future<bool> deletePeriodo(String periodoId) async {
     try {
       await _firestore.collection('periodos').doc(periodoId).delete();
@@ -213,9 +213,9 @@ class PeriodosHelper {
     }
   }
 
-  // ✅ ELIMINADA: La función _desactivarTodosPeriodos ya no es necesaria
 
-  // Buscar períodos por nombre o año
+
+
   static Future<List<Map<String, dynamic>>> searchPeriodos(
     String searchTerm,
   ) async {
@@ -244,7 +244,7 @@ class PeriodosHelper {
     }
   }
 
-  // ✅ MODIFICADO: Verificar si hay períodos activos (plural)
+
   static Future<bool> hayPeriodosActivos() async {
     try {
       final periodoQuery = await _firestore
@@ -260,7 +260,7 @@ class PeriodosHelper {
     }
   }
 
-  // ✅ NUEVO: Contar cuántos períodos activos hay
+
   static Future<int> contarPeriodosActivos() async {
     try {
       final periodoQuery = await _firestore

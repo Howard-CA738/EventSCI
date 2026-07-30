@@ -37,7 +37,7 @@ List<Map<String, dynamic>> get _juradosFiltrados {
   bool _isLoadingSession = true;
   bool _isLoadingJurados = false;
 
-  // Cache de eventos para no recargar cada vez que se abre el diálogo
+
   List<Map<String, dynamic>>? _eventosCache;
 
   late AnimationController _fadeController;
@@ -89,7 +89,7 @@ void dispose() {
     } finally {
       setState(() => _isLoadingSession = false);
     }
-    // Cargar jurados y eventos en paralelo
+
     await Future.wait([
       _cargarJurados(),
       _cargarEventosConCache(),
@@ -140,7 +140,7 @@ void dispose() {
     }
   }
 
-  // Carga y guarda en cache los eventos para no repetir la llamada
+
   Future<List<Map<String, dynamic>>> _cargarEventosConCache() async {
     if (_eventosCache != null) return _eventosCache!;
     _eventosCache = await _cargarEventos();
@@ -247,7 +247,7 @@ void dispose() {
     return docRef.id;
   }
 
-  // Retorna true si se cambió la contraseña (para re-cifrar externamente)
+
   Future<bool> _actualizarJurado({
     required String id,
     required String nombre,
@@ -417,8 +417,8 @@ void dispose() {
     }
   }
 
-  // ─── DIÁLOGO INSTANTÁNEO ────────────────────────────────────────────────
-  // Se abre de inmediato y carga datos en background dentro del StatefulBuilder
+
+
   void _mostrarDialogoJurado({Map<String, dynamic>? jurado}) {
     final isEditing = jurado != null;
 
@@ -438,19 +438,19 @@ void dispose() {
     bool obscurePass = true;
     bool isLoading = false;
     bool isLoadingCategorias = false;
-    // Indica que los datos async iniciales están cargando
+
     bool isLoadingInitial = isEditing;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
-          // Carga inicial: contraseña descifrada + categorías del evento actual
-          // Se dispara una sola vez al construir el diálogo
+
+
           if (isEditing && isLoadingInitial) {
-            isLoadingInitial = false; // evitar re-disparar
+            isLoadingInitial = false;
             Future(() async {
-              // Cargar en paralelo: contraseña descifrada y categorías
+
               final results = await Future.wait([
                 JuradoSecurityService.decryptPassword(juradoId: jurado['id']),
                 if (eventoSeleccionado != null)
@@ -473,7 +473,7 @@ void dispose() {
               });
             });
           } else if (!isEditing && eventos.isEmpty) {
-            // Para nuevo jurado, asegurar eventos cargados
+
             Future(() async {
               final eventosActualizados = await _cargarEventosConCache();
               if (!ctx.mounted) return;
@@ -515,7 +515,7 @@ void dispose() {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ── Header ──────────────────────────────────────────
+
                       Row(
                         children: [
                           Container(
@@ -568,7 +568,7 @@ void dispose() {
                       ),
                       const SizedBox(height: 18),
 
-                      // ── Info de carrera ──────────────────────────────────
+
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 10),
@@ -599,7 +599,7 @@ void dispose() {
                       ),
                       const SizedBox(height: 18),
 
-                      // ── Datos personales ─────────────────────────────────
+
                       _buildDialogSectionLabel('Datos personales',
                           Icons.person_rounded, const Color(0xFFD4863B)),
                       const SizedBox(height: 10),
@@ -609,14 +609,14 @@ void dispose() {
                         icon: Icons.person_outline_rounded,
                       ),
                       const SizedBox(height: 12),
-                      // CORREGIDO: usuario siempre editable
+
                       _buildDialogTextField(
                         controller: usuarioCtrl,
                         label: 'Usuario',
                         icon: Icons.account_circle_outlined,
                       ),
                       const SizedBox(height: 12),
-                      // Contraseña: muestra shimmer mientras carga en edición
+
                       isEditing && passwordCtrl.text.isEmpty
                           ? _buildPasswordFieldLoading()
                           : _buildPasswordField(
@@ -628,7 +628,7 @@ void dispose() {
                             ),
                       const SizedBox(height: 18),
 
-                      // ── Evento ────────────────────────────────────────────
+
                       _buildDialogSectionLabel('Evento asignado',
                           Icons.event_rounded, const Color(0xFF3B6FD4)),
                       const SizedBox(height: 10),
@@ -658,7 +658,7 @@ void dispose() {
                       ),
                       const SizedBox(height: 18),
 
-                      // ── Categorías ────────────────────────────────────────
+
                       if (eventoSeleccionado != null) ...[
                         _buildDialogSectionLabel('Categorías',
                             Icons.category_rounded, const Color(0xFF8B4DC7)),
@@ -712,7 +712,7 @@ void dispose() {
                         const SizedBox(height: 18),
                       ],
 
-                      // ── Botones ───────────────────────────────────────────
+
                       Row(
                         children: [
                           Expanded(
@@ -780,7 +780,7 @@ void dispose() {
 
                                       try {
                                         if (isEditing) {
-                                          // ── Editar ──────────────────────
+
                                           final passwordCambiada =
                                               await _actualizarJurado(
                                             id: jurado['id'],
@@ -792,8 +792,8 @@ void dispose() {
                                             eventoNombre: eventoNombre,
                                           );
 
-                                          // CORREGIDO: si cambió la contraseña,
-                                          // también actualizamos el cifrado seguro
+
+
                                           if (passwordCambiada) {
                                             await JuradoSecurityService
                                                 .encryptAndSavePassword(
@@ -802,7 +802,7 @@ void dispose() {
                                             );
                                           }
                                         } else {
-                                          // ── Crear ────────────────────────
+
                                           final nuevoId = await _crearJurado(
                                             nombre: nombre,
                                             usuario: usuario,
@@ -819,7 +819,7 @@ void dispose() {
                                               password: password,
                                             );
                                           } else {
-                                            // _crearJurado ya mostró el error
+
                                             setDialogState(
                                                 () => isLoading = false);
                                             return;
@@ -839,7 +839,7 @@ void dispose() {
                                       _showSnackBar(isEditing
                                           ? 'Jurado actualizado exitosamente'
                                           : 'Jurado creado exitosamente');
-                                      // Invalidar cache de eventos para reflejar posibles cambios
+
                                       _eventosCache = null;
                                       await _cargarJurados();
                                     },
@@ -1280,7 +1280,7 @@ Widget build(BuildContext context) {
                   icon: Icons.edit_rounded,
                   color: const Color(0xFF1E3A5F),
                   bgColor: const Color(0xFFF0F5FF),
-                  // INSTANTÁNEO: ya no es async, abre el diálogo de inmediato
+
                   onTap: () => _mostrarDialogoJurado(jurado: jurado),
                   tooltip: 'Editar',
                 ),
@@ -1433,7 +1433,7 @@ Widget build(BuildContext context) {
     );
   }
 
-  // Placeholder mientras carga la contraseña descifrada en edición
+
   Widget _buildPasswordFieldLoading() {
     return Container(
       height: 56,

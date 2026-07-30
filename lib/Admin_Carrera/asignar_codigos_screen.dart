@@ -358,9 +358,9 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     }
   }
 
-  /// Elimina en bloque todos los certificados que coinciden con los filtros
-  /// actuales (pestaña, rol y estado). Si no hay ningún filtro activo,
-  /// esto equivale a eliminar absolutamente todos los certificados.
+
+
+
   Future<void> _eliminarTodosCertificados() async {
     final objetivo = _entriesFiltradas;
     if (objetivo.isEmpty || _eliminandoTodos) return;
@@ -461,8 +461,8 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
 
     if (confirmar != true) return;
 
-    // Pedimos una segunda confirmación por texto cuando el borrado es grande,
-    // para evitar eliminaciones masivas accidentales.
+
+
     if (objetivo.length >= 10) {
       final confirmTextController = TextEditingController();
       final confirmarDoble = await showDialog<bool>(
@@ -526,7 +526,7 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     if (mounted) setState(() => _eliminandoTodos = true);
 
     try {
-      // Firestore permite máximo 500 operaciones por batch.
+
       const tamanoLote = 450;
       for (var i = 0; i < objetivo.length; i += tamanoLote) {
         final lote = objetivo.sublist(
@@ -551,8 +551,8 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     } catch (e) {
       if (mounted) setState(() => _eliminandoTodos = false);
       _snack('❌ Error al eliminar todos: $e');
-      // Recargamos para reflejar el estado real, ya que el batch pudo
-      // haber eliminado parcialmente antes de fallar.
+
+
       await _cargarTodo();
     }
   }
@@ -797,8 +797,8 @@ class _AsignarCodigosScreenState extends State<AsignarCodigosScreen>
     ]);
   }
 
-  /// Barra con la acción de "Eliminar todos" (aplica sobre la lista
-  /// actualmente filtrada, respetando pestaña y filtros activos).
+
+
   Widget _buildAccionesMasivas() {
     final objetivo = _entriesFiltradas;
     if (objetivo.isEmpty) return const SizedBox.shrink();

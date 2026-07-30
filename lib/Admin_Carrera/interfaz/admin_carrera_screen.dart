@@ -77,7 +77,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ────────────────────────────────────────────────────
+
             Padding(
               padding: const EdgeInsets.all(20.0),
               child: Column(
@@ -127,7 +127,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Tarjeta de información de carrera
+
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -186,7 +186,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
               ),
             ),
 
-            // ── Content Area ──────────────────────────────────────────────
+
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -220,7 +220,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                         physics: const NeverScrollableScrollPhysics(),
                         children: [
 
-                          // 1. Registrar Estudiantes
+
                           if (_tienePermiso('estudiantes'))
                             _buildMenuCard(
                               imagePath: 'assets/icons/usuario.png',
@@ -233,7 +233,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                               ),
                             ),
 
-                          // 2. Gestión de Sesiones
+
                           _buildMenuCard(
                             imagePath: 'assets/icons/sesiones.png',
                             title: 'Gestión de\nSesiones',
@@ -245,7 +245,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                             ),
                           ),
 
-                          // 3. Gestión de Eventos
+
                           if (_tienePermiso('eventos'))
                             _buildMenuCard(
                               imagePath: 'assets/icons/evento.png',
@@ -258,7 +258,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                               ),
                             ),
 
-                          // 4. Gestión de Grupos
+
                           if (_tienePermiso('grupos'))
                             _buildMenuCard(
                               imagePath: 'assets/icons/reunion.png',
@@ -271,7 +271,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                               ),
                             ),
 
-                          // 5. Gestión de Jurados
+
                           if (_tienePermiso('proyectos'))
                             _buildMenuCard(
                               imagePath: 'assets/icons/jurado.png',
@@ -284,7 +284,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                               ),
                             ),
 
-                          // 6. Asignar Proyectos
+
                           if (_tienePermiso('proyectos'))
                             _buildMenuCard(
                               imagePath: 'assets/icons/notas.png',
@@ -297,7 +297,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                               ),
                             ),
 
-                          // 7. Gestión de Rúbricas
+
                           if (_tienePermiso('proyectos'))
                             _buildMenuCard(
                               imagePath: 'assets/icons/criterios.png',
@@ -310,7 +310,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                               ),
                             ),
 
-                          // 8. Gestión de Roles
+
                           _buildMenuCard(
                             imagePath: 'assets/icons/roles.png',
                             title: 'Gestión de\nRoles',
@@ -322,7 +322,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                             ),
                           ),
 
-                          // 9. Generar Certificados
+
                           _buildMenuCard(
                             imagePath: 'assets/icons/certificado.png',
                             title: 'Certificados por Roles',
@@ -334,7 +334,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                             ),
                           ),
 
-                          // 10. Reportes
+
                           if (_tienePermiso('reportes'))
                             _buildMenuCard(
                               imagePath: 'assets/icons/reporte.png',
@@ -347,7 +347,7 @@ class _AdminCarreraScreenState extends State<AdminCarreraScreen> {
                               ),
                             ),
 
-                          // 11. Editar Cuenta
+
                           _buildMenuCard(
                             imagePath: 'assets/icons/admin.png',
                             title: 'Editar\nCuenta',

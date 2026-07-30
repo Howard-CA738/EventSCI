@@ -39,7 +39,7 @@ class InformeWordGenerator {
     );
   }
 
-  // ─── OBTENER CATEGORÍAS DESDE FIRESTORE ──────────────────────────────────
+
 
   static Future<List<String>> _obtenerCategorias(String eventId) async {
     try {
@@ -76,9 +76,9 @@ class InformeWordGenerator {
         .collection('proyectos')
         .get();
 
-    // ── Conteo de proyectos aceptados por categoría ──
+
     final Map<String, int> conteoPorCategoria = {};
-    // ── Conteo de banner y oral por categoría ──
+
     final Map<String, int> bannerPorCategoria = {};
     final Map<String, int> oralPorCategoria = {};
 
@@ -91,7 +91,7 @@ class InformeWordGenerator {
       conteoPorCategoria[clasificacion] =
           (conteoPorCategoria[clasificacion] ?? 0) + 1;
 
-      // ── Detectar tipo de exposición por el código ──
+
       final codigo = (data['Código'] as String?)?.trim() ?? '';
 final codigoLower = codigo.toLowerCase();
 
@@ -111,8 +111,8 @@ if (esBanner) {
 
     final categorias = conteoPorCategoria.keys.toList()..sort();
 
-    // ── Conteo de proyectos que se presentaron por categoría ──
-    // Un proyecto se presentó si tiene al menos una evaluación con evaluada: true
+
+
     final Map<String, int> presentadosPorCategoria = {
       for (final cat in categorias) cat: 0,
     };
@@ -143,7 +143,7 @@ if (esBanner) {
       }
     }
 
-    // ── Construir filas ──
+
     for (final categoria in categorias) {
       filas.add(_FilaResultado(
         categoria: categoria,
@@ -168,7 +168,7 @@ if (esBanner) {
   int exponen = 0;
 
   try {
-    // ── Obtener datos del evento ──
+
     final eventoDoc = await FirebaseFirestore.instance
         .collection('events')
         .doc(eventId)
@@ -190,7 +190,7 @@ debugPrint('📊 filialNombre: "$filialNombre"');
 debugPrint('📊 carreraNombre: "$carreraNombre"');
 debugPrint('📊 docKey: "$docKey"');
 
-    // ── Matriculados: users/{filialNombre}_{carreraNombre}/students ──
+
     if (filialNombre.isNotEmpty && carreraNombre.isNotEmpty) {
       debugPrint('📊 Buscando matriculados en: "$docKey"');
       try {
@@ -213,7 +213,7 @@ debugPrint('📊 docKey: "$docKey"');
       debugPrint('✅ Matriculados: $matriculados');
     }
 
-    // ── Inscritos: estudiantes que pagaron para este evento ──
+
     if (filialNombre.isNotEmpty && carreraNombre.isNotEmpty) {
       try {
         final inscritosSnap = await FirebaseFirestore.instance
@@ -229,7 +229,7 @@ debugPrint('📊 docKey: "$docKey"');
       }
     }
 
-    // Exponen: suma de integrantes de proyectos con al menos una evaluación
+
 final proyectosSnap = await FirebaseFirestore.instance
     .collection('events')
     .doc(eventId)
@@ -246,7 +246,7 @@ for (final doc in proyectosSnap.docs) {
       .get();
 
   if (evalSnap.docs.isNotEmpty) {
-    // Este proyecto se expuso, sumar sus integrantes
+
     final data = doc.data();
     final integrantes = data['Integrantes'];
 
@@ -271,7 +271,7 @@ for (final doc in proyectosSnap.docs) {
 exponen = estudiantesQueExponen.length;
 debugPrint('📊 Estudiantes que exponen: $exponen');
 
-    // ── Asistentes: estudiantes únicos con registro en asistencias ──
+
     final asistenciasSnap = await FirebaseFirestore.instance
     .collection('events')
     .doc(eventId)
@@ -437,7 +437,7 @@ debugPrint('✅ Asistentes únicos (ambas fuentes): $asistentes');
     return filas;
   }
 
-  // ─── XML: PIE DE TABLA ────────────────────────────────────────────────────
+
 
   static String _buildPieTabla(String texto) {
     final t = texto
@@ -450,7 +450,7 @@ debugPrint('✅ Asistentes únicos (ambas fuentes): $asistentes');
         '</w:p>';
   }
 
-// ─── XML: TABLA DE CATEGORÍAS (2 columnas: N° + CATEGORÍA) ───────────────
+
 
 static String _buildTablaCategorias(List<String> categorias) {
   const String abrirTabla = '''
@@ -504,8 +504,8 @@ static String _buildTablaCategorias(List<String> categorias) {
     </w:tc>
   </w:tr>''';
 
-  // ── FIX 3: si no hay categorías, igual reemplazar la tabla de la plantilla
-  // con una fila de "Sin categorías registradas" en lugar de dejar los datos hardcodeados
+
+
   if (categorias.isEmpty) {
     return '$abrirTabla$filaEncabezado\n'
         '  <w:tr>\n'
@@ -573,11 +573,11 @@ static String _buildTablaCategorias(List<String> categorias) {
 }
 
   static String _buildTablaResultados(List<_FilaResultado> filas) {
-    const int col1 = 1872; // CATEGORÍA
-    const int col2 = 1872; // TRABAJOS ACEPTADOS
-    const int col3 = 1872; // QUE SE PRESENTARON
-    const int col4 = 1872; // EXPOSICION BANNER
-    const int col5 = 1872; // EXPOSICION ORAL
+    const int col1 = 1872;
+    const int col2 = 1872;
+    const int col3 = 1872;
+    const int col4 = 1872;
+    const int col5 = 1872;
     const int totalAncho = col1 + col2 + col3 + col4 + col5;
 
     final String abrirTabla = '''
@@ -664,7 +664,7 @@ static String _buildTablaCategorias(List<String> categorias) {
     return '$abrirTabla$filaEncabezado${filasDatos.toString()}$filaTotales\n</w:tbl>';
   }
 
-  // ─── XML: TABLA DE INDICADORES (2 columnas) ───────────────────────────────
+
 
   static String _buildTablaIndicadores({
     required int matriculados,
@@ -672,8 +672,8 @@ static String _buildTablaCategorias(List<String> categorias) {
     required int inscritos,
     required int exponen,
   }) {
-    const int col1 = 7020; // INDICADOR
-    const int col2 = 2340; // NRO VALOR
+    const int col1 = 7020;
+    const int col2 = 2340;
     const int totalAncho = col1 + col2;
 
     final String abrirTabla = '''
@@ -776,7 +776,7 @@ static String _buildTablaCategorias(List<String> categorias) {
     <w:gridCol w:w="$colProm"/>
   </w:tblGrid>''');
 
-  // Fila título fusionado
+
   sb.write('''
   <w:tr>
     <w:trPr><w:trHeight w:val="480"/></w:trPr>
@@ -796,7 +796,7 @@ static String _buildTablaCategorias(List<String> categorias) {
     </w:tc>
   </w:tr>''');
 
-  // Fila encabezados de columna
+
   sb.write('''
   <w:tr>
     <w:trPr><w:trHeight w:val="560"/></w:trPr>
@@ -807,7 +807,7 @@ static String _buildTablaCategorias(List<String> categorias) {
     ${_celdaEncabezado('PROMEDIO',      colProm)}
   </w:tr>''');
 
-  // ── FIX B: si no hay ganadores, mostrar fila vacía en lugar de datos de plantilla
+
   if (filas.isEmpty) {
     sb.write('''
   <w:tr>
@@ -831,7 +831,7 @@ static String _buildTablaCategorias(List<String> categorias) {
     return sb.toString();
   }
 
-  // ── Filas de datos (código original sin cambios) ──
+
   final Map<String, List<_FilaGanador>> porCategoria = {};
   for (final f in filas) {
     porCategoria.putIfAbsent(f.categoria, () => []).add(f);
@@ -908,7 +908,7 @@ static String _buildTablaCategorias(List<String> categorias) {
   return sb.toString();
 }
 
-  // ─── HELPERS CELDAS XML ───────────────────────────────────────────────────
+
 
   static String _celdaEncabezado(String texto, int ancho) {
     final t = texto
@@ -975,7 +975,7 @@ static String _buildTablaCategorias(List<String> categorias) {
     </w:tc>''';
   }
 
-  // ─── OBTENER BYTES FINALES ────────────────────────────────────────────────
+
 
   static Future<Uint8List> _obtenerBytes({
     required Map<String, dynamic> evento,
@@ -988,7 +988,7 @@ static String _buildTablaCategorias(List<String> categorias) {
     final String eventId      = evento['id']               as String? ?? '';
     final String filialId     = adminData['filial']        as String? ?? '';
 
-    // Cargar nombres antes de usarlos
+
     final resolverNombres = ResolverNombresService();
 resolverNombres.limpiarCache();
 await resolverNombres.cargarEstudiantes(
@@ -1104,7 +1104,7 @@ await resolverNombres.cargarEstudiantes(
     return Uint8List.fromList(ZipEncoder().encode(archivoModificado)!);
   }
 
-  // ─── SALTO DE PÁGINA ANTES DE INTRODUCCIÓN ────────────────────────────────
+
 
   static String _insertarSaltoAntesDeIntroduccion(String xml) {
     final RegExp introRe = RegExp(
@@ -1121,7 +1121,7 @@ await resolverNombres.cargarEstudiantes(
     });
   }
 
-  // ─── REEMPLAZAR TABLA DE CATEGORÍAS ──────────────────────────────────────
+
 
   static String _reemplazarTablaCategorias(
       String xml, List<String> categorias) {
@@ -1175,10 +1175,10 @@ static String _reemplazarTablasResultadosIndicadoresGanadores(
         t.contains('NRO')) {
       idxIndicadores = i;
     } else if (idxGanadores == -1 &&
-        // ── FIX A: detección ampliada para cubrir texto fragmentado en XML ──
+
         (t.contains('GANADORES') ||
          (t.contains('PROMEDIO') &&
-          t.contains('INVESTIGACI') &&  // cubre tanto INVESTIGACIÓN como INVESTIGACION
+          t.contains('INVESTIGACI') &&
           t.contains('INTEGRANTES')))) {
       idxGanadores = i;
     } else if (idxDuplicada == -1 &&
@@ -1205,7 +1205,7 @@ static String _reemplazarTablasResultadosIndicadoresGanadores(
       sb.write(_buildTablaResultados(filasResultado));
       cursor = m.end;
 
-      // Saltar pie antiguo de la plantilla si existe
+
       final afterRes = xml.substring(cursor);
       final pieMatch = parrafoRe.firstMatch(afterRes);
       if (pieMatch != null &&
@@ -1227,7 +1227,7 @@ static String _reemplazarTablasResultadosIndicadoresGanadores(
       ));
       cursor = m.end;
 
-      // Saltar pie antiguo si existe
+
       final afterInd = xml.substring(cursor);
       final pieMatchI = parrafoRe.firstMatch(afterInd);
       if (pieMatchI != null &&
@@ -1239,20 +1239,20 @@ static String _reemplazarTablasResultadosIndicadoresGanadores(
       sb.write(_buildPieTabla('Tabla 03. Resumen de indicadores'));
 
     } else if (i == idxDuplicada) {
-      // Eliminar tabla duplicada de categorías
+
       sb.write(xml.substring(cursor, m.start));
       cursor = m.end;
 
     } else if (i == idxGanadores) {
       sb.write(xml.substring(cursor, m.start));
 
-      // ── FIX A: siempre reemplazar, nunca dejar tabla de plantilla ──
-      // _buildTablaGanadores maneja internamente el caso de lista vacía (Fix B)
+
+
       sb.write(_buildTablaGanadores(nombreEvento, filasGanadores));
 
       cursor = m.end;
 
-      // Saltar pie antiguo si existe
+
       final afterGan = xml.substring(cursor);
       final pieMatchG = parrafoRe.firstMatch(afterGan);
       if (pieMatchG != null &&
@@ -1359,14 +1359,14 @@ static String _reemplazarTablasResultadosIndicadoresGanadores(
   }
 }
 
-// ─── MODELOS INTERNOS ─────────────────────────────────────────────────────────
+
 
 class _FilaResultado {
   final String categoria;
   final int trabajosAceptados;
-  final int trabajosPresentados; // pendiente de fuente Firestore
-  final int exposicionBanner;    // pendiente de fuente Firestore
-  final int exposicionOral;      // pendiente de fuente Firestore
+  final int trabajosPresentados;
+  final int exposicionBanner;
+  final int exposicionOral;
 
   const _FilaResultado({
     required this.categoria,

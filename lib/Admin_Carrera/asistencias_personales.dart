@@ -8,8 +8,8 @@ import 'dart:convert';
 import 'codigo_asistencia_service.dart';
 
 class AsistenciasPersonalesScreen extends StatefulWidget {
-  // Sesión opcional: si se pasa (p. ej. desde el asistente) se usa directo;
-  // si es null (admin de carrera) se carga desde PrefsHelper como antes.
+
+
   final String? filialId;
   final String? filialNombre;
   final String? facultad;
@@ -64,9 +64,9 @@ class _AsistenciasPersonalesScreenState
   late AnimationController _fadeCtrl;
   late AnimationController _qrScaleCtrl;
 
-  // ─────────────────────────────────────────────────────────────
-  // DESIGN TOKENS — fuente única de verdad para colores y sombras.
-  // ─────────────────────────────────────────────────────────────
+
+
+
   static const Color _primary = Color(0xFF1E3A5F);
   static const Color _primaryLight = Color(0xFF2D5F8D);
   static const Color _danger = Color(0xFFE53935);
@@ -75,7 +75,7 @@ class _AsistenciasPersonalesScreenState
   static const Color _surface = Colors.white;
   static const Color _muted = Color(0xFF64748B);
 
-  // Una sola "voz" de sombra: suave, tintada con el primario, sutil.
+
   static final List<BoxShadow> _cardShadow = [
     BoxShadow(
       color: _primary.withValues(alpha: 0.06),
@@ -115,7 +115,7 @@ class _AsistenciasPersonalesScreenState
   Future<void> _loadSessionData() async {
   setState(() => _isLoadingSession = true);
   try {
-    // Si la pantalla recibió datos de sesión, los usamos sin consultar Prefs.
+
     final tieneSesionExterna = widget.facultad != null ||
         widget.carreraId != null ||
         widget.filialId != null;
@@ -151,12 +151,12 @@ class _AsistenciasPersonalesScreenState
 }
 
   Future<void> _cargarEventos() async {
-  // Necesitamos al menos facultad o carrera para filtrar (evita mostrar todo).
+
   if (_facultad == null && _carreraNombre == null) return;
   setState(() => _cargandoEventos = true);
   try {
-    // Traemos los eventos ordenados y filtramos en cliente por NOMBRE,
-    // igual que AsistenteQRScreen, para que coincida en ambos roles.
+
+
     final snap = await _firestore
         .collection('events')
         .orderBy('createdAt', descending: true)
@@ -235,7 +235,7 @@ class _AsistenciasPersonalesScreenState
     }
   }
 
-  // Devuelve el QR guardado, o lo reconstruye si la asistencia es antigua.
+
   String _obtenerQrData(Map<String, dynamic> a) {
     final guardado = a['qrData'] as String?;
     if (guardado != null && guardado.isNotEmpty) return guardado;
@@ -248,7 +248,7 @@ class _AsistenciasPersonalesScreenState
       'carrera': a['carrera'],
       'eventId': a['eventId'],
       'eventName': a['eventName'],
-      'asistenciaId': a['docId'], // el docId ES el asistenciaId
+      'asistenciaId': a['docId'],
       'nombre': a['nombre'],
       'descripcion': a['descripcion'],
       'qrId': a['qrId'],
@@ -326,7 +326,7 @@ class _AsistenciasPersonalesScreenState
                 ),
               ),
 
-              // ── CÓDIGO PARA INGRESO MANUAL ──────────────────────────
+
               if (codigo.isNotEmpty) ...[
                 const SizedBox(height: 18),
                 _buildCodigoManualBox(codigo),
@@ -357,7 +357,7 @@ class _AsistenciasPersonalesScreenState
     );
   }
 
-  // Caja grande con el código de 6 dígitos para ingreso manual.
+
   Widget _buildCodigoManualBox(String codigo) {
     return Container(
       width: double.infinity,
@@ -568,7 +568,7 @@ class _AsistenciasPersonalesScreenState
             .delete();
       }
 
-      // Limpiamos también el código manual asociado.
+
       if (codigo.isNotEmpty) {
         await CodigoAsistenciaService.eliminar(codigo);
       }
@@ -629,8 +629,8 @@ class _AsistenciasPersonalesScreenState
 
       final qrDataJson = jsonEncode(payload);
 
-      // Código de 6 dígitos ligado a este QR (lleva el MISMO qrData).
-      // Al escribirlo, el alumno cae en la misma lógica que al escanear.
+
+
       final codigo = await CodigoAsistenciaService.generarYRegistrar(
         eventId: eventId,
         qrId: qrId,
@@ -1265,7 +1265,7 @@ class _AsistenciasPersonalesScreenState
     );
   }
 
-  // Skeleton de carga (placeholder animado) en lugar de un spinner.
+
   Widget _buildSkeletonCard() {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1898,7 +1898,7 @@ class _AsistenciasPersonalesScreenState
                     ),
                   ),
 
-                  // ── CÓDIGO PARA INGRESO MANUAL ────────────────────────
+
                   if ((_asistenciaCreada?['codigo'] ?? '')
                       .toString()
                       .isNotEmpty) ...[
@@ -2029,10 +2029,10 @@ class _AsistenciasPersonalesScreenState
   }
 }
 
-// ───────────────────────────────────────────────────────────────
-// Widget de skeleton (placeholder de carga con pulso suave).
-// Autocontenido: maneja su propio AnimationController.
-// ───────────────────────────────────────────────────────────────
+
+
+
+
 class _Skeleton extends StatefulWidget {
   final double height;
   final double? width;

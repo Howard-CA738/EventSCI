@@ -129,7 +129,7 @@ class _AsistenciasAdminCarreraScreenState
   });
 
   try {
-    // ── 1. Las tres fuentes en paralelo ──────────────────────────────────
+
     final results = await Future.wait([
       _firestore
           .collection('events')
@@ -152,11 +152,11 @@ class _AsistenciasAdminCarreraScreenState
     final snapPersonales = results[1];
     final snapHuerfanos  = results[2];
 
-    // ── 2. IDs de asistencias personales que AÚN EXISTEN ─────────────────
+
     final Set<String> asistenciasExistentes =
         snapPersonales.docs.map((d) => d.id).toSet();
 
-    // ── 3. Cargar registros de asistencias vivas ──────────────────────────
+
     final List<Future<QuerySnapshot>> registrosFutures =
         snapPersonales.docs
             .map((asistDoc) => _firestore
@@ -170,7 +170,7 @@ class _AsistenciasAdminCarreraScreenState
 
     final registrosSnaps = await Future.wait(registrosFutures);
 
-    // ── 4. Mapa asistenciaId → nombre (para mostrar en huérfanos) ─────────
+
     final Map<String, String> nombrePorAsistenciaId = {};
     for (final regDoc in snapHuerfanos.docs) {
       final rd = regDoc.data();
@@ -181,18 +181,18 @@ class _AsistenciasAdminCarreraScreenState
       }
     }
 
-    // ── 5. Filtrar solo registros verdaderamente huérfanos ─────────────────
-    // (cuyo doc padre NO existe en snapPersonales)
+
+
     final huerfanosReales = snapHuerfanos.docs.where((regDoc) {
       final rd = regDoc.data();
       final asistId = rd['asistenciaId']?.toString() ?? '';
       return !asistenciasExistentes.contains(asistId);
     }).toList();
 
-    // ── 6. Contar sellos personales por estudiante ────────────────────────
+
     final Map<String, int> sellosPersonalesPorEstudiante = {};
 
-    // De asistencias vivas
+
     for (final regSnap in registrosSnaps) {
       for (final regDoc in regSnap.docs) {
         final sid = regDoc.id;
@@ -201,14 +201,14 @@ class _AsistenciasAdminCarreraScreenState
       }
     }
 
-    // De asistencias huérfanas (solo las que no están duplicadas)
+
     for (final regDoc in huerfanosReales) {
       final sid = regDoc.id;
       sellosPersonalesPorEstudiante[sid] =
           (sellosPersonalesPorEstudiante[sid] ?? 0) + 1;
     }
 
-    // ── 7. Recopilar todos los studentIds únicos ──────────────────────────
+
     final Map<String, DocumentSnapshot?> porStudentId = {};
 
     for (final doc in snapProyectos.docs) {
@@ -222,18 +222,18 @@ class _AsistenciasAdminCarreraScreenState
         }
       }
     }
-    // Estudiantes que SOLO aparecen en huérfanos
+
     for (final regDoc in huerfanosReales) {
       porStudentId.putIfAbsent(regDoc.id, () => regDoc);
     }
 
-    // ── 8. Procesar cada estudiante ───────────────────────────────────────
+
     final futures = porStudentId.entries.map((entry) async {
       final studentId = entry.key;
       final sourceDoc = entry.value;
       final data = (sourceDoc?.data() ?? {}) as Map<String, dynamic>;
 
-      // Scans de proyectos
+
       QuerySnapshot? scansSnap;
       try {
         scansSnap = await _firestore
@@ -248,7 +248,7 @@ class _AsistenciasAdminCarreraScreenState
       final sellosProyectos  = scansSnap?.docs.length ?? 0;
       final sellosPersonales = sellosPersonalesPorEstudiante[studentId] ?? 0;
 
-      // Ciclo y grupo — intentar desde el doc, si no desde users
+
       String? ciclo = data['ciclo']?.toString();
       String? grupo = data['grupo']?.toString();
 
@@ -275,7 +275,7 @@ class _AsistenciasAdminCarreraScreenState
         } catch (_) {}
       }
 
-      // Lista de scans de proyectos con detalle
+
       final scans = (scansSnap?.docs ?? []).map((s) {
         final sd = s.data() as Map<String, dynamic>;
         return {
@@ -295,10 +295,10 @@ class _AsistenciasAdminCarreraScreenState
         return tB.compareTo(tA);
       });
 
-      // ── Asistencias personales de este estudiante ─────────────────────
+
       final List<Map<String, dynamic>> personales = [];
 
-      // De asistencias cuyo doc padre AÚN EXISTE
+
       for (int idx = 0; idx < snapPersonales.docs.length; idx++) {
         final asistDoc = snapPersonales.docs[idx];
         final asistData = asistDoc.data();
@@ -320,7 +320,7 @@ class _AsistenciasAdminCarreraScreenState
         }
       }
 
-      // De asistencias HUÉRFANAS (doc padre fue borrado)
+
       for (final regDoc in huerfanosReales) {
         if (regDoc.id != studentId) continue;
         final rd = regDoc.data();

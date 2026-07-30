@@ -18,7 +18,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
 
   String _filtroEstado = 'todos';
 
-  // NUEVO: estado para selección múltiple
+
   bool _modoSeleccion = false;
   final Set<String> _seleccionados = {};
 
@@ -92,7 +92,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
       if (mounted) {
         setState(() {
           _estudiantes = lista;
-          // Limpia selecciones que ya no existen tras recargar
+
           final idsValidos = lista.map((e) => e['docId'].toString()).toSet();
           _seleccionados.removeWhere((id) => !idsValidos.contains(id));
           _aplicarFiltro();
@@ -128,9 +128,9 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
     });
   }
 
-  // ============================================================
-  // NUEVO: lógica de selección múltiple
-  // ============================================================
+
+
+
 
   void _toggleModoSeleccion() {
     setState(() {
@@ -149,14 +149,14 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
     });
   }
 
-  // ¿Están seleccionados todos los que se ven actualmente (según filtro/búsqueda)?
+
   bool _todosSeleccionados() {
     if (_filtrados.isEmpty) return false;
     return _filtrados
         .every((e) => _seleccionados.contains(e['docId'].toString()));
   }
 
-  // Marca o desmarca TODOS los estudiantes visibles (respetando el filtro actual)
+
   void _toggleSeleccionarTodos() {
     setState(() {
       final idsVisibles =
@@ -169,7 +169,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
     });
   }
 
-  // NUEVO: desbloquea en bloque todos los seleccionados
+
   Future<void> _desbloquearSeleccionados() async {
     if (_seleccionados.isEmpty) return;
 
@@ -200,9 +200,9 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
           .doc(_carreraPath)
           .collection('students');
 
-      // Firestore permite máx. 500 operaciones por lote.
-      // Cada estudiante puede generar hasta 2 (update + delete device),
-      // así que dividimos en tandas para no superar el límite.
+
+
+
       WriteBatch batch = firestore.batch();
       int ops = 0;
 
@@ -211,7 +211,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
           'sessionActive': false,
           'sessionToken': null,
           'primeraVez': true,
-          // lastLogin NO se borra — conserva la fecha real del último ingreso
+
           'bloqueadoPermanente': false,
           'deviceId': null,
           'bloqueadoEn': null,
@@ -226,7 +226,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
           ops++;
         }
 
-        // Si nos acercamos al límite, confirmamos esta tanda y abrimos otra
+
         if (ops >= 450) {
           await batch.commit();
           batch = firestore.batch();
@@ -280,7 +280,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
         'sessionActive': false,
         'sessionToken': null,
         'primeraVez': true,
-        // FIX 1: lastLogin NO se borra — conserva la fecha real del último ingreso
+
         'bloqueadoPermanente': false,
         'deviceId': null,
         'bloqueadoEn': null,
@@ -482,7 +482,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         actions: [
-          // NUEVO: botón para activar/desactivar modo selección
+
           IconButton(
             icon: Icon(_modoSeleccion
                 ? Icons.close_rounded
@@ -530,7 +530,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
                             },
                           ),
                   ),
-                  // NUEVO: barra inferior de acción para desbloqueo masivo
+
                   if (_modoSeleccion && _seleccionados.isNotEmpty)
                     _buildBottomActionBar(),
                 ],
@@ -609,7 +609,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
               ],
             ),
           ),
-          // NUEVO: control "Marcar todos" + contador (solo en modo selección)
+
           if (_modoSeleccion) ...[
             const SizedBox(height: 14),
             Row(
@@ -743,7 +743,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
     );
   }
 
-  // NUEVO: barra inferior con el botón de desbloqueo masivo
+
   Widget _buildBottomActionBar() {
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -815,7 +815,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
     }
 
     return GestureDetector(
-      // En modo selección, tocar la tarjeta marca/desmarca al estudiante
+
       onTap: _modoSeleccion ? () => _toggleSeleccion(docId) : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -837,7 +837,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // NUEVO: checkbox visible solo en modo selección
+
               if (_modoSeleccion) ...[
                 Icon(
                   seleccionado
@@ -938,7 +938,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
                       ],
                     ),
                   ),
-                  // Los botones individuales se ocultan en modo selección
+
                   if (!_modoSeleccion) ...[
                     const SizedBox(height: 8),
                     Row(
@@ -1029,7 +1029,7 @@ class _GestionSesionesScreenState extends State<GestionSesionesScreen> {
     );
   }
 
-  // FIX 2: toLocal() convierte UTC → hora local del dispositivo (Perú UTC-5)
+
   String _formatDate(DateTime dt) {
     final local = dt.toLocal();
     return '${local.day.toString().padLeft(2, '0')}/'

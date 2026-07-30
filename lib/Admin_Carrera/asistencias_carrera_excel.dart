@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 class AsistenciasCarreraExcelService {
 
-  // ── Paleta de colores ────────────────────────────────────────────────────────
+
   static const _navy        = '#0F2044';
   static const _blue        = '#2563EB';
   static const _blueSoft    = '#DBEAFE';
@@ -25,7 +25,7 @@ class AsistenciasCarreraExcelService {
   static const _purpleLight = '#EDE9FE';
   static const _orange      = '#EA580C';
   static const _orangeLight = '#FFF7ED';
-  // ── Punto de entrada principal ───────────────────────────────────────────────
+
   Future<String?> generarReporteAsistencias({
     required List<Map<String, dynamic>> estudiantes,
     required String eventoNombre,
@@ -39,7 +39,7 @@ class AsistenciasCarreraExcelService {
     try {
       final excel = Excel.createExcel();
 
-      // ── 1. Deduplicar y ordenar estudiantes ──────────────────────────────────
+
       final Map<String, Map<String, dynamic>> vistos = {};
 
       for (final e in estudiantes) {
@@ -55,7 +55,7 @@ class AsistenciasCarreraExcelService {
                 .map((s) => Map<String, dynamic>.from(s as Map)),
           );
         } else {
-          // Mergear scans de proyectos
+
           final scansPrevios =
               vistos[key]!['scans'] as List<Map<String, dynamic>>;
           final scansNuevos =
@@ -69,7 +69,7 @@ class AsistenciasCarreraExcelService {
             }
           }
 
-          // Mergear personales
+
           final personalesPrev =
               vistos[key]!['personales'] as List<Map<String, dynamic>>;
           final personalesNuevos =
@@ -87,7 +87,7 @@ class AsistenciasCarreraExcelService {
               scansPrevios.length + personalesPrev.length;
           vistos[key]!['totalScans'] = totalScans;
 
-          // lastScan: el más reciente de los dos
+
           final lastA = vistos[key]!['lastScan'];
           final lastB = e['lastScan'];
           if (lastA == null) {
@@ -99,7 +99,7 @@ class AsistenciasCarreraExcelService {
         }
       }
 
-      // Recalcular totalScans después del merge
+
       for (final e in vistos.values) {
         final scans = (e['scans'] as List<dynamic>?) ?? [];
         final pers = (e['personales'] as List<dynamic>?) ?? [];
@@ -121,7 +121,7 @@ class AsistenciasCarreraExcelService {
       debugPrint(
           '✅ Estudiantes únicos para Excel: ${estudiantesLimpios.length}');
 
-      // ── 2. Consultar meta de sellos desde Firestore ──────────────────────────
+
       int metaSellos = 0;
       try {
         final docId =
@@ -145,8 +145,8 @@ class AsistenciasCarreraExcelService {
         debugPrint('⚠️ No se pudo leer meta de sellos: $e');
       }
 
-      // ── 3. Construir todas las filas de detalle (para hojas 2–5) ────────────
-      //   Cada fila = un scan o una asistencia personal individual
+
+
       final List<Map<String, dynamic>> todasLasFilas = [];
       for (final est in estudiantesLimpios) {
         final nombre = (est['nombre'] as String?) ?? '';
@@ -187,7 +187,7 @@ class AsistenciasCarreraExcelService {
         }
       }
 
-      // Ordenar todas las filas por timestamp ascendente
+
       todasLasFilas.sort((a, b) {
         final tA = (a['timestamp'] as Timestamp?)?.toDate();
         final tB = (b['timestamp'] as Timestamp?)?.toDate();
@@ -197,7 +197,7 @@ class AsistenciasCarreraExcelService {
         return tA.compareTo(tB);
       });
 
-      // Separar por turno
+
       final filasTurnoManana = todasLasFilas.where((f) {
         final ts = (f['timestamp'] as Timestamp?)?.toDate();
         if (ts == null) return false;
@@ -210,7 +210,7 @@ class AsistenciasCarreraExcelService {
         return ts.hour >= 12;
       }).toList();
 
-      // ── 4. Crear hojas ───────────────────────────────────────────────────────
+
       _crearHojaListaCompleta(
         excel: excel,
         estudiantes: estudiantesLimpios,
@@ -281,7 +281,7 @@ class AsistenciasCarreraExcelService {
 
       excel.delete('Sheet1');
 
-      // ── 5. Guardar archivo ───────────────────────────────────────────────────
+
       final bytes = excel.encode();
       if (bytes == null) return null;
 
@@ -299,9 +299,9 @@ class AsistenciasCarreraExcelService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // HOJA 1 — Lista Completa de Asistencias (resumen por estudiante)
-  // ═══════════════════════════════════════════════════════════════════════════
+
+
+
   void _crearHojaListaCompleta({
     required Excel excel,
     required List<Map<String, dynamic>> estudiantes,
@@ -313,7 +313,7 @@ class AsistenciasCarreraExcelService {
   }) {
     final sheet = excel['Lista de Asistencias'];
 
-    // Estilos
+
     final sTitulo = CellStyle(
       bold: true, fontSize: 15,
       fontColorHex: ExcelColor.fromHexString(_white),
@@ -411,8 +411,8 @@ class AsistenciasCarreraExcelService {
       horizontalAlign: HorizontalAlign.Center,
     );
 
-    // ── Banner ────────────────────────────────────────────────────────────────
-    const totalCols = 8; // N°, NOMBRE, CÓDIGO, CICLO, GRUPO, SELLOS, N°ASIST, ÚLTIMA
+
+    const totalCols = 8;
     _cel(sheet, 0, 0, '  LISTA DE ASISTENCIAS', sTitulo);
     _cel(sheet, 1, 0, '  ${eventoNombre.toUpperCase()}', sSubtitulo);
     for (int c = 0; c < totalCols; c++) {
@@ -420,7 +420,7 @@ class AsistenciasCarreraExcelService {
     }
     sheet.setRowHeight(2, 4);
 
-    // ── Metadatos ─────────────────────────────────────────────────────────────
+
     final fechaGen = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final totalGlobal = estudiantes.fold<int>(
         0, (s, e) => s + ((e['totalScans'] as int?) ?? 0));
@@ -441,7 +441,7 @@ class AsistenciasCarreraExcelService {
     }
     sheet.setRowHeight(10, 8);
 
-    // ── Encabezados tabla (fila 11) ───────────────────────────────────────────
+
     const fEnc = 11;
     const encabezados = [
       'N°', 'NOMBRE COMPLETO', 'CÓDIGO',
@@ -467,7 +467,7 @@ class AsistenciasCarreraExcelService {
             .reduce((a, b) => a > b ? a : b)
             .clamp(1, 99999);
 
-    // ── Filas de datos ────────────────────────────────────────────────────────
+
     for (int i = 0; i < estudiantes.length; i++) {
       final e = estudiantes[i];
       final fila = fEnc + 1 + i;
@@ -476,9 +476,9 @@ class AsistenciasCarreraExcelService {
       final sI = par ? sIzqP : sIzq;
       final sC = par ? sCenP : sCen;
 
-      // ── Última asistencia: se calcula directamente desde los timestamps de
-      //    scans y personales (misma fuente que las otras hojas), para que
-      //    siempre muestre fecha y hora reales. ────────────────────────────────
+
+
+
       DateTime? ultimoTs;
       for (final scan
           in (e['scans'] as List<dynamic>? ?? [])
@@ -496,7 +496,7 @@ class AsistenciasCarreraExcelService {
           ultimoTs = ts;
         }
       }
-      // Fallback a lastScan si no se encontró timestamp en los detalles.
+
       if (ultimoTs == null && e['lastScan'] != null) {
         try {
           ultimoTs = (e['lastScan'] as dynamic).toDate() as DateTime;
@@ -514,7 +514,7 @@ class AsistenciasCarreraExcelService {
               ? sBadgeMedio
               : sBadgeBajo;
 
-      // Columna SELLOS: "ganados/meta" o solo "ganados" si no hay meta
+
       String textoSellos;
       CellStyle estiloSellos;
       if (metaSellos > 0) {
@@ -541,27 +541,27 @@ class AsistenciasCarreraExcelService {
       sheet.setRowHeight(fila, 18);
     }
 
-    // ── Merges banner ─────────────────────────────────────────────────────────
+
     _merge(sheet, 0, 0, 0, totalCols - 1);
     _merge(sheet, 1, 0, 1, totalCols - 1);
 
-    // ── Anchos de columna ─────────────────────────────────────────────────────
-    sheet.setColumnWidth(0, 5);   // N°
-    sheet.setColumnWidth(1, 34);  // Nombre
-    sheet.setColumnWidth(2, 14);  // Código
-    sheet.setColumnWidth(3, 8);   // Ciclo
-    sheet.setColumnWidth(4, 10);  // Grupo
-    sheet.setColumnWidth(5, 12);  // Sellos
-    sheet.setColumnWidth(6, 15);  // N° Asistencias
-    sheet.setColumnWidth(7, 22);  // Última asistencia
+
+    sheet.setColumnWidth(0, 5);
+    sheet.setColumnWidth(1, 34);
+    sheet.setColumnWidth(2, 14);
+    sheet.setColumnWidth(3, 8);
+    sheet.setColumnWidth(4, 10);
+    sheet.setColumnWidth(5, 12);
+    sheet.setColumnWidth(6, 15);
+    sheet.setColumnWidth(7, 22);
 
     sheet.setRowHeight(0, 34);
     sheet.setRowHeight(1, 22);
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // HOJA 2 (Proyectos) y HOJA 3 (Personales) — detalle por asistencia
-  // ═══════════════════════════════════════════════════════════════════════════
+
+
+
   void _crearHojaDetalle({
     required Excel excel,
     required String nombreHoja,
@@ -575,7 +575,7 @@ class AsistenciasCarreraExcelService {
     required String icono,
     required String etiquetaTipo,
   }) {
-    // ── Ordenar por ciclo y grupo (numérico), igual que Lista de Asistencias ──
+
     _ordenarPorCicloGrupo(filas);
 
     final sheet = excel[nombreHoja];
@@ -617,7 +617,7 @@ class AsistenciasCarreraExcelService {
 
     const totalCols = 8;
 
-    // Banner
+
     _cel(sheet, 0, 0, '  $etiquetaTipo — $eventoNombre', sTitulo);
     _cel(sheet, 1, 0, '  Reporte de asistencias por $etiquetaTipo', sSubtitulo);
     for (int c = 0; c < totalCols; c++) {
@@ -625,7 +625,7 @@ class AsistenciasCarreraExcelService {
     }
     sheet.setRowHeight(2, 4);
 
-    // Metadatos
+
     final fechaGen = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final metas = [
       ['  FILIAL', filialNombre],
@@ -642,7 +642,7 @@ class AsistenciasCarreraExcelService {
     }
     sheet.setRowHeight(8, 8);
 
-    // Encabezados
+
     const fEnc = 9;
     final encabezados = [
       'N°', 'NOMBRE COMPLETO', 'CÓDIGO',
@@ -666,7 +666,7 @@ class AsistenciasCarreraExcelService {
         fontColorHex: ExcelColor.fromHexString(_gray900),
         horizontalAlign: HorizontalAlign.Center);
 
-    // Filas de datos
+
     for (int i = 0; i < filas.length; i++) {
       final f = filas[i];
       final fila = fEnc + 1 + i;
@@ -713,11 +713,11 @@ class AsistenciasCarreraExcelService {
       _merge(sheet, fEnc + 1, 0, fEnc + 1, totalCols - 1);
     }
 
-    // Merges banner
+
     _merge(sheet, 0, 0, 0, totalCols - 1);
     _merge(sheet, 1, 0, 1, totalCols - 1);
 
-    // Anchos
+
     sheet.setColumnWidth(0, 5);
     sheet.setColumnWidth(1, 34);
     sheet.setColumnWidth(2, 14);
@@ -731,9 +731,9 @@ class AsistenciasCarreraExcelService {
     sheet.setRowHeight(1, 22);
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // HOJAS 4 y 5 — Turno Mañana / Turno Tarde (todas las asistencias por hora)
-  // ═══════════════════════════════════════════════════════════════════════════
+
+
+
   void _crearHojaTurno({
     required Excel excel,
     required String nombreHoja,
@@ -746,7 +746,7 @@ class AsistenciasCarreraExcelService {
     required String etiquetaTurno,
     required String icono,
   }) {
-    // ── Ordenar por ciclo y grupo (numérico), igual que Lista de Asistencias ──
+
     _ordenarPorCicloGrupo(filas);
 
     final sheet = excel[nombreHoja];
@@ -802,7 +802,7 @@ class AsistenciasCarreraExcelService {
 
     const totalCols = 9;
 
-    // Banner
+
     _cel(sheet, 0, 0, '  $etiquetaTurno', sTitulo);
     _cel(sheet, 1, 0, '  $eventoNombre', sSubtitulo);
     for (int c = 0; c < totalCols; c++) {
@@ -810,7 +810,7 @@ class AsistenciasCarreraExcelService {
     }
     sheet.setRowHeight(2, 4);
 
-    // Metadatos
+
     final fechaGen = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final metas = [
       ['  FILIAL', filialNombre],
@@ -827,7 +827,7 @@ class AsistenciasCarreraExcelService {
     }
     sheet.setRowHeight(8, 8);
 
-    // Encabezados (fila 9)
+
     const fEnc = 9;
     const encabezados = [
       'N°', 'NOMBRE COMPLETO', 'CÓDIGO',
@@ -846,7 +846,7 @@ class AsistenciasCarreraExcelService {
     }
     sheet.setRowHeight(fEnc, 28);
 
-    // Estilos fila de datos
+
     final sIzq  = CellStyle(fontSize: 9,
         fontColorHex: ExcelColor.fromHexString(_gray900));
     final sCen  = CellStyle(fontSize: 9,
@@ -883,7 +883,7 @@ class AsistenciasCarreraExcelService {
       horizontalAlign: HorizontalAlign.Center,
     );
 
-    // Filas — ordenadas por ciclo y grupo (numérico)
+
     for (int i = 0; i < filas.length; i++) {
       final f = filas[i];
       final fila = fEnc + 1 + i;
@@ -934,32 +934,32 @@ class AsistenciasCarreraExcelService {
       _merge(sheet, fEnc + 1, 0, fEnc + 1, totalCols - 1);
     }
 
-    // Merges banner
+
     _merge(sheet, 0, 0, 0, totalCols - 1);
     _merge(sheet, 1, 0, 1, totalCols - 1);
 
-    // Anchos de columna
-    sheet.setColumnWidth(0, 5);   // N°
-    sheet.setColumnWidth(1, 34);  // Nombre
-    sheet.setColumnWidth(2, 14);  // Código
-    sheet.setColumnWidth(3, 8);   // Ciclo
-    sheet.setColumnWidth(4, 10);  // Grupo
-    sheet.setColumnWidth(5, 12);  // Tipo
-    sheet.setColumnWidth(6, 24);  // Detalle
-    sheet.setColumnWidth(7, 20);  // Categoría / Tipo
-    sheet.setColumnWidth(8, 10);  // Hora
+
+    sheet.setColumnWidth(0, 5);
+    sheet.setColumnWidth(1, 34);
+    sheet.setColumnWidth(2, 14);
+    sheet.setColumnWidth(3, 8);
+    sheet.setColumnWidth(4, 10);
+    sheet.setColumnWidth(5, 12);
+    sheet.setColumnWidth(6, 24);
+    sheet.setColumnWidth(7, 20);
+    sheet.setColumnWidth(8, 10);
 
     sheet.setRowHeight(0, 34);
     sheet.setRowHeight(1, 22);
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Helpers internos
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /// Ordena una lista de filas de detalle por ciclo y grupo en orden numérico,
-  /// y como criterio final por nombre. Misma lógica que la hoja
-  /// "Lista de Asistencias".
+
+
+
+
+
+
   void _ordenarPorCicloGrupo(List<Map<String, dynamic>> filas) {
     filas.sort((a, b) {
       final ca = _parseCiclo(a['ciclo'] as String?);

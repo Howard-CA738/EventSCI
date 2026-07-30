@@ -13,12 +13,12 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final RubricasService _rubricasService = RubricasService();
 
-  // ✅ NUEVO: Valores con sistema de filiales
+
   String? _filialSeleccionada;
   String? _facultadSeleccionada;
   String? _carreraSeleccionada;
 
-  // ✅ NUEVO: Listas dinámicas
+
   List<String> _filialesDisponibles = [];
   List<String> _facultadesDisponibles = [];
   List<Map<String, dynamic>> _carrerasDisponibles = [];
@@ -32,7 +32,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
     _cargarFiliales();
   }
 
-  // ✅ NUEVO: Cargar filiales
+
   Future<void> _cargarFiliales() async {
     try {
       final filiales = await _rubricasService.getFiliales();
@@ -46,7 +46,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
     }
   }
 
-  // ✅ NUEVO: Cuando cambia la filial
+
   Future<void> _onFilialChanged(String? filial) async {
     setState(() {
       _filialSeleccionada = filial;
@@ -67,7 +67,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
     }
   }
 
-  // ✅ NUEVO: Cuando cambia la facultad
+
   Future<void> _onFacultadChanged(String? facultad) async {
     setState(() {
       _facultadSeleccionada = facultad;
@@ -102,7 +102,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
     }
   }
 
-  // ✅ ACTUALIZADO: Cargar jurados filtrando por filial, facultad y carrera
+
   Future<void> _cargarJurados() async {
     if (_filialSeleccionada == null ||
         _facultadSeleccionada == null ||
@@ -128,12 +128,12 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
       for (var doc in juradosSnapshot.docs) {
         final data = doc.data();
 
-        // Manejar categorías como lista
+
         List<String> categorias = [];
         if (data['categorias'] != null) {
           categorias = List<String>.from(data['categorias']);
         } else if (data['categoria'] != null) {
-          // Compatibilidad con datos antiguos
+
           categorias = [data['categoria']];
         }
 
@@ -223,7 +223,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // ✅ NUEVO: Mostrar ubicación del jurado (no editable)
+
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -339,7 +339,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Selector de múltiples categorías
+
                 FutureBuilder<List<String>>(
                   future: _obtenerCategorias(
                     jurado['filial'],
@@ -443,7 +443,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                   },
                 ),
 
-                // Mostrar categorías seleccionadas como chips
+
                 if (categoriasSeleccionadas.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 12.0),
@@ -528,7 +528,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
     );
   }
 
-  // ✅ ACTUALIZADO: Obtener categorías usando filialId
+
   Future<List<String>> _obtenerCategorias(
     String filialId,
     String facultad,
@@ -691,7 +691,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header
+
             Padding(
               padding: const EdgeInsets.all(20.0),
               child: Row(
@@ -719,7 +719,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                 ],
               ),
             ),
-            // Content Area
+
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -731,12 +731,12 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                 ),
                 child: Column(
                   children: [
-                    // Filtros
+
                     Padding(
                       padding: const EdgeInsets.all(24),
                       child: Column(
                         children: [
-                          // Icono
+
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
@@ -758,7 +758,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                           ),
                           const SizedBox(height: 24),
 
-                          // ✅ NUEVO: Filial
+
                           DropdownButtonFormField<String>(
                             initialValue: _filialSeleccionada,
                             isExpanded: true,
@@ -821,7 +821,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          // Facultad
+
                           DropdownButtonFormField<String>(
                             initialValue: _facultadSeleccionada,
                             isExpanded: true,
@@ -872,7 +872,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          // Carrera
+
                           DropdownButtonFormField<String>(
                             initialValue: _carreraSeleccionada,
                             isExpanded: true,
@@ -925,7 +925,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                       ),
                     ),
 
-                    // Lista de Jurados
+
                     Expanded(
                       child: _isLoadingJurados
                           ? const Center(
@@ -1009,7 +1009,7 @@ class _EditarJuradosScreenState extends State<EditarJuradosScreen> {
                                           ),
                                         ),
                                         const SizedBox(height: 4),
-                                        // Mostrar categorías como chips pequeños
+
                                         Wrap(
                                           spacing: 4,
                                           runSpacing: 4,

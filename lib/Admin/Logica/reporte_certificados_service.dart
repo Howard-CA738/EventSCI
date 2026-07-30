@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '/encryption_helper.dart';
 
-/// Una escuela (carrera) dentro de la estructura filial→facultad→escuela.
+
 class EscuelaItem {
   final String filialId;
   final String filialNombre;
@@ -18,14 +18,14 @@ class EscuelaItem {
   });
 }
 
-/// Un evento de una escuela.
+
 class EventoItem {
   final String id;
   final String name;
   const EventoItem(this.id, this.name);
 }
 
-/// Fila de la hoja ASISTENTE.
+
 class CertificadoRow {
   final String nombre;
   final String dni;
@@ -43,7 +43,7 @@ class CertificadoRow {
   });
 }
 
-/// Fila de la hoja PONENTE (estudiante integrante de proyecto).
+
 class PonenteRow {
   final String nombre;
   final String dni;
@@ -61,7 +61,7 @@ class PonenteRow {
   });
 }
 
-/// Fila de la hoja JURADO (docente).
+
 class JuradoRow {
   final String nombre;
   final int proyectosEvaluados;
@@ -71,7 +71,7 @@ class JuradoRow {
   });
 }
 
-/// Fila de la hoja ORGANIZADOR (estudiante con esAsisteQR).
+
 class OrganizadorRow {
   final String nombre;
   final String dni;
@@ -87,7 +87,7 @@ class OrganizadorRow {
   });
 }
 
-/// Contenedor con las 4 hojas del reporte.
+
 class ReporteRoles {
   final List<CertificadoRow> asistentes;
   final List<PonenteRow> ponentes;
@@ -104,7 +104,7 @@ class ReporteRoles {
 class ReporteCertificadosService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ── 1) Estructura filial → facultad → escuela (desde 'events') ──────────
+
   Future<List<EscuelaItem>> getEstructura() async {
     final snap = await _firestore.collection('events').get();
     final mapa = <String, EscuelaItem>{};
@@ -134,7 +134,7 @@ class ReporteCertificadosService {
     return mapa.values.toList();
   }
 
-  // ── 2) Eventos de una escuela ───────────────────────────────────────────
+
   Future<List<EventoItem>> getEventos(EscuelaItem escuela) async {
     final snap = await _firestore
         .collection('events')
@@ -157,7 +157,7 @@ class ReporteCertificadosService {
         .toList();
   }
 
-  // ── 3) Meta de sellos del evento ────────────────────────────────────────
+
   Future<int> getMetaSellos(EscuelaItem escuela, String eventoId) async {
     try {
       final docId =
@@ -178,7 +178,7 @@ class ReporteCertificadosService {
     }
   }
 
-  // ── Helper: descifrar DNI ────────────────────────────────────────────────
+
   String _dni(Map<String, dynamic> est) {
     final dniEnc = (est['dniEncrypted'] ?? '').toString();
     if (dniEnc.isEmpty) return '—';
@@ -187,7 +187,7 @@ class ReporteCertificadosService {
     return d;
   }
 
-  // ── Helper: ordenar por ciclo → grupo → nombre ──────────────────────────
+
   int _comparar(String a, String b) {
     final na = int.tryParse(a.trim());
     final nb = int.tryParse(b.trim());
@@ -197,9 +197,9 @@ class ReporteCertificadosService {
     return a.toLowerCase().compareTo(b.toLowerCase());
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
-  // ASISTENTE — inscritos con sellos (optimizado con totalScans + híbrido)
-  // ═════════════════════════════════════════════════════════════════════════
+
+
+
   Future<List<CertificadoRow>> getInscritosConSellos({
     required EscuelaItem escuela,
     required String eventoId,
@@ -226,15 +226,15 @@ class ReporteCertificadosService {
 
     final idsInscritos = inscritos.map((e) => e['id'] as String).toSet();
 
-    // Personales
-   // Personales — dos fuentes, igual que Control de Asistencias:
-    //  (1) asistencias_personales vivas + sus registros
-    //  (2) collectionGroup('registros') huérfanos (padre borrado)
-    // Para no duplicar, guardamos un set de "asistenciaId|studentId" ya contados.
+
+
+
+
+
     final conteoPersonales = <String, int>{};
     final yaContados = <String>{};
 
-    // (1) Vivas
+
     final personalesSnap = await _firestore
         .collection('events')
         .doc(eventoId)
@@ -250,7 +250,7 @@ class ReporteCertificadosService {
       }
     }));
 
-    // (2) Huérfanos (o cualquier registro del evento por collectionGroup)
+
     try {
       final huerfanosSnap = await _firestore
           .collectionGroup('registros')
@@ -274,7 +274,7 @@ class ReporteCertificadosService {
         conteoPersonales.keys.where((k) => idsInscritos.contains(k)).length;
     debugPrint('📝 personales que coinciden con inscritos: $personalesCoinciden');
 
-    // Scans vía totalScans
+
     final scansPorEstudiante = <String, int>{};
     final necesitanRecuento = <String>[];
  final asistenciasSnap = await _firestore
@@ -283,7 +283,7 @@ class ReporteCertificadosService {
         .collection('asistencias')
         .get();
 
-    // ── DEBUG temporal ──
+
     debugPrint('🚀 getInscritosConSellos — eventoId="$eventoId"');
     debugPrint('📋 docs en asistencias: ${asistenciasSnap.docs.length}');
     if (asistenciasSnap.docs.isNotEmpty) {
@@ -293,7 +293,7 @@ class ReporteCertificadosService {
     final coinciden =
         asistenciasSnap.docs.where((d) => idsInscritos.contains(d.id)).length;
     debugPrint('   coincidencias id: $coinciden de ${asistenciasSnap.docs.length}');
-    // ── FIN DEBUG ──
+
 
     for (final doc in asistenciasSnap.docs) {
       if (!idsInscritos.contains(doc.id)) continue;
@@ -355,10 +355,10 @@ class ReporteCertificadosService {
     return filas;
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
-  // MATRICULADOS — todos los estudiantes de la carrera con sus sellos
-  // (misma lógica de sellos que asistente, sin filtrar por pago)
-  // ═════════════════════════════════════════════════════════════════════════
+
+
+
+
   Future<List<CertificadoRow>> getMatriculadosConSellos({
     required EscuelaItem escuela,
     required String eventoId,
@@ -372,7 +372,7 @@ class ReporteCertificadosService {
         .orderBy('name')
         .get();
 
-    // Todos los estudiantes (sin filtro de pago)
+
     final estudiantes = <Map<String, dynamic>>[];
     for (final doc in snap.docs) {
       estudiantes.add({'id': doc.id, ...doc.data()});
@@ -381,7 +381,7 @@ class ReporteCertificadosService {
 
     final ids = estudiantes.map((e) => e['id'] as String).toSet();
 
-    // Personales
+
     final conteoPersonales = <String, int>{};
     final personalesSnap = await _firestore
         .collection('events')
@@ -395,7 +395,7 @@ class ReporteCertificadosService {
       }
     }));
 
- // Scans vía totalScans (+ recuento híbrido)
+
     final scansPorEstudiante = <String, int>{};
     final necesitanRecuento = <String>[];
     final asistenciasSnap = await _firestore
@@ -404,7 +404,7 @@ class ReporteCertificadosService {
         .collection('asistencias')
         .get();
 
-    // ── DEBUG temporal ──
+
     debugPrint('📋 docs en asistencias: ${asistenciasSnap.docs.length}');
     if (asistenciasSnap.docs.isNotEmpty) {
       debugPrint('   ej. id asistencia: "${asistenciasSnap.docs.first.id}"');
@@ -413,7 +413,7 @@ class ReporteCertificadosService {
     final coinciden =
         asistenciasSnap.docs.where((d) => ids.contains(d.id)).length;
     debugPrint('   coincidencias id: $coinciden de ${asistenciasSnap.docs.length}');
-    // ── FIN DEBUG ──
+
 
     for (final doc in asistenciasSnap.docs) {
       if (!ids.contains(doc.id)) continue;
@@ -475,9 +475,9 @@ class ReporteCertificadosService {
     return filas;
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
-  // Reporte de las otras 3 hojas: ponentes, jurados, organizadores
-  // ═════════════════════════════════════════════════════════════════════════
+
+
+
   Future<ReporteRoles> getReporteRoles({
     required EscuelaItem escuela,
     required String eventoId,
@@ -485,7 +485,7 @@ class ReporteCertificadosService {
   }) async {
     final docKey = '${escuela.filialNombre}_${escuela.carreraNombre}';
 
-    // Cargar estudiantes de la carrera (para cruces por código)
+
     final studentsSnap = await _firestore
         .collection('users')
         .doc(docKey)
@@ -493,7 +493,7 @@ class ReporteCertificadosService {
         .get();
 
 final porCodigo = <String, Map<String, dynamic>>{};
-    // 🆕 lista de estudiantes con sus tokens de nombre, para matching flexible
+
     final estudiantesTokens = <MapEntry<Set<String>, Map<String, dynamic>>>[];
     final organizadores = <OrganizadorRow>[];
 
@@ -518,18 +518,18 @@ final porCodigo = <String, Map<String, dynamic>>{};
       }
     }
 
-    // ── Proyectos del evento + evaluaciones ────────────────────────────────
+
     final proyectosSnap = await _firestore
         .collection('events')
         .doc(eventoId)
         .collection('proyectos')
         .get();
 
-    // Conteo de evaluaciones por jurado y set de códigos de ponentes evaluados
+
     final evalPorJurado = <String, int>{};
-    // codigo integrante → fue evaluado en algún proyecto
+
     final ponenteEvaluado = <String, bool>{};
-    // codigo integrante → (asegura presencia aunque no evaluado)
+
     final ponentesCodigos = <String>{};
 
     await Future.wait(proyectosSnap.docs.map((proyDoc) async {
@@ -537,7 +537,7 @@ final porCodigo = <String, Map<String, dynamic>>{};
       final integrantesRaw = pData['Integrantes'] ?? pData['integrantes'];
       final codigos = _extraerCodigos(integrantesRaw);
 
-      // Evaluaciones de este proyecto
+
       final evalSnap = await proyDoc.reference.collection('evaluaciones').get();
       bool proyectoEvaluado = false;
       for (final ev in evalSnap.docs) {
@@ -545,7 +545,7 @@ final porCodigo = <String, Map<String, dynamic>>{};
         final evaluada = evData['evaluada'] == true;
         if (evaluada) {
           proyectoEvaluado = true;
-          final juradoId = ev.id; // doc.id == juradoId
+          final juradoId = ev.id;
           evalPorJurado[juradoId] = (evalPorJurado[juradoId] ?? 0) + 1;
         }
       }
@@ -588,7 +588,7 @@ for (final cod in ponentesCodigos) {
       return x.nombre.toLowerCase().compareTo(y.nombre.toLowerCase());
     });
 
-    // ── Jurados: todos los de la carrera + su conteo ───────────────────────
+
     final juradosSnap = await _firestore
         .collection('users')
         .where('userType', isEqualTo: 'jurado')
@@ -607,7 +607,7 @@ for (final cod in ponentesCodigos) {
     }
     jurados.sort((a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()));
 
-    // Organizadores ordenados
+
     organizadores.sort((x, y) {
       final c = _comparar(x.ciclo, y.ciclo);
       if (c != 0) return c;
@@ -623,7 +623,7 @@ for (final cod in ponentesCodigos) {
       organizadores: organizadores,
     );
   }
-  
+
 Map<String, dynamic>? _buscarPorNombreParecido(
     String texto,
     List<MapEntry<Set<String>, Map<String, dynamic>>> estudiantesTokens,
@@ -667,7 +667,7 @@ Map<String, dynamic>? _buscarPorNombreParecido(
 int _distanciaEdicion(String a, String b) {
     if (a == b) return 0;
     final la = a.length, lb = b.length;
-    if ((la - lb).abs() > 2) return 99; // corte rápido, muy distintas en longitud
+    if ((la - lb).abs() > 2) return 99;
     final dp = List.generate(la + 1, (_) => List.filled(lb + 1, 0));
     for (var i = 0; i <= la; i++) dp[i][0] = i;
     for (var j = 0; j <= lb; j++) dp[0][j] = j;
@@ -686,7 +686,7 @@ int _distanciaEdicion(String a, String b) {
 
   bool _tokenParecido(String a, String b) {
     if (a == b) return true;
-    // tolerancia: 1 letra de diferencia para palabras de 4+ letras
+
     if (a.length >= 4 && b.length >= 4) {
       return _distanciaEdicion(a, b) <= 1;
     }
@@ -703,7 +703,7 @@ int _distanciaEdicion(String a, String b) {
   List<String> _extraerCodigos(dynamic integrantes) {
     if (integrantes == null) return [];
 
-    // Junta todo en una sola cadena, venga como lista o como texto
+
     final String texto;
     if (integrantes is List) {
       texto = integrantes.map((e) => e.toString()).join(',');
@@ -712,7 +712,7 @@ int _distanciaEdicion(String a, String b) {
     }
     if (texto.trim().isEmpty) return [];
 
-    // Parte por coma o salto de línea, sin importar cómo vino agrupado
+
     return texto
         .split(RegExp(r'[,\n]'))
         .map((s) => s.trim())

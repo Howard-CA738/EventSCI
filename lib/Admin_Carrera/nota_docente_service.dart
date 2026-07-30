@@ -4,7 +4,7 @@ import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 
-/// Resultado del import: cuántos grupos se cargaron y si hubo errores.
+
 class NotaDocenteImportResult {
   final int gruposImportados;
   final int codigosTotales;
@@ -20,9 +20,9 @@ class NotaDocenteImportResult {
 class NotaDocenteService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ── Leer notas ya guardadas en Firestore ────────────────────────────────
-  /// Devuelve un mapa { codigoEstudiante → notaDocente (0–20) }
-  /// de todos los registros guardados para este evento.
+
+
+
   Future<Map<String, double>> obtenerNotasDocente(String eventId) async {
     try {
       final snap = await _firestore
@@ -36,7 +36,7 @@ class NotaDocenteService {
         final data = doc.data();
         final nota = (data['notaDocente'] as num?)?.toDouble();
         if (nota != null) {
-          resultado[doc.id] = nota; // doc.id = código del estudiante
+          resultado[doc.id] = nota;
         }
       }
       return resultado;
@@ -46,7 +46,7 @@ class NotaDocenteService {
     }
   }
 
-  // ── Importar desde archivo Excel ────────────────────────────────────────
+
   Future<NotaDocenteImportResult?> importarDesdeExcel(String eventId) async {
     try {
       final FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -72,7 +72,7 @@ class NotaDocenteService {
     }
   }
 
-  // ── Parsear el Excel y persistir en Firestore ───────────────────────────
+
   Future<NotaDocenteImportResult> _procesarYGuardar(
     String eventId,
     Uint8List bytes,
@@ -80,14 +80,14 @@ class NotaDocenteService {
     final excel = Excel.decodeBytes(bytes);
     final errores = <String>[];
 
-    // { codigoEstudiante: notaDocente }
+
     final Map<String, double> notas = {};
 
     for (final sheetName in excel.tables.keys) {
       final sheet = excel.tables[sheetName];
       if (sheet == null || sheet.maxRows < 2) continue;
 
-      // Detectar índices de columnas por cabecera
+
       final headers = sheet.rows.first
           .map((c) => c?.value?.toString().trim().toUpperCase() ?? '')
           .toList();
@@ -104,17 +104,17 @@ class NotaDocenteService {
         continue;
       }
 
-      // ── Parse merge-aware ──────────────────────────────────────────────
-      // El Excel tiene celdas combinadas verticalmente: el primer estudiante
-      // de cada grupo lleva la nota; los siguientes tienen celda vacía.
-      // Propagamos la última nota vista hacia abajo hasta que aparezca otra.
+
+
+
+
       double? ultimaNota;
 
       for (int i = 1; i < sheet.maxRows; i++) {
         final row = sheet.rows[i];
 
         final codigoRaw = _cell(row, idxCodigo);
-        if (codigoRaw.isEmpty) continue; // fila completamente vacía
+        if (codigoRaw.isEmpty) continue;
 
         final notaRaw = _cell(row, idxNota);
 
@@ -131,7 +131,7 @@ class NotaDocenteService {
             ultimaNota = parsed;
           }
         }
-        // Si notaRaw está vacío, conservamos ultimaNota (celda combinada)
+
 
         if (ultimaNota != null) {
           notas[codigoRaw] = ultimaNota;
@@ -147,11 +147,11 @@ class NotaDocenteService {
       );
     }
 
-    // ── Guardar en Firestore (batches de 500) ──────────────────────────
+
     int gruposGuardados = 0;
-    // Contamos "grupos" como registros con nota explícita vs total códigos
+
     final notasUnicas = notas.values.toSet();
-    gruposGuardados = notasUnicas.length; // aproximado; revisamos abajo
+    gruposGuardados = notasUnicas.length;
 
     final entries = notas.entries.toList();
     for (int i = 0; i < entries.length; i += 500) {
@@ -162,7 +162,7 @@ class NotaDocenteService {
             .collection('events')
             .doc(eventId)
             .collection('notasDocentes')
-            .doc(e.key); // doc.id = código del estudiante
+            .doc(e.key);
         batch.set(ref, {
           'notaDocente': e.value,
           'actualizadoEn': FieldValue.serverTimestamp(),
@@ -171,8 +171,8 @@ class NotaDocenteService {
       await batch.commit();
     }
 
-    // Contar grupos reales (registros donde el Excel tenía nota explícita)
-    // Re-parsear para obtener el número exacto de grupos importados
+
+
     gruposGuardados = _contarGruposConNota(bytes);
 
     debugPrint(
@@ -186,7 +186,7 @@ class NotaDocenteService {
     );
   }
 
-  /// Cuenta cuántas filas tienen nota explícita (cabecera de grupo).
+
   int _contarGruposConNota(Uint8List bytes) {
     try {
       final excel = Excel.decodeBytes(bytes);
@@ -211,7 +211,7 @@ class NotaDocenteService {
     }
   }
 
-  // ── Eliminar notas del evento ───────────────────────────────────────────
+
   Future<void> eliminarNotasDocente(String eventId) async {
     final snap = await _firestore
         .collection('events')
@@ -228,7 +228,7 @@ class NotaDocenteService {
     }
   }
 
-  // ── Helpers ─────────────────────────────────────────────────────────────
+
   int _findCol(List<String> headers, List<String> candidates) {
     for (int i = 0; i < headers.length; i++) {
       for (final c in candidates) {
