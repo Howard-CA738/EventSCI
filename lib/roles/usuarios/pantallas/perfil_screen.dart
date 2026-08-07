@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '/usuarios/logica/perfil.dart';
+import '../logica/perfil_controller.dart';
 
 class PerfilScreen extends StatefulWidget {
   const PerfilScreen({super.key});

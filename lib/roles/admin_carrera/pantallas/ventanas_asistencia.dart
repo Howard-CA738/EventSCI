@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'configurar_sellos.dart';
-import 'asistencias_admin_carrera_screen.dart';
-import 'asistencias_personales.dart';
-import 'notas_por_sellos_screen.dart';
+import '/Admin_Carrera/configurar_sellos.dart';
+import '/Admin_Carrera/asistencias_admin_carrera_screen.dart';
+import '/Admin_Carrera/asistencias_personales.dart';
+import '/Admin_Carrera/notas_por_sellos_screen.dart';
 
 class VentanasAsistenciaScreen extends StatelessWidget {
   final String filialId;

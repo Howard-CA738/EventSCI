@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '/prefs_helper.dart';
 import 'dart:math' as math;
+import '../logica/asistencias_service.dart';
 
 class AsistenciasScreen extends StatefulWidget {
   const AsistenciasScreen({super.key});
@@ -12,7 +12,8 @@ class AsistenciasScreen extends StatefulWidget {
 
 class _AsistenciasScreenState extends State<AsistenciasScreen>
     with TickerProviderStateMixin {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final AsistenciasService _service = AsistenciasService();
+  StudentInfo? _studentInfo;
 
   String? _currentUserId;
   String? _currentUserName;
@@ -64,33 +65,29 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
 
   Future<void> _getCurrentUserId() async {
     try {
-      final userId = await PrefsHelper.getCurrentUserId();
-      final userName = await PrefsHelper.getUserName();
-      final userData = await PrefsHelper.getCurrentUserData();
-
-      if (userId != null) {
-        setState(() {
-          _currentUserId = userId;
-          _currentUserName = userName;
-          if (userData != null) {
-            _studentFilial = userData['filial']?.toString();
-            _studentFacultad = userData['facultad']?.toString();
-            _studentCarrera = userData['carrera']?.toString();
-            _studentCiclo = userData['ciclo']?.toString();
-            _studentGrupo = userData['grupo']?.toString();
-          }
-        });
-        await _cargarEventosYAsistencias();
-      } else {
+      final info = await _service.cargarEstudiante();
+      if (info == null) {
         _showSnackBar('No se pudo obtener el usuario actual', isError: true);
+        return;
       }
+      setState(() {
+        _studentInfo = info;
+        _currentUserId = info.userId;
+        _currentUserName = info.userName;
+        _studentFilial = info.filial;
+        _studentFacultad = info.facultad;
+        _studentCarrera = info.carrera;
+        _studentCiclo = info.ciclo;
+        _studentGrupo = info.grupo;
+      });
+      await _cargarEventosYAsistencias();
     } catch (e) {
       _showSnackBar('Error al obtener usuario: $e', isError: true);
     }
   }
 
   Future<void> _cargarEventosYAsistencias() async {
-    if (_currentUserId == null) return;
+    if (_studentInfo == null) return;
 
     setState(() {
       _isLoadingEventos = true;
@@ -105,57 +102,8 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
     });
 
     try {
-      final parts = _currentUserId!.split('/');
-      if (parts.length != 2) throw Exception('ID de usuario inválido');
-      final studentId = parts[1];
-
-      Query query = _firestore
-          .collection('events')
-          .orderBy('createdAt', descending: true);
-
-      if (_studentFacultad != null && _studentFacultad!.isNotEmpty) {
-        query = query.where('facultad', isEqualTo: _studentFacultad);
-      }
-      if (_studentCarrera != null && _studentCarrera!.isNotEmpty) {
-        query = query.where('carreraNombre', isEqualTo: _studentCarrera);
-      }
-      if (_studentFilial != null && _studentFilial!.isNotEmpty) {
-        query = query.where('filialNombre', isEqualTo: _studentFilial);
-      }
-
-      final eventosSnap = await query.get();
-
-      if (eventosSnap.docs.isEmpty) {
-        setState(() => _isLoadingEventos = false);
-        return;
-      }
-
-      final todos = eventosSnap.docs.map((doc) {
-        final d = doc.data() as Map<String, dynamic>;
-        return {
-          'eventId': doc.id,
-          'eventName': d['name'] ?? 'Sin nombre',
-          'eventDescription': d['description'] ?? '',
-          'eventDate': d['fecha'],
-          'eventFacultad': d['facultad'] ?? '',
-          'eventCarrera': d['carreraNombre'] ?? d['carrera'] ?? '',
-          'eventFilial': d['filialNombre'] ?? '',
-          'asistencias': <Map<String, dynamic>>[],
-          'asistenciasPersonales': <Map<String, dynamic>>[],
-          'tieneAsistencias': false,
-        };
-      }).toList();
-
-      setState(() => _todosLosEventos = todos);
-
-      await Future.wait(
-        todos.map((evento) => _cargarAsistenciasDeEvento(evento, studentId)),
-      );
-
-      final conAsistencias = _todosLosEventos
-          .where((e) => e['tieneAsistencias'] == true)
-          .toList();
-
+      final conAsistencias =
+          await _service.cargarEventosConAsistencias(_studentInfo!);
       if (mounted) {
         setState(() {
           _eventosConAsistencias = conAsistencias;
@@ -170,162 +118,17 @@ class _AsistenciasScreenState extends State<AsistenciasScreen>
     }
   }
 
-  Future<void> _cargarAsistenciasDeEvento(
-      Map<String, dynamic> evento, String studentId) async {
-    final eventId = evento['eventId'] as String;
-
-    try {
-      final resumenDoc = await _firestore
-          .collection('events')
-          .doc(eventId)
-          .collection('asistencias')
-          .doc(studentId)
-          .get();
-
-      List<Map<String, dynamic>> scans = [];
-      if (resumenDoc.exists) {
-        final scansSnap = await _firestore
-            .collection('events')
-            .doc(eventId)
-            .collection('asistencias')
-            .doc(studentId)
-            .collection('scans')
-            .orderBy('timestamp', descending: true)
-            .get();
-
-        scans = scansSnap.docs
-            .map((s) {
-              final d = s.data();
-              if (d['timestamp'] == null) return null;
-              return {
-                'id': s.id,
-                'timestamp': d['timestamp'],
-                'categoria': d['categoria'] ?? 'Sin categoría',
-                'tipoInvestigacion': d['categoria'] ?? 'Sin categoría',
-                'codigoProyecto': d['codigoProyecto'] ?? 'Sin código',
-                'tituloProyecto': d['tituloProyecto'] ?? 'Sin título',
-                'grupo': d['grupo'],
-                'qrId': d['qrId'],
-                'registrationMethod': d['registrationMethod'] ?? 'qr_scan',
-                'tipo': 'proyecto',
-              };
-            })
-            .whereType<Map<String, dynamic>>()
-            .toList();
-      }
-
-      List<Map<String, dynamic>> personales = [];
-      final asistPersonalesSnap = await _firestore
-          .collection('events')
-          .doc(eventId)
-          .collection('asistencias_personales')
-          .get();
-
-      final registros = await Future.wait(
-        asistPersonalesSnap.docs.map((asistDoc) async {
-          final registroDoc = await _firestore
-              .collection('events')
-              .doc(eventId)
-              .collection('asistencias_personales')
-              .doc(asistDoc.id)
-              .collection('registros')
-              .doc(studentId)
-              .get();
-
-          if (!registroDoc.exists) return null;
-
-          final rd = registroDoc.data()!;
-          final ad = asistDoc.data();
-          return {
-            'id': registroDoc.id,
-            'asistenciaId': asistDoc.id,
-            'asistenciaNombre':
-                rd['asistenciaNombre'] ?? ad['nombre'] ?? 'Asistencia personal',
-            'asistenciaTipo':
-                rd['asistenciaTipo'] ?? ad['tipo'] ?? 'Asistencia Personal',
-            'timestamp': rd['timestamp'],
-            'eventId': eventId,
-            'eventName': evento['eventName'],
-            'type': 'asistencia_personal',
-            'qrId': rd['qrId'],
-            'tipo': 'personal',
-          };
-        }),
-      );
-
-      personales.addAll(registros.whereType<Map<String, dynamic>>());
-
-      evento['asistencias'] = scans;
-      evento['asistenciasPersonales'] = personales;
-      evento['tieneAsistencias'] = scans.isNotEmpty || personales.isNotEmpty;
-    } catch (e) {
-      debugPrint('Error cargando asistencias del evento $eventId: $e');
-    }
-  }
-
   Future<void> _seleccionarEvento(Map<String, dynamic> eventoData) async {
-    final eventoId = eventoData['eventId'] as String;
-    final nombre = eventoData['eventName'] as String;
-    final scans =
-        List<Map<String, dynamic>>.from(eventoData['asistencias'] as List);
-    final personales = List<Map<String, dynamic>>.from(
-        (eventoData['asistenciasPersonales'] as List?) ?? []);
-
-    int meta = -1;
-
-    try {
-      final eventDoc =
-          await _firestore.collection('events').doc(eventoId).get();
-      if (eventDoc.exists) {
-        final ed = eventDoc.data()!;
-        final filialId = ed['filialId']?.toString();
-        final facultad = ed['facultad']?.toString();
-        final carreraId = ed['carreraId']?.toString();
-
-        if (filialId != null && facultad != null && carreraId != null) {
-          final docId =
-              '${filialId}_${facultad}_${carreraId}_$eventoId'.replaceAll(' ', '_');
-          final configDoc = await _firestore
-              .collection('sellos_asistencia')
-              .doc(docId)
-              .get();
-
-          if (configDoc.exists) {
-            final m = configDoc.data()!['meta'];
-            if (m is int && m > 0)
-              meta = m;
-            else if (m is double && m > 0) meta = m.toInt();
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('Error cargando meta de sellos: $e');
-    }
-
-    scans.sort((a, b) {
-      final tA = (a['timestamp'] as Timestamp?)?.toDate();
-      final tB = (b['timestamp'] as Timestamp?)?.toDate();
-      if (tA == null || tB == null) return 0;
-      return tB.compareTo(tA);
-    });
-    personales.sort((a, b) {
-      final tA = (a['timestamp'] as Timestamp?)?.toDate();
-      final tB = (b['timestamp'] as Timestamp?)?.toDate();
-      if (tA == null || tB == null) return 0;
-      return tB.compareTo(tA);
-    });
-
-    final tabInicial = scans.isEmpty && personales.isNotEmpty ? 1 : 0;
-
+    final selected = await _service.seleccionarEvento(
+        eventoData, _studentInfo?.userId ?? '');
     setState(() {
-      _eventoSeleccionadoId = eventoId;
-      _eventoSeleccionadoNombre = nombre;
-      _asistenciasDelEvento = scans;
-      _asistenciasPersonalesDelEvento = personales;
-      _metaSellos = meta;
-      _tabSeleccionado = tabInicial;
+      _eventoSeleccionadoId = selected.eventoId;
+      _eventoSeleccionadoNombre = selected.nombre;
+      _asistenciasDelEvento = selected.scans;
+      _asistenciasPersonalesDelEvento = selected.personales;
+      _metaSellos = selected.meta > 0 ? selected.meta : null;
+      _tabSeleccionado = selected.tabInicial;
     });
-
     _animationController
       ..reset()
       ..forward();

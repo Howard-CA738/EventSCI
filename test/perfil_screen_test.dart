@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:eventos/usuarios/logica/perfil.dart';
+import 'package:eventos/roles/usuarios/logica/perfil_controller.dart';
 
 void main() {
   // ─────────────────────────────────────────────────────────

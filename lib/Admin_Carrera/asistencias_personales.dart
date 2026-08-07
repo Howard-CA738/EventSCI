@@ -5,7 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '/prefs_helper.dart';
 import 'configuracion_asistencias_personales.dart';
 import 'dart:convert';
-import 'codigo_asistencia_service.dart';
+import '/roles/admin_carrera/logica/codigo_asistencia_service.dart';
 
 class AsistenciasPersonalesScreen extends StatefulWidget {
 

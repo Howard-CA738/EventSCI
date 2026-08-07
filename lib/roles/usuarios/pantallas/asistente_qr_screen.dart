@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '/prefs_helper.dart';
-import 'proyectos_categoria_asistente_screen.dart';
+import 'proyectos_categoria_screen.dart';
 import '/admin_carrera/asistencias_personales.dart';
+import '../logica/asistente_service.dart';
 
 class AsistenteQRScreen extends StatefulWidget {
   final VoidCallback? logoutCallback;
@@ -15,6 +15,8 @@ class AsistenteQRScreen extends StatefulWidget {
 
 class _AsistenteQRScreenState extends State<AsistenteQRScreen>
     with TickerProviderStateMixin {
+  final AsistenteService _service = AsistenteService();
+
   String? _estudianteNombre;
   String? _filialId;
   String? _filialNombre;
@@ -55,100 +57,34 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
 
   Future<void> _loadEstudianteData() async {
     setState(() => _isLoadingSession = true);
-
     try {
-      final name = await PrefsHelper.getUserName();
-      final userIdPath = await PrefsHelper.getCurrentUserId();
-
-      if (userIdPath == null || !userIdPath.contains('/')) {
-        setState(() {
-          _estudianteNombre = name ?? 'Asistente';
-          _isLoadingSession = false;
-        });
-        return;
-      }
-
-      final parts = userIdPath.split('/');
-      final carreraPath = parts[0];
-      final studentId = parts[1];
-
-      final studentDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(carreraPath)
-          .collection('students')
-          .doc(studentId)
-          .get();
-
-      final carreraDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(carreraPath)
-          .get();
-
-      final sd = studentDoc.data() ?? {};
-      final cd = carreraDoc.data() ?? {};
-
-      final facultad = sd['facultad']?.toString().trim() ?? '';
-      final carreraNombre = sd['carrera']?.toString().trim() ?? '';
-
-      final filialId = cd['filial']?.toString().trim() ?? '';
-      final filialNombre = cd['filialNombre']?.toString().trim() ??
-          cd['filial']?.toString().trim() ??
-          '';
-      final carreraId = cd['carreraId']?.toString().trim() ?? carreraPath;
-
-      debugPrint('🎓 Asistente QR:'
-          '\n  filialId=$filialId'
-          '\n  facultad=$facultad'
-          '\n  carreraId=$carreraId'
-          '\n  carreraNombre=$carreraNombre');
-
+      final datos = await _service.cargarDatos();
+      if (!mounted) return;
       setState(() {
-        _estudianteNombre = name ?? 'Asistente';
-        _filialId = filialId.isNotEmpty ? filialId : null;
-        _filialNombre = filialNombre.isNotEmpty ? filialNombre : null;
-        _facultad = facultad.isNotEmpty ? facultad : null;
-        _carreraId = carreraId.isNotEmpty ? carreraId : null;
-        _carreraNombre = carreraNombre.isNotEmpty ? carreraNombre : null;
+        _estudianteNombre = datos.nombre;
+        _filialId = datos.filialId;
+        _filialNombre = datos.filialNombre;
+        _facultad = datos.facultad;
+        _carreraId = datos.carreraId;
+        _carreraNombre = datos.carreraNombre;
         _isLoadingSession = false;
       });
-
       if (_facultad != null) {
         _fadeController.forward();
         _slideController.forward();
       }
     } catch (e) {
       debugPrint('Error cargando datos del asistente: $e');
-      setState(() => _isLoadingSession = false);
+      if (mounted) setState(() => _isLoadingSession = false);
     }
   }
 
   Stream<List<QueryDocumentSnapshot>> _getEventosStream() {
-    return FirebaseFirestore.instance
-        .collection('events')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.where((doc) {
-        final data = doc.data();
-
-        if (_filialNombre != null && _filialNombre!.isNotEmpty) {
-          final eventoFilial = data['filialNombre']?.toString() ??
-              data['filialId']?.toString() ??
-              '';
-          if (eventoFilial != _filialNombre) return false;
-        }
-
-        if (_facultad != null && _facultad!.isNotEmpty) {
-          if (data['facultad'] != _facultad) return false;
-        }
-
-        if (_carreraNombre != null && _carreraNombre!.isNotEmpty) {
-          if (data['carreraNombre'] != _carreraNombre) return false;
-        }
-
-        return true;
-      }).toList();
-    });
+    return _service.getEventosStream(
+      filialNombre: _filialNombre,
+      facultad: _facultad,
+      carreraNombre: _carreraNombre,
+    );
   }
 
   Future<void> _cargarCategorias(String eventId) async {
@@ -156,36 +92,19 @@ class _AsistenteQRScreenState extends State<AsistenteQRScreen>
       _isLoadingCategorias = true;
       _categorias.clear();
     });
-
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('events')
-          .doc(eventId)
-          .collection('proyectos')
-          .get();
-
-      final Set<String> categoriasSet = {};
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-        final clasificacion = data['Clasificación']?.toString().trim();
-        if (clasificacion != null && clasificacion.isNotEmpty) {
-          categoriasSet.add(clasificacion);
-        }
-      }
-
+      final cats = await _service.cargarCategorias(eventId);
+      if (!mounted) return;
       setState(() {
-        _categorias = categoriasSet.toList()..sort();
+        _categorias = cats;
         _isLoadingCategorias = false;
       });
-
       if (_categorias.isEmpty) {
-        _showSnackBar(
-          'Este evento aún no tiene proyectos importados.',
-          isError: true,
-        );
+        _showSnackBar('Este evento aún no tiene proyectos importados.',
+            isError: true);
       }
     } catch (e) {
-      setState(() => _isLoadingCategorias = false);
+      if (mounted) setState(() => _isLoadingCategorias = false);
       _showSnackBar('Error al cargar categorías: $e', isError: true);
     }
   }

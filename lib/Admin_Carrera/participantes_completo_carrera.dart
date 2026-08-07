@@ -3,9 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
 import '/prefs_helper.dart';
-import 'participantes_carrera_excel.dart';
+import '/roles/admin_carrera/logica/participantes_carrera_excel.dart';
 import '/resolver_nombres_service.dart';
-import 'nota_docente_service.dart';
+import '/roles/admin_carrera/logica/nota_docente_service.dart';
 
 class _C {
   static const primary       = Color(0xFF1E3A5F);

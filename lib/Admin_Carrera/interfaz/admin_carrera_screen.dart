@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
 import '/login.dart';
 import '/admin_carrera/registro_estudiantes_carrera.dart';
-import '/admin_carrera/editar_admin_carrera.dart';
-import '/admin_carrera/crear_eventos_carrera_screen.dart';
+import '/roles/admin_carrera/pantallas/editar_admin_carrera.dart';
+import '/roles/admin_carrera/pantallas/crear_eventos_carrera_screen.dart';
 import '/admin_carrera/gestion_grupos_carrera_screen.dart';
 import '/admin_carrera/asignar_proyectos_carrera_screen.dart';
 import '/admin_carrera/gestion_rubricas_carrera_screen.dart';
 import '/admin_carrera/gestion_jurados_carrera_screen.dart';
 import '/admin_carrera/generar_certificados_screen.dart';
 import '/admin_carrera/gestion_sesiones_screen.dart';
-import '/admin_carrera/reportes_admin_carrera_screen.dart';
+import '/roles/admin_carrera/pantallas/reportes_admin_carrera_screen.dart';
 import '/admin_carrera/gestion_roles_screen.dart';
 
 

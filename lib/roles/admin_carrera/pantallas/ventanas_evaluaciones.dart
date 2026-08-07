@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import 'ver_ganadores.dart';
-import 'participantes_completo_carrera.dart';
+import '/Admin_Carrera/evaluaciones_carrera.dart';
+import '/Admin_Carrera/evaluacion_final_carrera.dart';
 
-class VentanasGanadoresScreen extends StatelessWidget {
+class VentanasEvaluacionesScreen extends StatelessWidget {
   final String filialId;
   final String filialNombre;
   final String facultad;
   final String carrera;
 
-  const VentanasGanadoresScreen({
+  const VentanasEvaluacionesScreen({
     super.key,
     required this.filialId,
     required this.filialNombre,
@@ -22,7 +22,7 @@ class VentanasGanadoresScreen extends StatelessWidget {
       backgroundColor: const Color(0xFF1E3A5F),
       appBar: AppBar(
         title: const Text(
-          'Ganadores',
+          'Evaluaciones',
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
         backgroundColor: const Color(0xFF1E3A5F),
@@ -95,7 +95,7 @@ class VentanasGanadoresScreen extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: const Icon(
-                                  Icons.emoji_events_rounded,
+                                  Icons.assignment_turned_in_rounded,
                                   size: 30,
                                   color: Colors.white,
                                 ),
@@ -106,7 +106,7 @@ class VentanasGanadoresScreen extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const Text(
-                                      'Gestión de Ganadores',
+                                      'Gestión de Evaluaciones',
                                       style: TextStyle(
                                         fontSize: 19,
                                         fontWeight: FontWeight.bold,
@@ -131,7 +131,7 @@ class VentanasGanadoresScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 28),
                       const Text(
-                        '¿Qué deseas ver?',
+                        '¿Qué deseas hacer?',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -142,15 +142,15 @@ class VentanasGanadoresScreen extends StatelessWidget {
                       _TweenCard(
                         delay: 200,
                         child: _OpcionCard(
-                          icon: Icons.emoji_events_rounded,
-                          iconColor: const Color(0xFFF59E0B),
-                          title: 'Top 3 Ganadores',
+                          icon: Icons.rate_review_rounded,
+                          iconColor: const Color(0xFF9C27B0),
+                          title: 'Evaluaciones de jurados',
                           subtitle:
-                              'Consulta los tres primeros proyectos por categoría en cada evento',
+                              'Revisa y gestiona las evaluaciones realizadas por los jurados en cada evento',
                           onTap: () => Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => const VerGanadoresScreen(),
+                              builder: (_) => const EvaluacionesCarreraScreen(),
                             ),
                           ),
                         ),
@@ -159,15 +159,20 @@ class VentanasGanadoresScreen extends StatelessWidget {
                       _TweenCard(
                         delay: 320,
                         child: _OpcionCard(
-                          icon: Icons.groups_rounded,
-                          iconColor: const Color(0xFF4A90E2),
-                          title: 'Todos los participantes',
+                          icon: Icons.calculate_rounded,
+                          iconColor: const Color(0xFF0F9D58),
+                          title: 'Evaluación final',
                           subtitle:
-                              'Ranking completo de todos los proyectos por categoría',
+                              'Calcula la nota final de cada estudiante ponderando asistencias, jurados y docentes por porcentaje',
                           onTap: () => Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => const ParticipantesCompletoCarreraScreen(),
+                              builder: (_) => EvaluacionFinalCarreraScreen(
+                                filialId: filialId,
+                                filialNombre: filialNombre,
+                                facultad: facultad,
+                                carrera: carrera,
+                              ),
                             ),
                           ),
                         ),

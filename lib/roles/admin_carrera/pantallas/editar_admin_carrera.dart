@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
-import 'admin_carrera_service.dart';
+import '../logica/admin_carrera_service.dart';
 import '/password_helper.dart';
 
 class EditarAdminCarreraScreen extends StatefulWidget {

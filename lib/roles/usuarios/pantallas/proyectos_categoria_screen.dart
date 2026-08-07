@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'dart:convert';
-import '/admin_carrera/codigo_asistencia_service.dart';
+import '../logica/proyectos_qr_service.dart';
 
 class ProyectosCategoriaAsistenteScreen extends StatefulWidget {
   final String eventId;
@@ -32,6 +30,7 @@ class ProyectosCategoriaAsistenteScreen extends StatefulWidget {
 class _ProyectosCategoriaAsistenteScreenState
     extends State<ProyectosCategoriaAsistenteScreen>
     with TickerProviderStateMixin {
+  late ProyectosQRService _service;
   List<Map<String, dynamic>> _proyectos = [];
   bool _isLoading = true;
 
@@ -51,6 +50,15 @@ class _ProyectosCategoriaAsistenteScreenState
   @override
   void initState() {
     super.initState();
+    _service = ProyectosQRService(
+      eventId: widget.eventId,
+      eventName: widget.eventName,
+      filialId: widget.filialId,
+      filialNombre: widget.filialNombre,
+      facultad: widget.facultad,
+      carrera: widget.carrera,
+      categoria: widget.categoria,
+    );
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -70,134 +78,36 @@ class _ProyectosCategoriaAsistenteScreenState
   }
 
   Future<void> _finalizarQRSiActivo() async {
-    if (_qrId == null || _qrFinalizado) return;
-    try {
-      await FirebaseFirestore.instance
-          .collection('events')
-          .doc(widget.eventId)
-          .collection('qr_codes')
-          .doc(_qrId)
-          .update({
-        'activo': false,
-        'finalizadoAt': FieldValue.serverTimestamp(),
-      });
-
-      if (_codigoGenerado != null) {
-        await CodigoAsistenciaService.eliminar(_codigoGenerado!);
-      }
-    } catch (e) {
-      debugPrint('Error al auto-finalizar QR: $e');
-    }
+    await _service.finalizarQRSiActivo(_qrId, _qrFinalizado, _codigoGenerado);
   }
 
   Future<void> _cargarProyectos() async {
     setState(() => _isLoading = true);
-
     try {
-      final querySnapshot = await FirebaseFirestore.instance
-          .collection('events')
-          .doc(widget.eventId)
-          .collection('proyectos')
-          .where('Clasificación', isEqualTo: widget.categoria)
-          .orderBy('Código')
-          .get();
-
-      final proyectos = querySnapshot.docs.map((doc) {
-        final data = doc.data();
-        data['docId'] = doc.id;
-        return data;
-      }).toList();
-
+      final proyectos = await _service.cargarProyectos();
+      if (!mounted) return;
       setState(() {
         _proyectos = proyectos;
         _isLoading = false;
       });
-
       _fadeController.forward();
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
       _showSnackBar('Error al cargar proyectos: $e', isError: true);
     }
   }
 
   Future<void> _generarQRParaProyecto(Map<String, dynamic> proyecto) async {
-    String safeString(dynamic value) {
-      if (value == null) return '';
-      if (value is List) return value.join(', ');
-      return value.toString();
-    }
-
-    final codigoProyecto = safeString(proyecto['Código']).isEmpty
-        ? 'Sin código'
-        : safeString(proyecto['Código']);
-    final tituloProyecto = safeString(proyecto['Título']).isEmpty
-        ? 'Sin título'
-        : safeString(proyecto['Título']);
-    final grupo = safeString(proyecto['Sala']);
-
-    final qrDocRef = FirebaseFirestore.instance
-        .collection('events')
-        .doc(widget.eventId)
-        .collection('qr_codes')
-        .doc();
-
-    final qrId = qrDocRef.id;
-
-    final qrPayload = {
-      'filialId': widget.filialId,
-      'filialNombre': widget.filialNombre,
-      'facultad': widget.facultad,
-      'carrera': widget.carrera,
-      'eventId': widget.eventId,
-      'eventName': widget.eventName,
-      'categoria': widget.categoria,
-      'codigoProyecto': codigoProyecto,
-      'tituloProyecto': tituloProyecto,
-      'grupo': grupo,
-      'qrId': qrId,
-      'timestamp': DateTime.now().toIso8601String(),
-      'type': 'asistencia_categoria_asistente',
-      'activo': true,
-    };
-
     try {
-      final qrJson = jsonEncode(qrPayload);
-
-
-
-      final codigo = await CodigoAsistenciaService.generarYRegistrar(
-        eventId: widget.eventId,
-        qrId: qrId,
-        type: 'proyecto',
-        qrData: qrJson,
-      );
-
-      await qrDocRef.set({
-        'filialId': widget.filialId,
-        'filialNombre': widget.filialNombre,
-        'facultad': widget.facultad,
-        'carrera': widget.carrera,
-        'eventId': widget.eventId,
-        'eventName': widget.eventName,
-        'categoria': widget.categoria,
-        'codigoProyecto': codigoProyecto,
-        'tituloProyecto': tituloProyecto,
-        'grupo': grupo,
-        'codigo': codigo,
-        'activo': true,
-        'createdAt': FieldValue.serverTimestamp(),
-        'finalizadoAt': null,
-        'generadoPor': 'asistente_qr',
-      });
-
+      final result = await _service.generarQR(proyecto);
+      if (!mounted) return;
       setState(() {
-        _qrDataGenerado = qrJson;
-        _codigoGenerado = codigo;
+        _qrDataGenerado = result.qrData;
+        _codigoGenerado = result.codigo;
         _proyectoSeleccionado = proyecto;
-        _qrId = qrId;
+        _qrId = result.qrId;
         _qrFinalizado = false;
       });
-
       _scaleController.forward(from: 0);
       _showSnackBar('¡Código QR generado y activo!');
     } catch (e) {
@@ -207,36 +117,19 @@ class _ProyectosCategoriaAsistenteScreenState
 
   Future<void> _finalizarQR() async {
     if (_qrId == null || _qrFinalizado) return;
-
     setState(() => _finalizando = true);
-
     try {
-      await FirebaseFirestore.instance
-          .collection('events')
-          .doc(widget.eventId)
-          .collection('qr_codes')
-          .doc(_qrId)
-          .update({
-        'activo': false,
-        'finalizadoAt': FieldValue.serverTimestamp(),
-      });
-
-
-      if (_codigoGenerado != null) {
-        await CodigoAsistenciaService.eliminar(_codigoGenerado!);
-      }
-
+      await _service.finalizarQR(_qrId!, _codigoGenerado);
+      if (!mounted) return;
       setState(() {
         _qrFinalizado = true;
         _finalizando = false;
       });
-
       _showSnackBar('¡QR finalizado! Ya no se podrá escanear');
-
       await Future.delayed(const Duration(seconds: 2));
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      setState(() => _finalizando = false);
+      if (mounted) setState(() => _finalizando = false);
       _showSnackBar('Error al finalizar QR: $e', isError: true);
     }
   }

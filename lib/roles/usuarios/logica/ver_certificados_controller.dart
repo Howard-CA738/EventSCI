@@ -6,24 +6,8 @@ import '/prefs_helper.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
-import '/admin_Carrera/certificado_builder.dart';
-
-
-
-
-class CertificadoItem {
-  final String id;
-  final DatosCertificado datos;
-  final DateTime? creadoEn;
-  final String nombreEstudiante;
-
-  const CertificadoItem({
-    required this.id,
-    required this.datos,
-    this.creadoEn,
-    this.nombreEstudiante = '',
-  });
-}
+import '/shared/certificado_builder.dart';
+import '../datos/certificado_item.dart';
 
 
 

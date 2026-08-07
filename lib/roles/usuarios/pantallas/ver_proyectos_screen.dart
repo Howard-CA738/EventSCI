@@ -2,59 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 import '/resolver_nombres_service.dart';
+import '../logica/ver_proyectos_service.dart';
 
 
 
 
 
-
-class _ProyectosCache {
-  static final Map<String, List<Map<String, dynamic>>> _proyectosPorEvento = {};
-  static List<Map<String, dynamic>>? _eventosCache;
-  static DateTime? _eventosCacheTime;
-
-  static const _eventosMaxAge = Duration(minutes: 10);
-  static const _proyectosMaxAge = Duration(minutes: 15);
-  static final Map<String, DateTime> _proyectosCacheTime = {};
-
-  static bool get eventosVigentes {
-    if (_eventosCache == null || _eventosCacheTime == null) return false;
-    return DateTime.now().difference(_eventosCacheTime!) < _eventosMaxAge;
-  }
-
-  static List<Map<String, dynamic>>? get eventos => _eventosCache;
-
-  static void setEventos(List<Map<String, dynamic>> eventos) {
-    _eventosCache = eventos;
-    _eventosCacheTime = DateTime.now();
-  }
-
-  static bool proyectosVigentes(String eventoId) {
-    if (!_proyectosPorEvento.containsKey(eventoId)) return false;
-    final t = _proyectosCacheTime[eventoId];
-    if (t == null) return false;
-    return DateTime.now().difference(t) < _proyectosMaxAge;
-  }
-
-  static List<Map<String, dynamic>>? proyectos(String eventoId) =>
-      _proyectosPorEvento[eventoId];
-
-  static void setProyectos(
-      String eventoId, List<Map<String, dynamic>> proyectos) {
-    _proyectosPorEvento[eventoId] = proyectos;
-    _proyectosCacheTime[eventoId] = DateTime.now();
-  }
-
-  static void invalidateEventos() {
-    _eventosCache = null;
-    _eventosCacheTime = null;
-  }
-
-  static void invalidateProyectos(String eventoId) {
-    _proyectosPorEvento.remove(eventoId);
-    _proyectosCacheTime.remove(eventoId);
-  }
-}
 
 class VerProyectosScreen extends StatefulWidget {
   const VerProyectosScreen({super.key});
@@ -64,16 +17,12 @@ class VerProyectosScreen extends StatefulWidget {
 }
 
 class _VerProyectosScreenState extends State<VerProyectosScreen> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ResolverNombresService _resolver = ResolverNombresService();
+  VerProyectosService _service = VerProyectosService();
 
   bool _isLoadingSession = true;
   bool _isLoadingEvents = false;
   bool _isLoadingProjects = false;
-
-  String? _studentFilial;
-  String? _studentFacultad;
-  String? _studentCarrera;
 
   List<Map<String, dynamic>> _eventos = [];
 
@@ -116,14 +65,14 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
       final userData = await PrefsHelper.getCurrentUserData();
       if (userData == null) return;
       if (!mounted) return;
-      setState(() {
-        _studentFilial = userData['filial']?.toString();
-        _studentFacultad = userData['facultad']?.toString();
-        _studentCarrera = userData['carrera']?.toString();
-      });
+      final filial = userData['filial']?.toString();
+      final facultad = userData['facultad']?.toString();
+      final carrera = userData['carrera']?.toString();
+      _service = VerProyectosService(
+          filial: filial, facultad: facultad, carrera: carrera);
       await _resolver.cargarEstudiantes(
-        filialNombre: _studentFilial ?? '',
-        carrera: _studentCarrera ?? '',
+        filialNombre: filial ?? '',
+        carrera: carrera ?? '',
       );
       await _loadEventos();
     } catch (e) {
@@ -134,57 +83,14 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
   }
 
   Future<void> _loadEventos({bool forceRefresh = false}) async {
-
-    if (!forceRefresh && _ProyectosCache.eventosVigentes) {
-      if (mounted) {
-        setState(() => _eventos = List.from(_ProyectosCache.eventos!));
-      }
-      return;
-    }
-
     setState(() => _isLoadingEvents = true);
     try {
-      Query query = _firestore
-          .collection('events')
-          .orderBy('createdAt', descending: true);
-      if (_studentFacultad != null && _studentFacultad!.isNotEmpty) {
-        query = query.where('facultad', isEqualTo: _studentFacultad);
-      }
-      if (_studentCarrera != null && _studentCarrera!.isNotEmpty) {
-        query = query.where('carreraNombre', isEqualTo: _studentCarrera);
-      }
-      if (_studentFilial != null && _studentFilial!.isNotEmpty) {
-        query = query.where('filialNombre', isEqualTo: _studentFilial);
-      }
-
-
-
-      QuerySnapshot snap;
-      try {
-        snap = await query.get(const GetOptions(source: Source.cache));
-        debugPrint('Eventos cargados desde caché Firestore offline');
-      } catch (_) {
-
-        snap = await query.get(const GetOptions(source: Source.server));
-        debugPrint('Eventos cargados desde servidor Firestore');
-      }
-
+      final eventos =
+          await _service.cargarEventos(forceRefresh: forceRefresh);
       if (!mounted) return;
-      final eventos = snap.docs.map((doc) {
-        final d = doc.data() as Map<String, dynamic>;
-        d['id'] = doc.id;
-        return d;
-      }).toList();
-
-      _ProyectosCache.setEventos(eventos);
       setState(() => _eventos = eventos);
     } catch (e) {
       debugPrint('Error cargando eventos: $e');
-
-      final cached = _ProyectosCache.eventos;
-      if (cached != null && mounted) {
-        setState(() => _eventos = List.from(cached));
-      }
     } finally {
       if (mounted) setState(() => _isLoadingEvents = false);
     }
@@ -199,83 +105,19 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
       _searchQuery = '';
       _searchCtrl.clear();
     });
-
-
-
-
-    if (!forceRefresh && _ProyectosCache.proyectosVigentes(eventoId)) {
-      final cached = _ProyectosCache.proyectos(eventoId)!;
-      debugPrint('Proyectos cargados desde caché: ${cached.length} docs');
-      if (mounted) {
-        setState(() {
-          _proyectos = List.from(cached);
-          _proyectosPorCategoria = _agruparPorCategoria(cached);
-          _isLoadingProjects = false;
-        });
-      }
-      return;
-    }
-
     try {
-
-
-
-      final snap = await _firestore
-          .collection('events')
-          .doc(eventoId)
-          .collection('proyectos')
-          .get(const GetOptions(source: Source.server));
-
+      final lista = await _service.cargarProyectos(eventoId,
+          forceRefresh: forceRefresh);
       if (!mounted) return;
-
-      final lista = snap.docs.map((doc) {
-        final d = doc.data();
-        d['docId'] = doc.id;
-        return d;
-      }).toList();
-
-
-      lista.sort((a, b) {
-        final tA = a['importedAt'];
-        final tB = b['importedAt'];
-        if (tA == null && tB == null) return 0;
-        if (tA == null) return 1;
-        if (tB == null) return -1;
-        if (tA is Timestamp && tB is Timestamp) {
-          return tA.compareTo(tB);
-        }
-        return 0;
-      });
-
-      _ProyectosCache.setProyectos(eventoId, lista);
       setState(() {
         _proyectos = lista;
-        _proyectosPorCategoria = _agruparPorCategoria(lista);
+        _proyectosPorCategoria = _service.agruparPorCategoria(lista);
       });
     } catch (e) {
       debugPrint('Error cargando proyectos: $e');
-
-      final cached = _ProyectosCache.proyectos(eventoId);
-      if (cached != null && mounted) {
-        setState(() {
-          _proyectos = List.from(cached);
-          _proyectosPorCategoria = _agruparPorCategoria(cached);
-        });
-      }
     } finally {
       if (mounted) setState(() => _isLoadingProjects = false);
     }
-  }
-
-  Map<String, List<Map<String, dynamic>>> _agruparPorCategoria(
-      List<Map<String, dynamic>> proyectos) {
-    final Map<String, List<Map<String, dynamic>>> grupos = {};
-    for (final p in proyectos) {
-      final cat = p['Clasificación']?.toString().trim();
-      final key = (cat != null && cat.isNotEmpty) ? cat : 'Sin categoría';
-      grupos.putIfAbsent(key, () => []).add(p);
-    }
-    return grupos;
   }
 
   List<Map<String, dynamic>> get _proyectosFiltrados {
@@ -298,7 +140,7 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
 
   Map<String, List<Map<String, dynamic>>> get _categoriasFiltradas {
     if (_searchQuery.isEmpty) return _proyectosPorCategoria;
-    return _agruparPorCategoria(_proyectosFiltrados);
+    return _service.agruparPorCategoria(_proyectosFiltrados);
   }
 
   void _seleccionarEvento(Map<String, dynamic> evento) {
@@ -329,13 +171,13 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
 
 
   Future<void> _forceRefreshEventos() async {
-    _ProyectosCache.invalidateEventos();
+    _service.invalidarEventos();
     await _loadEventos(forceRefresh: true);
   }
 
   Future<void> _forceRefreshProyectos() async {
     if (_selectedEventoId == null) return;
-    _ProyectosCache.invalidateProyectos(_selectedEventoId!);
+    _service.invalidarProyectos(_selectedEventoId!);
     await _loadProyectos(_selectedEventoId!, forceRefresh: true);
   }
 

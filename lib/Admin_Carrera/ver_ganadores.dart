@@ -2,7 +2,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
 import '/resolver_nombres_service.dart';
-import 'nota_docente_service.dart';
+import '/roles/admin_carrera/logica/nota_docente_service.dart';
 
 class _C {
   static const primary = Color(0xFF1E3A5F);

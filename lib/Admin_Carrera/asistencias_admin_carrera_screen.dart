@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/admin/logica/asistencias_estudiantes_resultados.dart';
-import 'asistencias_carrera_excel.dart';
+import '/roles/admin_carrera/logica/asistencias_carrera_excel.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
 

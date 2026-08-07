@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:printing/printing.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_storage/firebase_storage.dart';
-import '/admin_Carrera/certificado_builder.dart';
+import '/shared/certificado_builder.dart';
 
 const _kPrimario       = Color(0xFF1E3A5F);
 const _kPrimario10     = Color(0x1A1E3A5F);

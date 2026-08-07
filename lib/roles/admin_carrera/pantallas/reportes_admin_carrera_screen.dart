@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
 import 'ventanas_ganadores.dart';
 import 'ventanas_asistencia.dart';
-import 'informe_evento_carrera.dart';
+import '/Admin_Carrera/informe_evento_carrera.dart';
 import 'ventanas_evaluaciones.dart';
 
 class ReportesAdminCarreraScreen extends StatefulWidget {

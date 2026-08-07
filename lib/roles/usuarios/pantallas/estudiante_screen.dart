@@ -3,12 +3,13 @@ import 'dart:async';
 import '/prefs_helper.dart';
 import '/login.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '/usuarios/interfaz/perfil_screen.dart';
-import 'escanear_qr.dart';
-import 'asistencias.dart';
-import '/usuarios/interfaz/ver_certificados_screen.dart';
-import 'asistente_qr.dart';
-import 'ver_proyectos.dart';
+import '../logica/estudiante_service.dart';
+import 'perfil_screen.dart';
+import 'escanear_qr_screen.dart';
+import 'asistencias_screen.dart';
+import 'ver_certificados_screen.dart';
+import 'asistente_qr_screen.dart';
+import 'ver_proyectos_screen.dart';
 
 class EstudianteScreen extends StatefulWidget {
   const EstudianteScreen({super.key});
@@ -18,6 +19,8 @@ class EstudianteScreen extends StatefulWidget {
 }
 
 class _EstudianteScreenState extends State<EstudianteScreen> {
+  final EstudianteService _service = EstudianteService();
+
   String _studentName = '';
   String? _studentFilial;
   String? _studentCarrera;
@@ -33,64 +36,14 @@ class _EstudianteScreenState extends State<EstudianteScreen> {
   }
 
   Future<void> _loadStudentData() async {
-    final name = await PrefsHelper.getUserName();
-    final userData = await PrefsHelper.getCurrentUserData(forceRefresh: true);
-
+    final perfil = await _service.cargarPerfil();
     if (!mounted) return;
-
-    if (userData == null) {
-      setState(() => _studentName = name ?? 'Estudiante');
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _verificarYMostrarAdvertencia();
-      });
-      return;
-    }
-
-    String filial = userData['filial']?.toString().trim() ?? '';
-    String facultad = userData['facultad']?.toString().trim() ?? '';
-    String carrera = userData['carrera']?.toString().trim() ?? '';
-
-    final bool needsParentDoc =
-        filial.isEmpty || facultad.isEmpty || carrera.isEmpty;
-
-    if (needsParentDoc) {
-      final carreraPath = userData['carreraPath']?.toString() ?? '';
-      if (carreraPath.isNotEmpty) {
-        try {
-          final parentDoc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(carreraPath)
-              .get();
-          if (parentDoc.exists) {
-            final parentData = parentDoc.data() ?? {};
-            if (filial.isEmpty) {
-              filial = parentData['filial']?.toString().trim() ?? '';
-            }
-            if (facultad.isEmpty) {
-              facultad = parentData['facultad']?.toString().trim() ?? '';
-            }
-            if (carrera.isEmpty) {
-              carrera = parentData['carrera']?.toString().trim() ?? '';
-            }
-          }
-        } catch (e) {
-          debugPrint('Error leyendo doc padre: $e');
-        }
-      }
-      if (carreraPath.contains('_')) {
-        final parts = carreraPath.split('_');
-        if (filial.isEmpty) filial = parts.first.trim();
-        if (carrera.isEmpty) carrera = parts.skip(1).join('_').trim();
-      }
-    }
-
     setState(() {
-      _studentName = name ?? 'Estudiante';
-      _studentFilial = filial.isNotEmpty ? filial : null;
-      _studentFacultad = facultad.isNotEmpty ? facultad : null;
-      _studentCarrera = carrera.isNotEmpty ? carrera : null;
+      _studentName = perfil.name;
+      _studentFilial = perfil.filial;
+      _studentFacultad = perfil.facultad;
+      _studentCarrera = perfil.carrera;
     });
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _verificarYMostrarAdvertencia();
     });
@@ -806,28 +759,7 @@ _buildMenuCard(
   }
 
   Stream<DocumentSnapshot> _buildStudentStream() {
-    if (_studentStream != null) return _studentStream!;
-
-    _studentStream = PrefsHelper.getCurrentUserData(forceRefresh: false)
-        .asStream()
-        .asyncExpand((userData) {
-      if (userData == null) return const Stream.empty();
-
-      final carreraPath = userData['carreraPath']?.toString() ?? '';
-      final docId = userData['docId']?.toString() ??
-          userData['id']?.toString() ??
-          '';
-
-      if (carreraPath.isEmpty || docId.isEmpty) return const Stream.empty();
-
-      return FirebaseFirestore.instance
-          .collection('users')
-          .doc(carreraPath)
-          .collection('students')
-          .doc(docId)
-          .snapshots();
-    });
-
+    _studentStream ??= _service.buildStudentStream();
     return _studentStream!;
   }
 

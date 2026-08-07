@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/admin/logica/gestion_criterios.dart';
-import 'evaluaciones_carrera_excel.dart';
+import '/roles/admin_carrera/logica/evaluaciones_carrera_excel.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '/usuarios/logica/ver_certificados.dart';
+import '../logica/ver_certificados_controller.dart';
+import '../datos/certificado_item.dart';
 
 const _kPrimario       = Color(0xFF1E3A5F);
 const _kTextoGris      = Color(0xFF64748B);

@@ -1,5 +1,5 @@
 ﻿import 'package:flutter/material.dart';
-import 'admin_carrera_service.dart';
+import '/roles/admin_carrera/logica/admin_carrera_service.dart';
 import '/admin/logica/filiales_service.dart';
 
 class GestionAdminsCarreraScreen extends StatefulWidget {

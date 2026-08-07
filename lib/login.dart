@@ -3,12 +3,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '/Admin/logica/admin.dart';
-import '/Jurados/jurados.dart';
-import '/admin_carrera/admin_carrera_service.dart';
+import '/roles/jurados/pantallas/jurado_screen.dart';
+import '/roles/admin_carrera/logica/admin_carrera_service.dart';
 import '/admin_carrera/interfaz/admin_carrera_screen.dart';
 import '/prefs_helper.dart';
 import '/super_admin_login.dart';
-import '/usuarios/logica/estudiante.dart';
+import '/roles/usuarios/pantallas/estudiante_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
