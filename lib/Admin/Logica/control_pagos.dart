@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '/admin/logica/filiales_service.dart';
+import '/shared/logica/filiales_service.dart';
 import '/encryption_helper.dart';
 import 'dart:async';
 

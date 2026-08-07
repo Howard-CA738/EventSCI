@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '/admin/logica/gestion_criterios.dart';
+import '/shared/logica/gestion_criterios.dart';
 import '/roles/jurados/logica/evaluacion_service.dart';
 
 class EvaluacionProyectoScreen extends StatefulWidget {

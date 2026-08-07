@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
-import 'reporte_usuarios_service.dart';
+import '/roles/admin/logica/reporte_usuarios_service.dart';
 
 
 class EventoFinalRow {

@@ -4,7 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:app_links/app_links.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'dart:async';
-import '/admin_carrera/interfaz/admin_carrera_screen.dart';
+import '/roles/admin_carrera/pantallas/admin_carrera_screen.dart';
 import 'dart:convert';
 import 'firebase_options.dart';
 import '/login.dart';

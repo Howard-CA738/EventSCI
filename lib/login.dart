@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import '/Admin/logica/admin.dart';
 import '/roles/jurados/pantallas/jurado_screen.dart';
 import '/roles/admin_carrera/logica/admin_carrera_service.dart';
-import '/admin_carrera/interfaz/admin_carrera_screen.dart';
+import '/roles/admin_carrera/pantallas/admin_carrera_screen.dart';
 import '/prefs_helper.dart';
 import '/super_admin_login.dart';
 import '/roles/usuarios/pantallas/estudiante_screen.dart';

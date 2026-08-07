@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'proyectos_categoria_screen.dart';
-import '/admin_carrera/asistencias_personales.dart';
+import '/roles/admin_carrera/pantallas/asistencias_personales_screen.dart';
 import '../logica/asistente_service.dart';
 
 class AsistenteQRScreen extends StatefulWidget {

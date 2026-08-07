@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '/admin/logica/gestion_criterios.dart';
+import '/shared/logica/gestion_criterios.dart';
 
 class EvaluacionCargada {
   final bool evaluada;

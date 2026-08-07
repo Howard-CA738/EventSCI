@@ -3,7 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '/admin/logica/filiales_service.dart';
+import '/shared/logica/filiales_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
 import 'package:xml/xml_events.dart';

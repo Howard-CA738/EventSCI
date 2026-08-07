@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '/prefs_helper.dart';
 import '/student_security_service.dart';
-import '/admin/logica/filiales_service.dart';
+import '/shared/logica/filiales_service.dart';
 
 class EstudiantesRegistradosScreen extends StatefulWidget {
   const EstudiantesRegistradosScreen({super.key});
