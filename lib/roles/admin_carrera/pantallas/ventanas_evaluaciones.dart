@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '/Admin_Carrera/evaluaciones_carrera.dart';
-import '/Admin_Carrera/evaluacion_final_carrera.dart';
+import '/roles/admin_carrera/pantallas/evaluaciones_carrera_screen.dart';
+import '/roles/admin_carrera/pantallas/evaluacion_final_carrera_screen.dart';
 
 class VentanasEvaluacionesScreen extends StatelessWidget {
   final String filialId;

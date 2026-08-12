@@ -487,9 +487,13 @@ class _VerProyectosScreenState extends State<VerProyectosScreen> {
       children: [
         Icon(icon, size: 11, color: Colors.grey.shade500),
         const SizedBox(width: 3),
-        Text(
-          label,
-          style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+        Flexible(
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+          ),
         ),
       ],
     );

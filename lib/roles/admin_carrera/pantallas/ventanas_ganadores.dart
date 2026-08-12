@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '/Admin_Carrera/ver_ganadores.dart';
-import '/Admin_Carrera/participantes_completo_carrera.dart';
+import '/roles/admin_carrera/pantallas/ver_ganadores_screen.dart';
+import '/roles/admin_carrera/pantallas/participantes_completo_carrera_screen.dart';
 
 class VentanasGanadoresScreen extends StatelessWidget {
   final String filialId;

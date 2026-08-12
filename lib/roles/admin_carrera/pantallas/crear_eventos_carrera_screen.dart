@@ -1,9 +1,9 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '/prefs_helper.dart';
-import '/admin/logica/crear_eventos.dart';
-import '/admin/logica/periodos_helper.dart';
-import '/admin/logica/eventos_detalles.dart';
+import '/shared/logica/eventos_service.dart';
+import '/shared/logica/periodos_helper.dart';
+import '/roles/admin/pantallas/eventos_detalles_screen.dart';
 
 class CrearEventosCarreraScreen extends StatefulWidget {
   const CrearEventosCarreraScreen({super.key});

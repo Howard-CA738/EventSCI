@@ -1,7 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '/admin/logica/filiales_service.dart';
+import '/shared/logica/filiales_service.dart';
 import '/device_helper.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:math';

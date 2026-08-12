@@ -47,7 +47,13 @@ class NotaDocenteService {
   }
 
 
-  Future<NotaDocenteImportResult?> importarDesdeExcel(String eventId) async {
+  Future<NotaDocenteImportResult?> importarDesdeExcel(
+    String eventId, {
+    String? filialNombre,
+    String? filialId,
+    String? carreraNombre,
+    String? carreraId,
+  }) async {
     try {
       final FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -65,21 +71,75 @@ class NotaDocenteService {
 
       if (bytes == null) return null;
 
-      return await _procesarYGuardar(eventId, bytes);
+      return await _procesarYGuardar(
+        eventId,
+        bytes,
+        filialNombre: filialNombre,
+        filialId: filialId,
+        carreraNombre: carreraNombre,
+        carreraId: carreraId,
+      );
     } catch (e) {
       debugPrint('Error al importar notas docente: $e');
       rethrow;
     }
   }
 
+  // Mismo patrón de rutas candidatas que importar_notas_docente.dart (SuperAdmin).
+  Future<Set<String>> _cargarCodigosRoster({
+    required String? filialNombre,
+    required String? filialId,
+    required String? carreraNombre,
+    required String? carreraId,
+  }) async {
+    final candidatos = <String>{
+      if (filialNombre != null && carreraNombre != null)
+        '${filialNombre}_$carreraNombre',
+      if (filialNombre != null && carreraId != null)
+        '${filialNombre}_$carreraId',
+      if (filialId != null && carreraNombre != null)
+        '${filialId}_$carreraNombre',
+      if (filialId != null && carreraId != null) '${filialId}_$carreraId',
+    };
+
+    final Set<String> codigos = {};
+    for (final path in candidatos) {
+      final snap = await _firestore
+          .collection('users')
+          .doc(path)
+          .collection('students')
+          .get();
+      if (snap.docs.isNotEmpty) {
+        for (final d in snap.docs) {
+          final cod =
+              (d.data()['codigoUniversitario'] ?? '').toString().trim();
+          if (cod.isNotEmpty) codigos.add(cod);
+        }
+        break;
+      }
+    }
+    return codigos;
+  }
 
   Future<NotaDocenteImportResult> _procesarYGuardar(
     String eventId,
-    Uint8List bytes,
-  ) async {
+    Uint8List bytes, {
+    String? filialNombre,
+    String? filialId,
+    String? carreraNombre,
+    String? carreraId,
+  }) async {
     final excel = Excel.decodeBytes(bytes);
     final errores = <String>[];
 
+    // Igual que importar_notas_docente.dart (SuperAdmin): si no hay contexto
+    // de carrera, el roster queda vacío y no se filtra por existencia.
+    final roster = await _cargarCodigosRoster(
+      filialNombre: filialNombre,
+      filialId: filialId,
+      carreraNombre: carreraNombre,
+      carreraId: carreraId,
+    );
 
     final Map<String, double> notas = {};
 
@@ -116,6 +176,12 @@ class NotaDocenteService {
         final codigoRaw = _cell(row, idxCodigo);
         if (codigoRaw.isEmpty) continue;
 
+        if (roster.isNotEmpty && !roster.contains(codigoRaw)) {
+          errores.add(
+              'Fila ${i + 1}: código "$codigoRaw" no pertenece a esta carrera — fila omitida');
+          continue;
+        }
+
         final notaRaw = _cell(row, idxNota);
 
         if (notaRaw.isNotEmpty) {
@@ -125,8 +191,8 @@ class NotaDocenteService {
             ultimaNota = null;
           } else if (parsed < 0 || parsed > 20) {
             errores.add(
-                'Fila ${i + 1}: nota $parsed fuera de rango 0–20 para código $codigoRaw');
-            ultimaNota = parsed.clamp(0.0, 20.0);
+                'Fila ${i + 1}: nota $parsed fuera de rango 0–20 para código $codigoRaw — fila omitida');
+            ultimaNota = null;
           } else {
             ultimaNota = parsed;
           }
@@ -148,11 +214,6 @@ class NotaDocenteService {
     }
 
 
-    int gruposGuardados = 0;
-
-    final notasUnicas = notas.values.toSet();
-    gruposGuardados = notasUnicas.length;
-
     final entries = notas.entries.toList();
     for (int i = 0; i < entries.length; i += 500) {
       final batch = _firestore.batch();
@@ -173,42 +234,16 @@ class NotaDocenteService {
 
 
 
-    gruposGuardados = _contarGruposConNota(bytes);
-
-    debugPrint(
-        '✅ Notas docente guardadas: ${notas.length} códigos, '
-        '$gruposGuardados grupos');
+    // gruposImportados refleja exactamente lo guardado (antes se calculaba
+    // dos veces: una con notasUnicas.length, descartada, y otra re-escaneando
+    // el Excel sin aplicar rango/roster — quedaba desalineada con lo real).
+    debugPrint('✅ Notas docente guardadas: ${notas.length} códigos');
 
     return NotaDocenteImportResult(
-      gruposImportados: gruposGuardados,
+      gruposImportados: notas.length,
       codigosTotales: notas.length,
       errores: errores,
     );
-  }
-
-
-  int _contarGruposConNota(Uint8List bytes) {
-    try {
-      final excel = Excel.decodeBytes(bytes);
-      int count = 0;
-      for (final sheetName in excel.tables.keys) {
-        final sheet = excel.tables[sheetName];
-        if (sheet == null || sheet.maxRows < 2) continue;
-        final headers = sheet.rows.first
-            .map((c) => c?.value?.toString().trim().toUpperCase() ?? '')
-            .toList();
-        final idxNota =
-            _findCol(headers, ['NOTA DOCENTE', 'NOTA', 'NOTADOCENTE']);
-        if (idxNota == -1) continue;
-        for (int i = 1; i < sheet.maxRows; i++) {
-          final v = _cell(sheet.rows[i], idxNota);
-          if (v.isNotEmpty && double.tryParse(v) != null) count++;
-        }
-      }
-      return count;
-    } catch (_) {
-      return 0;
-    }
   }
 
 

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
-import '/admin/logica/filiales_service.dart';
+import '/shared/logica/filiales_service.dart';
 import 'estudiantes_registrados.dart';
 import 'datos_excel.dart';
 import 'importacion_selector_screen.dart';

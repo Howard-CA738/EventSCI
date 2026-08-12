@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '/prefs_helper.dart';
 import '/login.dart';
-import '/admin/logica/gestion_criterios.dart';
+import '/shared/logica/gestion_criterios.dart';
 import '/roles/jurados/logica/jurado_proyectos_service.dart';
 import 'evaluacion_proyecto_screen.dart';
 import 'jurado_certificados_tab.dart';

@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '/prefs_helper.dart';
-import '/admin/logica/escaner_config_service.dart';
+import '/shared/logica/escaner_config_service.dart';
 
 class QRScanResult {
   final bool success;
@@ -327,7 +327,15 @@ class EscanearQRService {
 
       final parts = currentUserId!.split('/');
       final studentId = parts[1];
-      final scanId = '${qrInfo['eventId']}_${studentId}_$codigoProyecto';
+      // 'Sin código' es el literal que ProyectosCategoriaService escribe
+      // cuando el proyecto no tiene código. Sin este chequeo, dos proyectos
+      // distintos sin código generan el mismo scanId y el segundo escaneo
+      // se rechaza como duplicado, perdiendo la asistencia silenciosamente.
+      final codigoDesambiguador =
+          (esBlancoONulo(codigoProyecto) || codigoProyecto == 'Sin código')
+              ? qrId
+              : codigoProyecto;
+      final scanId = '${qrInfo['eventId']}_${studentId}_$codigoDesambiguador';
 
       final existingDoc = await conReintento(() => _firestore
           .collection('events')

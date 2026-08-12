@@ -31,12 +31,6 @@ class SuperAdminAuthService {
         return 'No tienes permisos de administrador.';
       }
 
-      await PrefsHelper.saveUserData(
-        userType: _userTypeSuperAdmin,
-        userName: doc.data()?['nombre'] ?? 'Administrador',
-        userId: uid,
-      );
-
       return null;
     } on FirebaseAuthException catch (e) {
       return _mensajeError(e.code);
@@ -114,6 +108,17 @@ class SuperAdminAuthService {
           .collection('otp_codes')
           .doc('current')
           .update({'usado': true});
+
+      final superAdminDoc = await FirebaseFirestore.instance
+          .collection('superadmins')
+          .doc(uid)
+          .get();
+
+      await PrefsHelper.saveUserData(
+        userType: _userTypeSuperAdmin,
+        userName: superAdminDoc.data()?['nombre'] ?? 'Administrador',
+        userId: uid,
+      );
 
       return null;
     } catch (e) {

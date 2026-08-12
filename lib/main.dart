@@ -3,12 +3,13 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:app_links/app_links.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'dart:async';
-import '/admin_carrera/interfaz/admin_carrera_screen.dart';
+import '/roles/admin_carrera/pantallas/admin_carrera_screen.dart';
 import 'dart:convert';
 import 'firebase_options.dart';
 import '/login.dart';
-import '/admin/logica/admin.dart';
+import '/roles/admin/pantallas/admin_screen.dart';
 import '/roles/usuarios/pantallas/estudiante_screen.dart';
 import '/roles/jurados/pantallas/jurado_screen.dart';
 import '/prefs_helper.dart';
@@ -19,7 +20,17 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
+  // Reporte de errores no capturados (excepciones, errores async) a Crashlytics.
+  // No soportado en Web (firebase_crashlytics no declara plataforma web).
+  // No captura overflow de RenderFlex: Flutter elimina ese diagnóstico en builds release.
   if (!kIsWeb) {
+    await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(!kDebugMode);
+    FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+    WidgetsBinding.instance.platformDispatcher.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+
     await FirebaseAppCheck.instance.activate(
       androidProvider: kDebugMode
           ? AndroidProvider.debug

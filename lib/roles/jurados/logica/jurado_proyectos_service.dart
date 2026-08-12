@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '/admin/logica/gestion_criterios.dart';
+import '/shared/logica/gestion_criterios.dart';
 import '/resolver_nombres_service.dart';
 
 class JuradoProyectosResult {
